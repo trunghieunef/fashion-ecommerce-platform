@@ -5,7 +5,7 @@
 | **Ngày** | 2026-09-11 |
 | **Trạng thái** | Approved — cơ sở cho PRD |
 | **Phiên bản** | v1.0 |
-| **Tài liệu liên quan** | [PRD chi tiết](02_prd.md) |
+| **Tài liệu liên quan** | [PRD chi tiết](02_prd.md) · [Database Design — Draft](05_database_design.md) · [Service Flows — Draft](06_service_flows.md) · [Bộ sơ đồ — Draft](07_diagrams.md) |
 
 ---
 

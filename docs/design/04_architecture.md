@@ -1,4 +1,4 @@
-# 06 — System Architecture
+# 04 — System Architecture
 
 | | |
 |---|---|
