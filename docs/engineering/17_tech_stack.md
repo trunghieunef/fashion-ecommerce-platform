@@ -172,15 +172,15 @@ Các phần chưa chọn exact version có chủ ý:
 | Maven | Wrapper distribution **3.9.16**, SHA-256 `5af3b743dd8b876b5c45da33b676251e5f1687712644abb4ee519ca56e1d89ce`; wrapper JAR 3.3.4, SHA-256 `4e2fbf6554bc8a4702cdfdd3bef464f423393d784ddbb037216320ce55d5e4e1` |
 | BOM khai báo | Spring Boot **4.0.8**; Spring Cloud **2025.1.3**; Spring Cloud Alibaba **2025.1.0.0**; Java target **21** |
 | npm workspace / lock | Root `package-lock.json`; `@fashion/storefront` direct pins: React/react-dom **19.2.8**, React Router **8.4.0**, Vite **8.3.0**, plugin React **6.1.1**, TypeScript **6.0.3**, Vitest **5.0.1**, Playwright **1.63.0** |
-| Lệnh đã chạy | `npm install --package-lock-only` tạo lockfile thành công (76 packages, 0 vulnerabilities); `./mvnw -version`, effective POM và dependency tree đã chạy sau khi sửa wrapper path base; resolver npm vẫn cảnh báo engine vì runtime local không đúng R1 |
-| Runtime local | Temurin JDK **21.0.12.1+1** và Maven **3.9.16** đã xác minh; Node **v18.19.1**, npm **9.2.0** vẫn khác Node **v24.21.0**, npm **11.19.0** đã pin trong `.tool-versions` |
-| Lệnh còn chặn | `bash scripts/verify-toolchain.sh` đã qua Maven check, rồi dừng ở Node/npm version guard trên host này. `target/effective-pom.xml` và `target/dependency-tree.txt` đã được tạo; vẫn cần chạy lại toàn bộ command trên environment R1 sạch, không dùng `--force`/`--legacy-peer-deps` |
+| Lệnh đã chạy | `bash scripts/verify-toolchain.sh` **PASS** với Maven banner, Node/npm guards, `npm ci --ignore-scripts` và `npm ls --all`; `./mvnw -q dependency:tree -DoutputFile=target/dependency-tree.txt` **PASS**. Effective POM và dependency tree đã được tạo; npm audit báo 0 vulnerabilities. |
+| Runtime local | Temurin JDK **21.0.12.1+1**, Maven **3.9.16**, Node **v24.21.0** và npm **11.19.0** đã xác minh; các version này khớp `.tool-versions`/R1. |
+| Chưa thực hiện | Service mẫu + Gateway/Nacos (config import, discovery, auth, route, restart/reconnect); PostgreSQL/Flyway; Kafka/Redis; frontend typecheck/build/Vitest/Playwright/browser; static serving, deployment và các flow runtime còn lại trong bảng O02. |
 
-Không đánh dấu O02 hay runtime compatibility hoàn tất từ lockfile/effective POM; cần reviewer TL + DEVOPS kiểm tra fresh clone bằng runtime R1 và lưu effective POM/dependency tree.
+Evidence core wrapper/BOM/npm của PLT-01 đã chạy với runtime R1 nêu trên; các runtime checks service, Gateway/Nacos, PostgreSQL, Kafka, Redis, browser và deployment trong bảng vẫn **chưa thực hiện**. Không đánh dấu O02 hay runtime compatibility toàn bộ hoàn tất; cần reviewer TL + DEVOPS kiểm tra fresh clone và các flow còn lại.
 
 Thứ tự: core backend + frontend → contracts → vertical slice COD → staging → observability/recovery theo backlog. Không scaffold toàn bộ 9 service để chứng minh version.
 
-Evidence phải ghi component/version/digest, OS/CPU, command, kết quả, commit/report, ngày, owner/reviewer và lỗi còn mở. Hiện tất cả runtime checks trong bảng là **chưa thực hiện**. Research chỉ giảm rủi ro lựa chọn, không đóng task PLT-01 hoặc gate G0/G2.
+Evidence phải ghi component/version/digest, OS/CPU, command, kết quả, commit/report, ngày, owner/reviewer và lỗi còn mở. Core wrapper/BOM/npm của PLT-01 có evidence local ở trên; các runtime checks service/dependency/browser/deployment còn lại theo bảng vẫn **chưa thực hiện**. Research và core toolchain pass chỉ giảm rủi ro lựa chọn, không đóng O02, task PLT-01 hoặc gate G0/G2.
 
 ## 8. Khóa và nâng cấp để ít tốn công về sau
 

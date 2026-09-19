@@ -56,6 +56,13 @@ class DocumentationChecks(unittest.TestCase):
         zip_base = properties.get("zipStoreBase")
         self.assertEqual(zip_base, "MAVEN_USER_HOME")
 
+    def test_toolchain_check_reads_non_quiet_maven_banner(self):
+        script_path = Path(__file__).resolve().parents[1] / "scripts/verify-toolchain.sh"
+        script = script_path.read_text(encoding="utf-8")
+
+        self.assertIn("./mvnw -version | grep -F 'Apache Maven 3.9.16'", script)
+        self.assertNotIn("./mvnw -q -version", script)
+
 
 if __name__ == "__main__":
     unittest.main()
