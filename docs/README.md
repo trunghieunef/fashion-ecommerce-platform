@@ -4,6 +4,8 @@ Baseline B1 · 2026-09-19 · Đồng bộ để phân công; chưa nghiệm thu 
 
 Sprint 1 theo ADR-18 chỉ triển khai local và đạt checkpoint S1-local trong 09/10. AWS/PLT-04, provider thật và toàn bộ G1/G2 được thực hiện sau; “local MVP foundation” không đồng nghĩa toàn bộ business MVP đã hoàn thành.
 
+Kế hoạch triển khai có thể giao cho agent/engineer được lập tại [docs/superpowers/plans](superpowers/plans/README.md). Bộ kế hoạch chia đường tới G2 MVP thành S1-local, G0 platform/staging, commerce core, G1 COD và G2 online payment; các plan không tự thay trạng thái backlog hay bằng chứng nghiệm thu.
+
 ## 1. Danh mục và nguồn sự thật
 
 | Tài liệu | Nội dung chịu trách nhiệm | Người duy trì theo vai trò |
