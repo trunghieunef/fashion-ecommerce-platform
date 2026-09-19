@@ -2,13 +2,13 @@
 
 | Thuộc tính | Giá trị |
 |---|---|
-| Ngày | 2026-09-16 |
-| Phiên bản | v0.1 |
-| Trạng thái | **Draft — chờ review cùng tài liệu 05–06** |
+| Ngày | 2026-09-19 |
+| Phiên bản | B1 |
+| Trạng thái | **Baseline đồng bộ; dùng để review, không mô tả hệ thống đã triển khai** |
 | Cơ sở nghiệp vụ | [Brief](01_brief.md), [PRD](02_prd.md) |
 | Thiết kế tham chiếu | [Architecture](04_architecture.md), [Database Design](05_database_design.md), [Service Flows](06_service_flows.md) |
 
-Sơ đồ mới bám theo các quyết định **D01–D12 đề xuất** ở tài liệu 05 và luồng ở tài liệu 06; không đánh dấu các quyết định này là đã được duyệt. Sơ đồ cũ trong PRD/Architecture chưa đồng bộ các thay đổi này. Quyền quyết định tồn kho/quota thuộc PostgreSQL; order điều phối checkout duy nhất.
+Sơ đồ bám theo D01–D12 ở 05/08 và luồng ở 06. PRD/Interfaces/Architecture đã đồng bộ B1; giả định thương mại còn chờ PO xác nhận theo 08. Quyền quyết định tồn kho/quota thuộc PostgreSQL; order điều phối checkout duy nhất.
 
 Tất cả sơ đồ dùng Mermaid để lưu cùng Markdown. Use Case, Activity, Component và Deployment dùng hình/nhãn và chú giải tương ứng trên flowchart Mermaid, **không phải bộ ký pháp UML chuẩn đầy đủ**. Sequence, ERD và Class dùng cú pháp Mermaid chuyên biệt. Mục tiêu là review trách nhiệm, dữ liệu và hành vi; nếu hồ sơ yêu cầu UML chuẩn hình thức, cần chuyển bốn loại đầu sang công cụ UML/PlantUML.
 
@@ -345,7 +345,7 @@ Khách thanh toán trên giao diện provider và nhận email/SMS qua provider;
 
 ## 4. Sequence Diagram
 
-Các Sequence đã có ở [06_service_flows.md](06_service_flows.md): §1.3 outbox/consumer; §4 cart; §5.1 checkout online; §5.2 COD; §7.1 payment/webhook. Đây là bản đề xuất hiện hành, ưu tiên review thay cho checkout cũ ở PRD.
+Các Sequence đã có ở [06_service_flows.md](06_service_flows.md): §1.3 outbox/consumer; §4 cart; §5.1 checkout online; §5.2 COD; §7.1 payment/webhook. Đây là nguồn sequence hiện hành; PRD dẫn tới cùng luồng này.
 
 ### SEQ-01 — Tiền đến sau khi đơn đã hủy
 
@@ -524,7 +524,7 @@ flowchart LR
     Kafka --> Consumer
 ```
 
-Các khối là trách nhiệm trong cùng ứng dụng Spring Boot, không phải service mới hoặc framework bắt buộc. Consumer lưu work rồi worker/saga tiếp tục ngoài transaction nhận event. Không gọi HTTP provider trong transaction DB. Cấu trúc package có thể theo template ở Architecture, không cần interface/factory cho từng khối.
+Các khối là trách nhiệm trong cùng ứng dụng Spring Boot, không phải service mới hoặc framework bắt buộc. Consumer lưu work rồi worker/saga tiếp tục ngoài transaction nhận event. Không gọi HTTP provider trong transaction DB. Cấu trúc package theo Engineering Guide 12, không cần interface/factory cho từng khối.
 
 <a id="deployment"></a>
 
@@ -549,12 +549,12 @@ flowchart TB
             Ingress["workload: Ingress controller<br/>chỉ public routes / webhook allowlist"]
             subgraph AppPool["node pool: Application workers / namespace prod"]
                 GW["Deployment: Gateway<br/>2+ replicas"]
-                Apps["9 Deployments: Spring Boot services<br/>2 replicas ban đầu mỗi service, HPA theo tải"]
+                Apps["8 Deployments MVP, promotion từ Phase 2<br/>replicas và HPA theo sizing đã duyệt"]
                 Secrets["Kubernetes Secrets<br/>quyền theo service account"]
             end
             subgraph StatefulPool["node pool: Stateful workloads / PVC"]
-                Kafka["StatefulSet: Kafka KRaft<br/>3 broker theo Architecture"]
-                Nacos["StatefulSet: Nacos<br/>3 replicas theo Architecture"]
+                Kafka["StatefulSet: Kafka KRaft<br/>3 broker tham chiếu, cần sizing"]
+                Nacos["StatefulSet: Nacos<br/>HA topology cần O01/O02"]
                 NacosData["Nacos metadata store<br/>cấu hình backend riêng cần chốt"]
             end
             subgraph OpsPool["workloads: Platform / Observability"]
@@ -608,7 +608,7 @@ Các ràng buộc phải giữ khi hiện thực:
 - Worker nền như saga recovery, relay, notification sender chạy trong service Deployment tương ứng, claim lease để nhiều replica không làm hiệu ứng trùng. Chưa tách thêm worker service.
 - Kafka/Nacos replica cần phân bố chống cùng điểm lỗi và volume bền vững. Hình không khẳng định chỉ cần ghi `replicas: 3` là đã có HA; topology failure domain phải review với ngân sách.
 - Nacos metadata backend có persistence riêng, không dùng một trong 9 DB nghiệp vụ. Loại backend/version là việc cần chốt khi dựng platform.
-- Dev/staging dùng cấu hình và credentials riêng; production cluster riêng là **đề xuất mới** cần review, vì tài liệu 04 hiện mới quy định namespace. Không triển khai thêm cluster chỉ vì sơ đồ này.
+- Dev/staging dùng cấu hình và credentials riêng; production cluster riêng là lựa chọn còn mở O01 đã được ghi ở 04/08. Không triển khai thêm cluster chỉ vì sơ đồ này.
 - Observability có storage riêng và RBAC; không ghi token/OTP/payment secret vào log. Hạ tầng của CI/registry/Git host là dịch vụ bên ngoài ranh giới cloud trong hình, không được cấp quyền DB production.
 - Hình nhấn luồng ứng dụng. ArgoCD cũng có thể quản lý platform theo manifest được review; kiểm tra backup/restore, HPA và SLO khi triển khai, không coi topology này là bằng chứng đã đạt tải.
 
@@ -952,6 +952,13 @@ P7 → P1 chỉ mang kết quả thông báo tài khoản/OTP; P7 → P4 mang k�
 - [ ] DEP-01 được review cùng ngân sách; cloud, managed data, production cluster và Nacos metadata chưa mặc nhiên được duyệt.
 - [ ] CLS-01/02/03 giữ invariant domain và không yêu cầu thêm framework/abstraction ngoài nhu cầu.
 - [ ] DFD-0/1 cân bằng external input/output, có data store owner và tên luồng dữ liệu.
-- [ ] Sequence/ERD tham chiếu đúng bản 05–06; sau khi duyệt phải đồng bộ 02–04 theo danh sách khác biệt.
+- [ ] Sequence/ERD tham chiếu đúng bản 05–06; 02–04 đã đồng bộ B1; khi thay đổi tiếp phải cập nhật cùng contract/test liên quan.
 
-Chưa có renderer trong repo tại thời điểm soạn. Kiểm tra cấu trúc Markdown, liên kết và nội dung không thay thế việc xem bố cục bằng Mermaid preview; khả năng render còn phụ thuộc phiên bản Mermaid của trình xem.
+Chưa có renderer được cấu hình trong repo. Baseline B1 đã kiểm tra cấu trúc Markdown/liên kết; chưa xác nhận bố cục bằng Mermaid preview. PLT-02 bổ sung bước preview các loại sơ đồ trên renderer/version được nhóm chọn trước ký review sơ đồ; không xem kiểm tra fence là bằng chứng render.
+
+## 11. Ghi chú baseline B1 cho người hiện thực
+
+- Các node “pending step”, “relay” và “notification sender” dùng lease recovery, không tạo worker service riêng. Sequence event chính xác có aggregate_sequence theo 03/05.
+- Order có background_tasks để cleanup cart độc lập saga, và order_returns/items lưu evidence OPS theo 05 §15. Class diagram biểu diễn phần lõi, không phải danh sách đủ mọi bảng.
+- Payment có closed_at giữ intent đóng dù late success; settlement gross/fees/net riêng. Shipping COD_REMITTED là bằng chứng cần đối soát, không phải tự khẳng định bank transfer đã nhận.
+- Source schema/state machine là 05/06, API là 03. Diagram không thay contract test hoặc bằng chứng render.

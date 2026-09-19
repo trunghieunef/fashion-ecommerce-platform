@@ -1,102 +1,55 @@
-# 01 — Project Brief: Nền tảng E-commerce Thời Trang
+# 01 — Project Brief
 
-| | |
+B1 · 2026-09-19 · Baseline để lập kế hoạch; PO/TL chưa ký nghiệm thu hay ngân sách.
+
+## 1. Bài toán và mục tiêu
+
+Xây nền tảng bán lẻ thời trang **một shop** tại Việt Nam, giao diện VI/EN, VND. Khách duyệt sản phẩm, chọn size/màu, đặt hàng guest/member, thanh toán VNPay/MoMo/COD và theo dõi giao hàng. Đội OPS quản lý sản phẩm/kho/đơn; FINANCE quản lý tiền, refund và đối soát; MARKETING quản lý ưu đãi.
+
+Mỗi size × màu là SKU có tồn riêng. Trải nghiệm ảnh, collection/lookbook và size guide phục vụ quyết định mua. Checkout phải chống oversell, không nhân đôi giao dịch khi retry và phục hồi được sau lỗi mạng/service.
+
+## 2. Phạm vi
+
+| Giai đoạn | Kết quả |
 |---|---|
-| **Ngày** | 2026-09-11 |
-| **Trạng thái** | Approved — cơ sở cho PRD |
-| **Phiên bản** | v1.0 |
-| **Tài liệu liên quan** | [PRD chi tiết](02_prd.md) · [Database Design — Draft](05_database_design.md) · [Service Flows — Draft](06_service_flows.md) · [Bộ sơ đồ — Draft](07_diagrams.md) |
+| Phase 0 | Repo, contracts, môi trường local/staging, CI, auth boundary, observability |
+| Phase 1 — MVP | Email/password, guest/member, catalog, cart, order saga, inventory, VNPay/MoMo/COD, SELF shipping, email giao dịch, admin có RBAC/audit, refund và đối soát tối thiểu |
+| Phase 2 — hoàn thiện Release 1 | Voucher/flash sale, GHN/GHTK/Viettel Post, OTP/social, reviews/wishlist/restock, marketing và báo cáo |
+| Phase 3 | Tối ưu theo đo tải, search nâng cao, PWA, analytics/A/B test |
 
----
+Release 1 = Phase 1 + Phase 2. Ngoài Release 1: marketplace nhiều seller, nhiều kho/split shipment, native mobile, đa tiền tệ, recommendation AI, live chat, cổng tự phục vụ đổi trả.
 
-## 1. Tóm tắt (Executive Summary)
+Một kho, một payment và một shipment/order là giả định D01/D06/D08. Các giới hạn thương mại phải được PO xác nhận theo [08 Decisions](08_decisions.md).
 
-Xây dựng nền tảng bán hàng trực tuyến cho shop thời trang, mô hình **bán lẻ 1 shop**, thị trường **Việt Nam** (VN + EN, tiền tệ VND). Hệ thống theo kiến trúc **microservices** (Java Spring Boot) triển khai trên **Kubernetes**, thiết kế cho khả năng **chịu tải cao** khi có chiến dịch flash sale, nhưng khởi đầu với quy mô nhỏ và mở rộng dần.
+## 3. Kiến trúc và nguồn lực
 
-## 2. Vấn đề & Cơ hội
+9 service: user, catalog, cart, order, inventory, payment, promotion, shipping, notification. Java 21/Spring Boot 3, React TypeScript, PostgreSQL per service, Kafka, Redis, Spring Cloud Gateway, Nacos, Kubernetes. Exact versions/compatibility, cloud và topology được chốt trong Phase 0; chưa có hạ tầng production.
 
-**Vấn đề**: Shop thời trang cần kênh bán online hoàn chỉnh, đáp ứng nhu cầu đặc thù (nhiều biến thể size/màu, trải nghiệm ảnh, bán theo mùa) và **không sập khi flash sale**.
+Team dự kiến 3–5 dev, một người có thể kiêm TL/QA/DevOps. Ước lượng ban đầu: Phase 0 khoảng 2–3 tuần; Phase 1 thêm 6–8 tuần; Phase 2 thêm 4–6 tuần. MVP hướng tới một quý; toàn Release 1 khoảng 4–5 tháng là dự báo có điều kiện, phải điều chỉnh theo capacity và sandbox thực tế trong [09](../delivery/09_delivery_plan.md).
 
-**Cơ hội**: Nền tảng bắt đầu từ con số 0 → không có nợ kỹ thuật cũ, thiết kế đúng kiến trúc ngay từ đầu, dễ scale khi kinh doanh tăng trưởng.
+## 4. Mục tiêu đo lường
 
-## 3. Mục tiêu
+- Production availability >= 99.9%/tháng; RPO <= 15 phút, RTO <= 1 giờ, phải diễn tập.
+- Catalog API p95 < 300 ms khi cache warm.
+- Checkout p95 < 2 giây để tiếp nhận bền vững; trả 201 hoặc 202. Thời gian sẵn sàng payment URL đo riêng.
+- >= 99.5% checkout đủ điều kiện không thất bại do hệ thống ở profile đã thống nhất.
+- OPS thao tác xác nhận/đóng gói một đơn < 1 phút, không tính chờ carrier.
+- Kiểm thử tăng dần 100 concurrent (MVP), 1.000 (Phase 2), 10.000 (Phase 3). Không đồng nhất concurrent users với request/giây.
 
-| # | Mục tiêu | Đo lường |
-|---|---|---|
-| 1 | Ra mắt web bán hàng responsive đầy đủ hành trình mua hàng | Go-live MVP ≤ 1 quý |
-| 2 | Kiến trúc microservices scale ngang từng service | Scale độc lập, không block nhau |
-| 3 | Xử lý giao dịch phân tán nhất quán (saga + Kafka) | Không mất đơn khi peak |
-| 4 | Vận hành được bằng admin dashboard | OPS tự xử lý đơn < 1 phút |
+Định nghĩa mẫu số, cửa sổ đo, dependency giả/thật và ngưỡng chi tiết ở [11 Test strategy](../quality/11_test_strategy.md). Đây là mục tiêu, chưa có bằng chứng đã đạt.
 
-## 4. Phạm vi
+## 5. Rủi ro và điều kiện thành công
 
-### Trong phạm vi (Release 1)
-
-- **9 microservices**: user, catalog, cart, order, inventory, payment, promotion, shipping, notification
-- **Hạ tầng**: Spring Cloud Gateway, Nacos, Kafka, PostgreSQL (1 DB/service), Redis, Kubernetes
-- **Web**: SPA React responsive (khách) + React Admin
-- **Thanh toán**: VNPay, MoMo, COD
-- **Vận chuyển**: GHN, GHTK, Viettel Post, tự giao
-- **Đăng nhập**: Email+password, OTP SMS, Facebook/Google, Guest checkout
-- **Đặc thù thời trang**: Collections/Lookbook, Size guide, Reviews kèm ảnh, Wishlist + Restock alert, Zoom ảnh
-
-### Ngoài phạm vi (sau Release 1)
-
-Recommendation AI · Mobile app native · Marketplace nhiều seller · Đa tiền tệ quốc tế · Live chat
-
-## 5. Tiêu chí thành công (Success Metrics)
-
-| Tiêu chí | Chỉ số |
+| Rủi ro | Biện pháp / owner |
 |---|---|
-| Tính khả dụng | ≥ 99.9% uptime/tháng |
-| Latency API đọc (p95) | < 300 ms |
-| Checkout khi peak | < 2 s tạo đơn |
-| Tỷ lệ đơn thành công ở flash sale | ≥ 99.5% |
-| Peak tải thiết kế | Hàng chục nghìn concurrent (sau scale) |
+| 9 service vượt sức team nhỏ | TL chia vertical slice, contract sớm, giới hạn WIP, chưa triển khai Phase 2 |
+| Saga và tiền/kho lệch | BE/QA kiểm thử transaction thật, race, crash, replay; durable recovery |
+| Bên thứ ba thiếu sandbox/quyền refund | PO/FINANCE lấy account sớm; BE mock độc lập; gate trước bật thật |
+| Flash sale vượt tải | DEVOPS/QA đo hot SKU, rate limit, backpressure, kill switch |
+| Scope/đổi trả/PII chưa rõ | PO chốt D01–D12 và O01–O10 trước gate liên quan |
 
-## 6. Đội ngũ & Nguồn lực
+Tuân thủ nghĩa vụ thương mại điện tử và bảo vệ dữ liệu áp dụng tại thời điểm launch là đầu việc O06, cần người có trách nhiệm rà soát. Tài liệu kỹ thuật không xác nhận tính đầy đủ pháp lý.
 
-| Hạng mục | Chi tiết |
-|---|---|
-| **Đội ngũ** | 3-5 dev (backend, 1 frontend, 1 DevOps chung) |
-| **Stack** | Java 17+, Spring Boot 3, Spring Cloud, Kafka, PostgreSQL 15, Redis, React |
-| **Hạ tầng** | Cloud (AWS/GCP) + Kubernetes; dev / staging / production |
-| **Kỹ năng** | Đã quen Java/Spring Boot; có kiến thức cơ bản Docker/K8s |
+## 6. Phê duyệt và bàn giao
 
-## 7. Mốc thời gian (Timeline)
-
-| Phase | Thời gian | Nội dung chính |
-|---|---|---|
-| Phase 0 — Nền tảng | 2-3 tuần | Monorepo, CI/CD, K8s, Kafka, PostgreSQL, Nacos, Gateway, Observability |
-| Phase 1 — MVP lõi | 6-8 tuần | Luồng mua hàng hoàn chỉnh: catalog → cart → order → inventory → payment (VNPay/MoMo/COD) |
-| Phase 2 — Vận hành & Marketing | 4-6 tuần | Voucher/flash sale, carrier GHN/GHTK/VTPL, restock, reviews, OTP/social login |
-| Phase 3 — Tối ưu & mở rộng | Liên tục | Elasticsearch, autoscaling, PWA, A/B test |
-
-**Tổng đến launch chính thức**: ~ 4-5 tháng
-
-## 8. Ràng buộc & Giả định
-
-**Ràng buộc**:
-- Phải chịu được peak flash sale mà không mất đơn (chống oversell).
-- Tuân thủ quy định TMĐT & bảo vệ dữ liệu cá nhân Việt Nam (Nghị định 52/2013, 13/2023).
-- Chi phí vận hành hợp lý với đội 3-5 dev.
-
-**Giả định**:
-- Quy mô khởi đầu vài nghìn đơn/ngày, thiết kế sẵn cho scale lớn.
-- Thanh toán/vận chuyển dùng dịch vụ bên thứ 3 của VN (VNPay/MoMo/GHN...).
-
-## 9. Rủi ro chính & Phương án giảm thiểu
-
-| Rủi ro | Mức | Giảm thiểu |
-|---|---|---|
-| Team nhỏ vận hành nhiều service | Cao | CI/CD chuẩn, template service, ranh giới rõ |
-| Distributed transaction (saga) phức tạp | Cao | Outbox pattern, test lỗi từng bước (Toxiproxy) |
-| Peak vượt dự kiến | TB | Load test trước chiến dịch, autoscaling, kill-switch |
-| Tích hợp bên thứ 3 không ổn định | TB | Webhook + retry + circuit breaker; fallback COD |
-
-## 10. Phê duyệt
-
-| Người | Vai trò | Quyết định |
-|---|---|---|
-| (Chưa điền) | Chủ dự án | ☐ Đã duyệt |
-| (Chưa điền) | Tech Lead | ☐ Đã duyệt |
+PO xác nhận scope/chính sách; TL xác nhận thiết kế; OPS/FINANCE xác nhận UAT; người chịu trách nhiệm vận hành xác nhận go-live. Ghi tên/ngày/bằng chứng tại milestone tương ứng trong 09. Không xem cập nhật tài liệu là đã phê duyệt những quyết định đó.

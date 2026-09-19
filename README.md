@@ -1,17 +1,18 @@
-# fashion-ecommerce-platform
+# Fashion E-commerce Platform
 
-Nền tảng thương mại điện tử thời trang (microservices) — cao tải, thị trường Việt Nam.
+Nền tảng bán lẻ thời trang một shop tại Việt Nam: React storefront/admin, 9 service Spring Boot, PostgreSQL, Kafka, Redis và Kubernetes.
 
-## Tài liệu
+Repo hiện chứa **tài liệu thiết kế và kế hoạch triển khai**; chưa có ứng dụng, migration hoặc hạ tầng đã chạy. Các chỉ số tải là mục tiêu nghiệm thu, không phải kết quả đo.
 
-- [01 — Project Brief](docs/design/01_brief.md)
-- [02 — PRD (Product Requirements Document)](docs/design/02_prd.md)
-- [03 — Interfaces: API, Events & Webhooks](docs/design/03_interfaces.md)
-- [04 — System Architecture](docs/design/04_architecture.md)
-- [05 — Database Design (Draft — chờ review)](docs/design/05_database_design.md)
-- [06 — Service Flows (Draft — chờ review)](docs/design/06_service_flows.md)
-- [07 — Bộ sơ đồ thiết kế (Draft — chờ review)](docs/design/07_diagrams.md)
+## Bắt đầu ở đâu?
 
-Hai bản nháp 05–06 đề xuất schema và luồng xử lý cho 9 service. Bắt đầu review tại **05 §1 (D01–D12)** và **06 §5 (checkout, COD, hủy/hoàn tiền)**. Các khác biệt với tài liệu 02–04 được liệt kê riêng, chưa thay thế quyết định hiện có.
+1. Đọc [cẩm nang tài liệu](docs/README.md) và [Project Brief](docs/design/01_brief.md).
+2. Đọc [PRD](docs/design/02_prd.md), sau đó [quyết định và vấn đề còn mở](docs/design/08_decisions.md).
+3. Chia việc từ [kế hoạch nhóm](docs/delivery/09_delivery_plan.md) và [backlog có tiêu chí nghiệm thu](docs/delivery/10_backlog.md).
+4. Khi nhận task, tra [API/event](docs/design/03_interfaces.md), [schema](docs/design/05_database_design.md), [service flows](docs/design/06_service_flows.md), [kiểm thử](docs/quality/11_test_strategy.md).
 
-Tài liệu **07** bổ sung Use Case, Activity, System Context, Component, Deployment, Class, DFD và dẫn tới Sequence/ERD đã có. Các sơ đồ dùng Mermaid; ký pháp UML giản lược được ghi rõ trong tài liệu.
+## Trạng thái bộ tài liệu
+
+Baseline **B1 — 2026-09-19**, đã hợp nhất nội dung để lập kế hoạch và triển khai theo từng task. Các giả định D01–D12 và vấn đề O01–O10 được theo dõi riêng; việc đồng bộ tài liệu không thay thế phê duyệt kinh doanh, ngân sách hay nghiệm thu. Lịch sử bản cũ được giữ trong Git.
+
+MVP là Phase 1; Release 1 gồm Phase 1 và Phase 2. Promotion/OTP/social/carrier bên ngoài thuộc Phase 2. MVP vẫn có SELF shipping, quyền admin, refund, khôi phục saga và đối soát tối thiểu.

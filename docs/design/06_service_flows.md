@@ -2,14 +2,14 @@
 
 | Thuộc tính | Giá trị |
 |---|---|
-| Ngày | 2026-09-16 |
-| Phiên bản | v0.1 |
-| Trạng thái | **Draft — chờ chủ dự án review, chưa phải hợp đồng đã duyệt** |
+| Ngày | 2026-09-19 |
+| Phiên bản | B1 |
+| Trạng thái | **Baseline đồng bộ — triển khai/test chưa thực hiện; giả định PO theo 08** |
 | Cơ sở | [PRD](02_prd.md), [Interfaces](03_interfaces.md), [Architecture](04_architecture.md) |
 | Đọc cùng | [Database Design](05_database_design.md) — D01–D12 là giả định đề xuất |
 | Bộ sơ đồ bổ sung | [07 — Use Case, Activity, Context, Component, Deployment, Class và DFD](07_diagrams.md) |
 
-Tài liệu mô tả xử lý bên trong và phối hợp giữa 9 service. Không thay thế danh sách endpoint trong Interfaces; mục 12 ghi rõ phần cần sửa/bổ sung sau review. Các tên operation mới là đề xuất, chưa có code hoặc migration.
+Tài liệu là nguồn luồng/state machine của baseline B1 cho 9 service. Danh sách endpoint và payload ở 03 đã đồng bộ; schema tại 05. Chưa có code/migration hoặc kết quả test. D01–D12 được theo dõi ở 08.
 
 ## 1. Quy tắc chung
 
@@ -57,7 +57,7 @@ sequenceDiagram
     C->>K: Commit offset
 ```
 
-Relay không gửi version sau khi version trước cùng aggregate chưa được ACK/đánh dấu SENT; event consumer vẫn tự bảo vệ trước replay/retry. Với cache, consumer ghi yêu cầu invalidate bền vững trước ACK rồi worker thực hiện; không đánh dấu đã xử lý khi Redis invalidate chưa có cơ chế retry. TTL là giới hạn stale bổ sung.
+Relay không gửi aggregate_sequence sau khi sequence trước cùng aggregate chưa được ACK/đánh dấu SENT; event consumer vẫn tự bảo vệ trước replay/retry. Với cache, consumer ghi yêu cầu invalidate bền vững trước ACK rồi worker thực hiện; không đánh dấu đã xử lý khi Redis invalidate chưa có cơ chế retry. TTL là giới hạn stale bổ sung.
 
 ## 2. `user-service`
 
@@ -104,7 +104,7 @@ flowchart LR
     C --> D[Invalidate cache qua worker]
     C --> E[VARIANT_CREATED để khởi tạo kho 0]
     F[Khách xem sản phẩm] --> G[Cache hoặc DB]
-    G --> H[Giá và tồn hiển thị có TTL]
+    G --> H[Giá và tồn hiển thị có TTL, version và observed_at]
 ```
 
 | Luồng | Xử lý | Lỗi / kết quả |
@@ -117,7 +117,7 @@ flowchart LR
 | Review | ORDER_COMPLETED → eligibility 30 ngày + cộng sold_quantity một lần → member submit đúng variant → PENDING → OPS duyệt | UNIQUE eligibility chặn review trùng; sửa trong 7 ngày từ tạo và đưa về PENDING; tối đa 5 ảnh |
 | Wishlist | Member PUT/DELETE sản phẩm vào wishlist_items | Idempotent bằng composite PK; không tự chuyển wishlist thành restock subscription |
 
-Catalog quote nội bộ trả variants ACTIVE, phiên bản, giá cơ sở/override, tên/size/màu/ảnh/weight. Promotion chịu trách nhiệm giá campaign. Quote dùng thời hạn ngắn (đề xuất 2 phút) được server ký và ràng buộc actor, cart_version, items, địa chỉ, phương thức, tổng tiền; không chứa secret. Nếu giá/version thay đổi trước tạo order, trả PRICE_CHANGED kèm quote mới để khách xác nhận.
+Catalog quote nội bộ trả variants ACTIVE, phiên bản, giá cơ sở/override, tên/size/màu/ảnh/weight. Promotion chịu trách nhiệm giá campaign. Order tạo quote dùng thời hạn ngắn (baseline 2 phút) được server ký và ràng buộc actor, cart_version, items, địa chỉ, phương thức, tổng tiền; không chứa secret. Nếu giá/version thay đổi trước tạo order, trả PRICE_CHANGED kèm quote mới để khách xác nhận.
 
 ## 4. `cart-service`
 
@@ -144,7 +144,7 @@ sequenceDiagram
 | Preview | Đọc items → tính giá lại và fee/voucher preview | Preview không giữ quota; provider lỗi cho biết chưa tính được phí, không hiển thị tổng giả là giá chốt |
 | Sau tạo đơn | Order gửi cleanup với order_id và item_id/version/quantity đã snapshot; TX xóa/giảm item khớp snapshot | Retry cùng order_id không trừ giỏ hai lần; item version đã đổi giữ nguyên và báo refresh; không xóa sạch giỏ hiện tại |
 
-Order lấy snapshot giỏ qua internal API có actor và version. Request items nếu vẫn giữ trong API public phải khớp snapshot giỏ, không tồn tại hai nguồn số lượng độc lập.
+Order lấy snapshot giỏ qua internal API có actor và version. POST orders B1 chỉ nhận cart_id/cart_version/quote_token, không nhận items độc lập; quantity lấy snapshot giỏ đã xác minh.
 
 ## 5. `order-service` — điều phối checkout
 
@@ -180,16 +180,16 @@ sequenceDiagram
 ```
 
 1. **Quote:** verify actor/cart/address/method, lấy giá catalog + promotion và phí shipping phía server. Client xác nhận quote và submit; không nhận amount do client tự tính. Quote không reserve hàng/quota.
-2. **Tạo đơn:** kiểm tra chữ ký/expiry/binding quote, đối chiếu version/giá; sai giá trả 409 PRICE_CHANGED. Trong order-db transaction tạo order PENDING, items, saga RESERVE, idempotency resource, outbox ORDER_CREATED. Snapshot giá khóa tại transaction này; thay đổi giá catalog sau đó không sửa order.
+2. **Tạo đơn:** kiểm tra chữ ký/expiry/binding quote, đối chiếu version/giá; sai giá trả 409 PRICE_CHANGED. Lookup idempotency sau auth và trước kiểm tra quote expiry để retry order cũ vẫn trả đúng resource. Trong order-db transaction tạo order PENDING, items, saga RESERVE, idempotency resource, outbox ORDER_CREATED. Snapshot giá khóa tại transaction này; thay đổi giá catalog sau đó không sửa order.
 3. **Reserve:** gửi cả items tới inventory, cùng order_id và request_hash. Online deadline bằng order.expires_at (15 phút từ lúc tạo, không gia hạn sau retry). Ghi kết quả bền vững; thiếu một SKU hủy toàn bộ reserve tại inventory rồi vào COMPENSATE.
 4. **Promotion:** lock quota/voucher nếu có; tính lại số tiền đúng snapshot/quote. Nếu không giữ được giá/quota: bù trừ, yêu cầu khách checkout lại; không tự bỏ voucher hoặc tăng tiền.
 5. **Payment:** intent CREATE_PAYMENT được ghi trước HTTP; payment nhận order_id và tự lấy tổng snapshot từ internal order API, hoặc nhận snapshot từ caller order đã xác thực và kiểm tra hash. Retry cùng order_id. Timeout lưu UNKNOWN rồi query payment; không lập giao dịch khác.
-6. **Phản hồi:** hoàn tất nhanh trả 201 với URL; chưa xong trả 202 với order_no, status_url, retry_after. UI poll trạng thái đơn có quyền truy cập. Mục tiêu tạo đơn <2s đo việc tiếp nhận bền vững; thời gian URL sẵn sàng là metric riêng cần review lại SLO cũ.
+6. **Phản hồi:** hoàn tất nhanh trả 201 với URL; chưa xong trả 202 với order_no, status_url, retry_after_seconds. UI poll trạng thái đơn có quyền truy cập. Mục tiêu tạo đơn <2s đo tiếp nhận bền vững; URL readiness đo riêng theo NFR-04 ở 02 và profile trong 11.
 7. **Nhận thanh toán:** trong một transaction lock order, ghi processed_events + payment_id/paid_at và saga work. Event có thể đến lúc order còn PENDING; lưu kết quả để saga tiếp tục, không bỏ event và không ghi WAITING_PAYMENT đè lên kết quả đã nhận.
 8. **Commit kho/promotion:** chưa đóng order và reservation còn hạn thì commit inventory; promotion commit phần đã giữ. PAID chỉ khi hoàn thành các bước này. Nếu kho đã nhả hoặc quá hạn, chạy refund toàn bộ. Nếu promotion tạm lỗi sau commit kho, tiếp tục retry, chưa giao; lỗi vĩnh viễn thì restore kho và refund.
 9. **Đóng gói:** OPS chuyển PAID → PACKING sau khi kiểm tra saga sẵn sàng. Order ghi durable step CREATE_SHIPMENT; shipment tạo thành công vẫn PACKING. Carrier nhận hàng mới SHIPPING.
 
-Trong Phase 1 chưa promotion: các bước promotion là no-op với discount = 0; chưa tích hợp carrier thì shipping-service dùng SELF và bảng phí nội bộ. Đây là đề xuất làm MVP mua được hàng, không bỏ phần tính phí/giao hàng.
+Trong Phase 1 chưa promotion: các bước promotion là no-op với discount = 0; chưa tích hợp carrier thì shipping-service dùng SELF và bảng phí nội bộ. Đây là phạm vi MVP hiện hành trong 02; không bỏ tính phí/giao hàng.
 
 ### 5.2 Luồng COD
 
@@ -272,10 +272,10 @@ flowchart TD
 
 - Worker định kỳ quét saga chưa xong và đơn quá hạn, claim lease; query trạng thái resource rồi tiếp tục bước đã lưu. Không suy ra kết quả chỉ từ last_error hoặc thứ tự gọi trước crash.
 - Cancellation ghi intent CANCEL trước mọi compensation. Worker FULFILL cũ không được ghi kết quả tiến tiếp sau khi intent/version đổi. Mỗi lệnh có khóa `order_id:operation`; target có trạng thái terminal/tombstone để lệnh đến muộn không tạo resource lại.
-- Đặc biệt reserve timeout: gửi release cùng order_id + original hash. Inventory ghi RELEASED kể cả reserve chưa đến; reserve đến muộn không giữ hàng. Promotion áp dụng cùng quy tắc.
+- Đặc biệt reserve timeout: gửi release cùng order_id + original reservation snapshot (order_no,items,expires_at) + original hash. Inventory ghi RELEASED kể cả reserve chưa đến; reserve đến muộn không giữ hàng. Promotion áp dụng cùng quy tắc.
 - Commit có thể đã thắng release: query reservation; COMMITTED phải dùng return/restore với key `cancel:{order_id}:{sku}`, không gọi release rồi cho rằng kho đã hoàn lại.
 - Khi create shipment UNKNOWN, dừng restore/refund hoàn tất hủy cho đến khi xác định hàng chưa bàn giao hoặc vận đơn đã hủy. Carrier đã nhận hàng thì đi luồng return và cảnh báo OPS.
-- Shipment cancel trước create phải lưu tombstone CANCELLED với snapshot/hash của original create request; create đến muộn bị từ chối. Payment close trước create tương tự lưu FAILED với order snapshot; webhook tiền thật sau đó vẫn được ghi nhận và hoàn.
+- Shipment cancel trước create phải lưu tombstone CANCELLED với snapshot/hash của original create request; create đến muộn bị từ chối. Payment close trước create lưu FAILED tombstone với order snapshot/hash và closed_at; webhook tiền thật sau đó vẫn được ghi nhận và hoàn.
 - `CANCELLED` chỉ đạt khi stock/promotion đã giải phóng hoặc restore, shipment không thể xuất hàng, payment chưa thu đã đóng. Chưa biết kết quả thì giữ CANCELLING/MANUAL, không báo hoàn tất giả.
 - Thanh toán đến sau deadline, kể cả provider báo paid_at trước deadline nhưng callback trễ: chính sách D07 kiểm tra reservation còn hiệu lực và order còn mở; nếu đã hết hạn/đóng thì refund. Không hứa khách vẫn nhận hàng chỉ dựa timestamp provider.
 - Refund lỗi vẫn REFUNDING, giữ nghĩa vụ và alert. Notification gửi trạng thái đang xử lý, không gửi “đã hoàn tiền” trước xác nhận provider.
@@ -299,7 +299,7 @@ stateDiagram-v2
 | Reserve | Normalize/gộp SKU trùng, validate qty → lock/create reservation theo order_id → so request_hash → lock stock SKU theo thứ tự → kiểm tra đủ tất cả → tăng reserved + insert items + ledger + outbox | Một SKU thiếu rollback toàn bộ; cùng key/body trả reservation hiện có; terminal không mở lại |
 | Commit | Lock reservation → ACTIVE và DB now < expires_at → lock SKU theo thứ tự → giảm on_hand/reserved theo items → COMMITTED + ledger/outbox | COMMITTED retry thành công không trừ thêm; RELEASED/EXPIRED trả 409; quá hạn chuyển EXPIRED và release trong cùng TX rồi trả kết quả thất bại sau commit |
 | Release/expire | Lock reservation → ACTIVE: giảm reserved, ghi RELEASED/EXPIRED + ledger/outbox | COMMITTED trả trạng thái cần restore; đã RELEASED/EXPIRED là no-op; release trước reserve tạo tombstone |
-| Return/restore | Chỉ caller order hoặc OPS có quyền; lock reservation → kiểm tra đã COMMITTED, tổng quantity trả chưa vượt commit → tăng on_hand + stock_returns + ledger/outbox | Không nhận số lượng trả tùy ý từ client; cần cancel chưa giao hoặc phiếu kiểm đếm hàng đã về; operation key chống cộng lại |
+| Return/restore | Chỉ caller order; OPS đi qua admin order returns; lock reservation → kiểm tra đã COMMITTED, tổng quantity trả chưa vượt commit → tăng on_hand + stock_returns + ledger/outbox | Không nhận số lượng trả tùy ý từ client; cần cancel chưa giao hoặc phiếu kiểm đếm hàng đã về; operation key chống cộng lại |
 
 Không giữ một phần các SKU của đơn. Không giữ row lock khi gọi service khác. Stock constraint `0 <= reserved <= on_hand` là lớp bảo vệ cuối; không thay bằng Redis distributed lock.
 
@@ -333,7 +333,7 @@ sequenceDiagram
     P-->>O: PAYMENT_COMPLETED qua Kafka
 ```
 
-- Tạo payment chỉ từ order đã xác thực; amount lấy snapshot order. Public `/payments` nếu giữ lại chỉ yêu cầu tiếp tục payment của đơn thuộc actor, không cho client đổi amount/method.
+- Tạo payment chỉ từ order đã xác thực; amount lấy snapshot order. Public GET /orders/{order_no}/payment chỉ đọc payment đã có của owner; không có create payment public hoặc amount/method từ client.
 - Tạo row trước gọi provider. COD tạo COD_PENDING ngay. Online giữ provider_request_id cố định qua mọi retry; thất bại mạng UNKNOWN → query trước, không gán FAILED do timeout cục bộ.
 - Webhook kiểm tra chữ ký theo adapter, merchant, reference, amount/currency đã chuẩn hóa. Sai amount/merchant không được SUCCESS; log đã lọc + alert. Request chưa xác minh không được ghi giao dịch tài chính.
 - Lock payment → insert payment_transactions nếu event mới → cập nhật trạng thái hợp lệ + outbox. ACK chỉ sau commit. DB lỗi trả phản hồi retry theo provider; không ACK success rồi mới lưu.
@@ -428,27 +428,27 @@ flowchart LR
 
 CRUD template chỉ MARKETING, validate placeholder và render preview trước lưu; nội dung transactional ảnh hưởng payment/order cần review nội bộ. Marketing unsubscribe link dùng token có scope recipient/channel, lưu hash; request lặp vẫn thành công.
 
-## 11. Ma trận trách nhiệm và event đề xuất
+## 11. Ma trận trách nhiệm và event B1
 
 | Producer / topic | Event | Consumer và tác dụng |
 |---|---|---|
 | user / `user.events` | USER_CREATED | Projection/analytics khi cần; không tự gửi welcome nếu đã có NOTIFY_WELCOME |
 | catalog / **`catalog.events` mới** | VARIANT_CREATED, CATALOG_CHANGED | Inventory đăng ký SKU; catalog worker invalidate cache từ durable task |
-| order / `order.events` | ORDER_CREATED, ORDER_PAID, ORDER_CONFIRMED, ORDER_CANCELLED, ORDER_COMPLETED | Cart cleanup theo contract; catalog eligibility/sold count; inventory ngưng restock khi completed; **không tự create payment/deduct stock/create shipment** |
+| order / `order.events` | ORDER_CREATED, ORDER_PAID, ORDER_CONFIRMED, ORDER_CANCELLED, ORDER_COMPLETED | Cart cleanup dùng REST-only background task; catalog eligibility/sold count; inventory ngưng restock khi completed; **không tự create payment/deduct stock/create shipment** |
 | inventory / `inventory.events` | INVENTORY_RESERVED/RELEASED/DEDUCTED/UPDATED/RESTOCKED | Order đối chiếu reservation; catalog invalidation; restock fan-out do inventory sở hữu |
 | payment / `payment.events` | PAYMENT_CREATED/COMPLETED/FAILED/REFUNDED | Order tiếp tục saga hoặc cập nhật tài chính COD; refund event có refund_id, amount, refunded_total |
 | promotion / `promotion.events` | PRICE_CHANGED | Catalog invalidation, không sửa snapshot đơn |
-| shipping / `shipping.events` | SHIPMENT_CREATED/STATUS_UPDATED, **COD_COLLECTED/COD_REMITTED** | Order cập nhật giao hàng; payment xử lý thu/đối soát COD |
+| shipping / `shipping.events` | SHIPMENT_CREATED/SHIPMENT_STATUS_UPDATED, **COD_COLLECTED/COD_REMITTED** | Order cập nhật giao hàng; payment xử lý thu/đối soát COD |
 | Các service / `notification.events` | NOTIFY_* | Chỉ notification gửi; producer gửi recipient, locale, dedupe_key, data tối thiểu |
 | notification / **`notification.results` mới** | NOTIFICATION_SENT/FAILED | Inventory cập nhật restock; user dọn secret tạm khi gửi OTP thành công |
 
 Order phát NOTIFY_ORDER_CONFIRMED khi online đã commit xong hoặc COD đã được tiếp nhận; payment phát NOTIFY_PAYMENT_SUCCESS/REFUND_RESULT cho thông tin tiền; shipping phát NOTIFY_SHIPMENT_STATUS. Đây là thông báo khác mục đích, không dùng cả event domain và NOTIFY để gửi cùng template hai lần.
 
-Envelope giữ event_id/event_type/version/occurred_at/aggregate_id của Interfaces, thêm `aggregate_version`, `correlation_id`; payload order-related luôn phân biệt order_id UUID và order_no. Events lifecycle có state/version để consumer không suy ra từ thứ tự giữa các topic. Kafka không cung cấp tổng thứ tự xuyên order/payment/inventory.
+Envelope giữ event_id/event_type/version/occurred_at/aggregate_id của Interfaces, thêm `aggregate_version`, `aggregate_sequence`, `correlation_id`; payload order-related luôn phân biệt order_id UUID và order_no. Events lifecycle có state/version để consumer không suy ra từ thứ tự giữa các topic. Kafka không cung cấp tổng thứ tự xuyên order/payment/inventory.
 
-## 12. API và schema cần bổ sung / sửa sau review
+## 12. API và schema đã đồng bộ
 
-Tất cả đường dẫn dưới đây là **đề xuất chưa phê duyệt**; base internal là `/internal/api/v1`, public `/api/v1`, admin `/admin/api/v1`. Mutation nội bộ yêu cầu service identity + Idempotency-Key + body hash và kiểm tra quyền theo caller.
+Các operation dưới đây đã được hợp nhất vào **03 Interfaces B1**, nơi định nghĩa method/path/caller chính thức; base internal là `/internal/api/v1`, public `/api/v1`, admin `/admin/api/v1`. Mutation nội bộ yêu cầu service identity + Idempotency-Key + body hash và kiểm tra quyền theo caller.
 
 | Khu vực | Endpoint / thay đổi | Dữ liệu và lý do |
 |---|---|---|
@@ -456,10 +456,10 @@ Tất cả đường dẫn dưới đây là **đề xuất chưa phê duyệt**
 | Internal cart | `GET /carts/{id}/snapshot`, `POST /carts/{id}/checkout-cleanup` | Actor/version bắt buộc; cleanup chứa order_id và items snapshot, idempotent |
 | Internal catalog | `POST /catalog/variants/quote` | Batch variant IDs, trả giá/version/weight/status; không một HTTP call cho mỗi item |
 | Internal order | `GET /orders/{order_id}/snapshot`, `GET /orders/{order_id}/saga-status` | Payment, promotion, shipping query snapshot/intent với quyền caller riêng |
-| Internal inventory | Giữ reserve/commit/release; thêm `GET /inventory/reservations/{order_id}`, `POST /inventory/returns` | Reserve toàn giỏ có expires_at + request_hash; release original hash; return reason/evidence/quantities |
+| Internal inventory | Giữ reserve/commit/release; thêm `GET /inventory/reservations/{order_id}`, `POST /inventory/returns` | Reserve toàn giỏ có expires_at + request_hash; release original snapshot/hash; return reason/evidence/quantities |
 | Internal promotion | `POST /promotions/quote`, `POST /promotions/reservations/{lock,commit,release}`, `GET /promotions/reservations/{order_id}` | Bao phủ voucher và campaign quota trong một TX; thay lock/release voucher riêng ở checkout |
 | Internal payment | `POST /payments`, `GET /payments/by-order/{order_id}`, `POST /payments/{order_id}/close`, `POST /payments/{payment_id}/refunds` | Amount server-owned; close có snapshot để ghi tombstone nếu create chưa đến |
-| Public payment | `/payments` không nhận amount có quyền quyết định | Chỉ resume/query payment của order đã xác thực; refund chuyển admin FINANCE hoặc order internal |
+| Public payment | `GET /orders/{order_no}/payment` | Chỉ đọc payment sẵn có đúng owner; refund qua FINANCE/order internal |
 | Internal shipping | `POST /shipping/shipments`, `GET /shipping/shipments/by-order/{order_id}`, `POST /shipping/shipments/{order_id}/cancel` | Snapshot/hash nhất quán; cancel-before-create có đủ snapshot; query UNKNOWN trước retry |
 | Admin order | Action xác nhận COD/đóng gói/hủy/nhận hàng hoàn | Order kiểm tra trạng thái trước khi điều phối, không cho OPS ghi trực tiếp vào inventory/payment |
 | Admin payment | Refund, COD settlement, resolve reconciliation | FINANCE; evidence, operation_key, audit; không coi shipping DELIVERED là đã thu |
@@ -473,7 +473,7 @@ Các điểm đối chiếu với schema 05:
 
 - `user_action_tokens` có purpose RESET_PASSWORD/EMAIL_VERIFY và target_email; reset/verify dùng cùng mẫu token một lần.
 - `shipments.handed_over_at` phân biệt đã tạo vận đơn với đã giao hàng cho hãng.
-- Consumer cart dùng processed_events nếu cleanup bằng event; nếu REST dùng idempotency_requests, không bật cả hai cách. Đề xuất REST cleanup do saga gọi sau khi tạo order được tiếp nhận, lỗi cleanup không hủy order.
+- Cleanup cart dùng REST-only và idempotency_requests; order insert background_tasks cùng TX tạo đơn. Task có lease/retry riêng, chạy lại sau crash dù saga DONE. Cleanup lỗi không hủy order.
 
 ## 13. Kịch bản nghiệm thu thiết kế
 
@@ -509,19 +509,77 @@ Chưa có ứng dụng nên đây là các ca kiểm thử phải hiện thực 
 | T26 | Refund một phần sau DELIVERED | Tiền hoàn đúng, order còn lịch sử DELIVERED; kho không tự tăng |
 | T27 | Giao COD thành công nhưng carrier chưa chuyển tiền | Order DELIVERED, payment COD_COLLECTED hoặc COD_PENDING theo bằng chứng; chưa SUCCESS |
 
-## 14. Trình tự triển khai sau khi review
+## 14. Trình tự triển khai
 
-1. Chốt D01–D12, state machines và API delta; đồng bộ PRD/Interfaces/Architecture để có một bộ quyết định thống nhất.
+1. Dùng baseline 01–08 đã đồng bộ; PO/TL chốt các giả định/gate liên quan theo 08; PLT-02 cụ thể hóa OpenAPI/JSON Schema.
 2. Tạo migration + test constraints/race cho order/inventory/payment trước; dựng user/catalog/cart tối thiểu và SELF shipping để chạy luồng COD xuyên suốt.
 3. Thêm một cổng online, kiểm thử webhook trùng/trễ, refund và crash recovery; sau đó tích hợp cổng còn lại.
-4. Hoàn thiện promotion, carrier, OTP/social/reviews/restock theo Phase 2; kiểm tra lại ưu tiên P0 trong PRD vì hiện chưa hoàn toàn khớp roadmap.
+4. Hoàn thiện promotion, carrier, OTP/social/reviews/restock theo Phase 2; theo scope P1/Phase 2 đã thống nhất ở PRD.
 5. Đo tải thực theo từng phase; tối ưu cache/index trước khi thêm sharding hoặc cơ chế quota Redis phức tạp.
 
 ## 15. Phiếu review
 
 - [ ] Luồng online, COD, hủy, hoàn tiền, hoàn hàng đúng cách shop muốn vận hành.
 - [ ] Chấp nhận order điều phối duy nhất, database quyết định kho/quota.
-- [ ] Chấp nhận xử lý UNKNOWN/202 và UI đang xử lý; chốt lại cách đo SLO checkout.
+- [ ] Xác nhận UX UNKNOWN/202 và cách đo SLO ở 02/11.
 - [ ] Chấp nhận các API/event mới, quyền truy cập và thay đổi state machine.
 - [ ] Xác nhận các tình huống T01–T27 đủ làm cơ sở nghiệm thu phần lõi.
 - [ ] Chốt scope Phase 1/2 và các chính sách chưa duyệt trước khi bắt đầu code.
+
+## 16. Làm rõ phục hồi và cạnh tài chính B1
+
+- Worker scan RUNNING/COMPENSATING đến next_retry_at; WAITING đến deadline/query time lưu trong next_retry_at; reclaim lease hết hạn. Không để WAITING mắc kẹt vì partial index chỉ chứa RUNNING.
+- Khi reserve thiếu hàng sau khi order đã durable, trả resource/status URL với reason; compensation hoàn tất rồi CANCELLED. Validation trước tạo đơn mới trả 4xx không có order.
+- Cleanup giỏ từ background_tasks của order, độc lập FULFILL/CANCEL saga, dùng original item versions. Khách có thể thêm lại hàng sau đơn bị hủy, hệ thống không tự merge lại giỏ.
+- closed_at trên payment không bị xóa khi late webhook đổi FAILED sang SUCCESS. Refund worker query bằng refund_id/operation_key; order có thể query refund resource khi event chậm.
+- Refund đã SUCCESS không quay FAILED bởi callback cũ. Tổng refund_reserved + refunded không vượt payment amount. Cùng operation đã FAILED chắc chắn mà cần thử lại được tiếp tục có audit dưới khóa, không đổi key để bỏ kiểm tra hạn mức.
+- COD nhận COD_REMITTED chỉ tạo bằng chứng/đối soát; FINANCE hoặc tác vụ đối soát đáng tin cậy xác nhận bank settlement mới SUCCESS. Ghi gross/fees/net theo 05; DELIVERED không chứng minh thu hoặc nhận tiền.
+- Return sau DELIVERED lưu order_returns/items, giữ DELIVERED; inventory chỉ nhận restock_quantity sau kiểm đếm. Refund tùy policy, không tự tăng kho từ event tiền.
+- SENDING notification hết lease → query/dedupe provider; nếu không thể xác minh thì UNKNOWN, không gửi lại mù quáng.
+- Sự kiện inventory theo SKU và reservation có aggregate riêng; không suy tổng thứ tự toàn bộ giỏ từ một partition SKU. Consumer tài chính dùng business ID, không bỏ ledger event chỉ vì aggregate_version thấp.
+
+## 17. Bảng chuyển trạng thái payment, refund và shipment
+
+Các guard sau là hợp đồng hành vi; API không nhận target status tùy ý. Phiên bản/state update luôn dưới khóa resource hoặc CAS. Cạnh không liệt kê bị từ chối hoặc reconcile nếu event thiếu tiền đề.
+
+### 17.1 Payment và refund
+
+| Từ → đến | Trigger / guard |
+|---|---|
+| CREATED → PROCESSING | Online request được provider tiếp nhận; không phải chỉ vì khách mở trang |
+| CREATED/PROCESSING → UNKNOWN | Network/query chưa xác minh kết quả |
+| CREATED/PROCESSING/UNKNOWN → FAILED | Provider xác minh thất bại chắc chắn hoặc close chưa thu; giữ closed_at nếu close |
+| CREATED/PROCESSING/UNKNOWN/FAILED → SUCCESS | Verified provider evidence đã thu đúng tiền; FAILED vẫn nhận late success |
+| COD_PENDING → COD_COLLECTED | Evidence thu đúng method/reference/amount; thiếu tiền mở discrepancy |
+| COD_PENDING → FAILED | Close trước thu có evidence; không tự kết luận thất bại từ DELIVERED |
+| FAILED đã close COD → COD_COLLECTED | Bằng chứng thu COD đến muộn được xác minh; giữ closed_at và order xử lý nghĩa vụ refund |
+| COD_COLLECTED → SUCCESS | FINANCE/verified reconciliation xác nhận gross = phí + net thực về, đủ nghĩa vụ |
+| SUCCESS/COD_COLLECTED → PARTIALLY_REFUNDED hoặc REFUNDED | Refund SUCCESS và cumulative total; COD refund cần evidence đã thu, không giả bank settlement |
+| PARTIALLY_REFUNDED → REFUNDED | Tổng refund verified bằng amount |
+| PARTIALLY_REFUNDED/REFUNDED → cùng trạng thái | Callback payment/settlement cũ đến sau; ghi evidence mới nếu có, không reset refunded counters |
+
+closed_at độc lập trạng thái tiền, ngăn URL/create mới kể cả late success. Nếu COD settlement đến sau một refund, vẫn lưu cod_settlements/discrepancy và xác minh tiền về nhưng giữ trạng thái refund cùng counters; không ghi SUCCESS đè lịch sử refund.
+
+Refund REQUESTED → PROCESSING trước network; PROCESSING → UNKNOWN khi timeout; PROCESSING/UNKNOWN → SUCCESS khi verify, hoặc FAILED khi thất bại chắc chắn. FAILED muốn retry phải giữ cùng refund/business reference và có hành động audit phù hợp provider; reserve hạn mức lại dưới payment lock trước gọi. SUCCESS terminal; duplicate no-op.
+
+### 17.2 Shipment
+
+| Từ → đến | Trigger / guard |
+|---|---|
+| Chưa có → PENDING | Order PACKING/ready, original snapshot/hash + key |
+| Chưa có → CANCELLED | Cancel-before-create tombstone đủ snapshot/hash |
+| PENDING → CREATED / UNKNOWN | Provider/SELF xác minh tạo thành công / kết quả chưa rõ |
+| UNKNOWN → CREATED / MANUAL | Query cùng reference xác minh / hết budget không xác minh được |
+| MANUAL → CREATED / CANCELLED | OPS đối chiếu có bằng chứng qua workflow, không force status |
+| CREATED → PICKING | Đã lên lịch lấy; chưa chắc bàn giao |
+| CREATED/PICKING → DELIVERING | Xác minh đã bàn giao, set handed_over_at; order SHIPPING |
+| DELIVERING → DELIVERED / FAILED | Bằng chứng giao thành công / lần giao thất bại |
+| FAILED → DELIVERING / RETURNING | Carrier giao lại / quyết định hoàn |
+| DELIVERING → RETURNING | Carrier chấp nhận hoàn sau bàn giao |
+| RETURNING → RETURNED | Carrier báo hoàn về; kho vẫn đợi OPS kiểm đếm |
+| PENDING/UNKNOWN/CREATED/PICKING/MANUAL → CANCEL_PENDING | Có cancel intent, đóng create mới; query/cancel ngoài TX |
+| CANCEL_PENDING → CANCELLED | Đã chứng minh chưa bàn giao và ngăn tạo/giao tiếp |
+| CANCEL_PENDING → DELIVERING / RETURNING | Phát hiện đã bàn giao: giữ evidence, order không restore; return khi carrier xác nhận |
+| CANCELLED nhận evidence đã bàn giao/giao | Mâu thuẫn cần MANUAL + incident/reconcile; không âm thầm bỏ bằng chứng vật lý |
+
+Nếu webhook nhảy từ CREATED sang DELIVERED, query carrier để xác minh mốc bàn giao và lịch sử thiếu trước apply; không bắt provider phải gửi mọi intermediate status. Shipment đã DELIVERED chỉ xử lý return sau giao bằng chứng từ OPS/order_returns theo D10, không xóa lịch sử giao.

@@ -2,15 +2,15 @@
 
 | Thuộc tính | Giá trị |
 |---|---|
-| Ngày | 2026-09-16 |
-| Phiên bản | v0.1 |
-| Trạng thái | **Draft — chờ chủ dự án review, chưa phê duyệt để triển khai** |
+| Ngày | 2026-09-19 |
+| Phiên bản | B1 |
+| Trạng thái | **Baseline đồng bộ — migration chưa triển khai/kiểm thử; giả định nghiệp vụ theo 08** |
 | Cơ sở | [PRD](02_prd.md), [Interfaces](03_interfaces.md), [Architecture](04_architecture.md) |
 | Đọc cùng | [Luồng xử lý từng service](06_service_flows.md) · [Bộ sơ đồ thiết kế](07_diagrams.md) |
 
-Đây là thiết kế đề xuất cho Release 1, bao gồm phần MVP và Phase 2. Các bảng Phase 2 chỉ tạo khi triển khai tính năng tương ứng. Tài liệu mô tả schema và ràng buộc để review; chưa phải SQL migration đã chạy kiểm thử. Những điểm khác tài liệu cũ được ghi trong mục 1 và mục 12, không tự coi là đã được duyệt.
+Thiết kế B1 cho MVP và Phase 2; bảng Phase 2 chỉ tạo khi triển khai tính năng đó. Đây là nguồn schema thống nhất với 02–04 và 06–07, chưa phải migration đã kiểm thử. Trạng thái D01–D12 và quyết định còn mở ở [08](08_decisions.md); không coi việc đồng bộ là PO đã ký chính sách.
 
-## 1. Các quyết định cần review
+## 1. Các giả định thiết kế đang dùng
 
 | ID | Đề xuất | Hệ quả / giới hạn |
 |---|---|---|
@@ -48,7 +48,7 @@
 
 | Bảng | Cột | Ràng buộc / index |
 |---|---|---|
-| `outbox_events` (C) | `id`, `aggregate_type text`, `aggregate_id text`, `aggregate_version bigint`, `event_type text`, `schema_version int = 1`, `topic text`, `partition_key text`, `payload jsonb`, `status varchar(32) = 'PENDING'`, `attempts int = 0`, `next_attempt_at timestamptz = now()`, `lease_until timestamptz?`, `lease_token uuid?`, `published_at timestamptz?`, `last_error text?` | Status PENDING/IN_FLIGHT/SENT; partial index `(next_attempt_at, created_at)` WHERE status <> 'SENT'; index `(aggregate_type, aggregate_id, aggregate_version)` |
+| `outbox_events` (C) | `id`, `aggregate_type text`, `aggregate_id text`, `aggregate_version bigint`, `aggregate_sequence bigint`, `event_type text`, `schema_version int = 1`, `topic text`, `partition_key text`, `payload jsonb`, `status varchar(32) = 'PENDING'`, `attempts int = 0`, `next_attempt_at timestamptz = now()`, `lease_until timestamptz?`, `lease_token uuid?`, `published_at timestamptz?`, `last_error text?` | Status PENDING/IN_FLIGHT/SENT; partial index `(next_attempt_at, created_at)` WHERE status <> 'SENT'; UNIQUE `(aggregate_type, aggregate_id, aggregate_sequence)` |
 | `processed_events` | `consumer_name text`, `event_id uuid`, `processed_at timestamptz = now()` | PK `(consumer_name, event_id)`; ghi trong cùng transaction với thay đổi nghiệp vụ |
 | `idempotency_requests` (T) | `actor_key text`, `operation text`, `key varchar(128)`, `request_hash char(64)`, `resource_id uuid?`, `status varchar(32) = 'PROCESSING'`, `response_code int?`, `response_body jsonb?`, `expires_at timestamptz?` | PK `(actor_key, operation, key)`; PROCESSING/COMPLETED; actor từ auth/session đã xác minh; không lưu secret trong response |
 | `audit_logs` (C) | `id`, `actor_id uuid`, `action text`, `resource_type text`, `resource_id text`, `reason text?`, `before_data jsonb?`, `after_data jsonb?`, `request_id uuid`, `source_ip inet?` | Append-only bằng quyền DB; index `(resource_type, resource_id, created_at)`; che secret/PII không cần thiết |
@@ -57,7 +57,7 @@
 - Business write + outbox + idempotency result là một local transaction. Với gọi bên ngoài, lưu intent trước, kết quả sau; không giữ transaction DB trong lúc chờ mạng.
 - Idempotency không chỉ dựa TTL: order giữ unique `(actor_key, checkout_key)` suốt vòng đời đơn; payment/refund/reservation giữ unique khóa nghiệp vụ. Xóa cache response không cho phép lặp lại hiệu ứng tài chính.
 - Outbox là at-least-once: crash sau publish trước đánh dấu SENT có thể gửi lại. Consumer xử lý trùng trong DB, không giả định Kafka producer idempotence loại được mọi lần gửi lặp.
-- `aggregate_version` là số phiên bản nghiệp vụ, khác `schema_version`. Relay giữ thứ tự trong cùng aggregate bằng cách chỉ claim bản chưa gửi nhỏ nhất; consumer vẫn kiểm tra trạng thái/version vì retry có thể đảo thứ tự.
+- `aggregate_version` là số phiên bản nghiệp vụ, khác `schema_version`. Mỗi event có aggregate_sequence tăng riêng kể cả cùng aggregate_version; cấp số dưới khóa aggregate. Relay giữ thứ tự bằng cách chỉ claim sequence chưa gửi nhỏ nhất; consumer vẫn kiểm tra trạng thái/version vì retry có thể đảo thứ tự.
 
 ## 4. `user-db`
 
@@ -157,7 +157,7 @@ erDiagram
 | `orders` (T) | `id`, `order_no varchar(32)`, `user_id uuid?`, `actor_key text`, `guest_access_hash char(64)?`, `checkout_key varchar(128)`, `checkout_hash char(64)`, `cart_id uuid`, `cart_version bigint`, `status varchar(32) = 'PENDING'`, `payment_method varchar(16)`, `currency char(3) = 'VND'`, `subtotal bigint`, `discount_amount bigint = 0`, `shipping_fee bigint`, `shipping_discount bigint = 0`, `cod_fee bigint = 0`, `total_amount bigint`, `voucher_code text?`, `contact_email text?`, `contact_phone varchar(32)`, `locale varchar(2) = 'vi'`, `shipping_address jsonb`, `shipping_quote jsonb`, `note text?`, `expires_at timestamptz`, `paid_at timestamptz?`, `confirmed_at timestamptz?`, `delivered_at timestamptz?`, `cancel_reason text?`, `version bigint = 0` | UNIQUE order_no, `(actor_key, checkout_key)`; guest cần guest_access_hash; phương thức VNPAY/MOMO/COD; tất cả tiền >= 0; discount <= subtotal, shipping_discount <= shipping_fee; total = subtotal - discount + shipping_fee - shipping_discount + cod_fee; indexes `(user_id, created_at, id)`, `(status, created_at, id)`, `(expires_at)` WHERE status IN ('PENDING','WAITING_PAYMENT','CONFIRMED') |
 | `order_items` | `id`, `order_id uuid FK orders`, `variant_id uuid`, `sku varchar(64)`, `name text`, `size text`, `color text`, `image_url text?`, `quantity int`, `unit_price bigint`, `line_total bigint`, `catalog_version bigint`, `campaign_item_id uuid?`, `cart_item_id uuid`, `cart_item_version bigint` | UNIQUE `(order_id, variant_id)`; quantity 1–99, unit_price >= 0; line_total = quantity * unit_price |
 | `order_status_history` (C) | `id`, `order_id uuid FK orders`, `from_status varchar(32)?`, `to_status varchar(32)`, `actor_type varchar(16)`, `actor_id uuid?`, `reason text?`, `request_id uuid?` | Index `(order_id, created_at, id)`; actor SYSTEM/CUSTOMER/ADMIN |
-| `order_sagas` (T) | `order_id uuid PK FK orders`, `intent varchar(16) = 'FULFILL'`, `step varchar(32)`, `status varchar(32) = 'RUNNING'`, `inventory_state varchar(32) = 'NONE'`, `promotion_state varchar(32) = 'NONE'`, `payment_id uuid?`, `shipment_id uuid?`, `retry_count int = 0`, `next_retry_at timestamptz = now()`, `lease_until timestamptz?`, `lease_token uuid?`, `last_error text?`, `version bigint = 0` | intent FULFILL/CANCEL; status RUNNING/WAITING/COMPENSATING/DONE/MANUAL; index `(next_retry_at)` WHERE status IN ('RUNNING','COMPENSATING'); resource states NONE/UNKNOWN/HELD/COMMITTED/RELEASED/RESTORED |
+| `order_sagas` (T) | `order_id uuid PK FK orders`, `intent varchar(16) = 'FULFILL'`, `step varchar(32)`, `status varchar(32) = 'RUNNING'`, `inventory_state varchar(32) = 'NONE'`, `promotion_state varchar(32) = 'NONE'`, `payment_id uuid?`, `shipment_id uuid?`, `retry_count int = 0`, `next_retry_at timestamptz = now()`, `lease_until timestamptz?`, `lease_token uuid?`, `last_error text?`, `version bigint = 0` | intent FULFILL/CANCEL; status RUNNING/WAITING/COMPENSATING/DONE/MANUAL; index `(next_retry_at)` WHERE status IN ('RUNNING','WAITING','COMPENSATING'); resource states NONE/UNKNOWN/HELD/COMMITTED/RELEASED/RESTORED |
 
 Order status: PENDING, WAITING_PAYMENT, CONFIRMED, PAID, PACKING, SHIPPING, DELIVERED, CANCELLING, CANCELLED, REFUNDING, REFUNDED, RETURNING, RETURNED. Saga step: VALIDATE, RESERVE, LOCK_PROMOTION, CREATE_PAYMENT, WAIT_PAYMENT, WAIT_OPS, COMMIT_STOCK, COMMIT_PROMOTION, WAIT_PACKING, CREATE_SHIPMENT, WAIT_DELIVERY, COMPENSATE, DONE. Chi tiết cạnh chuyển ở tài liệu 06.
 
@@ -188,7 +188,7 @@ erDiagram
 
 `available` tính `on_hand - reserved`, không lưu thành cột thứ ba có thể lệch. Reserve tất cả SKU trong **một transaction inventory-db**, khóa SKU theo thứ tự cố định. Commit giảm cả on_hand/reserved; release chỉ giảm reserved. Return của hàng đã commit tăng on_hand, không dùng release.
 
-Job hết hạn khóa reservation; commit cũng khóa cùng hàng và phải còn ACTIVE, chưa hết hạn. Chỉ một bên thắng. Reservation terminal giữ lại để request cũ không giữ hàng lại sau release. Release đến trước reserve tạo tombstone RELEASED theo order_id/request_hash; reserve đến muộn bị từ chối. Payload release phải có original reservation hash, không dùng hash của body release.
+Job hết hạn khóa reservation; commit cũng khóa cùng hàng và phải còn ACTIVE, chưa hết hạn. Chỉ một bên thắng. Reservation terminal giữ lại để request cũ không giữ hàng lại sau release. Release đến trước reserve tạo tombstone RELEASED theo order_id/request_hash; reserve đến muộn bị từ chối. Payload release phải có original reservation hash và original snapshot (order_no,items,expires_at) để tạo tombstone đủ cột; hash được tính lại từ snapshot. Không dùng hash của body release.
 
 ## 9. `payment-db`
 
@@ -201,16 +201,16 @@ erDiagram
 
 | Bảng | Cột | Constraints / index |
 |---|---|---|
-| `payments` (T) | `id`, `order_id uuid`, `order_no varchar(32)`, `user_id uuid?`, `method varchar(16)`, `amount bigint`, `currency char(3) = 'VND'`, `status varchar(32) = 'CREATED'`, `provider_request_id varchar(128)`, `provider_txn_id text?`, `payment_url text?`, `expires_at timestamptz`, `paid_at timestamptz?`, `refunded_amount bigint = 0`, `refund_reserved_amount bigint = 0`, `next_reconcile_at timestamptz?`, `version bigint = 0` | UNIQUE order_id, order_no, provider_request_id; UNIQUE `(method, provider_txn_id)` khi có; amount >= 0; 0 <= refunded + refund_reserved <= amount; indexes `(status, next_reconcile_at)`, `(created_at, id)` |
+| `payments` (T) | `id`, `order_id uuid`, `order_no varchar(32)`, `user_id uuid?`, `method varchar(16)`, `amount bigint`, `currency char(3) = 'VND'`, `status varchar(32) = 'CREATED'`, `provider_request_id varchar(128)`, `provider_txn_id text?`, `payment_url text?`, `closed_at timestamptz?`, `close_reason text?`, `request_hash char(64)`, `expires_at timestamptz`, `paid_at timestamptz?`, `refunded_amount bigint = 0`, `refund_reserved_amount bigint = 0`, `next_reconcile_at timestamptz?`, `version bigint = 0` | UNIQUE order_id, order_no, provider_request_id; UNIQUE `(method, provider_txn_id)` khi có; amount >= 0; 0 <= refunded + refund_reserved <= amount; indexes `(status, next_reconcile_at)`, `(created_at, id)` |
 | `payment_transactions` (C) | `id`, `payment_id uuid FK payments`, `source varchar(16)`, `provider_event_key text`, `provider_txn_id text?`, `status varchar(32)`, `amount bigint?`, `occurred_at timestamptz?`, `sanitized_payload jsonb`, `payload_hash char(64)` | UNIQUE `(payment_id, source, provider_event_key)`; source CREATE/WEBHOOK/QUERY/COD; index `(payment_id, created_at)` |
 | `refunds` (T) | `id`, `payment_id uuid FK payments`, `operation_key text`, `amount bigint`, `reason text`, `status varchar(32) = 'REQUESTED'`, `provider_refund_id text?`, `retry_count int = 0`, `next_retry_at timestamptz = now()`, `last_error text?`, `actor_id uuid?` | UNIQUE `(payment_id, operation_key)`; amount > 0; REQUESTED/PROCESSING/UNKNOWN/SUCCESS/FAILED; partial index next_retry_at WHERE status IN ('REQUESTED','PROCESSING','UNKNOWN') |
-| `reconciliation_items` (T, Phase 2) | `id`, `payment_id uuid FK payments`, `source_ref text`, `kind varchar(32)`, `expected_amount bigint`, `observed_amount bigint`, `status varchar(16) = 'OPEN'`, `evidence jsonb`, `resolved_by uuid?`, `resolved_at timestamptz?` | UNIQUE `(payment_id, source_ref, kind)`; OPEN/RESOLVED; index `(status, created_at)` |
+| `reconciliation_items` (T; MVP manual/query, Phase 2 batch) | `id`, `payment_id uuid FK payments`, `source_ref text`, `kind varchar(32)`, `expected_amount bigint`, `observed_amount bigint`, `status varchar(16) = 'OPEN'`, `evidence jsonb`, `resolved_by uuid?`, `resolved_at timestamptz?` | UNIQUE `(payment_id, source_ref, kind)`; OPEN/RESOLVED; index `(status, created_at)` |
 
 Payment status: CREATED/PROCESSING/UNKNOWN/SUCCESS/FAILED/PARTIALLY_REFUNDED/REFUNDED/COD_PENDING/COD_COLLECTED. COD_COLLECTED nghĩa carrier xác nhận đã thu, SUCCESS nghĩa FINANCE/đối soát xác nhận tiền về shop. Giao thành công không tự đồng nghĩa thu tiền hoặc tiền đã về.
 
 Khóa payment khi tạo refund; reserve amount trước gọi cổng. Thành công chuyển reserved sang refunded; thất bại chắc chắn mới nhả phần reserved. UNKNOWN giữ phần reserved, query kết quả bằng cùng mã trước khi retry. Refund một phần không đổi order sang REFUNDED; order chỉ REFUNDED khi nghĩa vụ hoàn toàn bộ của luồng hủy đã hoàn tất.
 
-Không ghi chi tiết thẻ, secret ký hoặc token thanh toán vào payload/log. Payload webhook đã xác minh được lọc trường nhạy cảm. Cơ chế xác thực, units, status và ACK từng provider phải được đối chiếu tài liệu tích hợp chính thức khi implement; không dùng công thức minh họa trong tài liệu 03 như đặc tả đã xác minh.
+Không ghi chi tiết thẻ, secret ký hoặc token thanh toán vào payload/log. Payload webhook đã xác minh được lọc trường nhạy cảm. Cơ chế xác thực, units, status và ACK từng provider phải được đối chiếu tài liệu tích hợp chính thức khi implement; theo [15 Integrations](../engineering/15_integrations.md); cấu hình merchant và fixture sandbox phải khớp contract 03.
 
 ## 10. `promotion-db` — Phase 2
 
@@ -251,11 +251,11 @@ erDiagram
 
 | Bảng | Cột | Constraints / index |
 |---|---|---|
-| `shipments` (T) | `id`, `order_id uuid`, `order_no varchar(32)`, `carrier varchar(16)`, `provider_request_id text`, `tracking_code text?`, `status varchar(32) = 'PENDING'`, `fee bigint`, `weight_grams int`, `from_address jsonb`, `to_address jsonb`, `cod_amount bigint = 0`, `cod_collected_amount bigint = 0`, `cod_remitted_amount bigint = 0`, `label_url text?`, `assigned_to uuid?`, `request_hash char(64)`, `retry_count int = 0`, `next_retry_at timestamptz?`, `last_provider_at timestamptz?`, `last_error text?`, `version bigint = 0` | UNIQUE order_id, order_no, provider_request_id; UNIQUE `(carrier, tracking_code)` khi có; weight > 0; amounts >= 0; cod_remitted <= cod_collected <= cod_amount; index `(status, next_retry_at)` |
+| `shipments` (T) | `id`, `order_id uuid`, `order_no varchar(32)`, `carrier varchar(16)`, `provider_request_id text`, `tracking_code text?`, `status varchar(32) = 'PENDING'`, `fee bigint`, `weight_grams int`, `from_address jsonb`, `to_address jsonb`, `cod_amount bigint = 0`, `cod_collected_amount bigint = 0`, `cod_remitted_amount bigint = 0`, `handed_over_at timestamptz?`, `label_url text?`, `assigned_to uuid?`, `request_hash char(64)`, `retry_count int = 0`, `next_retry_at timestamptz?`, `last_provider_at timestamptz?`, `last_error text?`, `version bigint = 0` | UNIQUE order_id, order_no, provider_request_id; UNIQUE `(carrier, tracking_code)` khi có; weight > 0; amounts >= 0; cod_remitted <= cod_collected <= cod_amount; index `(status, next_retry_at)` |
 | `shipment_status_history` (C) | `id`, `shipment_id uuid FK shipments`, `provider_event_key text`, `from_status varchar(32)?`, `to_status varchar(32)`, `provider_occurred_at timestamptz?`, `sanitized_payload jsonb`, `applied boolean`, `reason text?` | UNIQUE `(shipment_id, provider_event_key)`; index `(shipment_id, created_at)` |
 | `shipping_rules` (T) | `id`, `name text`, `rule_type varchar(16)`, `priority int`, `config_json jsonb`, `active boolean = true` | FLAT/PROVINCE/WEIGHT; index `(active, priority)`; config có schema: vùng, khoảng trọng lượng, fee, cod_fee |
 
-`shipments` có thêm `handed_over_at timestamptz?`: thời điểm đã xác nhận bàn giao hàng cho hãng. Status: PENDING/UNKNOWN/CREATED/PICKING/DELIVERING/DELIVERED/FAILED/RETURNING/RETURNED/CANCEL_PENDING/CANCELLED/MANUAL. Tạo shipment không tự chuyển order sang SHIPPING; chờ carrier đã nhận/giao hàng. Dùng mã event hãng; nếu thiếu, tạo khóa từ mã vận đơn + loại sự kiện + thời điểm hãng + hash payload chuẩn hóa. Không dedupe chỉ bằng trạng thái vì một trạng thái có thể lặp hợp lệ.
+`handed_over_at` là thời điểm đã xác nhận bàn giao hàng cho hãng. Status: PENDING/UNKNOWN/CREATED/PICKING/DELIVERING/DELIVERED/FAILED/RETURNING/RETURNED/CANCEL_PENDING/CANCELLED/MANUAL. Tạo shipment không tự chuyển order sang SHIPPING; chờ carrier đã nhận/giao hàng. Dùng mã event hãng; nếu thiếu, tạo khóa từ mã vận đơn + loại sự kiện + thời điểm hãng + hash payload chuẩn hóa. Không dedupe chỉ bằng trạng thái vì một trạng thái có thể lặp hợp lệ.
 
 ### 11.2 Notification
 
@@ -274,9 +274,9 @@ Notification nhận **một nguồn duy nhất `notification.events`** cho việ
 
 OTP dùng NOTIFY_OTP chỉ mang challenge_id và đích nhận, không mang plaintext OTP lên Kafka. Worker lấy code từ vùng Redis mã hóa có TTL qua API nội bộ của user-service dành riêng notification, xóa sau ACK gửi hoặc hết hạn; rendered_body của OTP không được lưu bền vững (lưu marker, render trong bộ nhớ). Có expires_at để không gửi OTP đã hết hạn. In-app/websocket để Phase 3, không tạo thêm service.
 
-## 12. Khác biệt cần đồng bộ sau review
+## 12. Các thay đổi đã hợp nhất trong B1
 
-| Tài liệu hiện tại | Đề xuất thay đổi |
+| Nội dung bản trước B1 (lịch sử) | Baseline B1 hiện hành |
 |---|---|
 | PRD ORD-01 dùng cart.price_snapshot làm giá chốt | D03: báo giá lại phía server, xác nhận thay đổi, snapshot tại checkout |
 | PRD INV-03 và Interfaces §7 cho inventory consume payment để deduct | D04: chỉ nhận lệnh order; event kho phục vụ projection/quan sát |
@@ -286,7 +286,7 @@ OTP dùng NOTIFY_OTP chỉ mang challenge_id và đích nhận, không mang plai
 | PRD admin hủy gần như mọi trạng thái | D09: ngăn hủy trực tiếp sau bàn giao; hàng về cần kiểm đếm |
 | Interfaces mẫu order_id chứa ORD... | Chuẩn hóa order_id UUID và order_no riêng |
 | PRD không có bảng wishlist, eligibility, reset token, saga bền vững | Bổ sung bảng nhỏ đúng nghiệp vụ đã nêu |
-| Interfaces chỉ có lock/release voucher, chưa có campaign quota/commit | API bổ sung được liệt kê ở tài liệu 06 mục 12 |
+| Interfaces chỉ có lock/release voucher, chưa có campaign quota/commit | API thống nhất tại 03; 06 mục 12 dẫn tới hợp đồng hiện hành |
 
 ## 13. Migration, lưu trữ và kiểm tra thiết kế
 
@@ -303,5 +303,42 @@ OTP dùng NOTIFY_OTP chỉ mang challenge_id và đích nhận, không mang plai
 - [ ] Chốt thời hạn COD, giá checkout, stacking khuyến mãi và xử lý thanh toán muộn.
 - [ ] Chốt phạm vi đổi/trả sau giao; một kho/một shipment/một payment đáp ứng Release 1.
 - [ ] Chấp nhận các bảng và constraints, đặc biệt order/inventory/payment/promotion.
-- [ ] Duyệt thay đổi API/event trong tài liệu 06 trước khi cập nhật tài liệu 02–04.
+- [ ] Review OpenAPI/JSON Schema từ contract 03 trước integration; 02–04 đã đồng bộ B1.
 - [ ] Chốt retention/PII, rồi mới tạo migration và kiểm thử trên PostgreSQL.
+
+## 15. Bổ sung schema hỗ trợ phục hồi B1
+
+Các bảng/cột dưới đây thuộc thiết kế hiện hành, phải được đưa vào migration của task tương ứng. FK chỉ nội bộ DB.
+
+| Database / bảng | Cột và constraint | Mục đích / phase |
+|---|---|---|
+| Mỗi service cần async work: background_tasks (T) | id UUID PK, kind text, business_key text, payload jsonb, status PENDING/RUNNING/DONE/MANUAL, attempts int >= 0, next_attempt_at timestamptz, lease_until timestamptz?, lease_token uuid?, last_error text?; UNIQUE(kind,business_key); index(status,next_attempt_at) | Order cart cleanup, catalog cache invalidation, công việc phục hồi không thuộc saga; chỉ tạo nơi cần / 1 |
+| order-db: order_returns (T) | id, order_id uuid FK orders, operation_key text, reason text, evidence_ref text, actor_id uuid, status varchar(32) = REQUESTED (REQUESTED/PROCESSING/COMPLETED/MANUAL); UNIQUE(order_id,operation_key) | Chứng từ OPS, giữ intent return trước gọi inventory / 1 |
+| order-db: order_return_items | return_id uuid FK order_returns,order_item_id uuid FK order_items,received_quantity int > 0,restock_quantity int >= 0,condition text; PK(return_id,order_item_id), restock <= received | Kiểm tra item cùng order, tổng đã nhận <= quantity đã giao/commit dưới order lock; hàng hỏng không vào available / 1 |
+| payment-db: cod_settlements (C) | id,payment_id uuid FK payments,settlement_ref text,gross_amount bigint,fee_amount bigint,net_amount bigint,evidence_ref text,confirmed_by UUID; amounts >= 0; gross = fee + net; UNIQUE(payment_id,settlement_ref) | Bằng chứng FINANCE xác nhận tiền về, tổng gross <= amount dưới payment lock / 1 |
+| notification-db: notification_campaigns (T, Phase 2) | id,operation_key text UNIQUE,template_id uuid FK notification_templates,template_version int,audience_snapshot jsonb,status varchar(32) = PENDING (PENDING/RUNNING/COMPLETED/FAILED),created_by uuid | Durable marketing fan-out, từng recipient nhận dedupe campaign:id:recipient / 2 |
+
+background_tasks payload bị giới hạn kích thước/schema, không lưu secret. Claim lại RUNNING hết lease; CAS lease token trước ghi kết quả. Consumer insert processed_events cùng task, không ACK rồi mới insert task. Worker DB commit/outbox vẫn cần business keys tại đích.
+
+Payment close: closed_at chỉ đóng đường tạo/resume; không xóa dấu vết tiền đã thu. Close-before-create tạo FAILED tombstone có snapshot/hash/closed_at. Nếu webhook sau đó xác nhận thu tiền, status chuyển SUCCESS hoặc trạng thái refund phù hợp nhưng closed_at giữ nguyên; UI không phát lại URL.
+
+COD amount là tổng shop cần thu từ khách. cod_collected_amount và cod_remitted_amount ở shipping là số gộp (gross) của bằng chứng carrier; net bank transfer + phí bị trừ được lưu riêng trong settlement. FINANCE chỉ xác nhận SUCCESS khi chứng minh đủ nghĩa vụ gross, đối chiếu fee/net; thiếu tiền mở discrepancy, không mặc định net bằng total. Bảng settlement không cho một reference được dùng lại cho cùng payment; reference batch có thể bao nhiều order với từng dòng payment riêng.
+
+Schema lưu tiền >= 0 để chứa dữ liệu lịch sử, nhưng command tạo checkout B1 yêu cầu total > 0 theo O05. Refund sau DELIVERED giữ trạng thái đơn DELIVERED dù refund toàn phần; REFUNDED của order chỉ thuộc luồng hủy/return trước hoàn tất giao.
+
+Outbox aggregate_sequence cấp số bền vững bằng counter tại aggregate hoặc bảng counter nội bộ service trong migration; không dùng MAX()+1 không khóa. Với nhiều event cùng version, sequence tạo thứ tự xác định.
+
+Notification SENDING hết lease phải query/dedupe trước gửi lại. OTP/reset/verify template vẫn có marker và secret reference; không lưu rendered secret trong DB. Catalog sold_quantity cập nhật từ ORDER_COMPLETED ngay MVP; bảng review_eligibilities chỉ được tạo/bật từ Phase 2.
+
+WAITING saga đặt next_retry_at tới thời điểm deadline/query kế tiếp; RUNNING claim có lease expiry index khi đo cần. Bảng background_tasks có thể dùng cho worker marketing, không thêm service. Notification campaign lưu audience filter/cutoff và cursor checkpoint bounded; recipient snapshot ở từng notifications, consent được kiểm tra lại ngay trước send.
+
+order_returns thuộc schema lõi nên ERD bổ sung:
+
+```mermaid
+erDiagram
+    orders ||--o{ order_returns : receives
+    order_returns ||--|{ order_return_items : counts
+    order_items ||--o{ order_return_items : identifies
+```
+
+payment-db bổ sung payments → cod_settlements; notification-db có notification_templates → notification_campaigns, chỉ FK nội bộ. Những quan hệ này thuộc source schema dù không chép vào class diagrams phần lõi.
