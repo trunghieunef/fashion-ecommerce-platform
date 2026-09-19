@@ -44,6 +44,18 @@ class DocumentationChecks(unittest.TestCase):
     def test_local_paths_with_title_or_angle_brackets(self):
         self.assertEqual(self.check('[a](README.md "title") [b](<README.md>)'), [])
 
+    def test_maven_wrapper_paths_use_maven_user_home(self):
+        properties_path = Path(__file__).resolve().parents[1] / ".mvn/wrapper/maven-wrapper.properties"
+        properties = dict(
+            line.split("=", 1)
+            for line in properties_path.read_text(encoding="utf-8").splitlines()
+            if line and not line.startswith("#")
+        )
+
+        self.assertEqual(properties.get("distributionBase"), "MAVEN_USER_HOME")
+        zip_base = properties.get("zipStoreBase")
+        self.assertEqual(zip_base, "MAVEN_USER_HOME")
+
 
 if __name__ == "__main__":
     unittest.main()

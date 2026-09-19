@@ -172,11 +172,11 @@ Các phần chưa chọn exact version có chủ ý:
 | Maven | Wrapper distribution **3.9.16**, SHA-256 `5af3b743dd8b876b5c45da33b676251e5f1687712644abb4ee519ca56e1d89ce`; wrapper JAR 3.3.4, SHA-256 `4e2fbf6554bc8a4702cdfdd3bef464f423393d784ddbb037216320ce55d5e4e1` |
 | BOM khai báo | Spring Boot **4.0.8**; Spring Cloud **2025.1.3**; Spring Cloud Alibaba **2025.1.0.0**; Java target **21** |
 | npm workspace / lock | Root `package-lock.json`; `@fashion/storefront` direct pins: React/react-dom **19.2.8**, React Router **8.4.0**, Vite **8.3.0**, plugin React **6.1.1**, TypeScript **6.0.3**, Vitest **5.0.1**, Playwright **1.63.0** |
-| Lệnh đã chạy | `npm install --package-lock-only` tạo lockfile thành công (76 packages, 0 vulnerabilities); resolver cảnh báo engine vì runtime local không đúng R1 |
-| Runtime local | Node **v18.19.1**, npm **9.2.0**, không có Java; khác Node **v24.21.0**, npm **11.19.0**, JDK 21 đã pin trong `.tool-versions` |
-| Lệnh còn chặn | `bash scripts/verify-toolchain.sh` dừng đúng tại thiếu `./mvnw` trước bootstrap; sau bootstrap không thể xanh trên máy này vì Java/Node/npm không đúng. Cần chạy lại `bash scripts/verify-toolchain.sh && ./mvnw -q dependency:tree -DoutputFile=target/dependency-tree.txt` trên environment R1 sạch, không dùng `--force`/`--legacy-peer-deps` |
+| Lệnh đã chạy | `npm install --package-lock-only` tạo lockfile thành công (76 packages, 0 vulnerabilities); `./mvnw -version`, effective POM và dependency tree đã chạy sau khi sửa wrapper path base; resolver npm vẫn cảnh báo engine vì runtime local không đúng R1 |
+| Runtime local | Temurin JDK **21.0.12.1+1** và Maven **3.9.16** đã xác minh; Node **v18.19.1**, npm **9.2.0** vẫn khác Node **v24.21.0**, npm **11.19.0** đã pin trong `.tool-versions` |
+| Lệnh còn chặn | `bash scripts/verify-toolchain.sh` đã qua Maven check, rồi dừng ở Node/npm version guard trên host này. `target/effective-pom.xml` và `target/dependency-tree.txt` đã được tạo; vẫn cần chạy lại toàn bộ command trên environment R1 sạch, không dùng `--force`/`--legacy-peer-deps` |
 
-Không đánh dấu O02 hay runtime compatibility hoàn tất từ lockfile; cần reviewer TL + DEVOPS kiểm tra fresh clone bằng runtime R1 và lưu effective POM/dependency tree.
+Không đánh dấu O02 hay runtime compatibility hoàn tất từ lockfile/effective POM; cần reviewer TL + DEVOPS kiểm tra fresh clone bằng runtime R1 và lưu effective POM/dependency tree.
 
 Thứ tự: core backend + frontend → contracts → vertical slice COD → staging → observability/recovery theo backlog. Không scaffold toàn bộ 9 service để chứng minh version.
 
