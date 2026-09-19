@@ -3,3 +3,11 @@
 
 # Subagent-driven-development scratch ledger, briefs and review packages.
 .superpowers/
+
+# Local build and test outputs.
+target/
+node_modules/
+coverage/
+dist/
+playwright-report/
+test-results/

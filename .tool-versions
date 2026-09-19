@@ -1,0 +1,4 @@
+java temurin-21.0.12.1+1
+maven 3.9.16
+nodejs 24.21.0
+npm 11.19.0
