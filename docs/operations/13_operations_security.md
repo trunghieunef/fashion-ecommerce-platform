@@ -2,6 +2,8 @@
 
 B1 · 2026-09-19 · Owner DEVOPS + TL, phối hợp OPS/FINANCE/PO. Đây là runbook thiết kế; lệnh/env/dashboard URL cụ thể phải được điền và diễn tập trong OPS-01 trước production.
 
+AWS đã chọn, chưa provision. [16 AWS deployment](../engineering/16_aws_deployment.md) quản lý credit $200, cost estimate/alerts, đề xuất EC2 + K3s staging, IAM/OIDC, stop/start và thu hồi tài nguyên. Credit không phải ngân sách hằng tháng; budget alert không thay giới hạn chi tiêu và không tự xóa dữ liệu. Staging một máy chưa có bằng chứng đạt RPO/RTO/HA ở đây.
+
 ## 1. Ranh giới tin cậy và quyền
 
 | Boundary / rủi ro | Control bắt buộc | Proof |

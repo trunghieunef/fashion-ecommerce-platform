@@ -10,16 +10,24 @@ Số ngày là khoảng person-day dự kiến, không phải cam kết deadline
 
 Review mặc định: BE bởi TL/BE khác; FE bởi FE/TL và PO cho UX; platform bởi TL + DEVOPS; tiền bởi BE reviewer + FINANCE UAT; QA report bởi TL + PO. Mỗi task gắn bằng chứng theo 11, không tick Done trước khi có.
 
+### Sprint 1 commitment — local only
+
+Sprint 1 nhận PLT-01, phần core PLT-02 và SEC-01 theo checkpoint S1-local ở 09. Local smoke phải đi qua frontend shell → Gateway → một service mẫu → PostgreSQL, có migration/health/test và lệnh fresh-clone đã review. Phần PLT-03 chỉ kéo vào khi smoke path cần trực tiếp và còn capacity.
+
+PLT-04/05, AWS/K3s/ECR/ArgoCD, provider sandbox và các task business Phase 1 không thuộc commitment Sprint 1. Có thể chuẩn bị tài liệu/mock độc lập nhưng không chuyển In progress hoặc Done thay cho acceptance của task. Sprint 1 không được báo “MVP hoàn tất”; đây là nền tảng local để các sprint sau xây G1/G2.
+
 ## 2. Phase 0 — nền tảng
 
 | Task | Owner role / ngày | Phụ thuộc | REQ | Đầu ra và acceptance |
 |---|---|---|---|---|
-| PLT-01 | TL+DEVOPS / 2–3 | — | XCT-06 | Chốt O02, Maven wrapper/BOM, frontend lockfile, cấu trúc repo, Compose + env example; fresh clone chạy service mẫu/DB migration và frontend; ghi exact versions đã thử |
+| PLT-01 | TL+DEVOPS / 2–3 | — | XCT-06 | Kiểm thử bộ version R1 tại 17/ADR-16/17 để nghiệm thu O02 core; FE/PO xác nhận SEO cho SPA; Maven wrapper/BOM, npm lockfile, cấu trúc repo, Compose + env example; fresh clone chạy service mẫu/DB migration và frontend; lưu dependency tree, exact versions và compatibility evidence |
 | PLT-02 | TL+BE+FE / 2–4 | PLT-01 | ORD-01/07, XCT-02 | OpenAPI core + event JSON Schema từ 03, examples/negative fixtures và mock; producer/consumer review; schema lint pass; preview Mermaid với renderer/version thống nhất; skeleton không được đánh dấu mọi endpoint đã implement |
 | PLT-03 | BE / 2–4 | PLT-01, PLT-02 | ORD-02, PAY-07 | Outbox/inbox/idempotency/lease/background-task primitives tối thiểu; crash sau publish và lease hết hạn test; cùng version nhiều event không đảo sequence |
-| PLT-04 | DEVOPS / 2–4 | PLT-01, SEC-01 | NFR-01/06 | Staging namespace/DB/topics/secrets/ingress private, CI→image→ArgoCD, smoke/rollback; credentials mỗi DB; public internal route bị chặn |
+| PLT-04 | DEVOPS / 2–4 | PLT-01, SEC-01; **sau Sprint 1** | NFR-01/06 | AWS staging theo 16: credit/budget guardrails, namespace/DB/topics/secrets/ingress, OIDC→ECR→GitOps/ArgoCD, smoke/rollback; credentials mỗi DB; public internal route bị chặn; phần CI docs đã có file không thay acceptance deploy |
 | PLT-05 | DEVOPS+BE / 1–3 | PLT-03, PLT-04 | NFR-01/03/04 | JSON logs, correlation HTTP/Kafka, RED metrics, dashboard/alerts mẫu; trace checkout giả đi qua 2 service; test redaction |
 | SEC-01 | TL+BE / 2–3 | PLT-01 | USR-07/08, XCT-02/03/06 | Threat/data inventory, service identity và permission matrix, CSRF strategy, secret injection; spoof header/cross-service token/PII logs bị chặn; O06 có owner/hạn |
+
+Subtasks PLT-04.A–F, owner theo vai trò, dependencies và acceptance ở [16 AWS deployment](../engineering/16_aws_deployment.md). Không cộng subtasks lần hai vào tổng package; estimate PLT-04 cần review lại sau sizing/compatibility spike. Parent vẫn Planned, chưa có evidence remote CI hoặc staging.
 
 ## 3. Phase 1 — identity, catalog, cart, stock
 

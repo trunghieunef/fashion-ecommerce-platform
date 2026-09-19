@@ -4,7 +4,11 @@ B1 · 2026-09-19 · Owner TL + DEVOPS.
 
 ## 1. Trạng thái thực tế
 
-Repo hiện chỉ có docs. Chưa có pom.xml, package.json, Compose, migration hay lệnh chạy ứng dụng. PLT-01 phải hiện thực cấu trúc và ghi lệnh thực tế được kiểm chứng bên dưới trước G0. Không coi cấu trúc dự kiến là file đã tồn tại.
+Repo hiện có docs và CI kiểm tra tài liệu (`.github/workflows/docs-ci.yml`, `scripts/check_docs.py` cùng test). Chưa có pom.xml, package.json, Compose, migration hay lệnh chạy ứng dụng. PLT-01 phải hiện thực cấu trúc và ghi lệnh thực tế được kiểm chứng bên dưới trước G0. Không coi cấu trúc dự kiến là file đã tồn tại.
+
+Theo ADR-18, Sprint 1 chỉ nhắm checkpoint S1-local: development/deployment trên máy local, không AWS/Kubernetes/GitOps. Local workflow phải chạy được trên clean checkout bằng lệnh đã ghi; một smoke path đi qua frontend shell, Gateway, service mẫu và PostgreSQL. Không scaffold toàn bộ service hoặc gọi kết quả là G0/G1/G2.
+
+Danh mục và bộ phiên bản đã chọn sau research R1 được quản lý tại [17 Tech Stack](17_tech_stack.md): Java 21/Boot 4.0 theo BOM; React/Vite SPA, Node 24 LTS/npm. O02 vẫn mở cho runtime compatibility, lockfile/digest, license/CVE và xác nhận đánh đổi SEO; chưa có bộ dependency được kiểm thử trong repo.
 
 ## 2. Cấu trúc dự kiến
 
@@ -72,6 +76,7 @@ Mỗi PR ghi: vấn đề/kết quả; scope; REQ/TASK; schema/API/event impact;
 
 ## 6. Quy tắc backend
 
+- Dùng Maven Wrapper và tổ hợp BOM tại 17; service nghiệp vụ MVC/JdbcClient, gateway WebFlux riêng. Không pin lại thư viện con do BOM quản lý nếu chưa có lý do/test; không tắt compatibility verifier.
 - Transaction chỉ trong DB owner. Không gọi HTTP/provider trong transaction.
 - Dùng decimal/integer VND, checked arithmetic; không float/double cho tiền.
 - API/event boundary validate type/range/size/enum và ownership. Không lấy user_id/amount từ public input làm authoritative.
@@ -83,6 +88,8 @@ Mỗi PR ghi: vấn đề/kết quả; scope; REQ/TASK; schema/API/event impact;
 
 ## 7. Quy tắc frontend
 
+Theo ADR-17, storefront/admin dùng Vite SPA, npm workspaces và một package-lock tại workspace root khi tạo code; không thêm lockfile package manager khác. Node chỉ phục vụ build/test. Test deep-link reload và SPA fallback tách API/callback. Xác nhận SEO với PO trước WEB-01; version, peer constraints và đường nâng cấp ở 17.
+
 Contract typed từ OpenAPI khi có; không viết amount quyết định thu tiền. UI dùng allowed_actions và vẫn xử lý 403/409 từ server. Giữ Idempotency-Key của submission qua retry, không sinh key mới khi mất response. Token access in-memory, refresh cookie, refresh single-flight; CSRF theo deployment.
 
 Mỗi màn có loading/empty/error/permission/version-conflict; VI/EN, keyboard focus và field labels. Xem 14 để biết copy của processing/refund/COD. Không hiển thị “thành công” chỉ dựa redirect URL.
@@ -91,7 +98,9 @@ Mỗi màn có loading/empty/error/permission/version-conflict; VI/EN, keyboard 
 
 Flyway mỗi service, versioned append-only scripts; sửa migration đã deploy bằng migration mới. Expand → backfill → deploy compatible code → contract → drop sau cửa sổ tương thích. Backfill có batch/checkpoint, không khóa toàn bảng vô hạn.
 
-CI tối thiểu: formatting/static checks; unit; DB migration/constraint integration khi có schema; OpenAPI/event compatibility; secret/dependency scan; build immutable artifact; staging smoke. Payment/stock PR phải test race/failure path liên quan. Không dùng coverage % thay proof invariant.
+CI ứng dụng cần hiện thực: formatting/static checks; unit; DB migration/constraint integration khi có schema; OpenAPI/event compatibility; secret/dependency scan; build immutable artifact; staging smoke. Payment/stock PR phải test race/failure path liên quan. Không dùng coverage % thay proof invariant.
+
+CI thực có hiện tại chỉ kiểm tra tài liệu bằng Python stdlib; lệnh chạy, phạm vi/giới hạn, cách bật required check và lộ trình GitHub OIDC → ECR → GitOps ở [16 AWS deployment](16_aws_deployment.md). Chưa có CD hoặc quyền AWS trong workflow này.
 
 Rollback ứng dụng bằng image/manifests đã xác nhận; rollback schema chỉ khi có kế hoạch tested. Không drop dữ liệu tiền để quay lại migration cũ. Release cần biết phiên bản code nào đọc được schema mới.
 

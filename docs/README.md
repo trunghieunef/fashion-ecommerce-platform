@@ -2,6 +2,8 @@
 
 Baseline B1 · 2026-09-19 · Đồng bộ để phân công; chưa nghiệm thu triển khai.
 
+Sprint 1 theo ADR-18 chỉ triển khai local và đạt checkpoint S1-local trong 09/10. AWS/PLT-04, provider thật và toàn bộ G1/G2 được thực hiện sau; “local MVP foundation” không đồng nghĩa toàn bộ business MVP đã hoàn thành.
+
 ## 1. Danh mục và nguồn sự thật
 
 | Tài liệu | Nội dung chịu trách nhiệm | Người duy trì theo vai trò |
@@ -21,6 +23,8 @@ Baseline B1 · 2026-09-19 · Đồng bộ để phân công; chưa nghiệm thu 
 | [13 Operations & security](operations/13_operations_security.md) | Quyền, PII, monitoring, runbook, backup và go-live | DEVOPS + TL + FINANCE |
 | [14 Frontend behavior](design/14_frontend_behavior.md) | Màn hình, hành vi, quyền thao tác và trạng thái UI | FE + PO |
 | [15 Integrations](engineering/15_integrations.md) | Hợp đồng provider, sandbox và điều kiện bật thật | BE + DEVOPS |
+| [16 AWS deployment](engineering/16_aws_deployment.md) | AWS credit/budget, staging đề xuất, CI thực có, lộ trình CD và subtasks PLT-04 | DEVOPS + TL + PO |
+| [17 Tech stack](engineering/17_tech_stack.md) | Bộ phiên bản R1 sau research, nguồn upstream, đánh đổi, compatibility spike và quy trình nâng cấp; chưa kiểm thử runtime | TL + DEVOPS + FE/BE/QA |
 
 PO = chủ sản phẩm; TL = tech lead; BE = backend; FE = frontend; QA = trách nhiệm kiểm thử; DEVOPS = trách nhiệm nền tảng. Đây là vai trò, chưa phải tên người được giao việc.
 
@@ -29,10 +33,11 @@ Mỗi loại dữ liệu có một tài liệu chủ quản như bảng trên. K
 ## 2. Lộ trình đọc theo vai trò
 
 - Mọi thành viên: 01 → 02 → 08 → 09 → task được giao trong 10.
+- Thành viên kỹ thuật: đọc thêm 17 để biết stack đã chọn, công cụ chưa chốt và gate phiên bản O02; đọc 12 để biết cách làm việc.
 - Backend: thêm 03 → 04 → phần service của 05–06 → 11 → 12 → 15.
 - Frontend: thêm 03 → 14 → checkout/COD/hủy ở 06 → 11.
 - QA: thêm 03, invariants ở 05, T01–T27 ở 06, 11, 14 và provider ở 15.
-- DevOps: thêm 04, Deployment trong 07, 12, 13, 15.
+- DevOps: thêm 04, Deployment trong 07, 12, 13, 15, 16. Topology AWS thử nghiệm ở 16; không lấy diagram HA tương lai làm cấu hình đã provision.
 - OPS/FINANCE/MARKETING: thêm 14, flow tương ứng ở 06 và runbook ở 13.
 
 ## 3. Quy tắc cập nhật
@@ -41,7 +46,7 @@ Mỗi loại dữ liệu có một tài liệu chủ quản như bảng trên. K
 2. Thay đổi nghiệp vụ: PO quyết định; đổi boundary/contract/schema: TL và producer/consumer cùng review.
 3. Cập nhật 08 trước hoặc cùng PR thay đổi; không dùng lại mã yêu cầu cũ cho nghĩa khác.
 4. OpenAPI/JSON Schema được tạo trong PLT-02 từ 03. Khi có code, contract thực thi và tài liệu phải cùng PR; CI kiểm tra drift.
-5. Trạng thái task: Planned, In progress, Review, Done, Blocked. Hiện mọi task là Planned, owner cụ thể chưa gán.
+5. Trạng thái task: Planned, In progress, Review, Done, Blocked. Các work package vẫn Planned, owner cụ thể chưa gán; phần CI tài liệu đã có file/check local nhưng chưa đủ acceptance PLT-04/G0. Chi tiết phần còn lại ở 16.
 6. Chỉ đánh dấu đã test/deploy/duyệt khi có bằng chứng, người xác nhận và ngày.
 
 ## 4. Thuật ngữ chung

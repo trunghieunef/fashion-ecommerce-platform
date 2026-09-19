@@ -2,9 +2,11 @@
 
 B1 · 2026-09-19 · Chủ trì TL + DEVOPS. Theo [08 ADR](08_decisions.md); chưa có deployment đã chạy.
 
+Tra cứu công nghệ, version và compatibility/support gates tại [17 Tech Stack](../engineering/17_tech_stack.md). Tài liệu 04 quản lý boundary và kiến trúc, không phải danh sách dependency đã cài.
+
 ## 1. Ranh giới
 
-Giữ 9 microservices, database per service, không 2PC hoặc truy vấn chéo DB. Java 21/Spring Boot 3, React TypeScript; exact BOM/version trong PLT-01. PostgreSQL là nguồn sự thật cho cart/stock/quota/payment. Redis là cache, rate limit và auth ephemeral.
+Giữ 9 microservices, database per service, không 2PC hoặc truy vấn chéo DB. Java 21/Spring Boot 4.0, React TypeScript + Vite SPA theo ADR-16/17; bộ version research tại 17, còn kiểm thử và khóa trong PLT-01. PostgreSQL là nguồn sự thật cho cart/stock/quota/payment. Redis là cache, rate limit và auth ephemeral.
 
 | Service | Sở hữu | Command/query đồng bộ | Event chính |
 |---|---|---|---|
@@ -79,11 +81,15 @@ Exponential backoff có jitter, max delay/attempts theo dependency. Kết thúc 
 
 Local: Compose cho dependency, service chạy JVM/container; provider stub/mail sink. Staging: isolated DB/topics/credentials, provider sandbox. Production topology được duyệt ở O01; namespace không phải biên bảo mật đầy đủ.
 
+AWS đã được chủ dự án chọn. Với credit $200, [16 AWS deployment](../engineering/16_aws_deployment.md) đề xuất EC2 + K3s single-node cho service mẫu/staging; chưa provision, không phải EKS hoặc HA production. Region, plan/credit expiry, sizing và chi phí cần chốt O01. Không mặc định node 8 GiB chạy được toàn bộ stack; đo tài nguyên theo từng vertical slice.
+
 Gateway và service cần >= 2 replicas cho mục tiêu HA production, HPA theo tải đo; promotion chỉ deploy Phase 2. Kafka replication/ISR, Redis HA, PostgreSQL failover, Nacos metadata/persistence cần topology có failure domains thực; không coi “3 nodes” là bảo đảm HA. 07 DEP-01 là phương án tham chiếu, chưa quyết định mua hạ tầng.
 
 Public TLS/WAF/Ingress → Gateway → private services; React/ảnh qua object storage/CDN. Nacos registry/config không chứa secrets; Secrets/service accounts riêng. Nacos metadata store riêng được xác minh theo version đã chọn, không mượn DB nghiệp vụ.
 
-CI: lint/unit/integration/contract/security checks → immutable image → staging manifests → ArgoCD → smoke/UAT → authorized production promotion. Main qua PR; feature branches ngắn; môi trường theo manifest, không bắt buộc branch staging lâu dài.
+Frontend R1 build static assets; Node chỉ chạy dev/build/test, không thêm Node server/BFF. PO/FE xác nhận SPA đáp ứng SEO/preview của MVP trước WEB-01; nếu bắt buộc HTML sản phẩm render từ server, mở lại ADR-17 trước code storefront. Service nghiệp vụ dùng MVC/JDBC, gateway dùng WebFlux; không trộn starter MVC/JDBC vào gateway.
+
+CI/CD đích: lint/unit/integration/contract/security checks → immutable image → staging manifests → ArgoCD → smoke/UAT → authorized production promotion. Hiện chỉ có workflow kiểm tra tài liệu; build/deploy chưa hiện thực. Chi tiết GitHub OIDC/ECR/ArgoCD, migration và rollback ở 16. Main qua PR; feature branches ngắn; môi trường theo manifest, không bắt buộc branch staging lâu dài.
 
 Readiness phản ánh khả năng nhận request của pod, không buộc mọi downstream khỏe rồi làm cả cụm mất ready. Liveness chỉ phát hiện tiến trình hỏng, không restart hàng loạt do Kafka/provider down. Graceful shutdown ngừng nhận work, hoàn tất TX, trả lease an toàn.
 

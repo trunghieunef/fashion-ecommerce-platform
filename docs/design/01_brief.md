@@ -23,7 +23,7 @@ Một kho, một payment và một shipment/order là giả định D01/D06/D08.
 
 ## 3. Kiến trúc và nguồn lực
 
-9 service: user, catalog, cart, order, inventory, payment, promotion, shipping, notification. Java 21/Spring Boot 3, React TypeScript, PostgreSQL per service, Kafka, Redis, Spring Cloud Gateway, Nacos, Kubernetes. Exact versions/compatibility, cloud và topology được chốt trong Phase 0; chưa có hạ tầng production.
+9 service: user, catalog, cart, order, inventory, payment, promotion, shipping, notification. Java 21/Spring Boot 4.0, React TypeScript + Vite SPA, PostgreSQL per service, Kafka, Redis, Spring Cloud Gateway, Nacos, Kubernetes. Bộ phiên bản được chọn sau research ở [17](../engineering/17_tech_stack.md), thay định hướng Boot 3 qua ADR-16; còn kiểm thử compatibility và xác nhận đánh đổi SEO của SPA. AWS đã được chủ dự án chọn với $200 credit theo thông tin cung cấp; region, budget và topology được chốt trong Phase 0. Phương án staging tại [16](../engineering/16_aws_deployment.md); chưa có hạ tầng production.
 
 Team dự kiến 3–5 dev, một người có thể kiêm TL/QA/DevOps. Ước lượng ban đầu: Phase 0 khoảng 2–3 tuần; Phase 1 thêm 6–8 tuần; Phase 2 thêm 4–6 tuần. MVP hướng tới một quý; toàn Release 1 khoảng 4–5 tháng là dự báo có điều kiện, phải điều chỉnh theo capacity và sandbox thực tế trong [09](../delivery/09_delivery_plan.md).
 
