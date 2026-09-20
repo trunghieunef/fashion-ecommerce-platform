@@ -122,6 +122,12 @@ erDiagram
 | `reviews` (T, Phase 2) | `id`, `eligibility_id uuid FK review_eligibilities`, `rating smallint`, `title text`, `content text`, `images text[] = '{}'`, `status varchar(32) = 'PENDING'`, `moderated_by uuid?`, `moderated_at timestamptz?`, `moderation_reason text?` | UNIQUE eligibility_id; rating 1–5, cardinality(images) <= 5; PENDING/APPROVED/REJECTED; index `(status, created_at, id)` |
 | `wishlist_items` (C, Phase 2) | `user_id uuid`, `product_id uuid FK products` | PK `(user_id, product_id)`; index `(user_id, created_at, product_id)` |
 
+`TASK:PLT-01` hiện có `V001` làm read sample tối thiểu: `products` chỉ gồm `id`,
+`slug`, `status`, tên VI/EN, `version` và timestamps, cùng index public ACTIVE.
+Đây không phải toàn bộ schema/acceptance `CAT-01` ở bảng trên. Các cột, relation và
+constraint còn thiếu phải được thêm bằng migration tương thích, append-only trước
+khi nhận CRUD/publish/variant/catalog đầy đủ; không sửa lại `V001` đã áp dụng.
+
 Review không cần lặp user/order/variant trong bảng reviews vì eligibility đã giữ bộ ba này. `helpful_count` chưa triển khai vì chưa có yêu cầu hành vi vote. `sold_quantity` là projection từ ORDER_COMPLETED, chống cộng lại bằng processed_events; dùng cho sort bán chạy, không dùng đối soát doanh thu.
 
 Tìm kiếm đầu kỳ dùng ILIKE có phân trang/giới hạn; chưa tuyên bố B-tree tăng tốc `%keyword%`. Index tìm kiếm bổ sung khi đo tải, Elasticsearch theo Phase 3. Bộ lọc giá/sort giá phải dùng giá hiệu lực cùng quy tắc D12; ở Phase 2 cần đánh giá projection giá campaign nếu query hiện tại không đáp ứng tải.

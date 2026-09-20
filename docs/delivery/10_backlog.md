@@ -16,6 +16,12 @@ Sprint 1 nhận PLT-01, phần core PLT-02 và SEC-01 theo checkpoint S1-local �
 
 PLT-04/05, AWS/K3s/ECR/ArgoCD, provider sandbox và các task business Phase 1 không thuộc commitment Sprint 1. Có thể chuẩn bị tài liệu/mock độc lập nhưng không chuyển In progress hoặc Done thay cho acceptance của task. Sprint 1 không được báo “MVP hoàn tất”; đây là nền tảng local để các sprint sau xây G1/G2.
 
+### Implementation status — 2026-09-20
+
+- `TASK:PLT-01` — **In progress**. Bootstrap toolchain đã có evidence; catalog read sample,
+  V001 và Compose PostgreSQL được thêm trong Task 2. Testcontainers/Compose execution vẫn
+  cần Docker daemon được cấp quyền; chưa đánh dấu `PLT-01`, `CAT-01`, S1-local hay O02 Done.
+
 ## 2. Phase 0 — nền tảng
 
 | Task | Owner role / ngày | Phụ thuộc | REQ | Đầu ra và acceptance |

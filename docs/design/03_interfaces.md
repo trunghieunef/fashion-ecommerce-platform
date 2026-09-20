@@ -76,7 +76,7 @@ Refresh token không nằm JSON response/localStorage. Guest có credential ng�
 
 | Method | Path | Auth / phase | Input → output |
 |---|---|---|---|
-| GET | /catalog/products | Public / 1 | category_id,brand_id,size,color,price_min/max,tag,sort,cursor → cards |
+| GET | /catalog/products | Public / 1 | `TASK:PLT-01` sample chỉ nhận `limit` (mặc định 20, tối đa 100), trả card ACTIVE `id,slug,name_vi,name_en,next_cursor`; filter/sort/cursor đầy đủ thuộc `CAT-02` |
 | GET | /catalog/products/{id} | Public / 1 | variants,images,size_guide,available,observed_at; review summary Phase 2 |
 | GET | /catalog/search | Public / 1 | q + filters/cursor; bounded query length |
 | GET | /catalog/categories | Public / 1 | Cây tối đa 2 cấp |

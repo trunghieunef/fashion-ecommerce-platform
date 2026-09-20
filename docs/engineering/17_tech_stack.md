@@ -178,6 +178,15 @@ Các phần chưa chọn exact version có chủ ý:
 
 Evidence core wrapper/BOM/npm của PLT-01 đã chạy với runtime R1 nêu trên; các runtime checks service, Gateway/Nacos, PostgreSQL, Kafka, Redis, browser và deployment trong bảng vẫn **chưa thực hiện**. Không đánh dấu O02 hay runtime compatibility toàn bộ hoàn tất; cần reviewer TL + DEVOPS kiểm tra fresh clone và các flow còn lại.
 
+### Catalog sample `TASK:PLT-01` — 2026-09-20
+
+`TASK:PLT-01` partial `TASK:CAT-01` tiêu thụ PostgreSQL 17.11, Flyway và Testcontainers
+2.0.5 từ BOM. Service dùng Spring MVC + JdbcClient, migration/runtime roles tách riêng,
+và không thêm ORM hay dependency ngoài BOM. Compile source/test đã chạy bằng Maven Wrapper
+với Java 21; Testcontainers PostgreSQL và Compose chưa có evidence PASS vì Docker client
+trả `permission denied` tại `/var/run/docker.sock`. Không dùng H2/mock thay thế, không tắt
+test; runtime compatibility PostgreSQL/Flyway và O02 vẫn mở đến khi test DB thật chạy được.
+
 Thứ tự: core backend + frontend → contracts → vertical slice COD → staging → observability/recovery theo backlog. Không scaffold toàn bộ 9 service để chứng minh version.
 
 Evidence phải ghi component/version/digest, OS/CPU, command, kết quả, commit/report, ngày, owner/reviewer và lỗi còn mở. Core wrapper/BOM/npm của PLT-01 có evidence local ở trên; các runtime checks service/dependency/browser/deployment còn lại theo bảng vẫn **chưa thực hiện**. Research và core toolchain pass chỉ giảm rủi ro lựa chọn, không đóng O02, task PLT-01 hoặc gate G0/G2.

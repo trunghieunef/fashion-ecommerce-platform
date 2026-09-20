@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:17.11
+    environment:
+      POSTGRES_DB: ${CATALOG_POSTGRES_DB:-catalog}
+      POSTGRES_USER: ${CATALOG_POSTGRES_ADMIN_USERNAME:-catalog_admin}
+      POSTGRES_PASSWORD: ${CATALOG_POSTGRES_ADMIN_PASSWORD:?set CATALOG_POSTGRES_ADMIN_PASSWORD}
+      CATALOG_MIGRATION_DB_PASSWORD: ${CATALOG_MIGRATION_DB_PASSWORD:?set CATALOG_MIGRATION_DB_PASSWORD}
+      CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:?set CATALOG_DB_PASSWORD}
+    ports:
+      - "${CATALOG_POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - catalog-postgres-data:/var/lib/postgresql/data
+      - ./postgres-init/01-catalog-roles.sh:/docker-entrypoint-initdb.d/01-catalog-roles.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  catalog-postgres-data:

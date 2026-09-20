@@ -202,7 +202,7 @@ public record ProductSummary(UUID id, String slug, String nameVi, String nameEn)
 public record ProductPage(List<ProductSummary> items, String nextCursor) {}
 
 ProductPage findActive(int limit) {
-  if (limit < 1 || limit > 50) throw new ResponseStatusException(BAD_REQUEST, "INVALID_LIMIT");
+  if (limit < 1 || limit > 100) throw new ResponseStatusException(BAD_REQUEST, "INVALID_LIMIT");
   var items = jdbc.sql("select id,slug,name_vi,name_en from products where status='ACTIVE' order by created_at desc,id desc limit :limit")
       .param("limit", limit).query(ProductSummary.class).list();
   return new ProductPage(items, null);
@@ -311,7 +311,7 @@ import {createRoot} from 'react-dom/client';
 import {vi} from 'vitest';
 
 it('shows empty state after an empty response', async () => {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({data:{items:[],next_cursor:null},meta:{request_id:'req-1'}}), {status:200})));
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({code:'OK',data:{items:[],next_cursor:null},metadata:{request_id:'req-1',trace_id:'trace-1'}}), {status:200})));
   const container = document.createElement('div');
   await act(async () => createRoot(container).render(<CatalogPage />));
   expect(container.textContent).toContain('Chưa có sản phẩm');
@@ -334,7 +334,7 @@ Expected: FAIL because components and test setup do not exist.
 - [ ] **Step 3: Implement typed fetch and explicit states**
 
 ```ts
-export type ProductPage = {data:{items:Array<{id:string;slug:string;name_vi:string;name_en:string}>;next_cursor:string|null};meta:{request_id:string}};
+export type ProductPage = {code:'OK';data:{items:Array<{id:string;slug:string;name_vi:string;name_en:string}>;next_cursor:string|null};metadata:{request_id:string;trace_id:string}};
 export async function getProducts(signal: AbortSignal): Promise<ProductPage> {
   const response = await fetch('/api/v1/catalog/products?limit=1', {signal});
   if (!response.ok) throw new Error(`catalog:${response.status}`);
@@ -389,7 +389,7 @@ paths:
     get:
       operationId: listProducts
       parameters:
-        - {in: query, name: limit, schema: {type: integer, minimum: 1, maximum: 50, default: 20}}
+        - {in: query, name: limit, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
       responses:
         '200':
           description: Stable public product page
@@ -400,8 +400,9 @@ components:
   schemas:
     ProductPageResponse:
       type: object
-      required: [data, meta]
+      required: [code, data, metadata]
       properties:
+        code: {type: string, const: OK}
         data:
           type: object
           required: [items, next_cursor]
@@ -410,10 +411,10 @@ components:
               type: array
               items: {$ref: '#/components/schemas/ProductSummary'}
             next_cursor: {type: [string, 'null']}
-        meta:
+        metadata:
           type: object
-          required: [request_id]
-          properties: {request_id: {type: string, minLength: 1}}
+          required: [request_id, trace_id]
+          properties: {request_id: {type: string, minLength: 1}, trace_id: {type: string, minLength: 1}}
     ProductSummary:
       type: object
       required: [id, slug, name_vi, name_en]
