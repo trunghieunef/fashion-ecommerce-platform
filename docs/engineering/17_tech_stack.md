@@ -183,13 +183,14 @@ Evidence core wrapper/BOM/npm của PLT-01 đã chạy với runtime R1 nêu tr�
 `TASK:PLT-01` partial `TASK:CAT-01` tiêu thụ PostgreSQL 17.11, Flyway và Testcontainers
 2.0.5 từ BOM. Service dùng Spring MVC + JdbcClient, migration/runtime roles tách riêng,
 và không thêm ORM hay dependency ngoài BOM. Docker, Compose PostgreSQL (healthy) và kết nối
-Testcontainers đã được xác minh sau khi cấp quyền daemon. Khi chạy full test, năm integration
-tests cùng lỗi vì chúng inject Jackson 2 `com.fasterxml.jackson.databind.ObjectMapper`, trong
-khi Spring Boot 4 mặc định auto-configure Jackson 3 `tools.jackson.databind.JsonMapper`. Test
-được chuyển sang Jackson 3; annotation `com.fasterxml.jackson.annotation` vẫn đúng theo
-migration guide của Jackson 3. Chưa có evidence PASS cho full suite sau sửa đổi này; không dùng
-H2/mock thay thế, và runtime compatibility PostgreSQL/Flyway cùng O02 vẫn mở cho đến khi full
-test suite chạy xanh.
+Testcontainers đã được xác minh sau khi cấp quyền daemon. Spring Boot 4 mặc định auto-configure
+Jackson 3 `tools.jackson.databind.JsonMapper`, nên integration test dùng Jackson 3 thay vì
+inject Jackson 2 `com.fasterxml.jackson.databind.ObjectMapper`; annotation
+`com.fasterxml.jackson.annotation` vẫn đúng theo migration guide của Jackson 3. Maven compiler
+của service cũng bật `parameters=true` để Spring MVC bind tên tham số `limit` từ bytecode.
+`./mvnw -pl services/catalog-service clean test` đã **PASS** ngày 2026-09-20: 7 tests, 0
+failures/errors, với PostgreSQL 17.11 qua Testcontainers; không dùng H2/mock thay thế. Runtime
+compatibility PostgreSQL/Flyway cùng O02 vẫn mở cho đến khi evidence được reviewer xác nhận.
 
 Thứ tự: core backend + frontend → contracts → vertical slice COD → staging → observability/recovery theo backlog. Không scaffold toàn bộ 9 service để chứng minh version.
 
