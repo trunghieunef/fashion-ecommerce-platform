@@ -92,11 +92,20 @@ class ProductQueryIntegrationTest {
   @Test
   void rejectsLimitAbovePublicMaximum() {
     var response = get("/api/v1/catalog/products?limit=101");
+    var body = readApiError(response);
 
     assertThat(response.statusCode()).isEqualTo(HttpStatus.BAD_REQUEST.value());
-    assertThat(response.body()).contains("\"code\":\"VALIDATION_ERROR\"");
-    assertThat(response.body()).contains("\"request_id\"");
-    assertThat(response.body()).contains("\"trace_id\"");
+    assertThat(body.code()).isEqualTo("VALIDATION_ERROR");
+    assertThat(body.message()).isEqualTo("INVALID_LIMIT");
+    assertThat(body.errors()).singleElement().satisfies(error -> {
+      assertThat(error.field()).isEqualTo("limit");
+      assertThat(error.message()).isEqualTo("must be between 1 and 100");
+      assertThat(error.rejectedValue()).isEqualTo(101);
+    });
+    assertThat(body.metadata().requestId()).isNotBlank();
+    assertThat(body.metadata().traceId()).isNotBlank();
+    assertThat(response.headers().firstValue("X-Correlation-Id"))
+        .contains(body.metadata().traceId());
   }
 
   @Test
@@ -153,6 +162,14 @@ class ProductQueryIntegrationTest {
     }
   }
 
+  private ApiErrorResponse readApiError(HttpResponse<String> response) {
+    try {
+      return objectMapper.readValue(response.body(), ApiErrorResponse.class);
+    } catch (IOException exception) {
+      throw new AssertionError(exception);
+    }
+  }
+
   record ProductPageResponse(String code, ProductPage data, Metadata metadata) {
   }
 
@@ -165,5 +182,13 @@ class ProductQueryIntegrationTest {
 
   record Metadata(@JsonProperty("request_id") String requestId,
                   @JsonProperty("trace_id") String traceId) {
+  }
+
+  record ApiErrorResponse(String code, String message, List<ApiFieldError> errors,
+                          Metadata metadata) {
+  }
+
+  record ApiFieldError(String field, String message,
+                       @JsonProperty("rejected_value") Integer rejectedValue) {
   }
 }

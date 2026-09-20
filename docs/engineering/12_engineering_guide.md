@@ -4,7 +4,17 @@ B1 · 2026-09-19 · Owner TL + DEVOPS.
 
 ## 1. Trạng thái thực tế
 
-Repo hiện có docs và CI kiểm tra tài liệu (`.github/workflows/docs-ci.yml`, `scripts/check_docs.py` cùng test). Chưa có pom.xml, package.json, Compose, migration hay lệnh chạy ứng dụng. PLT-01 phải hiện thực cấu trúc và ghi lệnh thực tế được kiểm chứng bên dưới trước G0. Không coi cấu trúc dự kiến là file đã tồn tại.
+Repo có docs/CI kiểm tra tài liệu (`.github/workflows/docs-ci.yml`, `scripts/check_docs.py`
+cùng test) và nền tảng `TASK:PLT-01` đã được tạo: root Maven reactor/Wrapper,
+`services/catalog-service`, Compose PostgreSQL local, role migration/runtime riêng, và
+Flyway `V001`. Lệnh chạy/test thực tế và các giới hạn của catalog sample nằm trong
+`services/catalog-service/README.md`; không coi các service/đường dẫn khác trong cấu
+trúc dự kiến là đã tồn tại.
+
+PostgreSQL runtime chưa có evidence PASS trên worktree này: Docker client bị từ chối
+quyền truy cập `/var/run/docker.sock` (`java.net.BindException: Permission denied`).
+Do đó Compose/Testcontainers chưa chạy migration/query/readiness với DB thật; không
+thay bằng H2/mock hoặc bỏ qua test để xác nhận S1-local.
 
 Theo ADR-18, Sprint 1 chỉ nhắm checkpoint S1-local: development/deployment trên máy local, không AWS/Kubernetes/GitOps. Local workflow phải chạy được trên clean checkout bằng lệnh đã ghi; một smoke path đi qua frontend shell, Gateway, service mẫu và PostgreSQL. Không scaffold toàn bộ service hoặc gọi kết quả là G0/G1/G2.
 

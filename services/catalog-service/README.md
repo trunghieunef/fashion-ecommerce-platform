@@ -8,6 +8,11 @@ Endpoint trả các product `ACTIVE` theo `created_at DESC, id DESC`; `limit` m�
 `20`, tối đa `100`. Response thành công theo [contract 03 §1.2](../../docs/design/03_interfaces.md):
 `code: "OK"`, `data`, `metadata.request_id`, và `metadata.trace_id`.
 
+`limit` ngoài khoảng `1..100` trả HTTP 400 với `code: "VALIDATION_ERROR"`,
+`message: "INVALID_LIMIT"`, một `errors` field-level (`field: "limit"`, `message`,
+`rejected_value`) và metadata đầy đủ. Header `X-Correlation-Id` bằng `trace_id` của
+response, kể cả lỗi validation.
+
 Đây chưa phải acceptance đầy đủ của `TASK:CAT-01`: không có CRUD/admin, variant,
 category, filter/search, cursor thật, cache, auth hoặc Kafka. `next_cursor` luôn
 `null`; topics producer/consumer: **none trong S1**.
