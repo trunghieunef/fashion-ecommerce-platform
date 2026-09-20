@@ -1,7 +1,6 @@
 package vn.fashion.catalog.product;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -22,6 +21,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
+import tools.jackson.databind.ObjectMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -155,19 +155,11 @@ class ProductQueryIntegrationTest {
   }
 
   private ProductPageResponse readProductPage(HttpResponse<String> response) {
-    try {
-      return objectMapper.readValue(response.body(), ProductPageResponse.class);
-    } catch (IOException exception) {
-      throw new AssertionError(exception);
-    }
+    return objectMapper.readValue(response.body(), ProductPageResponse.class);
   }
 
   private ApiErrorResponse readApiError(HttpResponse<String> response) {
-    try {
-      return objectMapper.readValue(response.body(), ApiErrorResponse.class);
-    } catch (IOException exception) {
-      throw new AssertionError(exception);
-    }
+    return objectMapper.readValue(response.body(), ApiErrorResponse.class);
   }
 
   record ProductPageResponse(String code, ProductPage data, Metadata metadata) {
