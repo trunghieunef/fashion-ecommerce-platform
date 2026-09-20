@@ -11,6 +11,7 @@
 
   <modules>
     <module>services/catalog-service</module>
+    <module>services/gateway</module>
   </modules>
 
   <properties>
