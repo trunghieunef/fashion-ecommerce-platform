@@ -18,10 +18,12 @@ PLT-04/05, AWS/K3s/ECR/ArgoCD, provider sandbox và các task business Phase 1 k
 
 ### Implementation status — 2026-09-20
 
-- `TASK:PLT-01` — **In progress**. Bootstrap toolchain đã có evidence; catalog read sample,
-  V001 và Compose PostgreSQL được thêm trong Task 2. Docker/Compose PostgreSQL và
-  Testcontainers đã được chạy local; chưa đánh dấu `PLT-01`, `CAT-01`, S1-local hay O02 Done
-  vì các phần Gateway, storefront và evidence/review còn thiếu.
+- `TASK:PLT-01` — **In progress**. Bootstrap toolchain, catalog read sample/V001/Compose
+  PostgreSQL, Gateway boundary và storefront shell đều đã có evidence local. Testcontainers
+  PostgreSQL đã pass theo evidence host; Gateway boundary test, storefront typecheck/Vitest/build
+  và Playwright desktop/360px smoke cũng đã pass. Chưa đánh dấu `PLT-01`, `CAT-01`, S1-local hay
+  O02 Done: cần fresh-clone chain frontend → Gateway → Catalog → PostgreSQL thật, Task 5 contract/
+  orchestration, aggregate regression và reviewer evidence.
 
 ## 2. Phase 0 — nền tảng
 
