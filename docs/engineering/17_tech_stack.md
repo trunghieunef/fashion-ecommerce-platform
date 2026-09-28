@@ -8,14 +8,14 @@ Chọn **Java 21 LTS + Spring Boot 4.0**, **React + Vite SPA**, **PostgreSQL 17*
 
 Tiêu chí: còn đường cập nhật, phối hợp được theo BOM/peer dependencies của upstream, ít runtime/tooling phải tự vận hành, phù hợp nhóm nhỏ và không tự tăng chi phí cloud. Không chọn mọi thành phần theo bản mới nhất.
 
-Đây là **bộ phiên bản được chọn để hiện thực và kiểm thử**, không phải bộ đã được dự án kiểm thử đầy đủ. Checkpoint Sprint 1 hiện có catalog sample, Gateway, storefront shell và `package-lock.json` local; image digest, deployment và compatibility toàn bộ vẫn chưa có. Nguồn chính thức bên dưới được đối chiếu ngày 2026-09-19; kiểm tra lại release/security advisories khi tạo lockfile và trước mỗi release.
+Đây là **bộ phiên bản được chọn để hiện thực và kiểm thử**, không phải bộ đã được dự án kiểm thử đầy đủ. Checkpoint Sprint 1 hiện có catalog sample, Gateway, storefront shell, `package-lock.json`, image local pin digest và Application CI (chưa có run remote); deployment, scan và compatibility toàn bộ vẫn chưa có (chi tiết §7). Nguồn chính thức bên dưới được đối chiếu ngày 2026-09-19; kiểm tra lại release/security advisories khi tạo lockfile và trước mỗi release.
 
 | Mức bằng chứng | Trạng thái R1 |
 |---|---|
 | Release tồn tại, version/support/peer mapping theo upstream | Đã research; dẫn nguồn tại từng nhóm |
-| Tổ hợp exact patches chạy cùng nhau trong repo | **Chưa kiểm thử**; PLT-01 thực hiện §7 |
-| Lockfile, dependency tree, image digest và scan | Chưa có |
-| CI ứng dụng, staging, performance, restore và production | Chưa có; docs CI không thay các bằng chứng này |
+| Tổ hợp exact patches chạy cùng nhau trong repo | Evidence local tác giả cho phần S1 (Boot/Cloud/Alibaba/Nacos, PostgreSQL/Flyway, Vite/React) tại §7; chưa reviewer độc lập; Kafka/Redis chưa |
+| Lockfile, dependency tree, image digest và scan | Lockfile/tree và digest image local đã có; scan CVE/license chưa có |
+| CI ứng dụng, staging, performance, restore và production | Application CI đã viết, chưa có run remote; staging/performance/restore/production chưa có |
 
 Thay định hướng Boot 3 bằng Boot 4 và chọn frontend toolchain được ghi ở ADR-16/17 trong [08](../design/08_decisions.md). O02 vẫn mở để nghiệm thu compatibility; không coi R1 là phê duyệt production hay quyền sử dụng AWS credit.
 
@@ -142,7 +142,7 @@ Không lấy browser UI tests thay unit tests nghiệp vụ. Mọi acceptance v�
 
 Các phần chưa chọn exact version có chủ ý:
 
-- **PLT-02:** OpenAPI/JSON Schema validator, generator/mock và Mermaid renderer. Chọn theo contract thực thi; không thêm Swagger runtime chỉ để có tài liệu.
+- **PLT-02:** OpenAPI lint/example validation đã chọn `@redocly/cli` **2.54.3** (root devDependency, không kéo dependency con; rule example sai schema nâng thành error; `telemetry: off` và script đặt `REDOCLY_TELEMETRY=off`, `REDOCLY_SUPPRESS_UPDATE_NOTICE=true` để không gọi dịch vụ ngoài). Event JSON Schema validator, generator/mock và Mermaid renderer chọn khi có producer/nhu cầu thật; không thêm Swagger runtime chỉ để có tài liệu.
 - **SEC-01/PLT-04:** secret/dependency/container scanners và rule/database update policy. Bắt buộc trước release, không coi trì hoãn chọn tool là bỏ scan.
 - **QA-03:** load runner và failure harness theo profile L1/L2/L3; không suy unit/E2E tool đáp ứng load test.
 - **PLT-05:** log collector, alert routing, retention, sampling và manifests; kiểm tra resource budget trước cài.
@@ -175,7 +175,7 @@ Các phần chưa chọn exact version có chủ ý:
 | npm workspace / lock | Root `package-lock.json`; `@fashion/storefront` direct pins: React/react-dom **19.2.8**, React Router **8.4.0**, Vite **8.3.0**, plugin React **6.1.1**, TypeScript **6.0.3**, Vitest **5.0.1**, jsdom **30.1.0**, Playwright **1.63.0**; typecheck dùng `@types/react` **19.2.18** và `@types/react-dom` **19.2.7** |
 | Lệnh đã chạy | `bash scripts/verify-toolchain.sh` **PASS** với Maven banner, Node/npm guards, `npm ci --ignore-scripts` và `npm ls --all`; `./mvnw -q dependency:tree -DoutputFile=target/dependency-tree.txt` **PASS**. Effective POM và dependency tree đã được tạo; npm audit báo 0 vulnerabilities. |
 | Runtime local | Temurin JDK **21.0.12.1+1**, Maven **3.9.16**, Node **v24.21.0** và npm **11.19.0** đã xác minh; các version này khớp `.tool-versions`/R1. |
-| Chưa thực hiện | Nacos (config import, discovery, auth, restart/reconnect); Kafka/Redis; static serving/deployment; fresh-clone end-to-end có Catalog/PostgreSQL thật và các flow runtime còn lại trong bảng O02. |
+| Chưa thực hiện (snapshot 2026-09-20) | Nacos, static serving và chuỗi thật đã có evidence ở mục Task 5 bên dưới; còn Kafka/Redis, deployment, fresh-clone review độc lập và các flow runtime còn lại trong bảng O02. |
 
 Evidence core wrapper/BOM/npm của PLT-01 đã chạy với runtime R1 nêu trên; các runtime checks service, Gateway/Nacos, PostgreSQL, Kafka, Redis, browser và deployment trong bảng vẫn **chưa thực hiện**. Không đánh dấu O02 hay runtime compatibility toàn bộ hoàn tất; cần reviewer TL + DEVOPS kiểm tra fresh clone và các flow còn lại.
 
@@ -202,10 +202,27 @@ focus và CSS responsive 360px. `npm run typecheck --workspace @fashion/storefro
 `npm test --workspace @fashion/storefront -- --run`, và `npm run build --workspace
 @fashion/storefront` đã **PASS**. Playwright 1.63.0 Chromium đã chạy **PASS 2/2** (desktop và
 360px): reload `/products` render được và `/api/not-found` nhận HTTP 404 qua Gateway local.
-Catalog response trong smoke browser được intercept fixture có contract để tách deep-link test
-khỏi dữ liệu demo; do đó đây **không** thay bằng chứng frontend → Gateway → Catalog → PostgreSQL
-thật ở fresh-clone exit gate. Shell không hoàn thành WEB-01; contents/ảnh/SEO confirmation O10
+Bản 2026-09-20 intercept catalog response; từ Task 5 (dưới) spec E2E chạy trên chuỗi thật,
+không intercept. Shell không hoàn thành WEB-01; contents/ảnh/SEO confirmation O10
 và các screen catalog đầy đủ vẫn mở.
+
+### Contract, Compose đủ chuỗi và Nacos `TASK:PLT-01/02`, `TASK:SEC-01` — 2026-09-28
+
+Evidence tác giả trên commit nền `cc18a00` + working tree Task 5; reviewer độc lập **chưa có**.
+
+| Trường | Bằng chứng |
+|---|---|
+| Host | Ubuntu 24.04.5 LTS, Linux 7.0.0-34-generic x86_64, Intel Core Ultra 7 155U |
+| Runtime | Temurin 21.0.12.1, Maven 3.9.16, Node v24.21.0, npm 11.19.0 |
+| Docker | Docker Desktop engine **29.8.0** (client 29.8.1), Compose 5.5.1. Lệch R1 29.8.1 vì Docker Engine gốc của host không cho host truy cập port publish (xem 12 §1); cần chạy lại trên Engine 29.8.1 hoặc chấp nhận lệch |
+| Images | `eclipse-temurin:21.0.12.1_1-jre-noble@sha256:817f192b…b3d0`, `nginx:1.30.5-alpine@sha256:0985e772…7d94`, `nacos/nacos-server:v3.2.4@sha256:1c191c30…7708`, `postgres:17.11@sha256:d74eeac9…c46f` (Compose; Testcontainers dùng tag) |
+| Maven reactor | `./mvnw test` **PASS** 9 tests (catalog 7 với PostgreSQL 17.11 Testcontainers, Gateway 2), sau khi thêm Nacos starter; compatibility verifier giữ mặc định |
+| Frontend | `npm test` (script `vitest run`, không watch) 2 tests và `npm run typecheck` **PASS**. Bản trước dùng `npm test -- --run`: npm nuốt `--run` và chỉ không treo vì không có TTY; đã sửa sau review |
+| Contract | `bash scripts/validate-contracts.sh` **PASS**; thử sửa example sai schema → exit 1 (negative check) |
+| Compose + smoke | `bash scripts/local-up.sh` → 4 container healthy; `bash scripts/smoke-local.sh` **PASS** (readiness, catalog qua Gateway và qua storefront, `/internal` 404, limit 400, API/asset miss 404, deep link SPA). Smoke fail đúng khi stack dừng |
+| Browser | `npx playwright test` **PASS 2/2** (desktop, 360px) trên chuỗi thật storefront nginx → Gateway → catalog → PostgreSQL |
+| Nacos | `bash scripts/nacos-compat-check.sh` **PASS**: server 3.2.4 auth bật, client 3.1.1; config `catalog-service.yaml` import được; catalog + gateway đăng ký; Gateway route `lb://catalog-service`; sau restart Nacos cả hai đăng ký lại và smoke pass; stack trả về profile mặc định |
+| Chưa làm | Run Application CI remote; fresh-clone review độc lập; Kafka/Redis; scan CVE/license/image; deployment |
 
 Thứ tự: core backend + frontend → contracts → vertical slice COD → staging → observability/recovery theo backlog. Không scaffold toàn bộ 9 service để chứng minh version.
 

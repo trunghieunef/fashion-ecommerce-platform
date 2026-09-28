@@ -1,0 +1,108 @@
+openapi: 3.1.0
+info:
+  title: Catalog API
+  version: 0.1.0
+  description: >
+    TASK:PLT-02 core — only the operation implemented by the S1 catalog sample.
+    Full catalog filters/sort/cursor belong to TASK:CAT-02 (docs/design/03_interfaces.md §2.2).
+servers:
+  - url: http://localhost:8080
+    description: Local Gateway (S1-local)
+paths:
+  /api/v1/catalog/products:
+    get:
+      operationId: listProducts
+      summary: List ACTIVE products, newest first
+      security: []
+      parameters:
+        - in: query
+          name: limit
+          schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+      responses:
+        '200':
+          description: Stable public product page; next_cursor is always null in S1
+          headers:
+            X-Correlation-Id: {$ref: '#/components/headers/CorrelationId'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProductPageResponse'}
+              examples:
+                empty:
+                  value:
+                    code: OK
+                    data: {items: [], next_cursor: null}
+                    metadata: {request_id: 4c8a1f2e-0000-4000-8000-000000000001, trace_id: 4c8a1f2e-0000-4000-8000-000000000002}
+                one:
+                  value:
+                    code: OK
+                    data:
+                      items:
+                        - {id: 11111111-1111-4111-8111-111111111111, slug: ao-thun-mau, name_vi: Áo thun mẫu, name_en: Sample tee}
+                      next_cursor: null
+                    metadata: {request_id: 4c8a1f2e-0000-4000-8000-000000000003, trace_id: 4c8a1f2e-0000-4000-8000-000000000004}
+        '400':
+          description: limit outside 1..100 or not an integer
+          headers:
+            X-Correlation-Id: {$ref: '#/components/headers/CorrelationId'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+              examples:
+                invalidLimit:
+                  value:
+                    code: VALIDATION_ERROR
+                    message: INVALID_LIMIT
+                    errors:
+                      - {field: limit, message: must be between 1 and 100, rejected_value: 0}
+                    metadata: {request_id: 4c8a1f2e-0000-4000-8000-000000000005, trace_id: 4c8a1f2e-0000-4000-8000-000000000006}
+components:
+  headers:
+    CorrelationId:
+      description: Equals metadata.trace_id; tracing only, never an idempotency key
+      schema: {type: string, minLength: 1}
+  schemas:
+    Metadata:
+      type: object
+      required: [request_id, trace_id]
+      properties:
+        request_id: {type: string, minLength: 1}
+        trace_id: {type: string, minLength: 1}
+    ProductSummary:
+      type: object
+      required: [id, slug, name_vi, name_en]
+      additionalProperties: false
+      properties:
+        id: {type: string, format: uuid}
+        slug: {type: string, minLength: 1, maxLength: 160}
+        name_vi: {type: string, minLength: 1, maxLength: 255}
+        name_en: {type: string, minLength: 1, maxLength: 255}
+    ProductPageResponse:
+      type: object
+      required: [code, data, metadata]
+      properties:
+        code: {type: string, const: OK}
+        data:
+          type: object
+          required: [items, next_cursor]
+          properties:
+            items:
+              type: array
+              items: {$ref: '#/components/schemas/ProductSummary'}
+            next_cursor: {type: [string, 'null']}
+        metadata: {$ref: '#/components/schemas/Metadata'}
+    ApiError:
+      type: object
+      required: [code, message, metadata]
+      properties:
+        code: {type: string, enum: [VALIDATION_ERROR]}
+        message: {type: string}
+        errors:
+          type: array
+          items:
+            type: object
+            required: [field, message]
+            properties:
+              field: {type: string}
+              message: {type: string}
+              rejected_value: {}
+        metadata: {$ref: '#/components/schemas/Metadata'}

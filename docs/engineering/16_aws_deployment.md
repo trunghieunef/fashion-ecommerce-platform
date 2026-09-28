@@ -11,7 +11,7 @@ Danh mục và bộ version R1 sau research ở [17 Tech Stack](17_tech_stack.md
 | Hạng mục | Trạng thái thực tế |
 |---|---|
 | CI tài liệu | Có cấu hình [GitHub Actions](../../.github/workflows/docs-ci.yml), checker và test chạy local; cần push và xem run để xác nhận trên GitHub |
-| CI ứng dụng | Chưa có; repo chưa có service, frontend, Dockerfile, migration hoặc test nghiệp vụ |
+| CI ứng dụng | Có [Application CI](../../.github/workflows/application-ci.yml) cho S1-local (catalog mẫu, Gateway, storefront shell, Compose smoke), read-only, không AWS; chưa có run remote, scan hoặc build/push image registry |
 | CD / hạ tầng AWS | Chưa có workflow triển khai, CloudFormation hay manifest chạy được; tài liệu này là kế hoạch thực hiện PLT-04 |
 | Cloud provider | AWS đã chọn; region/topology dưới đây là đề xuất chưa provision |
 | Credit / tài khoản | Chủ dự án báo có $200; loại plan, số dư khả dụng, dịch vụ áp dụng và ngày hết hạn cần kiểm tra Billing |

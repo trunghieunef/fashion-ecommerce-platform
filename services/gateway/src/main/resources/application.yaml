@@ -5,6 +5,10 @@ spring:
   application:
     name: gateway
   cloud:
+    # Nacos discovery is off by default; profile nacos-compat enables it (O02 proof).
+    nacos:
+      discovery:
+        enabled: false
     gateway:
       server:
         webflux:

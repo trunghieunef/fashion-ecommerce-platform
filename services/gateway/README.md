@@ -30,7 +30,14 @@ timeout không được biến mutation thành retry hay thành công giả.
 | `GATEWAY_PORT` | `8080` | Public listener local |
 | `CATALOG_BASE_URL` | `http://localhost:8081` | Catalog upstream trong default profile |
 
-Actuator expose `health`, `info`, `metrics`; liveness/readiness mặc định do Spring Boot quản
-lý. Gateway không có database, migration, Kafka topic hay credential riêng ở S1. Profile
-`nacos-compat`, service identity và private networking là evidence Task 5/O02; default local
-route cố ý dùng URI cấu hình để cô lập Gateway boundary.
+Actuator expose `health`, `info`, `metrics` trên cùng port public 8080; chấp nhận cho local,
+phải tách management port hoặc chặn trước staging (PLT-04). Gateway không có database,
+migration, Kafka topic hay credential riêng ở S1.
+
+Default route cố ý dùng URI cấu hình để cô lập Gateway boundary. Profile `nacos-compat` bật
+Nacos discovery (`NACOS_SERVER_ADDR`, `NACOS_USERNAME`, `NACOS_PASSWORD`); đặt
+`CATALOG_BASE_URL=lb://catalog-service` để route qua discovery (Compose:
+`GATEWAY_CATALOG_BASE_URL`). Proof: `bash scripts/nacos-compat-check.sh`. Service identity
+giữa Gateway và service vẫn chưa có.
+
+Trong Compose, Gateway chạy từ `Dockerfile` và chỉ publish `127.0.0.1:8080`.

@@ -473,7 +473,7 @@ Expected: guest and member orders traverse quote → COD → confirm → pack �
 
 ```bash
 ./mvnw test
-npm ci && npm run typecheck && npm test -- --run && npm run build
+npm ci && npm run typecheck && npm test && npm run build
 bash scripts/validate-contracts.sh
 npx playwright test tests/e2e/g1-cod.spec.ts tests/e2e/g1-cod-interruption.spec.ts
 python3 -B scripts/check_docs.py

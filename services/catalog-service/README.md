@@ -28,7 +28,9 @@ set -a; source infra/local/.env; set +a
 ./mvnw -pl services/catalog-service spring-boot:run
 ```
 
-Service mặc định nghe tại `http://localhost:8081`. Dừng dependency bằng
+Service mặc định nghe tại `http://localhost:8081`. Trong Compose đủ chuỗi
+(`bash scripts/local-up.sh`), catalog chạy từ `Dockerfile` (JAR build trên host, JRE Temurin
+pin digest), không publish port, chỉ Gateway gọi được qua mạng Compose. Dừng dependency bằng
 `docker compose --env-file infra/local/.env -f infra/local/compose.yaml down`.
 Lệnh này giữ volume local; chỉ dùng `down -v` khi chủ động xóa toàn bộ dữ liệu local.
 
@@ -76,6 +78,14 @@ restart JVM. Readiness gồm `db` và `catalogMigration`: database trống/chưa
 trả HTTP 503. Để kiểm tra case đó trên một database local mới, chạy service với
 `SPRING_FLYWAY_ENABLED=false` trước khi chạy migration, rồi gọi readiness; không dùng
 profile này cho runtime bình thường.
+
+## Profile `nacos-compat` (O02)
+
+Mặc định Nacos tắt (`spring.cloud.nacos.*.enabled=false`). Profile `nacos-compat`
+(`application-nacos-compat.yaml`) import `nacos:catalog-service.yaml` (không optional, fail
+fast nếu Nacos down lúc khởi động), đăng ký discovery `catalog-service` và bật
+`management.info.env` để proof đọc giá trị import. Biến: `NACOS_SERVER_ADDR`,
+`NACOS_USERNAME`, `NACOS_PASSWORD`. Chạy proof: `bash scripts/nacos-compat-check.sh`.
 
 Actuator hiện chỉ expose `health`, `info`, `metrics`; chưa có Prometheus registry,
 dashboard, alert, tracing exporter hoặc retention policy. Các phần observability đó

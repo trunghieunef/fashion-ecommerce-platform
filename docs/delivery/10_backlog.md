@@ -16,14 +16,19 @@ Sprint 1 nhận PLT-01, phần core PLT-02 và SEC-01 theo checkpoint S1-local �
 
 PLT-04/05, AWS/K3s/ECR/ArgoCD, provider sandbox và các task business Phase 1 không thuộc commitment Sprint 1. Có thể chuẩn bị tài liệu/mock độc lập nhưng không chuyển In progress hoặc Done thay cho acceptance của task. Sprint 1 không được báo “MVP hoàn tất”; đây là nền tảng local để các sprint sau xây G1/G2.
 
-### Implementation status — 2026-09-20
+### Implementation status — 2026-09-28
 
-- `TASK:PLT-01` — **In progress**. Bootstrap toolchain, catalog read sample/V001/Compose
-  PostgreSQL, Gateway boundary và storefront shell đều đã có evidence local. Testcontainers
-  PostgreSQL đã pass theo evidence host; Gateway boundary test, storefront typecheck/Vitest/build
-  và Playwright desktop/360px smoke cũng đã pass. Chưa đánh dấu `PLT-01`, `CAT-01`, S1-local hay
-  O02 Done: cần fresh-clone chain frontend → Gateway → Catalog → PostgreSQL thật, Task 5 contract/
-  orchestration, aggregate regression và reviewer evidence.
+- `TASK:PLT-01` — **In progress**. Toolchain, catalog read sample/V001, Gateway boundary,
+  storefront shell và Compose đủ chuỗi postgres → catalog → Gateway → storefront (nginx) có
+  evidence local tác giả: Maven reactor 9 tests (PostgreSQL thật), Vitest, typecheck/build,
+  local smoke và Playwright chuỗi thật desktop/360px, proof `nacos-compat` (config import,
+  discovery `lb://`, reconnect sau restart Nacos). Evidence tại 17 §7.
+- `TASK:PLT-02` core — **In progress**. `contracts/openapi/catalog.yaml` cho operation duy nhất
+  đã implement, Redocly lint + validate example. Chưa có event schema (chưa có producer).
+- `TASK:SEC-01` phần nền — **In progress**. Strip identity header, `/internal/**` 404, catalog
+  không publish port, ports local chỉ `127.0.0.1`. Threat inventory/permission matrix/CSRF chưa làm.
+- Chưa đánh dấu `PLT-01`, `CAT-01`, S1-local hay O02 Done: cần fresh-clone review bởi người khác
+  tác giả (template `docs/evidence/s1-local-template.md`) và run Application CI trên remote.
 
 ## 2. Phase 0 — nền tảng
 

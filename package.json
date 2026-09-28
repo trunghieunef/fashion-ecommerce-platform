@@ -2,10 +2,15 @@
   "name": "fashion-ecommerce-platform",
   "private": true,
   "packageManager": "npm@11.19.0",
-  "workspaces": ["web/storefront"],
+  "workspaces": [
+    "web/storefront"
+  ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "@redocly/cli": "2.54.3"
   }
 }

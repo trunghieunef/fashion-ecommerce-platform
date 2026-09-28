@@ -342,7 +342,7 @@ Return route ignores query success as evidence, extracts only allowlisted order 
 
 - [ ] **Step 4: Run U03/U07/U12/U13/U16/U22/U24**
 
-Run: `npm run typecheck && npm test -- --run && npx playwright test tests/e2e/g2-online.spec.ts tests/e2e/g2-refund.spec.ts`
+Run: `npm run typecheck && npm test && npx playwright test tests/e2e/g2-online.spec.ts tests/e2e/g2-refund.spec.ts`
 
 Expected: browser close/return order, double-click, role/ownership, CSRF, 202/409/UNKNOWN, VI/EN and 360px cases PASS.
 
@@ -412,7 +412,7 @@ Expected: deterministic stub full fault matrix PASS. Then run the small permitte
 
 ```bash
 ./mvnw test
-npm ci && npm run typecheck && npm test -- --run && npm run build
+npm ci && npm run typecheck && npm test && npm run build
 bash scripts/validate-contracts.sh
 bash scripts/scan-secrets.sh
 npx playwright test tests/e2e/mvp-regression.spec.ts
@@ -519,7 +519,7 @@ Record that G2 does not prove production HA, a multi-node database, 30-day 99.9%
 python3 -B -m unittest discover -s scripts -p 'test_*.py' -v
 python3 -B scripts/check_docs.py
 ./mvnw test
-npm ci && npm run typecheck && npm test -- --run && npm run build
+npm ci && npm run typecheck && npm test && npm run build
 bash scripts/validate-contracts.sh
 bash scripts/test-mvp-regression.sh
 git diff --check

@@ -465,7 +465,7 @@ Keep access token in memory; cookie carries refresh only. UI hides disallowed ac
 
 - [ ] **Step 4: Run component/accessibility/browser checks**
 
-Run: `npm run typecheck && npm test -- --run && npx playwright test tests/e2e/commerce-core.spec.ts`
+Run: `npm run typecheck && npm test && npx playwright test tests/e2e/commerce-core.spec.ts`
 
 Expected: U03/U05/U07/U10 paths PASS in VI and EN; deep-link reload remains valid.
 
@@ -512,7 +512,7 @@ Expected: all named tests PASS on PostgreSQL 17.11/Kafka 4.1.2/Redis 8.2.9; cont
 
 ```bash
 ./mvnw test
-npm ci && npm run typecheck && npm test -- --run && npm run build
+npm ci && npm run typecheck && npm test && npm run build
 bash scripts/validate-contracts.sh
 npx playwright test tests/e2e/commerce-core.spec.ts
 python3 -B -m unittest discover -s scripts -p 'test_*.py' -v

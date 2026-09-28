@@ -354,7 +354,7 @@ test('deep link works while API misses stay 404', async ({page, request}) => {
 });
 ```
 
-Run: `npm run typecheck && npm test -- --run && npx playwright test tests/e2e/s1-local.spec.ts`
+Run: `npm run typecheck && npm test && npx playwright test tests/e2e/s1-local.spec.ts`
 
 Expected: PASS at 360px and desktop; `/products` reload succeeds; API miss is 404.
 
@@ -467,7 +467,7 @@ Reviewer fills `docs/evidence/s1-local-template.md` with commit, OS/CPU, JDK/Nod
 python3 -B -m unittest discover -s scripts -p 'test_*.py' -v
 python3 -B scripts/check_docs.py
 ./mvnw test
-npm ci && npm run typecheck && npm test -- --run && npm run build
+npm ci && npm run typecheck && npm test && npm run build
 bash scripts/validate-contracts.sh
 bash scripts/smoke-local.sh
 git diff --check

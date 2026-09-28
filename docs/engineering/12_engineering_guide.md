@@ -6,19 +6,55 @@ B1 · 2026-09-19 · Owner TL + DEVOPS.
 
 Repo có docs/CI kiểm tra tài liệu (`.github/workflows/docs-ci.yml`, `scripts/check_docs.py`
 cùng test) và nền tảng `TASK:PLT-01` đã được tạo: root Maven reactor/Wrapper,
-`services/catalog-service`, Compose PostgreSQL local, role migration/runtime riêng, và
-Flyway `V001`. Lệnh chạy/test thực tế và các giới hạn của catalog sample nằm trong
-`services/catalog-service/README.md`; không coi các service/đường dẫn khác trong cấu
-trúc dự kiến là đã tồn tại.
+`services/catalog-service` (Flyway `V001`, role migration/runtime riêng),
+`services/gateway`, `web/storefront` và Compose PostgreSQL local. Lệnh chạy/test thực tế
+và giới hạn nằm trong README của từng thành phần; không coi các service/đường dẫn khác
+trong cấu trúc dự kiến là đã tồn tại.
 
-PostgreSQL runtime chưa có evidence PASS trên worktree này: Docker client bị từ chối
-quyền truy cập `/var/run/docker.sock` (`java.net.BindException: Permission denied`).
-Do đó Compose/Testcontainers chưa chạy migration/query/readiness với DB thật; không
-thay bằng H2/mock hoặc bỏ qua test để xác nhận S1-local.
+Evidence local hiện có ghi tại [17 §7](17_tech_stack.md): catalog `clean test` **PASS**
+2026-09-20 (7 tests, PostgreSQL 17.11 qua Testcontainers), Gateway boundary test,
+storefront typecheck/Vitest/build và Playwright. Đây chưa phải fresh-clone chain
+frontend → Gateway → Catalog → PostgreSQL; không thay bằng H2/mock hoặc bỏ qua test để
+xác nhận S1-local.
+
+Lưu ý môi trường:
+
+- Nếu process chưa nạp group `docker`, dùng `sg docker -c '<lệnh>'`; không chmod socket.
+- Máy có cả Docker Desktop và Docker Engine thì CLI/Compose theo `docker context`, còn
+  Testcontainers mặc định dùng `/var/run/docker.sock`. Kiểm tra `docker context ls` và
+  ghi engine/version thực dùng vào evidence; hai lệnh có thể chạy trên hai daemon khác nhau.
+- Sandbox chặn kết nối tới port container trên `localhost` làm Testcontainers lỗi
+  `Could not connect to Ryuk`; đây là lỗi môi trường, không phải test pass/fail.
+- 2026-09-28 trên host Ubuntu kernel 7.0.0-34, Docker Engine gốc (`/var/run/docker.sock`)
+  không cho host kết nối port publish/IP bridge (connection reset, container-to-container
+  vẫn chạy). Docker Desktop hoạt động. Khi gặp lỗi này, dùng context `desktop-linux` và
+  `DOCKER_HOST=unix://$HOME/.docker/desktop/docker.sock` cho Testcontainers; không sửa
+  firewall host để vượt lỗi.
+
+### Lệnh local thực tế (S1-local)
+
+Chạy từ repo root. Artifact build trên host bằng Maven Wrapper/npm lockfile; Dockerfile
+chỉ copy JAR/`dist` vào image runtime pin tag + digest.
+
+| Mục đích | Lệnh |
+|---|---|
+| Toolchain/lockfile | `bash scripts/verify-toolchain.sh` |
+| Docs | `python3 -B -m unittest discover -s scripts -p 'test_*.py' -v` và `python3 -B scripts/check_docs.py` |
+| Backend (PostgreSQL thật) | `./mvnw test`; một test: `./mvnw -pl services/catalog-service -Dtest=ProductQueryIntegrationTest test` |
+| Frontend | `npm ci && npm run typecheck && npm test && npm run build` |
+| Contract | `bash scripts/validate-contracts.sh` (Redocly lint; example sai schema là lỗi) |
+| Khởi động stack | `bash scripts/local-up.sh` (tạo `infra/local/.env` từ example nếu chưa có) |
+| Smoke | `bash scripts/smoke-local.sh`; browser: `npx playwright install chromium && npx playwright test` |
+| Nacos proof O02 | `bash scripts/nacos-compat-check.sh` sau `local-up.sh`; tự trả stack về profile mặc định. Mật khẩu admin chỉ được khởi tạo lần đầu và lưu trong volume `nacos-data`: đổi `NACOS_PASSWORD` sau đó thì xóa riêng volume này (`docker volume rm local_nacos-data`) |
+| Dừng / reset | `docker compose --env-file infra/local/.env -f infra/local/compose.yaml --profile nacos-compat down`; thêm `-v` chỉ khi chủ động xóa dữ liệu local |
+
+Ports chỉ bind `127.0.0.1`: storefront 4173, Gateway 8080, PostgreSQL 5432 (cho chạy JVM
+trên host). Catalog và Nacos không publish port. CI tương ứng ở
+`.github/workflows/application-ci.yml`, read-only, không có credential AWS.
 
 Theo ADR-18, Sprint 1 chỉ nhắm checkpoint S1-local: development/deployment trên máy local, không AWS/Kubernetes/GitOps. Local workflow phải chạy được trên clean checkout bằng lệnh đã ghi; một smoke path đi qua frontend shell, Gateway, service mẫu và PostgreSQL. Không scaffold toàn bộ service hoặc gọi kết quả là G0/G1/G2.
 
-Danh mục và bộ phiên bản đã chọn sau research R1 được quản lý tại [17 Tech Stack](17_tech_stack.md): Java 21/Boot 4.0 theo BOM; React/Vite SPA, Node 24 LTS/npm. O02 vẫn mở cho runtime compatibility, lockfile/digest, license/CVE và xác nhận đánh đổi SEO; chưa có bộ dependency được kiểm thử trong repo.
+Danh mục và bộ phiên bản đã chọn sau research R1 được quản lý tại [17 Tech Stack](17_tech_stack.md): Java 21/Boot 4.0 theo BOM; React/Vite SPA, Node 24 LTS/npm. O02 vẫn mở cho runtime compatibility toàn bộ, image digest, license/CVE và xác nhận đánh đổi SEO; lockfile và dependency tree của phần Sprint 1 đã có evidence local.
 
 ## 2. Cấu trúc dự kiến
 
@@ -110,7 +146,7 @@ Flyway mỗi service, versioned append-only scripts; sửa migration đã deploy
 
 CI ứng dụng cần hiện thực: formatting/static checks; unit; DB migration/constraint integration khi có schema; OpenAPI/event compatibility; secret/dependency scan; build immutable artifact; staging smoke. Payment/stock PR phải test race/failure path liên quan. Không dùng coverage % thay proof invariant.
 
-CI thực có hiện tại chỉ kiểm tra tài liệu bằng Python stdlib; lệnh chạy, phạm vi/giới hạn, cách bật required check và lộ trình GitHub OIDC → ECR → GitOps ở [16 AWS deployment](16_aws_deployment.md). Chưa có CD hoặc quyền AWS trong workflow này.
+CI thực có: Documentation CI (Python stdlib) và Application CI cho phần S1-local (toolchain, Maven/Testcontainers, frontend, contract, Compose smoke, Playwright). Chưa có secret/dependency/image scan, image registry, CD hoặc quyền AWS; lộ trình GitHub OIDC → ECR → GitOps ở [16 AWS deployment](16_aws_deployment.md). Application CI chưa có run remote làm bằng chứng.
 
 Rollback ứng dụng bằng image/manifests đã xác nhận; rollback schema chỉ khi có kế hoạch tested. Không drop dữ liệu tiền để quay lại migration cũ. Release cần biết phiên bản code nào đọc được schema mới.
 

@@ -300,4 +300,4 @@ Method/header/carrier mapping thật phải được xác minh trong sandbox. N�
 
 ## 7. Điều kiện contract-ready
 
-Mỗi endpoint/event khi nhận task phải có: operationId/schema ID, request/response examples hợp lệ, required/nullable/range/enum, permission/ownership, lỗi nghiệp vụ, idempotency/version behavior, producer/consumer và test duplicate/out-of-order nếu liên quan. 03 là danh mục B1; chưa tuyên bố là OpenAPI hoàn chỉnh đã validate. Tên đường dẫn thay đổi phải sửa FE/mock/tests cùng PR.
+Mỗi endpoint/event khi nhận task phải có: operationId/schema ID, request/response examples hợp lệ, required/nullable/range/enum, permission/ownership, lỗi nghiệp vụ, idempotency/version behavior, producer/consumer và test duplicate/out-of-order nếu liên quan. 03 là danh mục B1; chưa tuyên bố là OpenAPI hoàn chỉnh đã validate. Contract thực thi hiện có: `contracts/openapi/catalog.yaml` chỉ cho `GET /api/v1/catalog/products` của S1 (200/400), kiểm bằng `scripts/validate-contracts.sh`; smoke kiểm envelope và shape từng item của response live theo `ProductSummary`; chưa có validator tự sinh từ OpenAPI. Tên đường dẫn thay đổi phải sửa FE/mock/tests cùng PR.

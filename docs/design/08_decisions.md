@@ -53,7 +53,7 @@ Gate task là work package trong [backlog](../delivery/10_backlog.md). Mã task 
 | ID | Cần quyết định / đầu ra | Owner | Hạn gate | Có thể làm trước |
 |---|---|---|---|---|
 | O01 | AWS đã chọn nhưng hoãn khỏi Sprint 1; còn plan/số dư/hạn credit $200, region, ngân sách gộp và tiền tự trả, staging sizing, managed DB/Redis và prod cluster | PO + DEVOPS | Sau S1-local, trước PLT-04 / G2 | Sprint 1 local không bị chặn; đề xuất EC2 + K3s, cost worksheet và subtasks tại 16; chưa tạo tài nguyên |
-| O02 | R1 đã chọn bộ version ở 17; còn nghiệm thu runtime compatibility, lockfile/digest, license/CVE và yêu cầu SEO trước WEB-01 | TL + DEVOPS + FE | PLT-01 core; PLT-02/04/05 theo tooling | Hiện thực spike từ R1/ADR-16/17; chưa có integration test, app CI hoặc deployment, không tắt verifier/ép peer dependencies để vượt lỗi |
+| O02 | R1 đã chọn bộ version ở 17; còn nghiệm thu runtime compatibility, lockfile/digest, license/CVE và yêu cầu SEO trước WEB-01 | TL + DEVOPS + FE | PLT-01 core; PLT-02/04/05 theo tooling | Evidence local S1 ngày 2026-09-28 tại 17 §7: Boot 4.0.8 + Cloud 2025.1.3 + Alibaba 2025.1.0.0 + Nacos client 3.1.1/server 3.2.4 (auth bật), PostgreSQL 17.11/Flyway, Vite/React; verifier bật. Còn thiếu reviewer độc lập, run CI remote, Kafka/Redis, image scan/CVE/license, deployment và xác nhận SEO; không tắt verifier/ép peer dependencies để vượt lỗi |
 | O03 | Merchant sandbox/production, callback domains, quyền query/refund VNPay/MoMo | PO + FINANCE | PAY-02/03 / G2 | Mock và negative tests |
 | O04 | Phí ship/COD, vùng SELF, nguồn địa chỉ, carrier account/SLA | PO + OPS | SHP-01/03 | Fixture giả và adapter |
 | O05 | Đổi trả, phí, hàng hỏng, bằng chứng, đơn tổng 0; giá đã gồm thuế hay chưa và yêu cầu hóa đơn | PO + FINANCE | ORD-01/04 / G2 | Baseline không cộng thuế ngoài giá niêm yết; chặn checkout total <= 0; nếu cần thuế tách dòng phải sửa pricing/schema trước code |
@@ -75,5 +75,6 @@ Gate task là work package trong [backlog](../delivery/10_backlog.md). Mã task 
 - Bổ sung [17 Tech Stack](../engineering/17_tech_stack.md): tập hợp lựa chọn baseline, công cụ chưa chọn, trạng thái/version và bằng chứng cần có cho O02. Nêu rủi ro support Boot/Cloud theo nguồn chính thức; không thay stack, không chốt version chưa test hoặc đánh dấu task Done.
 - R1 research 2026-09-19 theo yêu cầu chọn phiên bản: 17 có exact version ứng viên và nguồn upstream; ADR-16 thay Boot 3 bằng Boot 4.0, ADR-17 chọn Vite SPA có gate SEO. Đây là lựa chọn để implementation, không phải compatibility đã pass; không đóng O02, PLT-01 hay cấp quyền provision AWS.
 - ADR-18: chủ dự án giới hạn Sprint 1 ở local-first MVP foundation. Thêm checkpoint S1-local; AWS/PLT-04 và toàn bộ G1/G2 không được suy là commitment Sprint 1.
+- S1 Task 5 (2026-09-28): contract OpenAPI catalog + Redocly, Compose đủ chuỗi, smoke/Playwright chuỗi thật, Application CI và proof `nacos-compat` local. Đây là evidence tác giả; S1-local chỉ đạt sau fresh-clone review độc lập. O01/AWS vẫn mở.
 
 Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác và lý do; ảnh hưởng PRD/API/schema/test/task; người quyết định; ngày; link bằng chứng. Chưa có chữ ký phê duyệt giả định thương mại.
