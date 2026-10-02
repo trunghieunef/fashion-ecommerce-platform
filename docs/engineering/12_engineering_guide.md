@@ -11,14 +11,24 @@ cùng test) và nền tảng `TASK:PLT-01` đã được tạo: root Maven react
 và giới hạn nằm trong README của từng thành phần; không coi các service/đường dẫn khác
 trong cấu trúc dự kiến là đã tồn tại.
 
-Evidence local hiện có ghi tại [17 §7](17_tech_stack.md): catalog `clean test` **PASS**
-2026-09-20 (7 tests, PostgreSQL 17.11 qua Testcontainers), Gateway boundary test,
-storefront typecheck/Vitest/build và Playwright. Đây chưa phải fresh-clone chain
-frontend → Gateway → Catalog → PostgreSQL; không thay bằng H2/mock hoặc bỏ qua test để
-xác nhận S1-local.
+Evidence local hiện có ghi tại [17 §7](17_tech_stack.md): catalog/Gateway, frontend,
+Compose smoke chuỗi thật và Nacos proof ngày 2026-09-28. CI remote **PASS** cho commit
+`d16151d` ngày 2026-09-30. [Lần kiểm tra ngày 2026-10-02](../evidence/s1-local-2026-10-02.md)
+trên clone sạch Windows bị mạng công ty chặn runtime artifacts; chưa đủ fresh-clone
+acceptance độc lập. Không thay bằng H2/mock hoặc bỏ qua test để xác nhận S1-local.
 
 Lưu ý môi trường:
 
+- Windows: dùng Git Bash cho `.sh`, hoặc `./mvnw.cmd test` trong PowerShell với
+  `JAVA_HOME` trỏ JDK đã khóa. Wrapper Windows chuẩn hóa project path, hỗ trợ khoảng
+  trắng; regression nằm ở `scripts/test_maven_wrapper.py` (Windows + JDK).
+- Nếu TLS interception của mạng công ty dùng CA đã được Windows tin cậy, có thể đặt
+  `NODE_USE_SYSTEM_CA=1` cho Node và
+  `MAVEN_OPTS='-Djavax.net.ssl.trustStoreType=Windows-ROOT -Djavax.net.ssl.trustStore=NONE'`
+  cho Java trên Windows. Không tắt TLS verification. HTTP 403 do policy chặn artifact
+  cần môi trường được phép tải hoặc hỗ trợ từ quản trị mạng; không sửa lockfile/version
+  để che blocker. `npm ci` có thể exit 0 dù optional native dependency bị chặn: vẫn phải
+  chạy unit/build để xác minh.
 - Nếu process chưa nạp group `docker`, dùng `sg docker -c '<lệnh>'`; không chmod socket.
 - Máy có cả Docker Desktop và Docker Engine thì CLI/Compose theo `docker context`, còn
   Testcontainers mặc định dùng `/var/run/docker.sock`. Kiểm tra `docker context ls` và
@@ -146,7 +156,7 @@ Flyway mỗi service, versioned append-only scripts; sửa migration đã deploy
 
 CI ứng dụng cần hiện thực: formatting/static checks; unit; DB migration/constraint integration khi có schema; OpenAPI/event compatibility; secret/dependency scan; build immutable artifact; staging smoke. Payment/stock PR phải test race/failure path liên quan. Không dùng coverage % thay proof invariant.
 
-CI thực có: Documentation CI (Python stdlib) và Application CI cho phần S1-local (toolchain, Maven/Testcontainers, frontend, contract, Compose smoke, Playwright). Chưa có secret/dependency/image scan, image registry, CD hoặc quyền AWS; lộ trình GitHub OIDC → ECR → GitOps ở [16 AWS deployment](16_aws_deployment.md). Application CI chưa có run remote làm bằng chứng.
+CI thực có: Documentation CI (Python stdlib) và Application CI cho phần S1-local (toolchain, Maven/Testcontainers, frontend, contract, Compose smoke, Playwright). Cả hai đã PASS trên `d16151d` ngày 2026-09-30 ([evidence](../evidence/s1-local-2026-10-02.md)); chưa chứng minh patch sau commit này. Chưa có secret/dependency/image scan, image registry, CD hoặc quyền AWS; lộ trình GitHub OIDC → ECR → GitOps ở [16 AWS deployment](16_aws_deployment.md).
 
 Rollback ứng dụng bằng image/manifests đã xác nhận; rollback schema chỉ khi có kế hoạch tested. Không drop dữ liệu tiền để quay lại migration cũ. Release cần biết phiên bản code nào đọc được schema mới.
 

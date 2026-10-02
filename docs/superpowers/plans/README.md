@@ -6,6 +6,7 @@ Bộ kế hoạch này chuyển baseline B1 thành các gói triển khai tuần
 |---|---|---|---|
 | 1 | [Sprint 1 — local foundation](2026-09-19-sprint-1-local-foundation.md) | Fresh clone chạy storefront shell → Gateway → catalog sample → PostgreSQL; version/contract/security proof | S1-local |
 | — | [Handoff Sprint 1 — 2026-09-22](2026-09-22-s1-local-handoff.md) | Trạng thái checkout, evidence đã có và thứ tự tiếp tục | Không thay gate |
+| — | [Handoff sang máy mới — 2026-10-02](2026-10-02-s1-local-machine-handoff.md) | Toolchain, checklist fresh-clone, evidence/CI và phần cần nghiệm thu trên môi trường mới | Không thay gate |
 | 2 | [Phase 0 — platform và AWS staging](2026-09-19-phase-0-platform-staging.md) | Contract core, durable primitives, CI ứng dụng, AWS staging một service mẫu, observability và rollback | G0 |
 | 3 | [Phase 1A — commerce core](2026-09-19-phase-1a-commerce-core.md) | Identity, catalog, inventory, cart và UI cơ bản chạy bằng contract thật | Integration checkpoint |
 | 4 | [Phase 1B — COD vertical slice](2026-09-19-phase-1b-cod-vertical-slice.md) | Guest/member checkout COD, SELF fulfillment, notification, admin và settlement | G1 |

@@ -8,14 +8,14 @@ Chọn **Java 21 LTS + Spring Boot 4.0**, **React + Vite SPA**, **PostgreSQL 17*
 
 Tiêu chí: còn đường cập nhật, phối hợp được theo BOM/peer dependencies của upstream, ít runtime/tooling phải tự vận hành, phù hợp nhóm nhỏ và không tự tăng chi phí cloud. Không chọn mọi thành phần theo bản mới nhất.
 
-Đây là **bộ phiên bản được chọn để hiện thực và kiểm thử**, không phải bộ đã được dự án kiểm thử đầy đủ. Checkpoint Sprint 1 hiện có catalog sample, Gateway, storefront shell, `package-lock.json`, image local pin digest và Application CI (chưa có run remote); deployment, scan và compatibility toàn bộ vẫn chưa có (chi tiết §7). Nguồn chính thức bên dưới được đối chiếu ngày 2026-09-19; kiểm tra lại release/security advisories khi tạo lockfile và trước mỗi release.
+Đây là **bộ phiên bản được chọn để hiện thực và kiểm thử**, không phải bộ đã được dự án kiểm thử đầy đủ. Checkpoint Sprint 1 hiện có catalog sample, Gateway, storefront shell, `package-lock.json`, image local pin digest và Application CI (PASS trên `d16151d` ngày 2026-09-30); deployment, scan và compatibility toàn bộ vẫn chưa có (chi tiết §7). Nguồn chính thức bên dưới được đối chiếu ngày 2026-09-19; kiểm tra lại release/security advisories khi tạo lockfile và trước mỗi release.
 
 | Mức bằng chứng | Trạng thái R1 |
 |---|---|
 | Release tồn tại, version/support/peer mapping theo upstream | Đã research; dẫn nguồn tại từng nhóm |
 | Tổ hợp exact patches chạy cùng nhau trong repo | Evidence local tác giả cho phần S1 (Boot/Cloud/Alibaba/Nacos, PostgreSQL/Flyway, Vite/React) tại §7; chưa reviewer độc lập; Kafka/Redis chưa |
 | Lockfile, dependency tree, image digest và scan | Lockfile/tree và digest image local đã có; scan CVE/license chưa có |
-| CI ứng dụng, staging, performance, restore và production | Application CI đã viết, chưa có run remote; staging/performance/restore/production chưa có |
+| CI ứng dụng, staging, performance, restore và production | Application CI PASS trên `d16151d`; staging/performance/restore/production chưa có |
 
 Thay định hướng Boot 3 bằng Boot 4 và chọn frontend toolchain được ghi ở ADR-16/17 trong [08](../design/08_decisions.md). O02 vẫn mở để nghiệm thu compatibility; không coi R1 là phê duyệt production hay quyền sử dụng AWS credit.
 
@@ -177,7 +177,10 @@ Các phần chưa chọn exact version có chủ ý:
 | Runtime local | Temurin JDK **21.0.12.1+1**, Maven **3.9.16**, Node **v24.21.0** và npm **11.19.0** đã xác minh; các version này khớp `.tool-versions`/R1. |
 | Chưa thực hiện (snapshot 2026-09-20) | Nacos, static serving và chuỗi thật đã có evidence ở mục Task 5 bên dưới; còn Kafka/Redis, deployment, fresh-clone review độc lập và các flow runtime còn lại trong bảng O02. |
 
-Evidence core wrapper/BOM/npm của PLT-01 đã chạy với runtime R1 nêu trên; các runtime checks service, Gateway/Nacos, PostgreSQL, Kafka, Redis, browser và deployment trong bảng vẫn **chưa thực hiện**. Không đánh dấu O02 hay runtime compatibility toàn bộ hoàn tất; cần reviewer TL + DEVOPS kiểm tra fresh clone và các flow còn lại.
+Evidence core wrapper/BOM/npm của PLT-01 đã chạy với runtime R1 nêu trên; service,
+Gateway/Nacos, PostgreSQL và browser có evidence bổ sung ngày 2026-09-28 bên dưới.
+Kafka, Redis và deployment chưa thực hiện. Không đánh dấu O02 hay runtime compatibility
+toàn bộ hoàn tất; cần reviewer TL + DEVOPS kiểm tra fresh clone và các flow còn lại.
 
 ### Catalog sample `TASK:PLT-01` — 2026-09-20
 
@@ -223,6 +226,22 @@ Evidence tác giả trên commit nền `cc18a00` + working tree Task 5; reviewer
 | Browser | `npx playwright test` **PASS 2/2** (desktop, 360px) trên chuỗi thật storefront nginx → Gateway → catalog → PostgreSQL |
 | Nacos | `bash scripts/nacos-compat-check.sh` **PASS**: server 3.2.4 auth bật, client 3.1.1; config `catalog-service.yaml` import được; catalog + gateway đăng ký; Gateway route `lb://catalog-service`; sau restart Nacos cả hai đăng ký lại và smoke pass; stack trả về profile mặc định |
 | Chưa làm | Run Application CI remote; fresh-clone review độc lập; Kafka/Redis; scan CVE/license/image; deployment |
+
+### CI remote và kiểm chứng Windows — 2026-10-02
+
+Đã đối chiếu GitHub API: [Application CI](https://github.com/trunghieunef/fashion-ecommerce-platform/actions/runs/36662487345)
+và [Documentation CI](https://github.com/trunghieunef/fashion-ecommerce-platform/actions/runs/36662487374)
+**PASS** trên `d16151d57656dbe558f63c95d4feab4993edc6b6` ngày 2026-09-30. Application CI
+gồm toolchain, PostgreSQL/Testcontainers, frontend, contract, Compose smoke và browser;
+không gồm Nacos reconnect proof hoặc patch chưa commit.
+
+[Evidence Windows](../evidence/s1-local-2026-10-02.md) ghi clone sạch cùng commit,
+JDK Temurin 21.0.12.1+1 đã tải/kiểm checksum, Node/npm hiện có 24.18.0/11.16.0,
+Docker 28.5.2/Compose 2.40.3. Docs/typecheck/contract/Compose config pass; Maven,
+native frontend build/tests và full-chain runtime bị gateway mạng công ty chặn.
+Regression sửa Windows wrapper đã chạy RED → GREEN, bộ Python tests của patch PASS 12/12.
+Chủ dự án yêu cầu bỏ qua phần bị chặn trên máy công ty; fresh-clone runtime/TL acceptance
+vẫn mở. Không đổi bộ version R1 hoặc đóng O02.
 
 Thứ tự: core backend + frontend → contracts → vertical slice COD → staging → observability/recovery theo backlog. Không scaffold toàn bộ 9 service để chứng minh version.
 

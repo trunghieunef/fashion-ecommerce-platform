@@ -1,5 +1,9 @@
 # Handoff Sprint 1 local foundation — 2026-09-22
 
+Handoff này giữ snapshot lịch sử. Agent tiếp tục trên máy mới đọc
+[handoff ngày 2026-10-02](2026-10-02-s1-local-machine-handoff.md): Task 5 đã có code,
+CI baseline đã PASS; còn fresh-clone runtime/reviewer/TL acceptance.
+
 ## Mục đích
 
 Đây là handoff cho agent tiếp theo của branch Sprint 1. Tài liệu ghi trạng thái đã kiểm chứng, evidence và thứ tự tiếp tục.

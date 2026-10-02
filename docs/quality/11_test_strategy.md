@@ -1,6 +1,12 @@
 # 11 — Chiến lược kiểm thử và nghiệm thu
 
-B1 · 2026-09-19 · Owner QA + TL · Chưa có ứng dụng, các test dưới đây là kế hoạch, không phải kết quả đã chạy.
+B1 · 2026-09-19 · Owner QA + TL · Có catalog mẫu/Gateway/storefront và test S1; các ca nghiệp vụ bên dưới vẫn là kế hoạch, không phải kết quả đã chạy.
+
+Kết quả S1, CI remote và blocker kiểm chứng trên Windows được ghi tại
+[evidence ngày 2026-10-02](../evidence/s1-local-2026-10-02.md). Regression Windows của
+Maven Wrapper kiểm tra Java nhận đúng project path và arguments có khoảng trắng,
+không tải Maven/dependency; chỉ chạy trên Windows có JDK. CI Linux skip test này và
+vẫn chạy docs tests cùng backend/frontend runtime tests riêng.
 
 ## 1. Mục tiêu và tầng kiểm thử
 
