@@ -2,7 +2,7 @@
 
 B1 bổ sung · 2026-09-19 · Owner DEVOPS + TL; PO duyệt chi phí. AWS được chủ dự án chọn, có $200 credit theo thông tin cung cấp. Chưa đăng nhập/kiểm chứng Billing, chưa tạo tài nguyên.
 
-Danh mục và bộ version R1 sau research ở [17 Tech Stack](17_tech_stack.md); chưa có runtime compatibility hoặc image digest được kiểm thử. Tài liệu 16 sở hữu topology AWS, ngân sách và quy trình deploy.
+Danh mục và bộ version R1 sau research ở [17 Tech Stack](17_tech_stack.md); phần S1 có evidence runtime local/CI và image local pin digest, compatibility toàn bộ và deployment vẫn chưa nghiệm thu. Tài liệu 16 sở hữu topology AWS, ngân sách và quy trình deploy.
 
 **ADR-18:** AWS/cloud nằm ngoài Sprint 1. Trong Sprint 1 chỉ dùng local workflow ở 09/10; không tạo CloudFormation stack, IAM role, ECR, EC2, K3s hoặc ArgoCD. Tài liệu này là kế hoạch cho giai đoạn sau S1-local và không phải checklist phải hoàn thành trong Sprint 1.
 
@@ -10,14 +10,16 @@ Danh mục và bộ version R1 sau research ở [17 Tech Stack](17_tech_stack.md
 
 | Hạng mục | Trạng thái thực tế |
 |---|---|
-| CI tài liệu | Có cấu hình [GitHub Actions](../../.github/workflows/docs-ci.yml), checker và test chạy local; cần push và xem run để xác nhận trên GitHub |
-| CI ứng dụng | Chưa có; repo chưa có service, frontend, Dockerfile, migration hoặc test nghiệp vụ |
+| CI tài liệu | Có cấu hình [GitHub Actions](../../.github/workflows/docs-ci.yml), checker và test chạy local; [run PASS](https://github.com/trunghieunef/fashion-ecommerce-platform/actions/runs/36662487374) trên `d16151d` ngày 2026-09-30 |
+| CI ứng dụng | Có [Application CI](../../.github/workflows/application-ci.yml) cho S1-local, read-only, không AWS; [run PASS](https://github.com/trunghieunef/fashion-ecommerce-platform/actions/runs/36662487345) trên `d16151d`; chưa có scan hoặc build/push image registry |
 | CD / hạ tầng AWS | Chưa có workflow triển khai, CloudFormation hay manifest chạy được; tài liệu này là kế hoạch thực hiện PLT-04 |
 | Cloud provider | AWS đã chọn; region/topology dưới đây là đề xuất chưa provision |
 | Credit / tài khoản | Chủ dự án báo có $200; loại plan, số dư khả dụng, dịch vụ áp dụng và ngày hết hạn cần kiểm tra Billing |
 | Production | Chưa được duyệt; staging một máy không đáp ứng mặc nhiên SLO/HA/RPO/RTO |
 
-CI xanh ở thời điểm này chỉ là kiểm tra tài liệu, không phải ứng dụng build/test/deploy thành công. Không đánh dấu PLT-04 hay G0 Done từ kết quả đó.
+CI ứng dụng xanh chứng minh build/test/smoke S1 trên commit được chạy, không chứng minh
+staging deploy hoặc patch chưa commit. [Evidence hiện tại](../evidence/s1-local-2026-10-02.md)
+ghi giới hạn fresh-clone Windows. Không đánh dấu PLT-04 hay G0 Done từ CI S1.
 
 ## 2. Phương án đề xuất cho khoản credit
 

@@ -1,6 +1,6 @@
 # 10 — Backlog để chia task
 
-B1 · 2026-09-19 · Mọi work package dưới đây: **Planned; Assignee TBD; Reviewer TBD**.
+B1 · 2026-09-19 · Work package mặc định: **Planned; Assignee TBD; Reviewer TBD**; ngoại lệ implementation S1 được ghi bên dưới.
 
 ## 1. Cách nhận việc
 
@@ -16,6 +16,41 @@ Sprint 1 nhận PLT-01, phần core PLT-02 và SEC-01 theo checkpoint S1-local �
 
 PLT-04/05, AWS/K3s/ECR/ArgoCD, provider sandbox và các task business Phase 1 không thuộc commitment Sprint 1. Có thể chuẩn bị tài liệu/mock độc lập nhưng không chuyển In progress hoặc Done thay cho acceptance của task. Sprint 1 không được báo “MVP hoàn tất”; đây là nền tảng local để các sprint sau xây G1/G2.
 
+### Implementation status — 2026-09-28
+
+- `TASK:PLT-01` — **In progress**. Toolchain, catalog read sample/V001, Gateway boundary,
+  storefront shell và Compose đủ chuỗi postgres → catalog → Gateway → storefront (nginx) có
+  evidence local tác giả: Maven reactor 9 tests (PostgreSQL thật), Vitest, typecheck/build,
+  local smoke và Playwright chuỗi thật desktop/360px, proof `nacos-compat` (config import,
+  discovery `lb://`, reconnect sau restart Nacos). Evidence tại 17 §7.
+- `TASK:PLT-02` core — **In progress**. `contracts/openapi/catalog.yaml` cho operation duy nhất
+  đã implement, Redocly lint + validate example. Chưa có event schema (chưa có producer).
+- `TASK:SEC-01` phần nền — **In progress**. Strip identity header, `/internal/**` 404, catalog
+  không publish port, ports local chỉ `127.0.0.1`. Threat inventory/permission matrix/CSRF chưa làm.
+- Chưa đánh dấu `PLT-01`, `CAT-01`, S1-local hay O02 Done: cần fresh-clone review bởi người khác
+  tác giả (template `docs/evidence/s1-local-template.md`) và TL xác nhận.
+
+### Verification update — 2026-10-02
+
+- Đã xác minh Application CI và Documentation CI **PASS** trên commit `d16151d` ngày
+  2026-09-30; link run và từng kiểm tra ở [evidence](../evidence/s1-local-2026-10-02.md).
+- Sửa `mvnw.cmd` để đường dẫn project không kết thúc bằng backslash trong Java argument;
+  regression Windows kiểm tra đường dẫn/tham số có khoảng trắng đã chạy RED → GREEN.
+- Clone sạch cùng commit: docs tests/checker, frontend typecheck, OpenAPI lint và Compose
+  config validation **PASS**. Chưa chạy đủ runtime vì gateway mạng công ty chặn toolchain
+  và native dependency bằng HTTP 403; chủ dự án yêu cầu bỏ qua phần bị chặn trên máy này.
+- Trạng thái package vẫn **In progress**; yêu cầu bỏ qua kiểm thử không thay acceptance.
+  Windows wrapper patch chưa có CI remote; fresh-clone runtime/reviewer/TL acceptance còn mở.
+
+### Fresh-clone review — 2026-10-04
+
+- Clone sạch `a563f05` trên Windows với toolchain đúng R1: toolchain gate, docs, frontend,
+  contract, negative/positive smoke, Playwright 2/2 và Nacos proof **PASS**; CI remote trên
+  `a563f05` PASS. Chi tiết ở [evidence](../evidence/s1-local-2026-10-04.md).
+- `./mvnw test` fail trên host múi giờ Việt Nam (`Asia/Saigon` bị PostgreSQL từ chối); sửa
+  bằng surefire `-Duser.timezone=UTC` + regression, PASS 10/10. Patch chưa commit/CI.
+- Package vẫn **In progress**: chờ reviewer người khác tác giả và TL xác nhận.
+
 ## 2. Phase 0 — nền tảng
 
 | Task | Owner role / ngày | Phụ thuộc | REQ | Đầu ra và acceptance |
@@ -27,7 +62,7 @@ PLT-04/05, AWS/K3s/ECR/ArgoCD, provider sandbox và các task business Phase 1 k
 | PLT-05 | DEVOPS+BE / 1–3 | PLT-03, PLT-04 | NFR-01/03/04 | JSON logs, correlation HTTP/Kafka, RED metrics, dashboard/alerts mẫu; trace checkout giả đi qua 2 service; test redaction |
 | SEC-01 | TL+BE / 2–3 | PLT-01 | USR-07/08, XCT-02/03/06 | Threat/data inventory, service identity và permission matrix, CSRF strategy, secret injection; spoof header/cross-service token/PII logs bị chặn; O06 có owner/hạn |
 
-Subtasks PLT-04.A–F, owner theo vai trò, dependencies và acceptance ở [16 AWS deployment](../engineering/16_aws_deployment.md). Không cộng subtasks lần hai vào tổng package; estimate PLT-04 cần review lại sau sizing/compatibility spike. Parent vẫn Planned, chưa có evidence remote CI hoặc staging.
+Subtasks PLT-04.A–F, owner theo vai trò, dependencies và acceptance ở [16 AWS deployment](../engineering/16_aws_deployment.md). Không cộng subtasks lần hai vào tổng package; estimate PLT-04 cần review lại sau sizing/compatibility spike. Parent vẫn Planned; CI S1 có evidence remote, staging chưa có.
 
 ## 3. Phase 1 — identity, catalog, cart, stock
 

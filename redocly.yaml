@@ -1,0 +1,11 @@
+# No usage telemetry to Redocly (AGENTS: no external writes unless asked).
+telemetry: off
+extends:
+  - recommended
+rules:
+  # License is not decided yet (O06/PO); re-enable when chosen.
+  info-license: off
+  # S1 contract targets the local Gateway only; staging URLs arrive with PLT-04.
+  no-server-example.com: off
+  # Examples must match their schemas; a warning would let drift pass CI.
+  no-invalid-media-type-examples: error

@@ -8,8 +8,8 @@ AWS đã chọn, chưa provision. [16 AWS deployment](../engineering/16_aws_depl
 
 | Boundary / rủi ro | Control bắt buộc | Proof |
 |---|---|---|
-| Browser → Gateway: giả danh header | Strip client identity headers; JWT/session verify, CORS/CSRF theo cookie | U03/U24 |
-| Gateway → service: bypass gateway | Private network/caller identity + service authorization/ownership | Internal public bị chặn; token sai audience fail |
+| Browser → Gateway: giả danh header | Strip client identity headers; JWT/session verify, CORS/CSRF theo cookie | S1 Gateway strip `X-User-Id`, `X-User-Roles`, `X-Actor-Id`, `X-Service-Name`; U03/U24 còn mở |
+| Gateway → service: bypass gateway | Private network/caller identity + service authorization/ownership | S1 local: catalog không publish port, `/internal/**` 404 qua smoke; Gateway actuator (`health,info,metrics`) đang cùng port public — phải tách/chặn trước PLT-04. Token sai audience còn mở |
 | Guest cart/order: IDOR | Credential ngẫu nhiên đủ mạnh, hash server, cookie secure; scoped resource | T21 |
 | Service → DB: đọc chéo | Credentials riêng, least privilege, migrations role tách runtime | Runtime không đọc DB khác/không DDL |
 | Provider → callback: giả/trễ/lặp | Signature/auth theo adapter; reference/merchant/amount/currency; dedupe và TX trước ACK | U16/T06 |

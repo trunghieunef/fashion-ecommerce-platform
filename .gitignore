@@ -1,0 +1,16 @@
+# Local worktrees created for isolated phase implementation.
+.worktrees/
+
+# Subagent-driven-development scratch ledger, briefs and review packages.
+.superpowers/
+
+# Local build and test outputs.
+target/
+node_modules/
+coverage/
+dist/
+playwright-report/
+test-results/
+
+# Local env copied from .env.example; never commit.
+infra/local/.env

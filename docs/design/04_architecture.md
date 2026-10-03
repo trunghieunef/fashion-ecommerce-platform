@@ -89,7 +89,7 @@ Public TLS/WAF/Ingress → Gateway → private services; React/ảnh qua object 
 
 Frontend R1 build static assets; Node chỉ chạy dev/build/test, không thêm Node server/BFF. PO/FE xác nhận SPA đáp ứng SEO/preview của MVP trước WEB-01; nếu bắt buộc HTML sản phẩm render từ server, mở lại ADR-17 trước code storefront. Service nghiệp vụ dùng MVC/JDBC, gateway dùng WebFlux; không trộn starter MVC/JDBC vào gateway.
 
-CI/CD đích: lint/unit/integration/contract/security checks → immutable image → staging manifests → ArgoCD → smoke/UAT → authorized production promotion. Hiện chỉ có workflow kiểm tra tài liệu; build/deploy chưa hiện thực. Chi tiết GitHub OIDC/ECR/ArgoCD, migration và rollback ở 16. Main qua PR; feature branches ngắn; môi trường theo manifest, không bắt buộc branch staging lâu dài.
+CI/CD đích: lint/unit/integration/contract/security checks → immutable image → staging manifests → ArgoCD → smoke/UAT → authorized production promotion. Hiện có CI tài liệu và CI ứng dụng cho phần S1-local (test + Compose smoke); image registry/deploy chưa hiện thực. Chi tiết GitHub OIDC/ECR/ArgoCD, migration và rollback ở 16. Main qua PR; feature branches ngắn; môi trường theo manifest, không bắt buộc branch staging lâu dài.
 
 Readiness phản ánh khả năng nhận request của pod, không buộc mọi downstream khỏe rồi làm cả cụm mất ready. Liveness chỉ phát hiện tiến trình hỏng, không restart hàng loạt do Kafka/provider down. Graceful shutdown ngừng nhận work, hoàn tất TX, trả lease an toàn.
 

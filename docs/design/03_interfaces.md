@@ -76,7 +76,7 @@ Refresh token không nằm JSON response/localStorage. Guest có credential ng�
 
 | Method | Path | Auth / phase | Input → output |
 |---|---|---|---|
-| GET | /catalog/products | Public / 1 | category_id,brand_id,size,color,price_min/max,tag,sort,cursor → cards |
+| GET | /catalog/products | Public / 1 | `TASK:PLT-01` sample chỉ nhận `limit` (mặc định 20, tối đa 100), trả card ACTIVE `id,slug,name_vi,name_en,next_cursor`; filter/sort/cursor đầy đủ thuộc `CAT-02` |
 | GET | /catalog/products/{id} | Public / 1 | variants,images,size_guide,available,observed_at; review summary Phase 2 |
 | GET | /catalog/search | Public / 1 | q + filters/cursor; bounded query length |
 | GET | /catalog/categories | Public / 1 | Cây tối đa 2 cấp |
@@ -300,4 +300,4 @@ Method/header/carrier mapping thật phải được xác minh trong sandbox. N�
 
 ## 7. Điều kiện contract-ready
 
-Mỗi endpoint/event khi nhận task phải có: operationId/schema ID, request/response examples hợp lệ, required/nullable/range/enum, permission/ownership, lỗi nghiệp vụ, idempotency/version behavior, producer/consumer và test duplicate/out-of-order nếu liên quan. 03 là danh mục B1; chưa tuyên bố là OpenAPI hoàn chỉnh đã validate. Tên đường dẫn thay đổi phải sửa FE/mock/tests cùng PR.
+Mỗi endpoint/event khi nhận task phải có: operationId/schema ID, request/response examples hợp lệ, required/nullable/range/enum, permission/ownership, lỗi nghiệp vụ, idempotency/version behavior, producer/consumer và test duplicate/out-of-order nếu liên quan. 03 là danh mục B1; chưa tuyên bố là OpenAPI hoàn chỉnh đã validate. Contract thực thi hiện có: `contracts/openapi/catalog.yaml` chỉ cho `GET /api/v1/catalog/products` của S1 (200/400), kiểm bằng `scripts/validate-contracts.sh`; smoke kiểm envelope và shape từng item của response live theo `ProductSummary`; chưa có validator tự sinh từ OpenAPI. Tên đường dẫn thay đổi phải sửa FE/mock/tests cùng PR.

@@ -1,0 +1,9 @@
+# O02 compatibility proof: resolve catalog via Nacos discovery (set CATALOG_BASE_URL=lb://catalog-service).
+spring:
+  cloud:
+    nacos:
+      server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+      username: ${NACOS_USERNAME:nacos}
+      password: ${NACOS_PASSWORD:}
+      discovery:
+        enabled: true

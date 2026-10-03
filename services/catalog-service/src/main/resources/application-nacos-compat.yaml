@@ -1,0 +1,19 @@
+# O02 compatibility proof: Nacos config import + discovery. Fails fast if Nacos is down at startup.
+spring:
+  config:
+    import: nacos:catalog-service.yaml
+  cloud:
+    nacos:
+      server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+      username: ${NACOS_USERNAME:nacos}
+      password: ${NACOS_PASSWORD:}
+      config:
+        enabled: true
+      discovery:
+        enabled: true
+
+# Lets the proof read an imported info.* value from /actuator/info.
+management:
+  info:
+    env:
+      enabled: true
