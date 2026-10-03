@@ -61,6 +61,11 @@ class ProductQueryIntegrationTest {
   }
 
   @Test
+  void databaseSessionUsesUtc() {
+    assertThat(jdbc.queryForObject("show timezone", String.class)).isEqualTo("UTC");
+  }
+
+  @Test
   void returnsOnlyActiveProducts() {
     jdbc.update(
         "insert into products(id,slug,status,name_vi,name_en,version) values (?,?,?,?,?,0)",

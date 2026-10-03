@@ -15,7 +15,9 @@ Evidence local hiện có ghi tại [17 §7](17_tech_stack.md): catalog/Gateway,
 Compose smoke chuỗi thật và Nacos proof ngày 2026-09-28. CI remote **PASS** cho commit
 `d16151d` ngày 2026-09-30. [Lần kiểm tra ngày 2026-10-02](../evidence/s1-local-2026-10-02.md)
 trên clone sạch Windows bị mạng công ty chặn runtime artifacts; chưa đủ fresh-clone
-acceptance độc lập. Không thay bằng H2/mock hoặc bỏ qua test để xác nhận S1-local.
+acceptance độc lập. [Fresh-clone review ngày 2026-10-04](../evidence/s1-local-2026-10-04.md)
+chạy đủ chuỗi trên Windows sau khi sửa lỗi timezone; còn chờ reviewer người/TL.
+Không thay bằng H2/mock hoặc bỏ qua test để xác nhận S1-local.
 
 Lưu ý môi trường:
 
@@ -29,6 +31,10 @@ Lưu ý môi trường:
   cần môi trường được phép tải hoặc hỗ trợ từ quản trị mạng; không sửa lockfile/version
   để che blocker. `npm ci` có thể exit 0 dù optional native dependency bị chặn: vẫn phải
   chạy unit/build để xác minh.
+- JVM trên Windows đặt múi giờ Việt Nam mặc định là alias cũ `Asia/Saigon`; pgjdbc gửi
+  zone này và `postgres:17.11` (Debian trixie) từ chối. Surefire của catalog đã đặt
+  `-Duser.timezone=UTC`; khi chạy JVM service trên host kết nối PostgreSQL, thêm cùng
+  tham số (ví dụ `JAVA_TOOL_OPTIONS=-Duser.timezone=UTC`). Container không bị ảnh hưởng.
 - Nếu process chưa nạp group `docker`, dùng `sg docker -c '<lệnh>'`; không chmod socket.
 - Máy có cả Docker Desktop và Docker Engine thì CLI/Compose theo `docker context`, còn
   Testcontainers mặc định dùng `/var/run/docker.sock`. Kiểm tra `docker context ls` và

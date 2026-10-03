@@ -60,6 +60,8 @@ trường nào.
 ./mvnw -pl services/catalog-service test
 ```
 
+Surefire chạy JVM test với `-Duser.timezone=UTC` để pgjdbc không gửi alias zone cũ
+(ví dụ `Asia/Saigon` trên Windows) mà PostgreSQL từ chối.
 Hai lệnh dùng Testcontainers PostgreSQL `17.11`; chúng cần Docker daemon khả dụng,
 không dùng H2 hoặc mock repository thay thế. Test kiểm tra migration, active-only
 query, limit, response envelope, readiness và runtime role không thể tạo table.

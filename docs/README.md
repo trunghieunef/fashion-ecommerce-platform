@@ -7,7 +7,7 @@ Sprint 1 theo ADR-18 chỉ triển khai local và đạt checkpoint S1-local tro
 Tiếp tục trên máy mới: đọc [handoff S1-local ngày 2026-10-02](superpowers/plans/2026-10-02-s1-local-machine-handoff.md)
 để biết toolchain, thứ tự kiểm thử, phạm vi và mẫu prompt cho agent.
 
-Kế hoạch triển khai có thể giao cho agent/engineer được lập tại [docs/superpowers/plans](superpowers/plans/README.md). Reviewer fresh-clone S1-local điền [template evidence](evidence/s1-local-template.md). [Evidence ngày 2026-10-02](evidence/s1-local-2026-10-02.md) ghi CI remote PASS trên `d16151d`, kiểm tra local và blocker mạng công ty; chưa nghiệm thu S1-local. Bộ kế hoạch chia đường tới G2 MVP thành S1-local, G0 platform/staging, commerce core, G1 COD và G2 online payment; các plan không tự thay trạng thái backlog hay bằng chứng nghiệm thu.
+Kế hoạch triển khai có thể giao cho agent/engineer được lập tại [docs/superpowers/plans](superpowers/plans/README.md). Reviewer fresh-clone S1-local điền [template evidence](evidence/s1-local-template.md). [Evidence ngày 2026-10-02](evidence/s1-local-2026-10-02.md) ghi CI remote PASS trên `d16151d`, kiểm tra local và blocker mạng công ty; [evidence ngày 2026-10-04](evidence/s1-local-2026-10-04.md) ghi fresh-clone runtime PASS trên Windows và lỗi timezone đã sửa; chưa nghiệm thu S1-local. Bộ kế hoạch chia đường tới G2 MVP thành S1-local, G0 platform/staging, commerce core, G1 COD và G2 online payment; các plan không tự thay trạng thái backlog hay bằng chứng nghiệm thu.
 
 ## 1. Danh mục và nguồn sự thật
 

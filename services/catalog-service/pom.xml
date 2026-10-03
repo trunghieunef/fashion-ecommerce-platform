@@ -81,6 +81,10 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
         <version>3.5.4</version>
+        <configuration>
+          <!-- pgjdbc sends the JVM zone; Windows VN resolves to legacy Asia/Saigon, which postgres:17.11 rejects. -->
+          <argLine>-Duser.timezone=UTC</argLine>
+        </configuration>
       </plugin>
       <plugin>
         <groupId>org.springframework.boot</groupId>

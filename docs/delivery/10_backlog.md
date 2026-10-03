@@ -42,6 +42,15 @@ PLT-04/05, AWS/K3s/ECR/ArgoCD, provider sandbox và các task business Phase 1 k
 - Trạng thái package vẫn **In progress**; yêu cầu bỏ qua kiểm thử không thay acceptance.
   Windows wrapper patch chưa có CI remote; fresh-clone runtime/reviewer/TL acceptance còn mở.
 
+### Fresh-clone review — 2026-10-04
+
+- Clone sạch `a563f05` trên Windows với toolchain đúng R1: toolchain gate, docs, frontend,
+  contract, negative/positive smoke, Playwright 2/2 và Nacos proof **PASS**; CI remote trên
+  `a563f05` PASS. Chi tiết ở [evidence](../evidence/s1-local-2026-10-04.md).
+- `./mvnw test` fail trên host múi giờ Việt Nam (`Asia/Saigon` bị PostgreSQL từ chối); sửa
+  bằng surefire `-Duser.timezone=UTC` + regression, PASS 10/10. Patch chưa commit/CI.
+- Package vẫn **In progress**: chờ reviewer người khác tác giả và TL xác nhận.
+
 ## 2. Phase 0 — nền tảng
 
 | Task | Owner role / ngày | Phụ thuộc | REQ | Đầu ra và acceptance |

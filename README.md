@@ -29,7 +29,9 @@ Storefront: `http://localhost:4173`; Gateway: `http://localhost:8080`. Catalog k
 
 Trên Windows, dùng Git Bash cho các script `.sh`; backend có `mvnw.cmd` cho PowerShell.
 Máy cần được phép tải toolchain/dependency. [Evidence ngày 2026-10-02](docs/evidence/s1-local-2026-10-02.md)
-ghi rõ các kiểm tra đã chạy và phần fresh-clone runtime bị mạng công ty chặn; S1-local chưa nghiệm thu.
+ghi rõ các kiểm tra đã chạy và phần fresh-clone runtime bị mạng công ty chặn.
+[Fresh-clone review ngày 2026-10-04](docs/evidence/s1-local-2026-10-04.md) chạy đủ chuỗi trên Windows
+sau khi sửa lỗi timezone; S1-local chưa nghiệm thu (chờ reviewer/TL).
 
 Chuyển sang máy mới: dùng [handoff S1-local](docs/superpowers/plans/2026-10-02-s1-local-machine-handoff.md)
 để tiếp tục đúng checklist và ghi evidence trên commit được pull từ `origin/dev`.
