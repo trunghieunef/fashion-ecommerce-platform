@@ -53,7 +53,7 @@ Gate task là work package trong [backlog](../delivery/10_backlog.md). Mã task 
 | ID | Cần quyết định / đầu ra | Owner | Hạn gate | Có thể làm trước |
 |---|---|---|---|---|
 | O01 | AWS đã chọn nhưng hoãn khỏi Sprint 1; còn plan/số dư/hạn credit $200, region, ngân sách gộp và tiền tự trả, staging sizing, managed DB/Redis và prod cluster | PO + DEVOPS | Sau S1-local, trước PLT-04 / G2 | Sprint 1 local không bị chặn; đề xuất EC2 + K3s, cost worksheet và subtasks tại 16; chưa tạo tài nguyên |
-| O02 | R1 đã chọn bộ version ở 17; còn nghiệm thu runtime compatibility, lockfile/digest, license/CVE và yêu cầu SEO trước WEB-01 | TL + DEVOPS + FE | PLT-01 core; PLT-02/04/05 theo tooling | Evidence local S1 ngày 2026-09-28 tại 17 §7: Boot/Cloud/Alibaba/Nacos, PostgreSQL/Flyway, Vite/React; verifier bật. CI remote PASS trên `d16151d` ngày 2026-09-30; [kiểm chứng Windows](../evidence/s1-local-2026-10-02.md) bị mạng công ty chặn, chủ dự án yêu cầu bỏ qua trên máy này. Còn fresh-clone runtime/reviewer/TL acceptance, Kafka/Redis, image scan/CVE/license, deployment và xác nhận SEO; không tắt verifier/ép peer dependencies để vượt lỗi |
+| O02 | R1 đã chọn bộ version ở 17; còn nghiệm thu runtime compatibility, lockfile/digest, license/CVE và yêu cầu SEO trước WEB-01 | TL + DEVOPS + FE | PLT-01 core; PLT-02/04/05 theo tooling | [S1-local accepted ngày 2026-10-04](../evidence/s1-local-2026-10-04.md) bởi Codex (GPT-6) theo chỉ định chủ dự án, runtime Windows và CI patch `b62f963` PASS; lệch Docker/Compose chấp nhận riêng cho local. Còn Kafka/Redis, image scan/CVE/license, deployment và xác nhận SEO; không tắt verifier/ép peer dependencies để vượt lỗi |
 | O03 | Merchant sandbox/production, callback domains, quyền query/refund VNPay/MoMo | PO + FINANCE | PAY-02/03 / G2 | Mock và negative tests |
 | O04 | Phí ship/COD, vùng SELF, nguồn địa chỉ, carrier account/SLA | PO + OPS | SHP-01/03 | Fixture giả và adapter |
 | O05 | Đổi trả, phí, hàng hỏng, bằng chứng, đơn tổng 0; giá đã gồm thuế hay chưa và yêu cầu hóa đơn | PO + FINANCE | ORD-01/04 / G2 | Baseline không cộng thuế ngoài giá niêm yết; chặn checkout total <= 0; nếu cần thuế tách dòng phải sửa pricing/schema trước code |
@@ -77,5 +77,21 @@ Gate task là work package trong [backlog](../delivery/10_backlog.md). Mã task 
 - ADR-18: chủ dự án giới hạn Sprint 1 ở local-first MVP foundation. Thêm checkpoint S1-local; AWS/PLT-04 và toàn bộ G1/G2 không được suy là commitment Sprint 1.
 - S1 Task 5 (2026-09-28): contract OpenAPI catalog + Redocly, Compose đủ chuỗi, smoke/Playwright chuỗi thật, Application CI và proof `nacos-compat` local. Đây là evidence tác giả; S1-local chỉ đạt sau fresh-clone review độc lập. O01/AWS vẫn mở.
 - S1 verification (2026-10-02): xác minh CI remote PASS trên `d16151d`, sửa quoting project path của `mvnw.cmd` và thêm regression Windows RED → GREEN. Ghi [evidence và blocker mạng](../evidence/s1-local-2026-10-02.md); chủ dự án bỏ qua phần bị chặn trên máy công ty. Không đổi ADR/scope/version, không đánh dấu S1-local hoặc O02 Done.
+
+- S1 verification (2026-10-04): [fresh-clone evidence](../evidence/s1-local-2026-10-04.md)
+  ghi runtime trên `a563f05`, lỗi timezone Windows và regression local PASS 10/10.
+  Patch UTC đã commit tại `b62f963`; Application CI `37148002874` và Documentation CI
+  `37148002811` trên đúng SHA đều PASS (đã đối chiếu GitHub). Chủ dự án chỉ định Codex
+  (GPT-6) làm reviewer thay yêu cầu reviewer người/TL; S1-local được nghiệm thu theo
+  ngoại lệ này. Chấp nhận lệch Docker Engine/Compose riêng cho checkpoint local dựa
+  trên runtime PASS; không đổi R1. O02 vẫn mở cho compatibility ngoài S1 và SEO.
+  Không đổi ADR/scope/version hoặc cấp quyền AWS; chưa chuyển PLT-03 sang In progress.
+- Phase 0 local (2026-10-04): PLT-02 bắt đầu envelope Draft 2020-12, synthetic fixtures
+  và tests theo 03; tooling Python khóa tại `tests/contracts/requirements.txt`,
+  Application CI gọi cùng validator. Plan dùng nhầm `event_version/trace_id` được sửa
+  thành `version/correlation_id` theo 03; không đổi wire contract B1. Chuẩn bị PLT-03
+  theo schema 05, không lấy SQL minh họa lệch schema trong plan làm migration.
+  Parent PLT-02 chưa Done; primitive implementation và integration PostgreSQL/Kafka
+  còn chờ contract review.
 
 Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác và lý do; ảnh hưởng PRD/API/schema/test/task; người quyết định; ngày; link bằng chứng. Chưa có chữ ký phê duyệt giả định thương mại.

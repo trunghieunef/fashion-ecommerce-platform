@@ -31,7 +31,10 @@ Trên Windows, dùng Git Bash cho các script `.sh`; backend có `mvnw.cmd` cho 
 Máy cần được phép tải toolchain/dependency. [Evidence ngày 2026-10-02](docs/evidence/s1-local-2026-10-02.md)
 ghi rõ các kiểm tra đã chạy và phần fresh-clone runtime bị mạng công ty chặn.
 [Fresh-clone review ngày 2026-10-04](docs/evidence/s1-local-2026-10-04.md) chạy đủ chuỗi trên Windows
-sau khi sửa lỗi timezone; S1-local chưa nghiệm thu (chờ reviewer/TL).
+sau khi sửa lỗi timezone; S1-local đã được Codex (GPT-6) nghiệm thu theo chỉ định
+chủ dự án ngày 2026-10-04, với CI PASS trên patch `b62f963`. Đây không phải G0/G1/G2.
+Phase 0 local bắt đầu với [PLT-02 contracts](contracts/README.md); PLT-03 implementation
+chờ contract review theo dependency trong backlog.
 
 Chuyển sang máy mới: dùng [handoff S1-local](docs/superpowers/plans/2026-10-02-s1-local-machine-handoff.md)
 để tiếp tục đúng checklist và ghi evidence trên commit được pull từ `origin/dev`.

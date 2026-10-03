@@ -106,4 +106,5 @@ Mẫu release record:
 
 | Gate | Ngày | Build/commit | Test/UAT/restore evidence | Người xác nhận | Kết quả / vấn đề còn mở |
 |---|---|---|---|---|---|
+| S1-local | 2026-10-04 | Runtime `a563f05`; patch/CI `b62f963` | [Evidence](../evidence/s1-local-2026-10-04.md) | Codex (GPT-6), chủ dự án chỉ định agent thay reviewer người/TL cho checkpoint này | Accepted; lệch Docker/Compose chấp nhận riêng cho local; O02 ngoài S1 và G0–G4 vẫn mở |
 | G0–G4 | Chưa có | Chưa có | Chưa có | Chưa gán | Chưa nghiệm thu |

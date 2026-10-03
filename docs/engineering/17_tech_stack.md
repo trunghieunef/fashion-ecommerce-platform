@@ -249,6 +249,15 @@ Evidence phải ghi component/version/digest, OS/CPU, command, kết quả, comm
 
 ## 8. Khóa và nâng cấp để ít tốn công về sau
 
+Cập nhật 2026-10-04: các snapshot §7 phía trên là lịch sử. [Evidence S1-local](../evidence/s1-local-2026-10-04.md)
+ghi full-chain Windows PASS, timezone patch `b62f963` và CI đúng SHA PASS. Codex (GPT-6)
+nghiệm thu checkpoint theo chỉ định chủ dự án thay reviewer người/TL. PLT-01 phạm vi S1
+được chấp nhận; O02 vẫn mở cho Kafka/Redis, deployment, CVE/license và SEO.
+PLT-02 dùng `jsonschema==4.26.0` cùng bộ dependency khóa tại
+`tests/contracts/requirements.txt` cho Draft 2020-12/format checks, chỉ tooling test,
+không thay stack runtime. Bộ này đã cài trên máy và được dùng cho test envelope local;
+CI mới cần chạy sau khi thay đổi được push theo yêu cầu riêng.
+
 1. **Một nguồn thực thi:** backend BOM + Maven Wrapper; frontend exact direct versions + một `package-lock.json` ở workspace root; local/CI cài bằng `npm ci` sau khi có lockfile. Không commit đồng thời yarn.lock/pnpm-lock.yaml.
 2. **Pin deployment:** image theo digest; ghi version, kiến trúc và checksum lúc tải. Không dùng `latest`, snapshot, RC/beta làm release identity. Action GitHub pin commit SHA.
 3. **Nâng theo nhóm:** Boot–Cloud–Alibaba–Nacos; Node–npm–React–Vite–plugin–Router–Vitest; K3s bundle–Argo. Không tự động merge major upgrade.

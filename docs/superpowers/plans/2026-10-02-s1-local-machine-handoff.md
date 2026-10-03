@@ -104,8 +104,12 @@ npm ci
 npm run typecheck
 npm test
 npm run build
+python3 -m pip install -r tests/contracts/requirements.txt   # trong virtualenv
 bash scripts/validate-contracts.sh
 ```
+
+Từ PLT-02 (2026-10-04), `validate-contracts.sh` chạy thêm event envelope tests bằng
+`jsonschema`; thiếu tooling thì script dừng và in lệnh cài. Xem [contracts README](../../../contracts/README.md).
 
 Backend phải dùng PostgreSQL thật qua Testcontainers. Docker daemon/context phải khả
 dụng cho JVM; đối chiếu 12 khi lỗi Ryuk/Docker socket. Python suite có regression

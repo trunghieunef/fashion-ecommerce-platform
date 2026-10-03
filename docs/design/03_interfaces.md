@@ -241,6 +241,11 @@ Snapshot-based payment/shipment create từ order được xác thực và hạn
 
 ### 5.1 Envelope và xử lý
 
+`TASK:PLT-02` đã bắt đầu schema envelope tại `contracts/events/event-envelope.schema.json`
+và fixtures/tests; xem [contract README](../../contracts/README.md). Schema kiểm UUID,
+required fields, UTC timestamp và integer versions/sequence. Payload mới chỉ kiểm là
+object; chưa có schema riêng từng event hoặc producer Kafka đang chạy. Review pending.
+
 Envelope: event_id UUID, event_type, version (schema integer), occurred_at UTC, aggregate_id text, aggregate_version integer, aggregate_sequence integer, correlation_id, payload. event_id cố định qua retry. aggregate_sequence tăng trong mỗi aggregate cho từng event, giải quyết nhiều event ở cùng business version; unique ở outbox theo aggregate/sequence. Partition key như bảng dưới, consumer không giả định tổng thứ tự giữa topics.
 
 Aggregate IDs: order events là order UUID; payment events là payment UUID; shipment events là shipment UUID; stock snapshot là SKU; reservation lifecycle là reservation UUID. Các payment/shipping event vẫn partition theo order_no để gom giao dịch đơn. Luôn gửi order_id UUID và order_no trong payload liên quan đơn.

@@ -26,7 +26,7 @@ Chạy trên clone mới, từ repo root, theo thứ tự ([12 §1](../engineeri
 | 2 | `python3 -B -m unittest discover -s scripts -p 'test_*.py' -v` và `python3 -B scripts/check_docs.py` | |
 | 3 | `./mvnw test` | |
 | 4 | `npm ci && npm run typecheck && npm test && npm run build` | |
-| 5 | `bash scripts/validate-contracts.sh` | |
+| 5 | Cài `tests/contracts/requirements.txt` vào virtualenv, rồi `bash scripts/validate-contracts.sh` | |
 | 6 | `bash scripts/smoke-local.sh` trước khi start (phải FAIL) | |
 | 7 | `bash scripts/local-up.sh` | |
 | 8 | `bash scripts/smoke-local.sh` | |

@@ -48,8 +48,22 @@ PLT-04/05, AWS/K3s/ECR/ArgoCD, provider sandbox và các task business Phase 1 k
   contract, negative/positive smoke, Playwright 2/2 và Nacos proof **PASS**; CI remote trên
   `a563f05` PASS. Chi tiết ở [evidence](../evidence/s1-local-2026-10-04.md).
 - `./mvnw test` fail trên host múi giờ Việt Nam (`Asia/Saigon` bị PostgreSQL từ chối); sửa
-  bằng surefire `-Duser.timezone=UTC` + regression, PASS 10/10. Patch chưa commit/CI.
-- Package vẫn **In progress**: chờ reviewer người khác tác giả và TL xác nhận.
+  bằng surefire `-Duser.timezone=UTC` + regression, PASS 10/10. Patch đã commit tại
+  `b62f963`; Application CI `37148002874` và Documentation CI `37148002811`
+  trên đúng SHA đều **PASS**, link tại evidence ngày 2026-10-04.
+- **S1-local: Accepted** ngày 2026-10-04; reviewer **Codex (GPT-6)** theo chỉ định
+  trực tiếp của chủ dự án thay yêu cầu reviewer người/TL cho checkpoint này. Evidence
+  ghi rõ review hồ sơ/CI, không phải Codex chạy lại fresh clone. Lệch Docker/Compose
+  được chấp nhận riêng cho local; R1 không đổi.
+- Phần S1-local của `TASK:PLT-01`, `TASK:PLT-02` core S1 và `TASK:SEC-01` nền S1 được
+  chấp nhận. Parent PLT-01 vẫn **In progress**: acceptance còn FE/PO xác nhận SEO cho SPA
+  và O02 core ngoài S1. Parent PLT-02/SEC-01 vẫn **In progress**, O02 vẫn mở cho Kafka/
+  Redis, CVE/license, staging và SEO. Không coi S1-local là G0/G1/G2.
+- Phase 0 local tiếp tục: `TASK:PLT-02` — **In progress**, assignee Codex (GPT-6),
+  reviewer chủ dự án; envelope/schema và fixtures theo 03 đã có test local,
+  [evidence Phase 0](../evidence/phase-0-local-2026-10-04.md). `TASK:PLT-03`
+  — **Planned**, đã đọc/đối chiếu thiết kế; implementation chờ PLT-02 contract review.
+  O01 chỉ chặn phần cloud, không chặn PLT-02/03 local; chưa provision/deploy.
 
 ## 2. Phase 0 — nền tảng
 

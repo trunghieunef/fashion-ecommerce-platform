@@ -1,0 +1,11 @@
+# JSON Schema Draft 2020-12 validation; tooling only, not an application dependency.
+jsonschema==4.26.0
+jsonschema-specifications==2025.9.1
+referencing==0.37.0
+rpds-py==0.30.0
+attrs==26.1.0
+# Required by jsonschema's date-time FormatChecker (otherwise silently skipped).
+rfc3339-validator==0.1.4
+six==1.17.0
+# Pulled in by referencing on Python < 3.13 (CI ubuntu-latest); pin to keep CI reproducible.
+typing_extensions==4.16.0
