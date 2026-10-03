@@ -243,8 +243,12 @@ Snapshot-based payment/shipment create từ order được xác thực và hạn
 
 `TASK:PLT-02` đã bắt đầu schema envelope tại `contracts/events/event-envelope.schema.json`
 và fixtures/tests; xem [contract README](../../contracts/README.md). Schema kiểm UUID,
-required fields, UTC timestamp và integer versions/sequence. Payload mới chỉ kiểm là
-object; chưa có schema riêng từng event hoặc producer Kafka đang chạy. Review pending.
+required fields, UTC timestamp và integer versions/sequence. Payload §5.3 của USER_CREATED,
+VARIANT_CREATED, CATALOG_CHANGED, INVENTORY_UPDATED/RESTOCKED và ORDER_CREATED/CONFIRMED/
+PAID/CANCELLED có schema thực thi qua `contracts/events/registry.json`, kèm topic/partition
+key (§5.2) và field làm aggregate_id; test đối chiếu bảng §5.2 nên sửa topic/key phải
+sửa cả hai nơi. Các event còn lại thêm trong task producer. Quy ước §1.2/1.3 nằm ở `contracts/openapi/common.yaml`. Chưa có
+producer Kafka đang chạy; producer/consumer review pending.
 
 Envelope: event_id UUID, event_type, version (schema integer), occurred_at UTC, aggregate_id text, aggregate_version integer, aggregate_sequence integer, correlation_id, payload. event_id cố định qua retry. aggregate_sequence tăng trong mỗi aggregate cho từng event, giải quyết nhiều event ở cùng business version; unique ở outbox theo aggregate/sequence. Partition key như bảng dưới, consumer không giả định tổng thứ tự giữa topics.
 

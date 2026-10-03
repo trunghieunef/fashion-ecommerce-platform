@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fashion.local/contracts/events/stock-events.schema.json",
+  "title": "inventory.events stock snapshot payloads (03 §5.2/5.3)",
+  "description": "reserved <= on_hand and available = on_hand - reserved are producer invariants (05 CHECK); JSON Schema cannot express them, INV-01 tests must.",
+  "$defs": {
+    "StockSnapshot": {
+      "description": "INVENTORY_UPDATED, INVENTORY_RESTOCKED (0 to positive)",
+      "type": "object",
+      "required": ["sku", "on_hand", "reserved", "available", "stock_version", "observed_at"],
+      "properties": {
+        "sku": {"$ref": "common.schema.json#/$defs/sku"},
+        "on_hand": {"$ref": "common.schema.json#/$defs/stock_quantity"},
+        "reserved": {"$ref": "common.schema.json#/$defs/stock_quantity"},
+        "available": {"$ref": "common.schema.json#/$defs/stock_quantity"},
+        "stock_version": {"$ref": "common.schema.json#/$defs/business_version"},
+        "observed_at": {"$ref": "common.schema.json#/$defs/utc_timestamp"}
+      },
+      "additionalProperties": false
+    }
+  }
+}

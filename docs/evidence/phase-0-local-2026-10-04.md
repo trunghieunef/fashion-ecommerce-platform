@@ -68,6 +68,66 @@ Sửa theo review:
 Chưa có CI remote cho diff này; chưa chạy Maven vì diff không đổi Java. Review của agent
 không thay producer/consumer review của parent PLT-02.
 
+CI sau commit `ed4f8f5` (PR #2, đã merge vào `main`):
+[Application CI 37149713261](https://github.com/trunghieunef/fashion-ecommerce-platform/actions/runs/37149713261)
+và [Documentation CI 37149496139](https://github.com/trunghieunef/fashion-ecommerce-platform/actions/runs/37149496139)
+PASS; bước Contract validation cài đủ 8 package đã pin vào venv và chạy envelope 5/5.
+
+## PLT-02 contract core — Claude Code, TDD, 2026-10-04
+
+Theo `superpowers:test-driven-development`: mỗi hành vi có test RED (đúng lý do) trước khi
+thêm schema, rồi GREEN; mutation check cho các ràng buộc dễ mất. Toolchain như trên,
+venv đã pin (`sys.prefix` kiểm tra mỗi lần chạy).
+
+| Chu trình | RED (lý do đã xác nhận) | GREEN |
+|---|---|---|
+| Registry payload | Thiếu `contracts/events/registry.json` | `common`, `catalog-events` (CATALOG_CHANGED), registry; `event_type` lạ bị từ chối |
+| Tiền VND / ORDER_CREATED | `ORDER_CREATED` chưa đăng ký; 11 negative cases fail | `order-events`; tiền integer 0..bigint, `VND`, method enum, items ≥ 1, user_id nullable UUID |
+| Order lifecycle | CONFIRMED/PAID/CANCELLED chưa đăng ký; CANCELLED thiếu reason | `OrderLifecycle` + `unevaluatedProperties`; case camelCase đổi validator mong đợi sang `unevaluatedProperties` (vẫn từ chối) |
+| Event Phase 1A | USER/VARIANT/INVENTORY chưa đăng ký; 7 negative cases | `user-events`, VARIANT_CREATED, `stock-events` |
+| OpenAPI common | Thiếu `contracts/openapi/common.yaml` | `common.yaml` theo 03 §1.2/1.3; 9 tests |
+
+Mutation check (sửa tạm rồi khôi phục): bỏ `unevaluatedProperties` ở `OrderCancelled`;
+fixture `occurred_at` +07:00; `minimum: "6"` sai kiểu trong schema; example 400 của
+catalog đổi code `OOPS` — đều làm test/lint FAIL như mong đợi.
+
+Refactor: `catalog.yaml` dùng `Limit`/`Metadata`/`CorrelationId`/`ApiError` của
+`common.yaml` (400 thu hẹp `VALIDATION_ERROR`; khớp record `ApiError` của catalog-service).
+`validate-contracts.sh` chỉ lint API entrypoint (common lint qua `$ref`, tránh
+`no-empty-servers`/unused-components giả) và kiểm thêm `yaml` trong tooling.
+
+| Lệnh | Kết quả |
+|---|---|
+| `bash scripts/validate-contracts.sh` (venv đã pin) | PASS: Redocly catalog (resolve common), 19 contract tests |
+| Python script tests (có JDK) / docs check / `git diff --check` | PASS 12/12 / PASS 31 Markdown files / PASS |
+
+Không đổi Java/React; không chạy Maven/Playwright cho thay đổi chỉ-contract. Chưa có CI
+remote cho thay đổi này.
+
+## PLT-02 event routing — Claude Code, TDD, 2026-10-04
+
+Khoảng trống: 03 §5.1/5.2 quy định topic, partition key và aggregate_id cho từng event nhưng
+registry chỉ ánh xạ schema; outbox PLT-03 (`topic`, `partition_key`) cần đúng các giá trị này.
+
+| Chu trình | RED (lý do đã xác nhận) | GREEN |
+|---|---|---|
+| Topic/key khớp 03 §5.2 | 9 failures: entry là string, chưa có topic/key (lần đầu là TypeError, sửa test thành assertion trước khi viết code) | `registry.json` dạng `{schema, topic, partition_key}`; loader payload đọc `schema` |
+| aggregate_id theo 03 §5.1 | 9 failures: registry thiếu `aggregate_id` | thêm `aggregate_id` (user_id, product_id, sku, order_id) |
+| Partition key bắt buộc | Pass ngay (schema đã bắt buộc) — test guard, chứng minh bằng mutation | — |
+
+Mutation check (sửa tạm rồi khôi phục): topic `orders.events`; bỏ `order_no` khỏi `required`
+của order lifecycle; `aggregate_id` fixture bằng `order_no` — đều FAIL như mong đợi.
+
+| Lệnh (Temurin 21.0.12.1+1, Node 24.21.0/npm 11.19.0, venv đã pin, freeze khớp requirements) | Kết quả |
+|---|---|
+| `bash scripts/validate-contracts.sh` | PASS: Redocly catalog, 22 contract tests |
+| `python3 -B -m unittest discover -s scripts -p 'test_*.py'` | PASS 12/12 |
+| `python3 -B scripts/check_docs.py`; `git diff --check` | PASS 31 Markdown files; PASS |
+
+Không đổi Java/React nên không chạy Maven/Playwright. Mock API và Mermaid renderer chưa
+thêm: 17 §PLT-02 hoãn chọn tới khi có consumer/nhu cầu thật (FE mock khi WEB-01 bắt đầu).
+Producer/consumer review vẫn cần người ký trong contracts README.
+
 ## Tiếp theo
 
 Hoàn thiện OpenAPI core, schemas payload/VND, fixtures/mock và review PLT-02; sau đó

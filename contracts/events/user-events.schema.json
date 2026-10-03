@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fashion.local/contracts/events/user-events.schema.json",
+  "title": "user.events payloads (03 §5.2/5.3)",
+  "$defs": {
+    "UserCreated": {
+      "description": "No password, token or contact data in the event",
+      "type": "object",
+      "required": ["user_id", "locale"],
+      "properties": {
+        "user_id": {"$ref": "common.schema.json#/$defs/uuid"},
+        "locale": {"enum": ["vi", "en"]}
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,109 @@
+openapi: 3.1.0
+info:
+  title: Shared HTTP conventions
+  version: 0.1.0
+  description: >
+    TASK:PLT-02 core — response/error envelope, 202 processing, pagination,
+    Idempotency-Key and expected_version from docs/design/03_interfaces.md §1.2/§1.3.
+    Service contracts reference these components; this file declares no operations.
+components:
+  headers:
+    CorrelationId:
+      description: Equals metadata.trace_id; tracing only, never an idempotency key
+      schema: {type: string, minLength: 1}
+    RetryAfter:
+      description: Seconds to wait before retrying (429/503)
+      schema: {type: integer, minimum: 0}
+  parameters:
+    IdempotencyKey:
+      in: header
+      name: Idempotency-Key
+      required: true
+      description: >
+        Scoped by actor + operation; same body returns the same resource, a different
+        body returns 409. Keep the key across retries, including after timeouts.
+      schema: {type: string, minLength: 1, maxLength: 128}
+    Limit:
+      in: query
+      name: limit
+      description: Public cursor pages
+      schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+    Cursor:
+      in: query
+      name: cursor
+      description: Opaque; bound to the filters that produced it
+      schema: {type: string, minLength: 1}
+    Page:
+      in: query
+      name: page
+      description: Admin pages start at 1
+      schema: {type: integer, minimum: 1, default: 1}
+    Size:
+      in: query
+      name: size
+      description: Admin page size
+      schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+  schemas:
+    Metadata:
+      type: object
+      required: [request_id, trace_id]
+      properties:
+        request_id: {type: string, minLength: 1}
+        trace_id: {type: string, minLength: 1}
+    FieldError:
+      type: object
+      required: [field, message]
+      properties:
+        field: {type: string, minLength: 1}
+        message: {type: string}
+        rejected_value: {}
+    ApiError:
+      description: No stack traces or internal details; request_id is the support handle
+      type: object
+      required: [code, message, metadata]
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          enum:
+            - VALIDATION_ERROR
+            - UNAUTHORIZED
+            - FORBIDDEN
+            - NOT_FOUND
+            - CONFLICT
+            - VERSION_CONFLICT
+            - PRICE_CHANGED
+            - QUOTE_EXPIRED
+            - OUT_OF_STOCK
+            - PROMOTION_LIMIT
+            - ALREADY_REVIEWED
+            - VOUCHER_INVALID
+            - PAYMENT_AMOUNT_UNSUPPORTED
+            - ACCOUNT_LOCKED
+            - RATE_LIMITED
+            - TEMPORARILY_UNAVAILABLE
+            - INTERNAL
+        message: {type: string}
+        errors:
+          type: array
+          items: {$ref: '#/components/schemas/FieldError'}
+        metadata: {$ref: '#/components/schemas/Metadata'}
+    AcceptedResponse:
+      description: HTTP 202 keeps code=OK; the client polls status_url instead of retrying the mutation
+      type: object
+      required: [code, data, metadata]
+      properties:
+        code: {type: string, const: OK}
+        data:
+          type: object
+          required: [processing_status, status_url]
+          properties:
+            processing_status: {type: string, minLength: 1}
+            status_url: {type: string, minLength: 1}
+        metadata: {$ref: '#/components/schemas/Metadata'}
+    ExpectedVersion:
+      description: Required on cart/admin mutations; missing is 400, stale is 409 VERSION_CONFLICT
+      type: object
+      required: [expected_version]
+      properties:
+        expected_version: {type: integer, minimum: 0, maximum: 9223372036854775807}

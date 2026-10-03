@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fashion.local/contracts/events/common.schema.json",
+  "title": "Shared payload definitions (03 §1.1)",
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "business_version": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9223372036854775807
+    },
+    "vnd_amount": {
+      "description": "Integer VND, stored as PostgreSQL bigint (05); never float or string",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9223372036854775807
+    },
+    "currency": {
+      "const": "VND"
+    },
+    "payment_method": {
+      "enum": ["COD", "VNPAY", "MOMO"]
+    },
+    "nullable_uuid": {
+      "type": ["string", "null"],
+      "format": "uuid"
+    },
+    "utc_timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "sku": {
+      "description": "Immutable SKU, varchar(64) in 05",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "stock_quantity": {
+      "description": "PostgreSQL int stock counter (05 stock_items)",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "order_item": {
+      "type": "object",
+      "required": ["variant_id", "sku", "quantity"],
+      "properties": {
+        "variant_id": {"$ref": "#/$defs/uuid"},
+        "sku": {"$ref": "#/$defs/sku"},
+        "quantity": {"type": "integer", "minimum": 1, "maximum": 2147483647}
+      },
+      "additionalProperties": false
+    }
+  }
+}
