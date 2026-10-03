@@ -7,5 +7,7 @@ attrs==26.1.0
 # Required by jsonschema's date-time FormatChecker (otherwise silently skipped).
 rfc3339-validator==0.1.4
 six==1.17.0
+# Loads OpenAPI YAML so shared schemas can be validated with negative cases.
+pyyaml==6.0.3
 # Pulled in by referencing on Python < 3.13 (CI ubuntu-latest); pin to keep CI reproducible.
 typing_extensions==4.16.0

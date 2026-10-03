@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fashion.local/contracts/events/catalog-events.schema.json",
+  "title": "catalog.events payloads (03 §5.2/5.3)",
+  "$defs": {
+    "VariantCreated": {
+      "description": "Duplicate delivery must not reset stock (consumer test in INV-01)",
+      "type": "object",
+      "required": ["product_id", "variant_id", "sku", "version"],
+      "properties": {
+        "product_id": {"$ref": "common.schema.json#/$defs/uuid"},
+        "variant_id": {"$ref": "common.schema.json#/$defs/uuid"},
+        "sku": {"$ref": "common.schema.json#/$defs/sku"},
+        "version": {"$ref": "common.schema.json#/$defs/business_version"}
+      },
+      "additionalProperties": false
+    },
+    "CatalogChanged": {
+      "type": "object",
+      "required": ["product_id", "affected_variant_ids", "version"],
+      "properties": {
+        "product_id": {"$ref": "common.schema.json#/$defs/uuid"},
+        "affected_variant_ids": {
+          "type": "array",
+          "items": {"$ref": "common.schema.json#/$defs/uuid"},
+          "uniqueItems": true
+        },
+        "version": {"$ref": "common.schema.json#/$defs/business_version"}
+      },
+      "additionalProperties": false
+    }
+  }
+}

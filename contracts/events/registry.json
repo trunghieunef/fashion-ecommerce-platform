@@ -1,0 +1,11 @@
+{
+  "USER_CREATED": {"schema": "user-events.schema.json#/$defs/UserCreated", "topic": "user.events", "partition_key": "user_id", "aggregate_id": "user_id"},
+  "VARIANT_CREATED": {"schema": "catalog-events.schema.json#/$defs/VariantCreated", "topic": "catalog.events", "partition_key": "product_id", "aggregate_id": "product_id"},
+  "CATALOG_CHANGED": {"schema": "catalog-events.schema.json#/$defs/CatalogChanged", "topic": "catalog.events", "partition_key": "product_id", "aggregate_id": "product_id"},
+  "INVENTORY_UPDATED": {"schema": "stock-events.schema.json#/$defs/StockSnapshot", "topic": "inventory.events", "partition_key": "sku", "aggregate_id": "sku"},
+  "INVENTORY_RESTOCKED": {"schema": "stock-events.schema.json#/$defs/StockSnapshot", "topic": "inventory.events", "partition_key": "sku", "aggregate_id": "sku"},
+  "ORDER_CREATED": {"schema": "order-events.schema.json#/$defs/OrderState", "topic": "order.events", "partition_key": "order_no", "aggregate_id": "order_id"},
+  "ORDER_CONFIRMED": {"schema": "order-events.schema.json#/$defs/OrderState", "topic": "order.events", "partition_key": "order_no", "aggregate_id": "order_id"},
+  "ORDER_PAID": {"schema": "order-events.schema.json#/$defs/OrderState", "topic": "order.events", "partition_key": "order_no", "aggregate_id": "order_id"},
+  "ORDER_CANCELLED": {"schema": "order-events.schema.json#/$defs/OrderCancelled", "topic": "order.events", "partition_key": "order_no", "aggregate_id": "order_id"}
+}

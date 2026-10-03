@@ -15,14 +15,12 @@ paths:
       summary: List ACTIVE products, newest first
       security: []
       parameters:
-        - in: query
-          name: limit
-          schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+        - $ref: './common.yaml#/components/parameters/Limit'
       responses:
         '200':
           description: Stable public product page; next_cursor is always null in S1
           headers:
-            X-Correlation-Id: {$ref: '#/components/headers/CorrelationId'}
+            X-Correlation-Id: {$ref: './common.yaml#/components/headers/CorrelationId'}
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ProductPageResponse'}
@@ -43,10 +41,14 @@ paths:
         '400':
           description: limit outside 1..100 or not an integer
           headers:
-            X-Correlation-Id: {$ref: '#/components/headers/CorrelationId'}
+            X-Correlation-Id: {$ref: './common.yaml#/components/headers/CorrelationId'}
           content:
             application/json:
-              schema: {$ref: '#/components/schemas/ApiError'}
+              schema:
+                allOf:
+                  - $ref: './common.yaml#/components/schemas/ApiError'
+                  - properties:
+                      code: {const: VALIDATION_ERROR}
               examples:
                 invalidLimit:
                   value:
@@ -56,17 +58,7 @@ paths:
                       - {field: limit, message: must be between 1 and 100, rejected_value: 0}
                     metadata: {request_id: 4c8a1f2e-0000-4000-8000-000000000005, trace_id: 4c8a1f2e-0000-4000-8000-000000000006}
 components:
-  headers:
-    CorrelationId:
-      description: Equals metadata.trace_id; tracing only, never an idempotency key
-      schema: {type: string, minLength: 1}
   schemas:
-    Metadata:
-      type: object
-      required: [request_id, trace_id]
-      properties:
-        request_id: {type: string, minLength: 1}
-        trace_id: {type: string, minLength: 1}
     ProductSummary:
       type: object
       required: [id, slug, name_vi, name_en]
@@ -89,20 +81,4 @@ components:
               type: array
               items: {$ref: '#/components/schemas/ProductSummary'}
             next_cursor: {type: [string, 'null']}
-        metadata: {$ref: '#/components/schemas/Metadata'}
-    ApiError:
-      type: object
-      required: [code, message, metadata]
-      properties:
-        code: {type: string, enum: [VALIDATION_ERROR]}
-        message: {type: string}
-        errors:
-          type: array
-          items:
-            type: object
-            required: [field, message]
-            properties:
-              field: {type: string}
-              message: {type: string}
-              rejected_value: {}
-        metadata: {$ref: '#/components/schemas/Metadata'}
+        metadata: {$ref: './common.yaml#/components/schemas/Metadata'}

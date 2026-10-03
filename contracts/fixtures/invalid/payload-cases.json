@@ -1,0 +1,221 @@
+[
+  {
+    "name": "fractional VND amount",
+    "fixture": "order-created.json",
+    "changes": {
+      "total_amount": 398000.5
+    },
+    "validator": "type",
+    "path": [
+      "total_amount"
+    ]
+  },
+  {
+    "name": "VND amount as string",
+    "fixture": "order-created.json",
+    "changes": {
+      "total_amount": "398000"
+    },
+    "validator": "type",
+    "path": [
+      "total_amount"
+    ]
+  },
+  {
+    "name": "negative VND amount",
+    "fixture": "order-created.json",
+    "changes": {
+      "total_amount": -1
+    },
+    "validator": "minimum",
+    "path": [
+      "total_amount"
+    ]
+  },
+  {
+    "name": "VND amount exceeds bigint",
+    "fixture": "order-created.json",
+    "changes": {
+      "total_amount": 9223372036854775808
+    },
+    "validator": "maximum",
+    "path": [
+      "total_amount"
+    ]
+  },
+  {
+    "name": "currency other than VND",
+    "fixture": "order-created.json",
+    "changes": {
+      "currency": "USD"
+    },
+    "validator": "const",
+    "path": [
+      "currency"
+    ]
+  },
+  {
+    "name": "unknown payment method",
+    "fixture": "order-created.json",
+    "changes": {
+      "method": "CARD"
+    },
+    "validator": "enum",
+    "path": [
+      "method"
+    ]
+  },
+  {
+    "name": "missing order_no",
+    "remove": [
+      "order_no"
+    ],
+    "fixture": "order-created.json",
+    "changes": {},
+    "validator": "required",
+    "path": []
+  },
+  {
+    "name": "camelCase field instead of snake_case",
+    "fixture": "order-created.json",
+    "changes": {
+      "totalAmount": 398000
+    },
+    "validator": "unevaluatedProperties",
+    "path": []
+  },
+  {
+    "name": "zero item quantity",
+    "fixture": "order-created.json",
+    "changes": {
+      "items": [
+        {
+          "variant_id": "66666666-6666-4666-8666-666666666666",
+          "sku": "SYNTH-TEE-M-BLK",
+          "quantity": 0
+        }
+      ]
+    },
+    "validator": "minimum",
+    "path": [
+      "items",
+      0,
+      "quantity"
+    ]
+  },
+  {
+    "name": "order without items",
+    "fixture": "order-created.json",
+    "changes": {
+      "items": []
+    },
+    "validator": "minItems",
+    "path": [
+      "items"
+    ]
+  },
+  {
+    "name": "cancelled order without reason",
+    "fixture": "order-cancelled.json",
+    "remove": [
+      "reason"
+    ],
+    "changes": {},
+    "validator": "required",
+    "path": []
+  },
+  {
+    "name": "cancelled order with unknown field",
+    "fixture": "order-cancelled.json",
+    "changes": {
+      "cancel_reason": "CUSTOMER_REQUESTED"
+    },
+    "validator": "unevaluatedProperties",
+    "path": []
+  },
+  {
+    "name": "member user_id is not a UUID",
+    "fixture": "order-created.json",
+    "changes": {
+      "user_id": "user-1"
+    },
+    "validator": "format",
+    "path": [
+      "user_id"
+    ]
+  },
+  {
+    "name": "user event leaks password",
+    "fixture": "user-created.json",
+    "changes": {
+      "password": "secret"
+    },
+    "validator": "additionalProperties",
+    "path": []
+  },
+  {
+    "name": "unsupported locale",
+    "fixture": "user-created.json",
+    "changes": {
+      "locale": "fr"
+    },
+    "validator": "enum",
+    "path": [
+      "locale"
+    ]
+  },
+  {
+    "name": "variant without sku",
+    "fixture": "variant-created.json",
+    "remove": [
+      "sku"
+    ],
+    "changes": {},
+    "validator": "required",
+    "path": []
+  },
+  {
+    "name": "sku longer than 05 varchar(64)",
+    "fixture": "variant-created.json",
+    "changes": {
+      "sku": "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+    },
+    "validator": "maxLength",
+    "path": [
+      "sku"
+    ]
+  },
+  {
+    "name": "negative reserved stock",
+    "fixture": "inventory-updated.json",
+    "changes": {
+      "reserved": -1
+    },
+    "validator": "minimum",
+    "path": [
+      "reserved"
+    ]
+  },
+  {
+    "name": "fractional on_hand",
+    "fixture": "inventory-updated.json",
+    "changes": {
+      "on_hand": 9.5
+    },
+    "validator": "type",
+    "path": [
+      "on_hand"
+    ]
+  },
+  {
+    "name": "observed_at not UTC",
+    "fixture": "inventory-restocked.json",
+    "changes": {
+      "observed_at": "2026-10-04T10:12:00+07:00"
+    },
+    "validator": "pattern",
+    "path": [
+      "observed_at"
+    ]
+  }
+]

@@ -60,7 +60,8 @@ PLT-04/05, AWS/K3s/ECR/ArgoCD, provider sandbox và các task business Phase 1 k
   và O02 core ngoài S1. Parent PLT-02/SEC-01 vẫn **In progress**, O02 vẫn mở cho Kafka/
   Redis, CVE/license, staging và SEO. Không coi S1-local là G0/G1/G2.
 - Phase 0 local tiếp tục: `TASK:PLT-02` — **In progress**, assignee Codex (GPT-6),
-  reviewer chủ dự án; envelope/schema và fixtures theo 03 đã có test local,
+  reviewer chủ dự án; envelope, payload schemas §5.3 cho event Phase 1A + order lifecycle,
+  registry (schema/topic/partition key/aggregate_id theo §5.1/5.2), `openapi/common.yaml` (§1.2/1.3) và fixtures theo 03 đã có test local,
   [evidence Phase 0](../evidence/phase-0-local-2026-10-04.md). `TASK:PLT-03`
   — **Planned**, đã đọc/đối chiếu thiết kế; implementation chờ PLT-02 contract review.
   O01 chỉ chặn phần cloud, không chặn PLT-02/03 local; chưa provision/deploy.
