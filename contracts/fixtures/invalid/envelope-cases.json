@@ -1,0 +1,110 @@
+[
+  {
+    "name": "invalid UUID",
+    "changes": {
+      "event_id": "invalid"
+    },
+    "validator": "format",
+    "path": [
+      "event_id"
+    ]
+  },
+  {
+    "name": "zero schema version",
+    "changes": {
+      "version": 0
+    },
+    "validator": "minimum",
+    "path": [
+      "version"
+    ]
+  },
+  {
+    "name": "negative business version",
+    "changes": {
+      "aggregate_version": -1
+    },
+    "validator": "minimum",
+    "path": [
+      "aggregate_version"
+    ]
+  },
+  {
+    "name": "fractional sequence",
+    "changes": {
+      "aggregate_sequence": 1.5
+    },
+    "validator": "type",
+    "path": [
+      "aggregate_sequence"
+    ]
+  },
+  {
+    "name": "zero sequence",
+    "changes": {
+      "aggregate_sequence": 0
+    },
+    "validator": "minimum",
+    "path": [
+      "aggregate_sequence"
+    ]
+  },
+  {
+    "name": "sequence exceeds bigint",
+    "changes": {
+      "aggregate_sequence": 10000000000000000000
+    },
+    "validator": "maximum",
+    "path": [
+      "aggregate_sequence"
+    ]
+  },
+  {
+    "name": "invalid date",
+    "changes": {
+      "occurred_at": "2026-99-99T00:00:00Z"
+    },
+    "validator": "format",
+    "path": [
+      "occurred_at"
+    ]
+  },
+  {
+    "name": "non UTC timestamp",
+    "changes": {
+      "occurred_at": "2026-10-04T10:00:00+07:00"
+    },
+    "validator": "pattern",
+    "path": [
+      "occurred_at"
+    ]
+  },
+  {
+    "name": "payload is not object",
+    "changes": {
+      "payload": []
+    },
+    "validator": "type",
+    "path": [
+      "payload"
+    ]
+  },
+  {
+    "name": "empty correlation",
+    "changes": {
+      "correlation_id": ""
+    },
+    "validator": "minLength",
+    "path": [
+      "correlation_id"
+    ]
+  },
+  {
+    "name": "legacy plan field",
+    "changes": {
+      "event_version": 1
+    },
+    "validator": "additionalProperties",
+    "path": []
+  }
+]

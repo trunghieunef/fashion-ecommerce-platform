@@ -7,7 +7,7 @@ Sprint 1 theo ADR-18 chỉ triển khai local và đạt checkpoint S1-local tro
 Tiếp tục trên máy mới: đọc [handoff S1-local ngày 2026-10-02](superpowers/plans/2026-10-02-s1-local-machine-handoff.md)
 để biết toolchain, thứ tự kiểm thử, phạm vi và mẫu prompt cho agent.
 
-Kế hoạch triển khai có thể giao cho agent/engineer được lập tại [docs/superpowers/plans](superpowers/plans/README.md). Reviewer fresh-clone S1-local điền [template evidence](evidence/s1-local-template.md). [Evidence ngày 2026-10-02](evidence/s1-local-2026-10-02.md) ghi CI remote PASS trên `d16151d`, kiểm tra local và blocker mạng công ty; [evidence ngày 2026-10-04](evidence/s1-local-2026-10-04.md) ghi fresh-clone runtime PASS trên Windows và lỗi timezone đã sửa; chưa nghiệm thu S1-local. Bộ kế hoạch chia đường tới G2 MVP thành S1-local, G0 platform/staging, commerce core, G1 COD và G2 online payment; các plan không tự thay trạng thái backlog hay bằng chứng nghiệm thu.
+Kế hoạch triển khai có thể giao cho agent/engineer được lập tại [docs/superpowers/plans](superpowers/plans/README.md). Reviewer fresh-clone S1-local điền [template evidence](evidence/s1-local-template.md). [Evidence ngày 2026-10-02](evidence/s1-local-2026-10-02.md) ghi blocker mạng công ty; [evidence ngày 2026-10-04](evidence/s1-local-2026-10-04.md) ghi runtime PASS, patch timezone `b62f963` với CI PASS và nghiệm thu bởi Codex (GPT-6) theo chỉ định chủ dự án thay reviewer người/TL. Bộ kế hoạch chia đường tới G2 MVP thành S1-local, G0 platform/staging, commerce core, G1 COD và G2 online payment; S1-local được chấp nhận không thay acceptance các gate sau.
 
 ## 1. Danh mục và nguồn sự thật
 
@@ -51,7 +51,7 @@ Mỗi loại dữ liệu có một tài liệu chủ quản như bảng trên. K
 2. Thay đổi nghiệp vụ: PO quyết định; đổi boundary/contract/schema: TL và producer/consumer cùng review.
 3. Cập nhật 08 trước hoặc cùng PR thay đổi; không dùng lại mã yêu cầu cũ cho nghĩa khác.
 4. OpenAPI/JSON Schema được tạo trong PLT-02 từ 03. Khi có code, contract thực thi và tài liệu phải cùng PR; CI kiểm tra drift.
-5. Trạng thái task: Planned, In progress, Review, Done, Blocked. Phần S1 của PLT-01/PLT-02/SEC-01 đang In progress; các package còn lại Planned theo 10. CI tài liệu và ứng dụng có run PASS cho `d16151d`, chưa đủ acceptance S1-local/PLT-04/G0. Chi tiết phần còn lại ở 10/16.
+5. Trạng thái task: Planned, In progress, Review, Done, Blocked. S1-local được Codex (GPT-6) nghiệm thu theo chỉ định chủ dự án ngày 2026-10-04; phần S1 của PLT-01 được chấp nhận; parent PLT-01 vẫn In progress cho xác nhận SEO SPA (FE/PO) và O02 core ngoài S1; parent PLT-02/SEC-01 vẫn In progress. CI PASS trên `b62f963`; PLT-02 tiếp tục envelope/schema, PLT-03 implementation chờ contract review. Chưa nghiệm thu G0 hoặc PLT-04. Chi tiết ở 10/16 và evidence ngày 2026-10-04.
 6. Chỉ đánh dấu đã test/deploy/duyệt khi có bằng chứng, người xác nhận và ngày.
 
 ## 4. Thuật ngữ chung

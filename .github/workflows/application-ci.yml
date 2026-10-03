@@ -47,7 +47,11 @@ jobs:
           npm test
           npm run build
       - name: Contract validation
-        run: bash scripts/validate-contracts.sh
+        run: |
+          python3 -m venv /tmp/fashion-contracts-venv
+          source /tmp/fashion-contracts-venv/bin/activate
+          python3 -m pip install -r tests/contracts/requirements.txt
+          bash scripts/validate-contracts.sh
       - name: Start local stack
         run: bash scripts/local-up.sh
       - name: Local smoke

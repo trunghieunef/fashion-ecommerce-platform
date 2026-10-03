@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Start only after S1-local evidence is accepted and O01 records verified AWS plan/credit expiry, approved gross monthly budget, region, alert owner and permitted personal spend.
+- Start local PLT-02/03 after S1-local acceptance. O01 account/credit/region/budget approvals gate cloud work (PLT-04), not local PLT-02/03, per 08/10.
 - Do not upgrade the AWS account plan, create Organizations/Control Tower, or provision resources until the reviewed CloudFormation change set and explicit cost approval exist.
 - Staging target is one EC2/K3s node for a sample service; do not claim it runs full MVP, HA, production SLO, RPO or RTO.
 - Build once, identify images by digest, promote through manifest PR; never deploy `latest`.
@@ -57,7 +57,7 @@
 
 **Interfaces:**
 - Consumes: canonical paths/envelopes/events in 03 and producer/consumer matrix in 04.
-- Produces: `make`-free command `bash scripts/validate-contracts.sh`; JSON Schema envelope fields `event_id`, `event_type`, `event_version`, `aggregate_id`, `aggregate_version`, `aggregate_sequence`, `occurred_at`, `trace_id`, `payload`.
+- Produces: `bash scripts/validate-contracts.sh`; envelope fields `event_id`, `event_type`, `version`, `aggregate_id`, `aggregate_version`, `aggregate_sequence`, `occurred_at`, `correlation_id`, `payload` (03 §5.1 owns wire names).
 
 - [ ] **Step 1: Write failing fixture tests**
 
@@ -67,7 +67,7 @@ def test_event_example_has_stable_identity_and_sequence():
     assert UUID(event["event_id"])
     assert event["aggregate_version"] >= 1
     assert event["aggregate_sequence"] >= 1
-    assert event["event_version"] == 1
+    assert event["version"] == 1
 
 def test_invalid_money_fixture_is_rejected():
     result = run_validator("contracts/fixtures/invalid/order-float-money.json")
@@ -76,7 +76,7 @@ def test_invalid_money_fixture_is_rejected():
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `python3 -B -m unittest tests.contracts.test_contract_examples -v`
+Run: `python3 -B -m unittest discover -s tests/contracts -p 'test_*.py' -v`
 
 Expected: FAIL because executable schemas/fixtures are absent.
 
@@ -87,16 +87,16 @@ Expected: FAIL because executable schemas/fixtures are absent.
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://fashion.local/contracts/event-envelope.schema.json",
   "type": "object",
-  "required": ["event_id", "event_type", "event_version", "aggregate_id", "aggregate_version", "aggregate_sequence", "occurred_at", "trace_id", "payload"],
+  "required": ["event_id", "event_type", "version", "aggregate_id", "aggregate_version", "aggregate_sequence", "occurred_at", "correlation_id", "payload"],
   "properties": {
     "event_id": {"type": "string", "format": "uuid"},
     "event_type": {"type": "string", "minLength": 1},
-    "event_version": {"type": "integer", "minimum": 1},
+    "version": {"type": "integer", "minimum": 1},
     "aggregate_id": {"type": "string", "minLength": 1},
-    "aggregate_version": {"type": "integer", "minimum": 1},
+    "aggregate_version": {"type": "integer", "minimum": 0},
     "aggregate_sequence": {"type": "integer", "minimum": 1},
     "occurred_at": {"type": "string", "format": "date-time"},
-    "trace_id": {"type": "string", "minLength": 1},
+    "correlation_id": {"type": "string", "minLength": 1},
     "payload": {"type": "object"}
   },
   "additionalProperties": false
@@ -107,7 +107,7 @@ Encode VND as JSON integer, timestamps UTC date-time, UUIDs strings and snake_ca
 
 - [ ] **Step 4: Validate positive and negative fixtures**
 
-Run: `bash scripts/validate-contracts.sh && python3 -B -m unittest tests.contracts.test_contract_examples -v`
+Run: `bash scripts/validate-contracts.sh` (install `tests/contracts/requirements.txt` first).
 
 Expected: PASS; every valid fixture is accepted and each invalid fixture fails for its named reason.
 
@@ -169,28 +169,30 @@ Expected: FAIL because module/schema/repositories are absent.
 
 ```sql
 CREATE TABLE outbox_events (
-  event_id uuid PRIMARY KEY, aggregate_id varchar(128) NOT NULL,
+  id uuid PRIMARY KEY, aggregate_type text NOT NULL, aggregate_id text NOT NULL,
   aggregate_version bigint NOT NULL, aggregate_sequence bigint NOT NULL,
-  event_type varchar(128) NOT NULL, payload jsonb NOT NULL,
-  status varchar(16) NOT NULL CHECK (status IN ('PENDING','LEASED','SENT')),
-  available_at timestamptz NOT NULL, lease_token uuid, lease_until timestamptz,
-  created_at timestamptz NOT NULL DEFAULT now(), sent_at timestamptz,
-  UNIQUE (aggregate_id, aggregate_sequence)
+  event_type text NOT NULL, schema_version int NOT NULL DEFAULT 1,
+  topic text NOT NULL, partition_key text NOT NULL, payload jsonb NOT NULL,
+  status varchar(32) NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','IN_FLIGHT','SENT')),
+  attempts int NOT NULL DEFAULT 0, next_attempt_at timestamptz NOT NULL DEFAULT now(),
+  lease_token uuid, lease_until timestamptz, published_at timestamptz, last_error text,
+  created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (aggregate_type, aggregate_id, aggregate_sequence)
 );
 CREATE TABLE processed_events (
-  consumer varchar(128) NOT NULL, event_id uuid NOT NULL,
-  processed_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (consumer,event_id)
+  consumer_name text NOT NULL, event_id uuid NOT NULL,
+  processed_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (consumer_name,event_id)
 );
 ```
 
-Add idempotency request hash/response/status and background work lease token/version tables exactly as 05 requires. Use `FOR UPDATE SKIP LOCKED` to claim bounded batches and `WHERE lease_token=:token` for completion.
+Add idempotency/background tables exactly as 05 requires. Claim bounded batches with `FOR UPDATE SKIP LOCKED`; completion requires token CAS and unexpired DB lease. Claim only the earliest unsent sequence in `(aggregate_type, aggregate_id)`; a leased/delayed predecessor blocks later events. Map DB `schema_version` to wire `version`, DB `id` to wire `event_id`. This SQL is illustrative, not a deployed migration.
 
 - [ ] **Step 4: Implement transaction templates without starting nested remote work**
 
 ```java
 public <T> T applyOnce(UUID eventId, String consumer, Supplier<T> localEffect) {
   return transactions.execute(status -> {
-    int inserted = jdbc.sql("insert into processed_events(consumer,event_id) values (:c,:e) on conflict do nothing")
+    int inserted = jdbc.sql("insert into processed_events(consumer_name,event_id) values (:c,:e) on conflict do nothing")
         .param("c", consumer).param("e", eventId).update();
     return inserted == 0 ? null : localEffect.get();
   });

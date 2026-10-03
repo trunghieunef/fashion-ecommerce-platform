@@ -16,7 +16,8 @@ Compose smoke chuỗi thật và Nacos proof ngày 2026-09-28. CI remote **PASS*
 `d16151d` ngày 2026-09-30. [Lần kiểm tra ngày 2026-10-02](../evidence/s1-local-2026-10-02.md)
 trên clone sạch Windows bị mạng công ty chặn runtime artifacts; chưa đủ fresh-clone
 acceptance độc lập. [Fresh-clone review ngày 2026-10-04](../evidence/s1-local-2026-10-04.md)
-chạy đủ chuỗi trên Windows sau khi sửa lỗi timezone; còn chờ reviewer người/TL.
+chạy đủ chuỗi trên Windows sau khi sửa lỗi timezone; Codex (GPT-6) đã duyệt evidence/CI
+và nghiệm thu S1-local ngày 2026-10-04 theo chỉ định chủ dự án thay reviewer người/TL.
 Không thay bằng H2/mock hoặc bỏ qua test để xác nhận S1-local.
 
 Lưu ý môi trường:
@@ -58,7 +59,7 @@ chỉ copy JAR/`dist` vào image runtime pin tag + digest.
 | Docs | `python3 -B -m unittest discover -s scripts -p 'test_*.py' -v` và `python3 -B scripts/check_docs.py` |
 | Backend (PostgreSQL thật) | `./mvnw test`; một test: `./mvnw -pl services/catalog-service -Dtest=ProductQueryIntegrationTest test` |
 | Frontend | `npm ci && npm run typecheck && npm test && npm run build` |
-| Contract | `bash scripts/validate-contracts.sh` (Redocly lint; example sai schema là lỗi) |
+| Contract | Cài `python3 -m pip install -r tests/contracts/requirements.txt`; chạy `bash scripts/validate-contracts.sh` (Redocly lint + event envelope tests). Chỉ event: `python3 -B -m unittest discover -s tests/contracts -p 'test_*.py' -v` |
 | Khởi động stack | `bash scripts/local-up.sh` (tạo `infra/local/.env` từ example nếu chưa có) |
 | Smoke | `bash scripts/smoke-local.sh`; browser: `npx playwright install chromium && npx playwright test` |
 | Nacos proof O02 | `bash scripts/nacos-compat-check.sh` sau `local-up.sh`; tự trả stack về profile mặc định. Mật khẩu admin chỉ được khởi tạo lần đầu và lưu trong volume `nacos-data`: đổi `NACOS_PASSWORD` sau đó thì xóa riêng volume này (`docker volume rm local_nacos-data`) |
