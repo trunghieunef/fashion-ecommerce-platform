@@ -23,7 +23,7 @@ Assignee: Codex (GPT-6); reviewer: chủ dự án. Parent task còn In progress.
   bảng 03 §5.2 nên đổi topic/key ở một phía mà không sửa phía kia sẽ fail; partition key
   phải là field bắt buộc và `aggregate_id` của envelope phải bằng field đã khai báo. `events/common.schema.json`: UUID, UTC `Z`, business version, tiền VND
   integer 0..bigint (không float/string), `currency` = `VND`, `payment_method`
-  COD/VNPAY/MOMO, SKU ≤ 64, stock int ≥ 0, order item quantity ≥ 1.
+  COD/VNPAY/MOMO, SKU ≤ 64, stock int ≥ 0, order item quantity 1–99 (05).
 - Payload theo 03 §5.3: `user-events` (USER_CREATED, không password/token), `catalog-events`
   (VARIANT_CREATED, CATALOG_CHANGED), `stock-events` (INVENTORY_UPDATED/RESTOCKED),
   `order-events` (ORDER_CREATED/CONFIRMED/PAID; CANCELLED bắt buộc `reason`). Payload
@@ -35,7 +35,10 @@ Assignee: Codex (GPT-6); reviewer: chủ dự án. Parent task còn In progress.
   qua cả envelope và payload schema. Không tuyên bố service nào đã phát event.
 - `fixtures/invalid/payload-cases.json`: negative cases payload (tiền float/string/âm/tràn
   bigint, currency, method, quantity, thiếu field, camelCase, leak password, locale, SKU dài,
-  stock âm/lẻ, timestamp không UTC), kiểm đúng validator và path.
+  stock âm/lẻ, timestamp không UTC), kiểm đúng validator và path. Test đọc JSON với
+  `parse_float=Decimal`: token thập phân (`398000.0`, `9007199254740992.5`) giữ nguyên và bị
+  field integer từ chối, chặt hơn mặc định JSON Schema (coi `1.0` là integer) để khớp
+  "không float" ở 03/05; không làm tròn qua float trước khi validate.
 - `fixtures/invalid/envelope-cases.json`: các mutation và loại lỗi phải bị từ chối;
   test kiểm cả reason và field path, không chấp nhận một lỗi bất kỳ thay thế.
 

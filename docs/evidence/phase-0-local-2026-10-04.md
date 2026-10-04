@@ -128,6 +128,19 @@ Không đổi Java/React nên không chạy Maven/Playwright. Mock API và Merma
 thêm: 17 §PLT-02 hoãn chọn tới khi có consumer/nhu cầu thật (FE mock khi WEB-01 bắt đầu).
 Producer/consumer review vẫn cần người ký trong contracts README.
 
+## Xử lý review PR #3 — Claude Code, TDD, 2026-10-04
+
+Review của Codex (GPT-6) tại `f47bbbc`, gửi dạng COMMENT, gồm 2 finding P2. Cả hai đã được tái hiện trước khi sửa.
+
+| Finding | Tái hiện | RED | GREEN |
+|---|---|---|---|
+| `order_item.quantity` cho tới 2147483647, 05 quy định 1–99 | quantity 100 và 2147483647: `payload_errors` = [] | negative case quantity=100 FAIL (không có lỗi `maximum`); thêm test biên 99 hợp lệ | `maximum: 99` trong `common.schema.json` |
+| `json.loads` làm mất phần thập phân của tiền | `9007199254740992.5` → float `...992.0` → chấp nhận; `398000.0` cũng được chấp nhận | 2 negative case `type` cho `total_amount` FAIL | `load_json` dùng `parse_float=Decimal` cho mọi lần load fixture/case/schema trong tests/contracts |
+
+Kết quả: `bash scripts/validate-contracts.sh` PASS (Redocly + 23 tests). Lưu ý cho PLT-03 và consumer
+Java: Jackson mặc định bật `ACCEPT_FLOAT_AS_INT`, sẽ cắt phần thập phân khi đọc vào `long`; consumer
+tiền phải tắt tùy chọn này hoặc kiểm tra kiểu token, không chỉ dựa vào schema test.
+
 ## Tiếp theo
 
 Hoàn thiện OpenAPI core, schemas payload/VND, fixtures/mock và review PLT-02; sau đó

@@ -1,4 +1,7 @@
 [
+  {"name": "VND amount loses fraction above 2^53 if parsed as float", "fixture": "order-created.json", "changes": {"total_amount": 9007199254740992.5}, "validator": "type", "path": ["total_amount"]},
+  {"name": "VND amount written as float token", "fixture": "order-created.json", "changes": {"total_amount": 398000.0}, "validator": "type", "path": ["total_amount"]},
+  {"name": "item quantity above 05 limit 99", "fixture": "order-created.json", "changes": {"items": [{"variant_id": "66666666-6666-4666-8666-666666666666", "sku": "SYNTH-TEE-M-BLK", "quantity": 100}]}, "validator": "maximum", "path": ["items", 0, "quantity"]},
   {
     "name": "fractional VND amount",
     "fixture": "order-created.json",

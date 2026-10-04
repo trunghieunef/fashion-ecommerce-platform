@@ -1,5 +1,6 @@
 """TASK:PLT-02: payload contracts per event_type from 03 section 5.3."""
 import copy
+from decimal import Decimal
 import json
 from pathlib import Path
 import unittest
@@ -12,12 +13,18 @@ EVENTS = ROOT / "contracts/events"
 FIXTURES = ROOT / "contracts/fixtures"
 
 
+def load_json(path):
+    """Keep fractional tokens exact (Decimal): a float such as 9007199254740992.5 or 398000.0
+    must stay non-integer so VND/integer fields reject it (03/05: no float money)."""
+    return json.loads(path.read_text(encoding="utf-8"), parse_float=Decimal)
+
+
 def load_payload_validators():
     """Map each registered event_type to a validator for its payload (local refs only)."""
-    schemas = [json.loads(p.read_text(encoding="utf-8")) for p in EVENTS.glob("*.schema.json")]
+    schemas = [load_json(p) for p in EVENTS.glob("*.schema.json")]
     registry = Registry().with_resources((s["$id"], Resource.from_contents(s)) for s in schemas)
     base = "https://fashion.local/contracts/events/"
-    entries = json.loads((EVENTS / "registry.json").read_text(encoding="utf-8"))
+    entries = load_json(EVENTS / "registry.json")
     return {
         event_type: Draft202012Validator({"$ref": base + entry["schema"]}, registry=registry,
                                          format_checker=FormatChecker())
@@ -33,7 +40,7 @@ def payload_errors(validators, event):
 
 
 def load_fixture(name):
-    return json.loads((FIXTURES / "valid" / name).read_text(encoding="utf-8"))
+    return load_json(FIXTURES / "valid" / name)
 
 
 class EventPayloadTest(unittest.TestCase):
@@ -46,23 +53,23 @@ class EventPayloadTest(unittest.TestCase):
         self.assertTrue(fixtures, "no valid fixtures found")
         for path in fixtures:
             with self.subTest(fixture=path.name):
-                event = json.loads(path.read_text(encoding="utf-8"))
+                event = load_json(path)
                 self.assertEqual(payload_errors(self.validators, event), [])
 
     def test_every_valid_fixture_has_a_valid_envelope(self):
-        envelope = json.loads((EVENTS / "event-envelope.schema.json").read_text(encoding="utf-8"))
+        envelope = load_json(EVENTS / "event-envelope.schema.json")
         validator = Draft202012Validator(envelope, format_checker=FormatChecker())
         for path in sorted((FIXTURES / "valid").glob("*.json")):
             with self.subTest(fixture=path.name):
-                validator.validate(json.loads(path.read_text(encoding="utf-8")))
+                validator.validate(load_json(path))
 
     def test_every_event_schema_is_valid_draft_2020_12(self):
         for path in sorted(EVENTS.glob("*.schema.json")):
             with self.subTest(schema=path.name):
-                Draft202012Validator.check_schema(json.loads(path.read_text(encoding="utf-8")))
+                Draft202012Validator.check_schema(load_json(path))
 
     def test_invalid_payloads_fail_for_declared_reason(self):
-        cases = json.loads((FIXTURES / "invalid/payload-cases.json").read_text(encoding="utf-8"))
+        cases = load_json(FIXTURES / "invalid/payload-cases.json")
         for case in cases:
             with self.subTest(name=case["name"]):
                 event = load_fixture(case["fixture"])
@@ -74,6 +81,11 @@ class EventPayloadTest(unittest.TestCase):
                     e.validator == case["validator"] and list(e.path) == case["path"]
                     for e in errors if not isinstance(e, str)
                 ), errors)
+
+    def test_item_quantity_99_is_the_accepted_boundary(self):
+        event = load_fixture("order-created.json")
+        event["payload"]["items"][0]["quantity"] = 99
+        self.assertEqual(payload_errors(self.validators, event), [])
 
     def test_unregistered_event_type_is_rejected(self):
         event = load_fixture("event-envelope.json")

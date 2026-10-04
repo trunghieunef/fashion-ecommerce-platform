@@ -1,14 +1,13 @@
 """TASK:PLT-02: topic/partition key per event_type from 03 section 5.2, for outbox producers."""
-import json
 from pathlib import Path
 import re
 import unittest
 
-from test_event_payloads import load_payload_validators, payload_errors
+from test_event_payloads import load_json, load_payload_validators, payload_errors
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "contracts/fixtures/valid"
-REGISTRY = json.loads((ROOT / "contracts/events/registry.json").read_text(encoding="utf-8"))
+REGISTRY = load_json(ROOT / "contracts/events/registry.json")
 
 
 def topics_from_03():
@@ -37,14 +36,14 @@ class EventRoutingTest(unittest.TestCase):
     def test_payload_without_partition_key_is_rejected(self):
         validators = load_payload_validators()
         for path in sorted(FIXTURES.glob("*.json")):
-            event = json.loads(path.read_text(encoding="utf-8"))
+            event = load_json(path)
             with self.subTest(fixture=path.name):
                 event["payload"].pop(REGISTRY[event["event_type"]]["partition_key"])
                 self.assertTrue(payload_errors(validators, event), "partition key must be required")
 
     def test_envelope_aggregate_id_is_the_declared_payload_id(self):
         for path in sorted(FIXTURES.glob("*.json")):
-            event = json.loads(path.read_text(encoding="utf-8"))
+            event = load_json(path)
             with self.subTest(fixture=path.name):
                 entry = REGISTRY[event["event_type"]]
                 self.assertIn("aggregate_id", entry, "registry must name the payload field used as aggregate_id")

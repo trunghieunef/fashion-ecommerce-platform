@@ -51,7 +51,7 @@
       "properties": {
         "variant_id": {"$ref": "#/$defs/uuid"},
         "sku": {"$ref": "#/$defs/sku"},
-        "quantity": {"type": "integer", "minimum": 1, "maximum": 2147483647}
+        "quantity": {"description": "05 order_items/cart_items/stock_reservation_items: 1-99", "type": "integer", "minimum": 1, "maximum": 99}
       },
       "additionalProperties": false
     }
