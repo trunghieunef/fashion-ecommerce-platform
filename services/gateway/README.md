@@ -35,11 +35,14 @@ timeout không được biến mutation thành retry hay thành công giả.
 |---|---|---|
 | `GATEWAY_PORT` | `8080` | Public listener local |
 | `CATALOG_BASE_URL` | `http://localhost:8081` | Catalog upstream trong default profile |
+| `GATEWAY_MANAGEMENT_PORT` | `9080` | Actuator/health; chỉ trong container hoặc mạng nội bộ, không publish |
 | `GATEWAY_ALLOWED_ORIGINS` | `http://localhost:4173` | Origin được phép gửi request ghi kèm cookie, phân tách bằng dấu phẩy; để rỗng thì từ chối tất cả |
 
-Actuator expose `health`, `info`, `metrics` trên cùng port public 8080; chấp nhận cho local,
-phải tách management port hoặc chặn trước staging (PLT-04). Gateway không có database,
-migration, Kafka topic hay credential riêng ở S1.
+Actuator (`health`, `info`, `metrics`) chạy trên management port riêng `GATEWAY_MANAGEMENT_PORT`
+(mặc định 9080). Port này chỉ nằm trong container, không publish ra ngoài và không được route;
+port public 8080 trả 404 cho `/actuator/**` (SEC-01, xong trước PLT-04). Compose healthcheck
+gọi `localhost:9080` bên trong container. Gateway không có database, migration, Kafka topic hay
+credential riêng ở S1.
 
 Default route cố ý dùng URI cấu hình để cô lập Gateway boundary. Profile `nacos-compat` bật
 Nacos discovery (`NACOS_SERVER_ADDR`, `NACOS_USERNAME`, `NACOS_PASSWORD`); đặt

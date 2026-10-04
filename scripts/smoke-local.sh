@@ -24,7 +24,9 @@ assert d["metadata"]["request_id"] and d["metadata"]["trace_id"], d
 
 status() { curl -sS -o /dev/null -w '%{http_code}' "$@"; }
 
-curl --fail --silent --show-error "$GATEWAY_URL/actuator/health/readiness" >/dev/null
+# Readiness is guaranteed by local-up.sh (--wait on the management-port healthcheck);
+# actuator must not be reachable on the public port.
+test "$(status "$GATEWAY_URL/actuator/health")" = 404
 check_page "$(curl --fail --silent --show-error "$GATEWAY_URL/api/v1/catalog/products?limit=1")"
 check_page "$(curl --fail --silent --show-error "$STOREFRONT_URL/api/v1/catalog/products?limit=1")"
 

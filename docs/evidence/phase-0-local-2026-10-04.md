@@ -236,6 +236,18 @@ thì test vẫn PASS vì Spring tự từ chối khi dựng `Jwt` có `exp ≤ i
 yêu cầu review, test `tokenExpiringBeforeItWasIssuedIsRejected` bảo vệ hành vi này.
 `./mvnw -pl services/platform-security test` PASS 16/16.
 
+## SEC-01 — tách actuator Gateway khỏi port public, TDD, 2026-10-04
+
+O06: chủ dự án (PO) ghi bảng retention đã duyệt vào 13 §3 (commit `58e5cf6`). Ngày hạn hoàn
+tất và giá trị cụ thể trong các khoảng vẫn chưa chọn, nên chưa có job cleanup/purge.
+
+| Bước | Kết quả |
+|---|---|
+| RED `actuatorIsNotServedOnThePublicPort` | `/actuator/health` trên port public trả 200 |
+| GREEN `management.server.port: ${GATEWAY_MANAGEMENT_PORT:9080}` | Gateway 12/12 (thêm test readiness trên management port) |
+| Compose healthcheck → `localhost:9080`; smoke kiểm `/actuator/health` public = 404 | `local-up` PASS, smoke PASS, Playwright 2/2 |
+| `bash scripts/nacos-compat-check.sh` | Lần 1 FAIL do lỗi Docker `network ... not found` khi start nacos (lỗi môi trường, không có container cũ để xóa); chạy lại PASS 4/4 (config import, discovery, `lb://`, reconnect) |
+
 ## Tiếp theo
 
 PLT-03: chạy CI remote, reviewer duyệt, sau đó service producer đầu tiên (CAT-01/USR-01)
