@@ -10,6 +10,7 @@
   <packaging>pom</packaging>
 
   <modules>
+    <module>services/platform-durability</module>
     <module>services/catalog-service</module>
     <module>services/gateway</module>
   </modules>
@@ -41,6 +42,11 @@
       <dependency>
         <groupId>org.testcontainers</groupId>
         <artifactId>testcontainers-postgresql</artifactId>
+        <version>${testcontainers.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.testcontainers</groupId>
+        <artifactId>testcontainers-kafka</artifactId>
         <version>${testcontainers.version}</version>
       </dependency>
       <dependency>

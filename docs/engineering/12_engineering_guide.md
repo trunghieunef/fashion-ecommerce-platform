@@ -58,6 +58,7 @@ chỉ copy JAR/`dist` vào image runtime pin tag + digest.
 | Toolchain/lockfile | `bash scripts/verify-toolchain.sh` |
 | Docs | `python3 -B -m unittest discover -s scripts -p 'test_*.py' -v` và `python3 -B scripts/check_docs.py` |
 | Backend (PostgreSQL thật) | `./mvnw test`; một test: `./mvnw -pl services/catalog-service -Dtest=ProductQueryIntegrationTest test` |
+| Durability primitives (PostgreSQL + Kafka thật) | `./mvnw -pl services/platform-durability test`; xem [README](../../services/platform-durability/README.md) |
 | Frontend | `npm ci && npm run typecheck && npm test && npm run build` |
 | Contract | Cài `python3 -m pip install -r tests/contracts/requirements.txt`; chạy `bash scripts/validate-contracts.sh` (Redocly lint + event envelope tests). Chỉ event: `python3 -B -m unittest discover -s tests/contracts -p 'test_*.py' -v` |
 | Khởi động stack | `bash scripts/local-up.sh` (tạo `infra/local/.env` từ example nếu chưa có) |

@@ -62,8 +62,12 @@ PLT-04/05, AWS/K3s/ECR/ArgoCD, provider sandbox và các task business Phase 1 k
 - Phase 0 local tiếp tục: `TASK:PLT-02` — **In progress**, assignee Codex (GPT-6),
   reviewer chủ dự án; envelope, payload schemas §5.3 cho event Phase 1A + order lifecycle,
   registry (schema/topic/partition key/aggregate_id theo §5.1/5.2), `openapi/common.yaml` (§1.2/1.3) và fixtures theo 03 đã có test local,
-  [evidence Phase 0](../evidence/phase-0-local-2026-10-04.md). `TASK:PLT-03`
-  — **Planned**, đã đọc/đối chiếu thiết kế; implementation chờ PLT-02 contract review.
+  [evidence Phase 0](../evidence/phase-0-local-2026-10-04.md). Contract core được Codex
+  (GPT-6) duyệt và merge PR #3 ngày 2026-10-04. `TASK:PLT-03` — **In progress**, assignee
+  Claude Code (agent), reviewer chủ dự án: `services/platform-durability` có
+  outbox/inbox/idempotency/background_tasks/lease với 31 test PostgreSQL + Kafka thật
+  (crash sau publish, lease hết hạn, cùng version không đảo sequence). Chưa có CI remote,
+  chưa có reviewer và chưa có service nào dùng thư viện.
   O01 chỉ chặn phần cloud, không chặn PLT-02/03 local; chưa provision/deploy.
 
 ## 2. Phase 0 — nền tảng

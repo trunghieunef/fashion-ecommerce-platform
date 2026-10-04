@@ -57,7 +57,7 @@ sequenceDiagram
     C->>K: Commit offset
 ```
 
-Relay không gửi aggregate_sequence sau khi sequence trước cùng aggregate chưa được ACK/đánh dấu SENT; event consumer vẫn tự bảo vệ trước replay/retry. Với cache, consumer ghi yêu cầu invalidate bền vững trước ACK rồi worker thực hiện; không đánh dấu đã xử lý khi Redis invalidate chưa có cơ chế retry. TTL là giới hạn stale bổ sung.
+Relay không gửi aggregate_sequence sau khi sequence trước cùng aggregate chưa được ACK/đánh dấu SENT; event consumer vẫn tự bảo vệ trước replay/retry. Hiện thực `TASK:PLT-03`: `OutboxRepository.claim/markSent/relay`, `InboxGuard.applyOnce`, `IdempotencyStore.begin/finish`, `BackgroundTaskRepository` và `LeaseRepository` tại [platform-durability](../../services/platform-durability/README.md); crash sau publish, lease hết hạn và thứ tự cùng version đã có test với PostgreSQL/Kafka thật. Với cache, consumer ghi yêu cầu invalidate bền vững trước ACK rồi worker thực hiện; không đánh dấu đã xử lý khi Redis invalidate chưa có cơ chế retry. TTL là giới hạn stale bổ sung.
 
 ## 2. `user-service`
 
