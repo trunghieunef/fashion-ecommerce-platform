@@ -59,7 +59,7 @@ Gate task là work package trong [backlog](../delivery/10_backlog.md). Mã task 
 | O03 | Merchant sandbox/production, callback domains, quyền query/refund VNPay/MoMo | PO + FINANCE | PAY-02/03 / G2 | Mock và negative tests |
 | O04 | Phí ship/COD, vùng SELF, nguồn địa chỉ, carrier account/SLA | PO + OPS | SHP-01/03 | Fixture giả và adapter |
 | O05 | Đổi trả, phí, hàng hỏng, bằng chứng, đơn tổng 0; giá đã gồm thuế hay chưa và yêu cầu hóa đơn | PO + FINANCE | ORD-01/04 / G2 | Baseline không cộng thuế ngoài giá niêm yết; chặn checkout total <= 0; nếu cần thuế tách dòng phải sửa pricing/schema trước code |
-| O06 | Retention PII, điều khoản/consent, nghĩa vụ pháp lý hiện hành | PO + phụ trách pháp lý | SEC-01 / G2; ngày cụ thể: chờ PO ghi | Data inventory theo field ở 13 §3 (SEC-01, 2026-10-04), masking; thời hạn lưu là gate G2, kỹ thuật không tự chốt; chưa bật purge tài chính |
+| O06 | Retention PII, điều khoản/consent, nghĩa vụ pháp lý hiện hành | PO + phụ trách pháp lý | SEC-01 / G2; ngày hạn hoàn tất: chưa được chỉ định | Chủ dự án (PO) duyệt toàn bộ bảng retention và ngoại lệ tại [13 §3](../operations/13_operations_security.md) ngày 2026-10-04, theo xác nhận trong phiên làm việc. Còn giá trị cụ thể trong các khung thời gian, chi tiết policy, nhóm dữ liệu ngoài bảng và xác minh pháp lý; O06 vẫn mở cho các phần này; chưa bật purge tài chính |
 | O07 | Email/SMS provider, domain gửi, consent, query/retry hỗ trợ | PO + DEVOPS | NOT-01 / G2; OTP trước G3 | Mail sink và contract |
 | O08 | Headcount, capacity, người QA, tên owner/reviewer | PO + TL | Planning đầu | Estimate theo role; chưa cam kết ngày |
 | O09 | Bộ tải/dữ liệu/hạ tầng/ngân sách chứng minh SLO | TL + QA + DEVOPS | QA-03 / G2 | Script và synthetic dataset |

@@ -74,7 +74,9 @@ PLT-04/05, AWS/K3s/ECR/ArgoCD, provider sandbox và các task business Phase 1 k
   `CsrfOriginFilter` ở Gateway (8 test), `scripts/scan-secrets.sh` trong Application CI,
   data inventory theo field và permission codes ở 13, cách nạp secret. Còn mở: JWT người dùng,
   `auth_version` và U03/U24 (USR-01/02), service đầu tiên nối service token, actuator Gateway
-  trên port public (trước PLT-04), O06 chưa có ngày/thời hạn lưu.
+  trên port public (trước PLT-04). Chủ dự án (PO) đã duyệt toàn bộ [bảng retention và ngoại lệ](../operations/13_operations_security.md)
+  ngày 2026-10-04; O06 còn ngày hạn, giá trị cụ thể trong các khung thời gian, chi tiết policy,
+  nhóm dữ liệu ngoài bảng và xác minh pháp lý; chưa triển khai cleanup/purge.
   O01 chỉ chặn phần cloud, không chặn PLT-02/03 local; chưa provision/deploy.
 
 ## 2. Phase 0 — nền tảng
