@@ -192,6 +192,50 @@ Cả hai finding đúng: `TransactionTemplate` mặc định REQUIRED nên join 
 RED: 5 test FAIL đúng lý do; GREEN: `./mvnw -pl services/platform-durability test` PASS 36/36.
 README của module có thêm bảng ranh giới transaction.
 
+## SEC-01 security baseline — Claude Code, TDD, 2026-10-04
+
+`TASK:SEC-01` · REQ: USR-07, USR-08, XCT-02, XCT-03, XCT-06 · dependency: PLT-01.
+Chủ dự án chọn trong phiên: ADR-19 (service JWT ES256 tự ký + allowlist), ADR-20 (CSRF bằng
+Origin/Fetch-Metadata + SameSite), gitleaks v8.30.1 pin digest.
+
+| Chu trình | RED (lý do đã xác nhận) | GREEN |
+|---|---|---|
+| Service token | Thiếu `ServiceTokenIssuer/Verifier` (compile). Lần chạy đầu 2 test hợp lệ bị từ chối: debug cho thấy Nimbus không tìm thấy key vì JWK không có `kid` | `platform-security`: ES256, `kid` = caller; 12/12 |
+| CSRF Gateway | 4 test từ chối FAIL (request vẫn bị forward); 4 test không chặn nhầm pass sẵn | `CsrfOriginFilter`, `GATEWAY_ALLOWED_ORIGINS`; gateway 10/10 |
+| Secret scan | Repo sạch FAIL vì chưa có script; test trên Windows gọi nhầm WSL bash nên đổi sang đường dẫn bash tuyệt đối | `scripts/scan-secrets.sh` + `.gitleaksignore` (1 fingerprint synthetic có lý do) |
+
+Mutation check (sửa tạm rồi khôi phục): bỏ kiểm audience, bỏ giới hạn TTL, bỏ `sub = iss`,
+bỏ kiểm thời hạn đều làm đúng test FAIL. Với scan: quét thư mục rỗng làm test token FAIL.
+Lúc đầu bỏ `--redact` mà test vẫn PASS: assertion redact là rỗng vì gitleaks không in finding,
+nên đã thêm `--verbose`; sau đó bỏ redact làm test FAIL.
+
+| Lệnh | Kết quả |
+|---|---|
+| `./mvnw -B test` | PASS: platform-durability 36, platform-security 12, catalog 8, gateway 10 |
+| `bash scripts/scan-secrets.sh` | `no leaks found`, quét 26 commit (sau khi ghi 1 fingerprint synthetic) |
+| Test `scripts/` (có Docker); `check_docs.py`; `validate-contracts.sh`; `verify-toolchain.sh`; `git diff --check` | PASS |
+| `local-up.sh` → `smoke-local.sh` → `npx playwright test` | PASS; Playwright 2/2 |
+| POST có cookie qua storefront :4173, `Origin: https://evil.example` / `http://localhost:4173` | 403 tại Gateway / qua được tới catalog (405 vì catalog chưa có POST) |
+
+Lệch so với plan Task 3: threat model và data inventory được viết vào 13 (tài liệu chủ quản),
+không tạo `docs/security/*` trùng nội dung. Chưa làm `ActorContext` và JWT người dùng vì
+USR-01 chưa có issuer. Chưa có module `tests/integration/security`: test nằm trong module.
+PII redaction trong log ứng dụng thuộc PLT-05; ở đây chỉ chứng minh verifier không log token.
+
+## Xử lý review PR #5 — Claude Code, TDD, 2026-10-04
+
+Review của Codex (GPT-6) tại `c6aff6a` gồm 2 finding P2 trong `ServiceTokenVerifier`; CI của PR đều PASS. Cả hai đều đúng.
+
+| Finding | RED | GREEN |
+|---|---|---|
+| Token có `iat` ở tương lai được chấp nhận (issuer lệch đồng hồ +365 ngày thì dùng được cả năm) | `tokenIssuedInTheFutureBeyondSkewIsRejected` FAIL | validator `lifetime`: `iat ≤ now + 5s`, `exp > iat`, `exp ≤ iat + TTL + 5s`; test biên `iat` +3s vẫn hợp lệ |
+| JWE gây `NullPointerException` thay vì từ chối | `encryptedJwtIsRejectedWithoutException` ERROR (NPE) | chỉ parse `SignedJWT`, nên JWE và token không ký lỗi ngay ở bước parse |
+
+Mutation: bỏ chặn `iat` tương lai → FAIL; parse lại bằng `JWTParser` → ERROR. Bỏ `exp > iat`
+thì test vẫn PASS vì Spring tự từ chối khi dựng `Jwt` có `exp ≤ iat`; giữ kiểm tra tường minh theo
+yêu cầu review, test `tokenExpiringBeforeItWasIssuedIsRejected` bảo vệ hành vi này.
+`./mvnw -pl services/platform-security test` PASS 16/16.
+
 ## Tiếp theo
 
 PLT-03: chạy CI remote, reviewer duyệt, sau đó service producer đầu tiên (CAT-01/USR-01)

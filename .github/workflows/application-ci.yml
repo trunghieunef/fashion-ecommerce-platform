@@ -23,6 +23,8 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           persist-credentials: false
+          # Full history so the secret scan covers every commit, not only the tip.
+          fetch-depth: 0
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
@@ -34,6 +36,8 @@ jobs:
           cache: npm
       - name: Verify toolchain and lockfiles
         run: bash scripts/verify-toolchain.sh
+      - name: Secret scan (gitleaks, pinned digest)
+        run: bash scripts/scan-secrets.sh
       - name: Documentation checks
         run: |
           python3 -B -m unittest discover -s scripts -p 'test_*.py' -v

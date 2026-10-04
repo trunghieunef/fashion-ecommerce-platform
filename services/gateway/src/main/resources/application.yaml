@@ -21,6 +21,11 @@ spring:
               predicates:
                 - Path=/api/v1/catalog/**
 
+fashion:
+  security:
+    # ADR-20: browser origins allowed for cookie-authenticated mutations; empty = reject all.
+    allowed-origins: ${GATEWAY_ALLOWED_ORIGINS:http://localhost:4173}
+
 management:
   endpoints:
     web:

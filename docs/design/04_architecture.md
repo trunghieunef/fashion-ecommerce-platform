@@ -97,6 +97,6 @@ Readiness phản ánh khả năng nhận request của pod, không buộc mọi 
 
 Prometheus/Grafana metrics, JSON logs/Loki, OTel/Tempo traces. Correlation xuyên HTTP/Kafka; không đưa user_id/order_no làm metric label cardinality cao. Theo dõi riêng checkout acceptance, payment readiness, age UNKNOWN, lease expiry, outbox lag, refund pending, COD outstanding.
 
-JWT verify và ownership tại service; Gateway strip header danh tính của client; service token/mTLS kiểm tra caller/expiry/audience. Cookie auth cần CSRF/origin; admin sensitive kiểm tra auth_version hiện hành. Secret, token, OTP và payment URL nhạy cảm không vào log/cache response công khai.
+JWT verify và ownership tại service; Gateway strip header danh tính của client; service token kiểm tra caller/expiry/audience theo ADR-19 (JWT ES256 tự ký, allowlist key theo caller; [platform-security](../../services/platform-security/README.md)). Cookie auth cần CSRF/origin theo ADR-20 (Gateway `CsrfOriginFilter`); admin sensitive kiểm tra auth_version hiện hành. Secret, token, OTP và payment URL nhạy cảm không vào log/cache response công khai.
 
 SLO và test profile ở [11](../quality/11_test_strategy.md); controls, thresholds, runbook và go-live ở [13](../operations/13_operations_security.md). Threat checks và restore drill là acceptance, không chỉ checklist kiến trúc.

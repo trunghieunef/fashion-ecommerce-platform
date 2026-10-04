@@ -8,8 +8,8 @@ AWS đã chọn, chưa provision. [16 AWS deployment](../engineering/16_aws_depl
 
 | Boundary / rủi ro | Control bắt buộc | Proof |
 |---|---|---|
-| Browser → Gateway: giả danh header | Strip client identity headers; JWT/session verify, CORS/CSRF theo cookie | S1 Gateway strip `X-User-Id`, `X-User-Roles`, `X-Actor-Id`, `X-Service-Name`; U03/U24 còn mở |
-| Gateway → service: bypass gateway | Private network/caller identity + service authorization/ownership | S1 local: catalog không publish port, `/internal/**` 404 qua smoke; Gateway actuator (`health,info,metrics`) đang cùng port public — phải tách/chặn trước PLT-04. Token sai audience còn mở |
+| Browser → Gateway: giả danh header | Strip client identity headers; JWT/session verify, CORS/CSRF theo cookie | S1 Gateway strip `X-User-Id`, `X-User-Roles`, `X-Actor-Id`, `X-Service-Name`. SEC-01: `CsrfOriginFilter` (ADR-20) từ chối request ghi có cookie mà Origin lạ, `Origin: null`, cross-site, hoặc thiếu cả Origin lẫn Fetch-Metadata (test Gateway). JWT người dùng và U03/U24 còn mở (USR-01/02) |
+| Gateway → service: bypass gateway | Private network/caller identity + service authorization/ownership | S1 local: catalog không publish port, `/internal/**` 404 qua smoke; Gateway actuator (`health,info,metrics`) đang cùng port public — phải tách/chặn trước PLT-04. SEC-01: `platform-security` (ADR-19) từ chối token sai audience, caller ngoài allowlist, khóa sai, hết hạn hoặc sống quá TTL, `alg: none`, HS256; chưa service nào nối vào |
 | Guest cart/order: IDOR | Credential ngẫu nhiên đủ mạnh, hash server, cookie secure; scoped resource | T21 |
 | Service → DB: đọc chéo | Credentials riêng, least privilege, migrations role tách runtime | Runtime không đọc DB khác/không DDL |
 | Provider → callback: giả/trễ/lặp | Signature/auth theo adapter; reference/merchant/amount/currency; dedupe và TX trước ACK | U16/T06 |
@@ -28,6 +28,23 @@ Không đưa role/user_id/amount từ public input thành authority. Account lin
 | Voucher/campaign/template/marketing | Không | Không | Có | Theo permission | Không |
 | User role/lock | Không | Không | Không | Có | Không |
 | Deploy/backup/replay hạ tầng | Không | Phối hợp đối soát | Không | Không mặc nhiên | Có theo release/incident process |
+
+Permission code đề xuất để USR-02 seed (từ 03 §3). Service kiểm tra code, không kiểm tra tên role; đổi code thì phải cập nhật bảng này, seed và test cùng lúc:
+
+| Permission | Endpoint admin (03 §3) | Role mặc định | Phase |
+|---|---|---|---|
+| `user.manage` | users, roles, lock | SUPER_ADMIN | 1 |
+| `catalog.write` | products, variants, categories, brands, collections, size-guides, images | OPS | 1 |
+| `order.read` | GET orders (FINANCE nhận bản redacted) | OPS, FINANCE | 1 |
+| `order.fulfill`, `order.cancel`, `order.return` | confirm-cod, pack; cancel; returns | OPS | 1 |
+| `inventory.read`, `inventory.adjust` | skus, transactions; adjust, import | OPS | 1 |
+| `shipping.read`, `shipping.self_event`, `shipping.rules` | shipments; self-events; rules | OPS | 1 |
+| `payment.read`, `payment.refund`, `payment.settle`, `payment.reconcile` | payments; refunds; cod-settlements; reconciliation | FINANCE | 1 |
+| `review.moderate` | reviews approve/reject | OPS | 2 |
+| `promotion.manage`, `notification.template`, `notification.campaign` | vouchers, campaigns; templates; notification campaigns | MARKETING | 2 |
+| `report.orders`, `report.stock`, `report.cash` | reports | OPS, OPS, FINANCE | 2 |
+
+Caller allowlist cho `/internal` là cột "Caller → owner" ở 03 §4. Token service (ADR-19) chỉ chứng minh request đến từ service nào; endpoint vẫn phải đối chiếu allowlist của chính operation đó.
 
 Một người có thể nhiều role nhưng audit phải ghi actor/action/reason thực. Break-glass access cần incident ID, thời hạn, reviewer và audit; không tạo admin password mặc định dùng chung.
 
@@ -48,6 +65,21 @@ Một người có thể nhiều role nhưng audit phải ghi actor/action/reaso
 Các mốc kỹ thuật không thay thời hạn pháp lý. PO/phụ trách pháp lý xác minh nghĩa vụ hiện hành trước G2, ghi nguồn và ngày vào O06. Request xem/xóa dữ liệu phải xác minh actor, kiểm tra nghĩa vụ lưu và xử lý từng DB owner; không cascade xóa order/payment lịch sử vì user yêu cầu xóa account.
 
 Secret inventory gồm JWT signing keys, service credentials, DB/Kafka/Redis credentials, merchant secrets, mail/SMS keys. Mỗi secret có owner, env, rotation plan; không lưu trong Nacos plaintext, image, Git hoặc ticket.
+
+Data inventory theo field (SEC-01, từ 05). Dùng để masking log và để O06 chốt thời hạn lưu; bảng này **không** quyết định thời hạn lưu:
+
+| DB owner | Field PII / secret | Xử lý bắt buộc |
+|---|---|---|
+| user | `users.email`, `phone`, `full_name`; `user_addresses.*` (người nhận, phone, địa chỉ); `user_oauth.provider_email`; `refresh_tokens.device_info` | Không log nguyên văn; mask email/phone ở log/admin |
+| user | `password_hash`, `refresh_tokens.token_hash`, `user_action_tokens.token_hash`, `target_email` | Không trả qua API/admin, không log; chỉ lưu hash |
+| cart / order | `carts.guest_token_hash`, `orders.guest_access_hash`, `checkout_hash` | Chỉ lưu hash; cookie plaintext không vào log/URL |
+| order | `orders.contact_email`, `contact_phone`, `shipping_address`, `note`; `order_status_history.reason` | Owner + OPS; FINANCE chỉ thấy bản redacted (03 §3) |
+| payment | `payments.payment_url`, `provider_txn_id`; `payment_transactions.sanitized_payload`; `reconciliation_items.evidence` | Lọc field nhạy cảm của provider trước khi lưu; không lưu dữ liệu thẻ hay secret ký |
+| shipping | `shipments.from_address`, `to_address`, `label_url`; `shipment_status_history.sanitized_payload` | Không public `label_url`; payload đã lọc |
+| notification | `notifications.recipient`, `rendered_subject`, `rendered_body`; `notification_preferences.recipient`, `unsubscribe_token_hash` | OTP/reset chỉ lưu marker; TTL ngắn theo O06 |
+| mọi service | `audit_logs.before_data`, `after_data`, `source_ip`; outbox/inbox `payload`; `idempotency_requests.response_body` | Lọc PII không cần thiết; không chứa secret |
+
+Nạp secret (SEC-01): mọi secret vào qua biến môi trường hoặc file mount từ Compose `.env` local (giá trị synthetic, `.env` đã gitignore) hoặc Kubernetes Secret ở staging (PLT-04). Private key service (ADR-19) mỗi service một khóa, theo từng môi trường. Public key caller, allowed origins và issuer/audience là config không bí mật. `bash scripts/scan-secrets.sh` (gitleaks v8.30.1 pin digest) quét toàn bộ git history trong Application CI. Finding không phải secret được ghi vào `.gitleaksignore` theo fingerprint kèm lý do; không bỏ qua cả file hay cả rule.
 
 ## 4. Monitoring và escalation
 

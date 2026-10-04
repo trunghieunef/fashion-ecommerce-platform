@@ -143,6 +143,7 @@ Không lấy browser UI tests thay unit tests nghiệp vụ. Mọi acceptance v�
 Các phần chưa chọn exact version có chủ ý:
 
 - **PLT-02:** OpenAPI lint/example validation đã chọn `@redocly/cli` **2.54.3** (root devDependency, không kéo dependency con; rule example sai schema nâng thành error; `telemetry: off` và script đặt `REDOCLY_TELEMETRY=off`, `REDOCLY_SUPPRESS_UPDATE_NOTICE=true` để không gọi dịch vụ ngoài). Event JSON Schema validator, generator/mock và Mermaid renderer chọn khi có producer/nhu cầu thật; không thêm Swagger runtime chỉ để có tài liệu.
+- **SEC-01 (2026-10-04):** quét secret bằng gitleaks **v8.30.1** chạy qua Docker image `zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f` (`--network none`, mount read-only), chủ dự án chọn. Service token ES256 (ADR-19) dùng `spring-security-oauth2-jose` theo Spring Security BOM do Boot import (kéo theo Nimbus JOSE), không pin riêng.
 - **SEC-01/PLT-04:** secret/dependency/container scanners và rule/database update policy. Bắt buộc trước release, không coi trì hoãn chọn tool là bỏ scan.
 - **QA-03:** load runner và failure harness theo profile L1/L2/L3; không suy unit/E2E tool đáp ứng load test.
 - **PLT-05:** log collector, alert routing, retention, sampling và manifests; kiểm tra resource budget trước cài.

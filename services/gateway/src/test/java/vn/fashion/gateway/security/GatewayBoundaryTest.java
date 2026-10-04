@@ -42,6 +42,7 @@ class GatewayBoundaryTest {
   @DynamicPropertySource
   static void catalogBaseUrl(DynamicPropertyRegistry registry) {
     registry.add("CATALOG_BASE_URL", CATALOG::baseUrl);
+    registry.add("fashion.security.allowed-origins", () -> "http://localhost:4173");
   }
 
   @BeforeAll
@@ -78,6 +79,64 @@ class GatewayBoundaryTest {
         .expectStatus().isNotFound();
 
     assertThat(CATALOG.requestCount()).isZero();
+  }
+
+  @Test
+  void crossOriginCookieMutationIsRejectedWithoutForwarding() {
+    cookiePost().header("Origin", "https://evil.example").exchange()
+        .expectStatus().isForbidden()
+        .expectBody().jsonPath("$.code").isEqualTo("FORBIDDEN")
+        .jsonPath("$.metadata.request_id").exists();
+
+    assertThat(CATALOG.requestCount()).isZero();
+  }
+
+  @Test
+  void cookieMutationWithoutOriginOrFetchMetadataFailsClosed() {
+    cookiePost().exchange().expectStatus().isForbidden();
+    assertThat(CATALOG.requestCount()).isZero();
+  }
+
+  @Test
+  void crossSiteFetchMetadataIsRejected() {
+    cookiePost().header("Sec-Fetch-Site", "cross-site").exchange().expectStatus().isForbidden();
+    assertThat(CATALOG.requestCount()).isZero();
+  }
+
+  @Test
+  void opaqueNullOriginIsRejected() {
+    cookiePost().header("Origin", "null").exchange().expectStatus().isForbidden();
+    assertThat(CATALOG.requestCount()).isZero();
+  }
+
+  @Test
+  void allowlistedOriginCookieMutationIsForwarded() {
+    cookiePost().header("Origin", "http://localhost:4173").exchange().expectStatus().isOk();
+    assertThat(CATALOG.requestCount()).isEqualTo(1);
+  }
+
+  @Test
+  void sameOriginFetchMetadataWithoutOriginIsForwarded() {
+    cookiePost().header("Sec-Fetch-Site", "same-origin").exchange().expectStatus().isOk();
+    assertThat(CATALOG.requestCount()).isEqualTo(1);
+  }
+
+  @Test
+  void bearerMutationWithoutCookieIsNotCsrfAndIsForwarded() {
+    client.post().uri("/api/v1/catalog/products").header("Authorization", "Bearer synthetic")
+        .header("Origin", "https://evil.example").exchange().expectStatus().isOk();
+    assertThat(CATALOG.requestCount()).isEqualTo(1);
+  }
+
+  @Test
+  void safeMethodWithCookieIsNotBlocked() {
+    client.get().uri("/api/v1/catalog/products?limit=1").header("Cookie", "guest_cart=synthetic")
+        .header("Origin", "https://evil.example").exchange().expectStatus().isOk();
+    assertThat(CATALOG.requestCount()).isEqualTo(1);
+  }
+
+  private WebTestClient.RequestHeadersSpec<?> cookiePost() {
+    return client.post().uri("/api/v1/catalog/products").header("Cookie", "guest_cart=synthetic");
   }
 
   private static final class RecordingCatalogServer implements HttpHandler {

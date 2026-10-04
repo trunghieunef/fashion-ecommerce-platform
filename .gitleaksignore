@@ -1,0 +1,4 @@
+# gitleaks fingerprints (commit:file:rule:line) reviewed as NOT a secret. Add one line per finding
+# with a reason; never ignore whole files or rules. Reviewed 2026-10-04 (TASK:SEC-01).
+# Synthetic local-only Nacos token, base64 of "s1-local-synthetic-nacos-token-key-0001".
+c10356bf0ac2e0bda34fcb841a5b61d029e56580:infra/local/.env.example:generic-api-key:21

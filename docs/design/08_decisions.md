@@ -47,6 +47,8 @@ Gate task là work package trong [backlog](../delivery/10_backlog.md). Mã task 
 | ADR-16 | R1 chọn Java 21 LTS + Boot 4.0.8 + Cloud 2025.1.3 + Alibaba 2025.1.0.0; Nacos server 3.2.4/client 3.1.1 | Research theo yêu cầu chủ dự án ngày 2026-09-19; thay phần Boot 3 của ADR-02 để tránh train Cloud hết hỗ trợ. Không chọn Boot 4.1 ngoài mapping Alibaba; exact patches chưa test. Nguồn và gate tại 17; TL nghiệm thu PLT-01, chưa duyệt production |
 | ADR-17 | React + Vite SPA cho storefront/admin, Node 24 LTS + npm; static hosting | Ưu tiên ít runtime và dễ deploy. Giả định MVP chưa bắt buộc SEO/HTML sản phẩm từ server; PO/FE xác nhận trước WEB-01. Nếu không đạt, mở lại lựa chọn SSR/prerender; không tự thêm Next.js/BFF. Version/peer constraints ở 17 |
 | ADR-18 | Sprint 1 chỉ triển khai local; AWS/cloud bắt đầu sau checkpoint S1-local | Chủ dự án chốt 2026-09-19. Sprint 1 hoàn thành nền tảng local chạy từ fresh clone, không đồng nghĩa toàn bộ G2 MVP; không provision AWS/K3s/ECR/ArgoCD hoặc gọi provider thật. Phạm vi và exit ở 09/10 |
+| ADR-19 | Service identity cho `/internal`: mỗi service tự ký JWT ES256 bằng khóa riêng (`iss = sub = kid =` tên service, `aud =` service đích, TTL 60s); service đích kiểm tra theo allowlist public key của từng caller, sau đó endpoint kiểm tra caller allowlist 03 §4 | Chủ dự án chọn 2026-10-04 (SEC-01). Chạy được cả Compose local và K3s, không cần CA hay service mesh. Phương án khác: K8s service-account token (local không có), mTLS (nặng vận hành). Private key qua Secret, public key là config. Hiện thực tại `services/platform-security`; chưa có service gọi internal thật |
+| ADR-20 | CSRF cho request ghi dùng cookie: kiểm `Origin` theo allowlist, nếu không có Origin thì chỉ nhận `Sec-Fetch-Site: same-origin`, không có cả hai thì từ chối; cookie `Secure`, `HttpOnly`, `SameSite`. Không dùng CSRF token | Chủ dự án chọn 2026-10-04 (SEC-01). Thực thi tại Gateway (`CsrfOriginFilter`, `GATEWAY_ALLOWED_ORIGINS`). FE không cần gửi token. Request chỉ dùng Bearer không bị kiểm. Nếu sau này cần double-submit token thì ghi ADR mới |
 
 ## 4. Vấn đề mở
 
@@ -57,7 +59,7 @@ Gate task là work package trong [backlog](../delivery/10_backlog.md). Mã task 
 | O03 | Merchant sandbox/production, callback domains, quyền query/refund VNPay/MoMo | PO + FINANCE | PAY-02/03 / G2 | Mock và negative tests |
 | O04 | Phí ship/COD, vùng SELF, nguồn địa chỉ, carrier account/SLA | PO + OPS | SHP-01/03 | Fixture giả và adapter |
 | O05 | Đổi trả, phí, hàng hỏng, bằng chứng, đơn tổng 0; giá đã gồm thuế hay chưa và yêu cầu hóa đơn | PO + FINANCE | ORD-01/04 / G2 | Baseline không cộng thuế ngoài giá niêm yết; chặn checkout total <= 0; nếu cần thuế tách dòng phải sửa pricing/schema trước code |
-| O06 | Retention PII, điều khoản/consent, nghĩa vụ pháp lý hiện hành | PO + phụ trách pháp lý | SEC-01 / G2 | Data inventory, masking; chưa bật purge tài chính |
+| O06 | Retention PII, điều khoản/consent, nghĩa vụ pháp lý hiện hành | PO + phụ trách pháp lý | SEC-01 / G2; ngày cụ thể: chờ PO ghi | Data inventory theo field ở 13 §3 (SEC-01, 2026-10-04), masking; thời hạn lưu là gate G2, kỹ thuật không tự chốt; chưa bật purge tài chính |
 | O07 | Email/SMS provider, domain gửi, consent, query/retry hỗ trợ | PO + DEVOPS | NOT-01 / G2; OTP trước G3 | Mail sink và contract |
 | O08 | Headcount, capacity, người QA, tên owner/reviewer | PO + TL | Planning đầu | Estimate theo role; chưa cam kết ngày |
 | O09 | Bộ tải/dữ liệu/hạ tầng/ngân sách chứng minh SLO | TL + QA + DEVOPS | QA-03 / G2 | Script và synthetic dataset |
@@ -93,5 +95,10 @@ Gate task là work package trong [backlog](../delivery/10_backlog.md). Mã task 
   theo schema 05, không lấy SQL minh họa lệch schema trong plan làm migration.
   Parent PLT-02 chưa Done; primitive implementation và integration PostgreSQL/Kafka
   còn chờ contract review.
+- SEC-01 (2026-10-04): chủ dự án chọn ADR-19 (service JWT ES256 tự ký + allowlist), ADR-20
+  (CSRF bằng Origin/Fetch-Metadata + SameSite) và gitleaks v8.30.1 pin digest để quét secret.
+  Thêm `services/platform-security`, `CsrfOriginFilter` ở Gateway, `scripts/scan-secrets.sh`
+  (Application CI quét toàn bộ history) và data inventory/permission codes ở 13. O06 vẫn mở:
+  owner PO + pháp lý, chưa có ngày và thời hạn lưu; không suy luận kết luận pháp lý.
 
 Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác và lý do; ảnh hưởng PRD/API/schema/test/task; người quyết định; ngày; link bằng chứng. Chưa có chữ ký phê duyệt giả định thương mại.
