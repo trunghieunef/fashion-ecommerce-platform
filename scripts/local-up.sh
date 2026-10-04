@@ -1,12 +1,30 @@
 #!/usr/bin/env bash
-# Build host artifacts with the pinned toolchains, then start the S1-local stack.
+# Build host artifacts with the pinned toolchains, then start the local stack.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 ENV_FILE="${ENV_FILE:-infra/local/.env}"
 [[ -f "$ENV_FILE" ]] || cp infra/local/.env.example "$ENV_FILE"
 
+# Add keys introduced after this .env was created, with the example's synthetic values.
+while IFS= read -r line; do
+  [[ "$line" =~ ^([A-Z0-9_]+)= ]] || continue
+  grep -q "^${BASH_REMATCH[1]}=" "$ENV_FILE" || printf '%s\n' "$line" >> "$ENV_FILE"
+done < infra/local/.env.example
+
+# Local-only access-token signing key (TASK:USR-01a); generated once, never committed.
+if ! grep -q '^USER_JWT_PRIVATE_KEY=.' "$ENV_FILE"; then
+  key="$(openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 |
+    openssl pkcs8 -topk8 -nocrypt -outform DER | base64 | tr -d '\r\n')"
+  sed -i "s|^USER_JWT_PRIVATE_KEY=.*|USER_JWT_PRIVATE_KEY=$key|" "$ENV_FILE"
+fi
+
 ./mvnw -q -DskipTests package
 npm ci
 npm run build --workspace @fashion/storefront
-docker compose --env-file "$ENV_FILE" -f infra/local/compose.yaml up --build --wait -d
+
+C=(docker compose --env-file "$ENV_FILE" -f infra/local/compose.yaml)
+"${C[@]}" up --wait -d postgres
+# Re-apply the idempotent database/role scripts so existing volumes get databases added later.
+"${C[@]}" exec -T postgres sh -c 'for f in /docker-entrypoint-initdb.d/*.sh; do bash "$f"; done' >/dev/null
+"${C[@]}" up --build --wait -d

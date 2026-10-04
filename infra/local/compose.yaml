@@ -7,11 +7,14 @@ services:
       POSTGRES_PASSWORD: ${CATALOG_POSTGRES_ADMIN_PASSWORD:?set CATALOG_POSTGRES_ADMIN_PASSWORD}
       CATALOG_MIGRATION_DB_PASSWORD: ${CATALOG_MIGRATION_DB_PASSWORD:?set CATALOG_MIGRATION_DB_PASSWORD}
       CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:?set CATALOG_DB_PASSWORD}
+      USER_MIGRATION_DB_PASSWORD: ${USER_MIGRATION_DB_PASSWORD:?set USER_MIGRATION_DB_PASSWORD}
+      USER_DB_PASSWORD: ${USER_DB_PASSWORD:?set USER_DB_PASSWORD}
     ports:
       - "127.0.0.1:${CATALOG_POSTGRES_PORT:-5432}:5432"
     volumes:
       - catalog-postgres-data:/var/lib/postgresql/data
       - ./postgres-init/01-catalog-roles.sh:/docker-entrypoint-initdb.d/01-catalog-roles.sh:ro
+      - ./postgres-init/02-user-db.sh:/docker-entrypoint-initdb.d/02-user-db.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
@@ -65,11 +68,33 @@ services:
       timeout: 3s
       retries: 30
 
+  # TASK:USR-01a. Private: no published port; reachable only through the Gateway.
+  user-service:
+    build: ../../services/user-service
+    environment:
+      USER_DB_URL: jdbc:postgresql://postgres:5432/users
+      USER_DB_USERNAME: user_runtime
+      USER_DB_PASSWORD: ${USER_DB_PASSWORD:?set USER_DB_PASSWORD}
+      USER_MIGRATION_DB_URL: jdbc:postgresql://postgres:5432/users
+      USER_MIGRATION_DB_USERNAME: user_migration
+      USER_MIGRATION_DB_PASSWORD: ${USER_MIGRATION_DB_PASSWORD:?set USER_MIGRATION_DB_PASSWORD}
+      USER_JWT_PRIVATE_KEY: ${USER_JWT_PRIVATE_KEY:?run scripts/local-up.sh to generate USER_JWT_PRIVATE_KEY}
+      USER_JWT_KEY_ID: ${USER_JWT_KEY_ID:-user-local}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8082/actuator/health/readiness"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
   gateway:
     build: ../../services/gateway
     environment:
       # nacos-compat proof sets GATEWAY_CATALOG_BASE_URL=lb://catalog-service.
       CATALOG_BASE_URL: ${GATEWAY_CATALOG_BASE_URL:-http://catalog:8081}
+      USER_BASE_URL: http://user-service:8082
       SPRING_PROFILES_ACTIVE: ${APP_PROFILES:-}
       NACOS_SERVER_ADDR: nacos:8848
       NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
@@ -78,6 +103,8 @@ services:
       - "127.0.0.1:${GATEWAY_PORT:-8080}:8080"
     depends_on:
       catalog:
+        condition: service_healthy
+      user-service:
         condition: service_healthy
       nacos:
         condition: service_healthy

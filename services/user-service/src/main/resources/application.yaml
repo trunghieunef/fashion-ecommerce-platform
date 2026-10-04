@@ -1,0 +1,50 @@
+server:
+  port: ${SERVER_PORT:8082}
+
+spring:
+  application:
+    name: user-service
+  datasource:
+    url: ${USER_DB_URL:jdbc:postgresql://localhost:5432/users}
+    username: ${USER_DB_USERNAME:user_runtime}
+    password: ${USER_DB_PASSWORD:user_runtime_local}
+    hikari:
+      maximum-pool-size: ${USER_DB_MAX_POOL_SIZE:10}
+  flyway:
+    url: ${USER_MIGRATION_DB_URL:jdbc:postgresql://localhost:5432/users}
+    user: ${USER_MIGRATION_DB_USERNAME:user_migration}
+    password: ${USER_MIGRATION_DB_PASSWORD:user_migration_local}
+    locations: classpath:db/migration
+  jackson:
+    # JSON names are snake_case (03 section 1.1).
+    property-naming-strategy: SNAKE_CASE
+
+fashion:
+  user:
+    jwt:
+      # Base64 PKCS#8 EC P-256 private key; no default so the service fails closed without it.
+      private-key: ${USER_JWT_PRIVATE_KEY}
+      key-id: ${USER_JWT_KEY_ID:user-local}
+
+logging:
+  structured:
+    format:
+      # PLT-05: JSON (ECS) logs with trace ids; every string value is redacted (XCT-06).
+      console: ecs
+    json:
+      customizer: vn.fashion.platform.security.PiiRedactingJsonCustomizer
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,db

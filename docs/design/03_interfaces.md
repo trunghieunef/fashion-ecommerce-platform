@@ -52,8 +52,8 @@ Mutation cart/admin dùng expected_version; thiếu version bắt buộc trả 4
 
 | Method | Path | Auth / phase | Input → output |
 |---|---|---|---|
-| POST | /auth/register | Public / 1 | email,password,name,locale → user/access token + refresh cookie |
-| POST | /auth/login | Public / 1 | email,password → access token 900s + refresh cookie |
+| POST | /auth/register | Public / 1 | email,password,full_name,locale → user/access token + refresh cookie; email đã có → 409 CONFLICT |
+| POST | /auth/login | Public / 1 | email,password → access token 900s + refresh cookie; mọi lỗi đăng nhập (gồm tài khoản đang khóa) trả cùng 401 INVALID_CREDENTIALS |
 | POST | /auth/refresh | Refresh cookie / 1 | CSRF/origin → access mới, rotate cookie |
 | POST | /auth/logout | Session / 1 | revoke family, clear cookie |
 | POST | /auth/password/forgot | Public / 1 | email → thông báo chung 202 |
@@ -70,7 +70,7 @@ Mutation cart/admin dùng expected_version; thiếu version bắt buộc trả 4
 | GET | /auth/social/{provider}/callback | Provider flow / 2 | verified identity → session hoặc yêu cầu link |
 | POST, DELETE | /users/me/social/{provider} | Member + reauth / 2 | Link có verified provider proof / unlink nếu còn phương thức đăng nhập |
 
-Refresh token không nằm JSON response/localStorage. Guest có credential ngẫu nhiên do cart/order cấp bằng Secure HttpOnly cookie; lưu hash ở server.
+Contract thực thi của 4 endpoint register/login/refresh/logout (`TASK:USR-01` phần 1a): [`contracts/openapi/user.yaml`](../../contracts/openapi/user.yaml). Access token là JWT ES256 (`iss=user-service`, `aud=fashion-api`, `sub`, `auth_version`, `kid`), public key cấp cho verifier qua config (ADR-21). Cookie `refresh_token`: HttpOnly, Secure, SameSite=Strict, Path=/api/v1/auth, 30 ngày; dùng lại token đã xoay thì thu hồi cả family. Refresh token không nằm JSON response/localStorage. Guest có credential ngẫu nhiên do cart/order cấp bằng Secure HttpOnly cookie; lưu hash ở server.
 
 ### 2.2 Catalog, cart và tương tác Phase 2
 

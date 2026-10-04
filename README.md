@@ -20,7 +20,7 @@ Sprint 1 theo ADR-18 chỉ xây local-first MVP foundation: frontend shell → G
 Cần JDK 21, Node 24.21.0/npm 11.19.0 (`.tool-versions`), Docker với Compose và Python 3.10+. Từ repo root:
 
 ```bash
-bash scripts/local-up.sh        # build JAR/dist, chạy postgres → catalog → gateway → storefront
+bash scripts/local-up.sh        # build JAR/dist, chạy postgres → catalog + user-service → gateway → storefront
 bash scripts/smoke-local.sh     # smoke xuyên chuỗi
 docker compose --env-file infra/local/.env -f infra/local/compose.yaml down   # giữ volume
 ```

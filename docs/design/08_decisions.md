@@ -49,6 +49,7 @@ Gate task là work package trong [backlog](../delivery/10_backlog.md). Mã task 
 | ADR-18 | Sprint 1 chỉ triển khai local; AWS/cloud bắt đầu sau checkpoint S1-local | Chủ dự án chốt 2026-09-19. Sprint 1 hoàn thành nền tảng local chạy từ fresh clone, không đồng nghĩa toàn bộ G2 MVP; không provision AWS/K3s/ECR/ArgoCD hoặc gọi provider thật. Phạm vi và exit ở 09/10 |
 | ADR-19 | Service identity cho `/internal`: mỗi service tự ký JWT ES256 bằng khóa riêng (`iss = sub = kid =` tên service, `aud =` service đích, TTL 60s); service đích kiểm tra theo allowlist public key của từng caller, sau đó endpoint kiểm tra caller allowlist 03 §4 | Chủ dự án chọn 2026-10-04 (SEC-01). Chạy được cả Compose local và K3s, không cần CA hay service mesh. Phương án khác: K8s service-account token (local không có), mTLS (nặng vận hành). Private key qua Secret, public key là config. Hiện thực tại `services/platform-security`; chưa có service gọi internal thật |
 | ADR-20 | CSRF cho request ghi dùng cookie: kiểm `Origin` theo allowlist, nếu không có Origin thì chỉ nhận `Sec-Fetch-Site: same-origin`, không có cả hai thì từ chối; cookie `Secure`, `HttpOnly`, `SameSite`. Không dùng CSRF token | Chủ dự án chọn 2026-10-04 (SEC-01). Thực thi tại Gateway (`CsrfOriginFilter`, `GATEWAY_ALLOWED_ORIGINS`). FE không cần gửi token. Request chỉ dùng Bearer không bị kiểm. Nếu sau này cần double-submit token thì ghi ADR mới |
+| ADR-21 | Access token member/admin: JWT ES256 do user-service ký (`iss=user-service`, `aud=fashion-api`, TTL 900 s, `auth_version`, `kid`); verifier nhận public key qua config, xoay khóa bằng cách allowlist 2 `kid`. Không có endpoint JWKS | Chủ dự án chọn 2026-10-05 (USR-01). Cùng mô hình ADR-19, không phụ thuộc mạng lúc verify. Phương án khác: ES256/RS256 + JWKS (tự xoay khóa nhưng thêm route/cache). Private key qua Secret; local do `local-up.sh` sinh vào `.env` |
 
 ## 4. Vấn đề mở
 
@@ -104,5 +105,10 @@ Gate task là work package trong [backlog](../delivery/10_backlog.md). Mã task 
   tạo tài nguyên. Thêm CloudFormation identity/ECR và staging, workflow publish khóa bằng biến,
   Kustomize/Argo CD và cfn-lint 1.57.1 (tooling). Storefront chạy root là ngoại lệ có ghi lại,
   namespace dùng Pod Security `baseline`. O01 vẫn mở; không change set, không deploy.
+- Phase 1A bắt đầu trước G0 (2026-10-05): chủ dự án chọn làm Phase 1A trên local trong khi G0 chờ
+  O01, lệch quy tắc "chỉ bắt đầu sau gate trước" của docs/superpowers/plans. G0 vẫn mở; không
+  deploy hay báo 1A đạt checkpoint tích hợp. USR-01 chia 1a (đăng ký/đăng nhập/refresh/logout,
+  khóa tài khoản trong PostgreSQL) và 1b (mật khẩu + bàn giao secret); rate limit theo IP và Redis
+  8.2.9 hoãn tới 1b. Thêm ADR-21 và cột `users.failed_login_attempts`.
 
 Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác và lý do; ảnh hưởng PRD/API/schema/test/task; người quyết định; ngày; link bằng chứng. Chưa có chữ ký phê duyệt giả định thương mại.
