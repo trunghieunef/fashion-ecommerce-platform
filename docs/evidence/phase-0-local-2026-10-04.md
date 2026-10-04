@@ -141,8 +141,59 @@ Kết quả: `bash scripts/validate-contracts.sh` PASS (Redocly + 23 tests). Lư
 Java: Jackson mặc định bật `ACCEPT_FLOAT_AS_INT`, sẽ cắt phần thập phân khi đọc vào `long`; consumer
 tiền phải tắt tùy chọn này hoặc kiểm tra kiểu token, không chỉ dựa vào schema test.
 
+## PLT-03 durability primitives — Claude Code, TDD, 2026-10-04
+
+`TASK:PLT-03` · REQ: ORD-02, PAY-07 · dependency: PLT-01, PLT-02 (contract core được
+Codex (GPT-6) duyệt, PR #3 merge vào `main`). Module: [platform-durability](../../services/platform-durability/README.md).
+Môi trường: Temurin 21.0.12.1+1, Maven Wrapper 3.9.16, Docker Desktop Engine 29.2.0 (lệch R1
+như S1), Testcontainers 2.0.5, `postgres:17.11`, `apache/kafka:4.1.2`
+(`sha256:5cc2a2fd93fa2687b44015eee04fb2c3edd9e526bd64bf8bec5ff1e268772e0e`).
+
+| Chu trình | RED (lý do đã xác nhận) | GREEN |
+|---|---|---|
+| Inbox | Thiếu `InboxGuard` (compile) | `processed_events` + effect cùng transaction; duplicate đồng thời chỉ 1 effect; effect lỗi rollback inbox |
+| Idempotency | Thiếu `IdempotencyStore` | STARTED / IN_PROGRESS / COMPLETED (trả lại response) / CONFLICT khi khác hash; scope theo actor + operation |
+| Outbox | Thiếu `OutboxRepository` | append bắt buộc có transaction; sequence tăng kể cả cùng version; claim chỉ lấy head của aggregate; markSent CAS theo token và lease còn hạn; envelope đúng tên field 03 §5.1 |
+| Lease | Thiếu `LeaseRepository` | lease cũ không ghi được kết quả; ghi kết quả lỗi thì giữ nguyên lease; tên bảng phải là identifier |
+| Background tasks (05 §15) | Thiếu `BackgroundTaskRepository` | enqueue bắt buộc có transaction và dedupe theo (kind, business_key); claimDue/complete/fail CAS; retry rồi chuyển MANUAL |
+| Kafka thật | Pass ngay (chỉ dùng code đã có) — chứng minh bằng mutation M1/M4 | crash sau publish → 2 record cùng `event_id`/value, consumer áp dụng 1 lần; 3 event cùng version đến theo sequence 1, 2, 3 |
+
+Mutation check (sửa tạm rồi khôi phục, mỗi mutation đều làm test FAIL):
+- M1 inbox luôn chạy effect → test duplicate đồng thời và test Kafka crash fail.
+- M2 markSent bỏ kiểm lease hết hạn; M3 markSent bỏ CAS token.
+- M4 claim bỏ chặn sequence trước → 3 test outbox và test thứ tự Kafka fail.
+- M5 lease complete bỏ token; M6 idempotency bỏ so hash.
+- B1 task complete bỏ token; B2 không bao giờ chuyển MANUAL; B3 enqueue không cần transaction.
+
+| Lệnh | Kết quả |
+|---|---|
+| `./mvnw -pl services/platform-durability test` | PASS 31/31 |
+| `./mvnw -B test` (toàn reactor) | PASS: platform-durability 31, catalog 8, gateway 2 |
+| `bash scripts/validate-contracts.sh`; `bash scripts/verify-toolchain.sh` | PASS (23 contract tests); PASS |
+| Test `scripts/`; `check_docs.py`; `git diff --check` | PASS; PASS 32 Markdown files; PASS |
+
+Lệch so với plan Task 2: integration test đặt trong module (không tạo module
+`tests/integration/platform` riêng); DDL là file tham chiếu để service chép vào migration
+riêng, không phải migration dùng chung (tránh trùng version Flyway và DB chung); thêm
+`correlation_id` vào outbox theo envelope 03. Chưa có CI remote, chưa có reviewer, chưa
+có service nào tích hợp; chưa có backoff relay, metrics (PLT-05) hay retention cleanup.
+
+## Xử lý review PR #4 — Claude Code, TDD, 2026-10-04
+
+Review của Codex (GPT-6) tại `958e78c` gồm 2 finding P1 về ranh giới transaction; CI của PR đều PASS.
+Cả hai finding đúng: `TransactionTemplate` mặc định REQUIRED nên join transaction của caller.
+
+| Finding | Nguyên nhân | RED | GREEN |
+|---|---|---|---|
+| `applyOnce` trả về trước khi commit nếu caller đã có transaction → ACK offset rồi rollback thì mất event | join transaction ngoài | test transaction ngoài + rollback: không có ngoại lệ, ACK xảy ra | `applyOnce` từ chối khi đã có transaction |
+| `relay` trong transaction nghiệp vụ publish outbox chưa commit và giữ lock | `claim` join transaction ngoài | test append + relay trong transaction ngoài: publisher bị gọi | `claim` (cả `relay`) từ chối khi đã có transaction |
+| Cùng nguyên nhân, review chưa nêu | `BackgroundTaskRepository.claimDue`, `LeaseRepository.claim` | 2 test claim trong transaction | cùng guard |
+
+RED: 5 test FAIL đúng lý do; GREEN: `./mvnw -pl services/platform-durability test` PASS 36/36.
+README của module có thêm bảng ranh giới transaction.
+
 ## Tiếp theo
 
-Hoàn thiện OpenAPI core, schemas payload/VND, fixtures/mock và review PLT-02; sau đó
-triển khai outbox/inbox/idempotency/background lease cùng tests PostgreSQL/Kafka thật
-của PLT-03. Không đánh dấu parent Done hoặc G0 accepted từ test envelope.
+PLT-03: chạy CI remote, reviewer duyệt, sau đó service producer đầu tiên (CAT-01/USR-01)
+chép DDL vào migration và dùng relay/consumer thật. Song song: phần còn lại của SEC-01.
+Không đánh dấu PLT-02/03 Done hoặc G0 accepted từ test thư viện.

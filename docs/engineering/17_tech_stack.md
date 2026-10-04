@@ -60,7 +60,7 @@ Alibaba 2025.1.0.0 công bố tổ hợp tham chiếu Cloud 2025.1.0, Boot 4.0.0
 | PostgreSQL JDBC | **42.7.13**, qua Boot BOM | Không chọn driver độc lập khỏi bộ backend |
 | Flyway core + PostgreSQL module | **11.14.1**, qua Boot BOM | Migration từng service; cần cả module database PostgreSQL |
 | Apache Kafka broker | **4.1.2**, KRaft | Cùng dòng client BOM; không thêm ZooKeeper |
-| Kafka client / Spring Kafka | **4.1.2 / 4.0.7**, qua Boot BOM | Test retry, duplicate và restart với broker thật |
+| Kafka client / Spring Kafka | **4.1.2 / 4.0.7**, qua Boot BOM | Test retry, duplicate và restart với broker thật. PLT-03 dùng `kafka-clients` 4.1.2 (scope test) với broker `apache/kafka:4.1.2` (digest `sha256:5cc2a2fd…72e0e`) qua `testcontainers-kafka` 2.0.5; chưa dùng Spring Kafka |
 | Redis Open Source | **8.2.9** | Dòng 8.2 Extended; chỉ cache/rate limit/auth ephemeral |
 
 Nguồn: [PostgreSQL versioning](https://www.postgresql.org/support/versioning/), [Boot BOM](https://docs.spring.io/spring-boot/4.0/appendix/dependency-versions/coordinates.html), [Kafka downloads](https://kafka.apache.org/community/downloads/), [Redis 8.2 release notes](https://redis.io/docs/latest/operate/oss_and_stack/stack-with-enterprise/release-notes/redisce/redisos-8.2-release-notes/), [Redis version policy](https://redis.io/docs/latest/operate/oss_and_stack/install/version-mgmt/).
