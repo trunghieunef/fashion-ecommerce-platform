@@ -14,6 +14,10 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.slf4j.LoggerFactory;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalManagementPort;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -23,6 +27,7 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+@ExtendWith(OutputCaptureExtension.class)
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class GatewayBoundaryTest {
   private static final RecordingCatalogServer CATALOG = new RecordingCatalogServer();
@@ -138,6 +143,50 @@ class GatewayBoundaryTest {
     client.get().uri("/api/v1/catalog/products?limit=1").header("Cookie", "guest_cart=synthetic")
         .header("Origin", "https://evil.example").exchange().expectStatus().isOk();
     assertThat(CATALOG.requestCount()).isEqualTo(1);
+  }
+
+  @Test
+  void startsAW3cTraceAndPropagatesItToTheUpstream() {
+    client.get().uri("/api/v1/catalog/products?limit=1").exchange().expectStatus().isOk();
+
+    assertThat(CATALOG.headers().get("traceparent"))
+        .singleElement().asString().matches("00-[0-9a-f]{32}-[0-9a-f]{16}-0[01]");
+  }
+
+  @Test
+  void continuesTheCallersTraceTowardsTheUpstream() {
+    String traceId = "4bf92f3577b34da6a3ce929d0e0e4736";
+    client.get().uri("/api/v1/catalog/products?limit=1")
+        .header("traceparent", "00-" + traceId + "-00f067aa0ba902b7-01")
+        .exchange().expectStatus().isOk();
+
+    assertThat(CATALOG.headers().get("traceparent")).singleElement().asString()
+        .startsWith("00-" + traceId + "-");
+  }
+
+  @Test
+  void applicationLogsAreJsonAndRedacted(CapturedOutput output) {
+    LoggerFactory.getLogger(GatewayBoundaryTest.class)
+        .info("customer person@example.test sent Bearer synthetic.token.value password=hunter2");
+
+    String line = output.getOut().lines().filter(l -> l.contains("customer [email]"))
+        .findFirst().orElseThrow(() -> new AssertionError("redacted JSON log line not found"));
+    assertThat(line).startsWith("{").contains("\"log\":{\"level\":\"INFO\"")
+        .contains("Bearer [redacted]").contains("password=[redacted]");
+    assertThat(output.getAll()).doesNotContain("person@example.test", "synthetic.token.value", "hunter2");
+  }
+
+  @Test
+  void exposesRedMetricsOnTheManagementPortWithoutHighCardinalityLabels() {
+    client.get().uri("/api/v1/catalog/products?limit=1").exchange().expectStatus().isOk();
+
+    String metrics = WebTestClient.bindToServer().baseUrl("http://localhost:" + managementPort).build()
+        .get().uri("/actuator/prometheus").exchange()
+        .expectStatus().isOk()
+        .expectBody(String.class).returnResult().getResponseBody();
+    assertThat(metrics).contains("http_server_requests_seconds_count")
+        .doesNotContain("limit=1");
+    client.get().uri("/actuator/prometheus").exchange().expectStatus().isNotFound();
   }
 
   @Test

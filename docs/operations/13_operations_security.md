@@ -59,7 +59,7 @@ Một người có thể nhiều role nhưng audit phải ghi actor/action/reaso
 | Notification recipient/rendered content | notification-db | Sender/support có scope; OTP dùng marker | O06 chốt TTL ngắn, cleanup verified trước launch |
 | Marketing preferences | notification-db | Opt-in, consent timestamp và unsubscribe hash | O06 chốt bằng chứng consent/retention |
 | Outbox/inbox | DB service | Application/ops bounded replay | Dự kiến SENT 30 ngày, dedupe 90 ngày; phải đủ replay window |
-| Logs/traces | Observability storage | RBAC, mask phone/email/token, không body webhook secret | PO duyệt khung logs 30–90 ngày tại bảng O06 bên dưới; traces theo budget và O06 |
+| Logs/traces | Observability storage | RBAC, mask phone/email/token, không body webhook secret (Gateway: log JSON ECS qua `PiiRedactingJsonCustomizer`, PLT-05) | PO duyệt khung logs 30–90 ngày tại bảng O06 bên dưới; traces theo budget và O06 |
 | Media | Object storage | Scoped upload, public chỉ approved assets | Dọn orphan sau policy; không xóa ảnh evidence tùy ý |
 
 Các mốc kỹ thuật không thay thời hạn pháp lý. PO/phụ trách pháp lý xác minh nghĩa vụ hiện hành trước G2, ghi nguồn và ngày vào O06. Request xem/xóa dữ liệu phải xác minh actor, kiểm tra nghĩa vụ lưu và xử lý từng DB owner; không cascade xóa order/payment lịch sử vì user yêu cầu xóa account.

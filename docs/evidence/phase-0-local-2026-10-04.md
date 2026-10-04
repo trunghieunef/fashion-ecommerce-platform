@@ -289,6 +289,21 @@ Cả 3 finding đều đúng khi đối chiếu template. Chưa tái hiện đư
 `bash scripts/validate-infra.sh` PASS: cfn-lint sạch, 34 test. Bằng chứng runtime (HTTP không trả app,
 K3s cài được ở first boot, thời điểm xóa backup thực tế) phải lưu khi deploy có phê duyệt.
 
+## PLT-05 phần local, Gateway — Claude Code, TDD, 2026-10-05
+
+`TASK:PLT-05` · REQ: NFR-01/03/04, XCT-06 · dependency: PLT-03; phần staging chờ PLT-04.
+
+| Chu trình | RED (lý do đã xác nhận) | GREEN |
+|---|---|---|
+| Trace W3C | upstream không nhận `traceparent` khi client không gửi (test tiếp nối trace pass sẵn vì Gateway chuyển nguyên header) | `spring-boot-micrometer-tracing-opentelemetry`; lần đầu vẫn FAIL vì module này không kéo bridge, thêm `micrometer-tracing-bridge-otel` |
+| Redaction | thiếu `LogRedactor` | 6 test: email, Bearer/JWT, phone VN, `password=`/`otp:`, giữ nguyên ID/số tiền |
+| Log JSON | không có dòng log JSON đã che | ECS + `PiiRedactingJsonCustomizer`; assertion ban đầu sai format (ECS của Boot 4 lồng `log.level`), đã sửa test theo output thật |
+| Metrics | `/actuator/prometheus` 404 | `micrometer-registry-prometheus`; có `http_server_requests_seconds_count`, không có query string trong label, port public vẫn 404 |
+
+Mutation: bỏ cấu hình customizer làm test log FAIL. `./mvnw -B -pl services/gateway -am test`:
+platform-security 22, gateway 16 PASS. Docker Desktop không chạy trong phiên này nên chưa chạy
+catalog, Compose, smoke và Playwright.
+
 ## Tiếp theo
 
 PLT-03: chạy CI remote, reviewer duyệt, sau đó service producer đầu tiên (CAT-01/USR-01)

@@ -35,6 +35,15 @@ Các trường hợp bị từ chối: sai audience, caller ngoài allowlist, kh
 TTL, `iat` ở tương lai, `exp ≤ iat`, `sub ≠ iss`, `alg: none`, HS256, JWE, token rác hoặc rỗng. Test cũng khẳng định khi từ chối thì
 token không bị ghi ra log. Không dùng network hay Docker.
 
+## Che dữ liệu trong log (XCT-06, PLT-05)
+
+`LogRedactor.redact` che: cặp `password|passwd|secret|token|otp` `=`/`:` giá trị, `Bearer …`, chuỗi
+dạng JWT, email, số điện thoại VN (`0` hoặc `+84` + 9 chữ số). `PiiRedactingJsonCustomizer` áp
+nó lên mọi giá trị chuỗi của log JSON Spring Boot; bật bằng
+`logging.structured.json.customizer=vn.fashion.platform.security.PiiRedactingJsonCustomizer`.
+Đây chỉ là lưới an toàn: code vẫn không được log dữ liệu nhạy cảm. Regex không nhận diện được
+họ tên hay địa chỉ trong text tự do.
+
 ## Giới hạn
 
 - Chưa có token người dùng (member/admin JWT, JWKS của user-service, `auth_version`):

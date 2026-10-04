@@ -38,7 +38,18 @@ timeout không được biến mutation thành retry hay thành công giả.
 | `GATEWAY_MANAGEMENT_PORT` | `9080` | Actuator/health; chỉ trong container hoặc mạng nội bộ, không publish |
 | `GATEWAY_ALLOWED_ORIGINS` | `http://localhost:4173` | Origin được phép gửi request ghi kèm cookie, phân tách bằng dấu phẩy; để rỗng thì từ chối tất cả |
 
-Actuator (`health`, `info`, `metrics`) chạy trên management port riêng `GATEWAY_MANAGEMENT_PORT`
+Observability (PLT-05, phần local):
+
+- Trace W3C: Gateway tạo `traceparent` nếu client chưa gửi, nếu có thì tiếp nối, và chuyển
+  header này cho upstream (Micrometer Tracing + OpenTelemetry bridge theo Boot BOM; chưa có
+  exporter hay collector).
+- Log JSON dạng ECS (`logging.structured.format.console: ecs`). Mọi giá trị chuỗi đi qua
+  `PiiRedactingJsonCustomizer` của [platform-security](../platform-security/README.md) để che
+  email, số điện thoại, bearer/JWT và `password=`/`token=`.
+- Metrics RED (`http_server_requests_seconds_*`) ở `/actuator/prometheus` trên management port;
+  label dùng URI template, không chứa query string.
+
+Actuator (`health`, `info`, `metrics`, `prometheus`) chạy trên management port riêng `GATEWAY_MANAGEMENT_PORT`
 (mặc định 9080). Port này chỉ nằm trong container, không publish ra ngoài và không được route;
 port public 8080 trả 404 cho `/actuator/**` (SEC-01, xong trước PLT-04). Compose healthcheck
 gọi `localhost:9080` bên trong container. Gateway không có database, migration, Kafka topic hay

@@ -21,6 +21,14 @@ spring:
               predicates:
                 - Path=/api/v1/catalog/**
 
+logging:
+  structured:
+    format:
+      # PLT-05: JSON (ECS) logs with trace ids; every string value is redacted (XCT-06).
+      console: ecs
+    json:
+      customizer: vn.fashion.platform.security.PiiRedactingJsonCustomizer
+
 fashion:
   security:
     # ADR-20: browser origins allowed for cookie-authenticated mutations; empty = reject all.
@@ -33,7 +41,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info,metrics,prometheus
   endpoint:
     health:
       probes:
