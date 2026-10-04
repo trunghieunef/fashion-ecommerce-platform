@@ -1,0 +1,154 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  TASK:PLT-04.D - GitHub OIDC build role and private ECR repositories for fashion-ecommerce
+  staging images. Prepared only: create a change set and execute it after PLT-04.A (O01)
+  approval of account, region and budget. The role can push only these repositories.
+
+Parameters:
+  GitHubOrg:
+    Type: String
+    Default: trunghieunef
+  GitHubRepo:
+    Type: String
+    Default: fashion-ecommerce-platform
+  PublishEnvironment:
+    Type: String
+    Default: staging-publish
+    Description: GitHub environment of the publish job; protect it to the main branch with reviewers.
+  ExistingOidcProviderArn:
+    Type: String
+    Default: ""
+    Description: ARN of an existing token.actions.githubusercontent.com provider; empty creates one.
+  Owner:
+    Type: String
+    Description: Person responsible for these resources (tag), e.g. the DEVOPS owner.
+  ExpiresOn:
+    Type: String
+    Description: Review date tag (YYYY-MM-DD).
+
+Conditions:
+  CreateOidcProvider: !Equals [!Ref ExistingOidcProviderArn, ""]
+
+Resources:
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Condition: CreateOidcProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+      Tags:
+        - {Key: Project, Value: fashion-ecommerce}
+        - {Key: Environment, Value: staging}
+        - {Key: Owner, Value: !Ref Owner}
+        - {Key: ExpiresOn, Value: !Ref ExpiresOn}
+
+  ImagePublishRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: GitHub Actions publish job pushes staging images to the named ECR repositories only.
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !If [CreateOidcProvider, !Ref GitHubOidcProvider, !Ref ExistingOidcProviderArn]
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Sub repo:${GitHubOrg}/${GitHubRepo}:environment:${PublishEnvironment}
+      Policies:
+        - PolicyName: push-staging-images
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:InitiateLayerUpload
+                  - ecr:UploadLayerPart
+                  - ecr:CompleteLayerUpload
+                  - ecr:PutImage
+                  - ecr:BatchGetImage
+                Resource:
+                  - !GetAtt CatalogRepository.Arn
+                  - !GetAtt GatewayRepository.Arn
+                  - !GetAtt StorefrontRepository.Arn
+      Tags:
+        - {Key: Project, Value: fashion-ecommerce}
+        - {Key: Environment, Value: staging}
+        - {Key: Owner, Value: !Ref Owner}
+        - {Key: ExpiresOn, Value: !Ref ExpiresOn}
+
+  CatalogRepository:
+    Type: AWS::ECR::Repository
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RepositoryName: fashion-ecommerce/catalog-service
+      ImageTagMutability: IMMUTABLE
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      LifecyclePolicy:
+        LifecyclePolicyText: >-
+          {"rules":[{"rulePriority":1,"description":"Keep the 20 newest images (current + rollback)",
+          "selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":20},
+          "action":{"type":"expire"}}]}
+      Tags:
+        - {Key: Project, Value: fashion-ecommerce}
+        - {Key: Environment, Value: staging}
+        - {Key: Owner, Value: !Ref Owner}
+        - {Key: ExpiresOn, Value: !Ref ExpiresOn}
+
+  GatewayRepository:
+    Type: AWS::ECR::Repository
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RepositoryName: fashion-ecommerce/gateway
+      ImageTagMutability: IMMUTABLE
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      LifecyclePolicy:
+        LifecyclePolicyText: >-
+          {"rules":[{"rulePriority":1,"description":"Keep the 20 newest images (current + rollback)",
+          "selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":20},
+          "action":{"type":"expire"}}]}
+      Tags:
+        - {Key: Project, Value: fashion-ecommerce}
+        - {Key: Environment, Value: staging}
+        - {Key: Owner, Value: !Ref Owner}
+        - {Key: ExpiresOn, Value: !Ref ExpiresOn}
+
+  StorefrontRepository:
+    Type: AWS::ECR::Repository
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RepositoryName: fashion-ecommerce/storefront
+      ImageTagMutability: IMMUTABLE
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      LifecyclePolicy:
+        LifecyclePolicyText: >-
+          {"rules":[{"rulePriority":1,"description":"Keep the 20 newest images (current + rollback)",
+          "selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":20},
+          "action":{"type":"expire"}}]}
+      Tags:
+        - {Key: Project, Value: fashion-ecommerce}
+        - {Key: Environment, Value: staging}
+        - {Key: Owner, Value: !Ref Owner}
+        - {Key: ExpiresOn, Value: !Ref ExpiresOn}
+
+Outputs:
+  ImagePublishRoleArn:
+    Description: Set as GitHub variable AWS_PUBLISH_ROLE_ARN (not a secret).
+    Value: !GetAtt ImagePublishRole.Arn
+  RegistryHost:
+    Description: Set as GitHub variable AWS_ECR_REGISTRY.
+    Value: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com

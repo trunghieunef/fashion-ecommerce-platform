@@ -1,0 +1,75 @@
+name: Publish images
+
+# TASK:PLT-04.D. Runs only after Application CI passed on a push to main, and only once the
+# repository variable AWS_PUBLISH_ENABLED is 'true' (set after PLT-04.A/O01 approval and the
+# identity-and-ecr stack exists). Never runs for pull requests or forks; no long-lived secrets.
+on:
+  workflow_run:
+    workflows: [Application CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-images
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      vars.AWS_PUBLISH_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # Protect this environment: deployment branch main only, required reviewer.
+    environment: staging-publish
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version-file: .tool-versions
+          cache: maven
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: .tool-versions
+          cache: npm
+      - name: Verify toolchain and lockfiles
+        run: bash scripts/verify-toolchain.sh
+      - name: Build artifacts of the tested commit
+        run: |
+          ./mvnw -B -DskipTests -pl services/catalog-service,services/gateway -am package
+          npm ci
+          npm run build --workspace @fashion/storefront
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_PUBLISH_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: publish-${{ github.run_id }}
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
+      - name: Build and push images tagged by commit SHA
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          echo "| Image | Digest |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          for pair in catalog-service:services/catalog-service gateway:services/gateway storefront:web/storefront; do
+            name="${pair%%:*}"; context="${pair#*:}"
+            ref="$REGISTRY/fashion-ecommerce/$name:$SHA"
+            docker build --pull=false -t "$ref" "$context"
+            docker push "$ref"
+            digest="$(docker image inspect --format '{{index .RepoDigests 0}}' "$ref")"
+            echo "| $name | \`$digest\` |" >> "$GITHUB_STEP_SUMMARY"
+          done

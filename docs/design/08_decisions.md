@@ -100,5 +100,9 @@ Gate task là work package trong [backlog](../delivery/10_backlog.md). Mã task 
   Thêm `services/platform-security`, `CsrfOriginFilter` ở Gateway, `scripts/scan-secrets.sh`
   (Application CI quét toàn bộ history) và data inventory/permission codes ở 13. O06 vẫn mở:
   owner PO + pháp lý, chưa có ngày và thời hạn lưu; không suy luận kết luận pháp lý.
+- PLT-04 chuẩn bị (2026-10-04): chủ dự án chọn chuẩn bị hạ tầng trước khi O01 được duyệt, không
+  tạo tài nguyên. Thêm CloudFormation identity/ECR và staging, workflow publish khóa bằng biến,
+  Kustomize/Argo CD và cfn-lint 1.57.1 (tooling). Storefront chạy root là ngoại lệ có ghi lại,
+  namespace dùng Pod Security `baseline`. O01 vẫn mở; không change set, không deploy.
 
 Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác và lý do; ảnh hưởng PRD/API/schema/test/task; người quyết định; ngày; link bằng chứng. Chưa có chữ ký phê duyệt giả định thương mại.

@@ -1,0 +1,19 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: fashion-staging
+  namespace: argocd
+spec:
+  project: fashion-staging
+  source:
+    repoURL: https://github.com/trunghieunef/fashion-ecommerce-platform.git
+    targetRevision: main
+    path: infra/environments/staging
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: fashion-staging
+  syncPolicy:
+    # Reconcile merged Git; rollback is a reverted digest PR, never a live edit (16 section 4.2).
+    automated:
+      prune: true
+      selfHeal: true

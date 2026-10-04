@@ -248,6 +248,33 @@ tất và giá trị cụ thể trong các khoảng vẫn chưa chọn, nên ch�
 | Compose healthcheck → `localhost:9080`; smoke kiểm `/actuator/health` public = 404 | `local-up` PASS, smoke PASS, Playwright 2/2 |
 | `bash scripts/nacos-compat-check.sh` | Lần 1 FAIL do lỗi Docker `network ... not found` khi start nacos (lỗi môi trường, không có container cũ để xóa); chạy lại PASS 4/4 (config import, discovery, `lb://`, reconnect) |
 
+## PLT-04 chuẩn bị offline — Claude Code, TDD, 2026-10-04
+
+`TASK:PLT-04` (A, C, D, E) · REQ: NFR-01/06 · dependency: PLT-01, SEC-01; O01 chưa duyệt.
+Chủ dự án chọn "chuẩn bị PLT-04, chưa tạo gì". **Không có lệnh AWS nào được chạy**, không đăng nhập,
+không tạo change set hay tài nguyên.
+
+| Chu trình | RED (lý do đã xác nhận) | GREEN |
+|---|---|---|
+| OIDC + ECR | Thiếu `identity-and-ecr.yaml` | Trust policy so khớp chính xác `repo:trunghieunef/fashion-ecommerce-platform:environment:staging-publish` và `aud`; role chỉ push 3 repo; 6 test |
+| Workflow publish | Thiếu `publish-images.yml` | Chỉ chạy sau Application CI trên `main` (push), khi `AWS_PUBLISH_ENABLED`; OIDC trong environment; action pin SHA; 5 test. Một assertion ban đầu bắt nhầm chữ "secrets." trong comment, đã sửa test |
+| Stack staging | Thiếu `staging.yaml` | 8 test (loại tài nguyên, chỉ 80/443, IMDSv2 hop 1, gp3 mã hóa + Retain, K3s kiểm checksum, role tối thiểu, S3 private/TLS, retention 30–90 không mặc định, budget trước credit). Một assertion ban đầu bắt nhầm `| sha256sum`, đã sửa thành regex |
+| Manifest + Argo CD | Kustomize render lỗi, thiếu file | 13 test trên bản render (namespace, ingress, ClusterIP, digest, probes/resources/securityContext, không Secret, credential theo service, default deny, render `--strict`, bản copy init script khớp local, Argo CD scope) |
+
+Mutation check (sửa tạm rồi khôi phục, đều FAIL đúng test): trust policy wildcard, thêm `ec2:RunInstances`,
+dùng secret dài hạn, bỏ công tắc bật, cài K3s bằng pipe script, mở SSH, IMDS hop 2, budget tính sau
+credit, ingress `/internal` tới catalog, Service lộ port 9080, overlay `newTag: latest`, mật khẩu
+plaintext, gateway bỏ non-root. Mutation đầu tiên đổi tag ở base không có tác dụng vì overlay ghi đè digest.
+
+| Lệnh | Kết quả |
+|---|---|
+| `bash scripts/validate-infra.sh` (venv đã pin, freeze khớp) | cfn-lint sạch; 32 test PASS |
+| `bash scripts/render-staging.sh --strict` | exit 1 như mong đợi (digest placeholder) |
+| gitleaks `dir` trên thư mục mới | Không có finding mới; chỉ token Nacos synthetic đã biết trong `.env.example`/`.env` local |
+
+Còn mở: số liệu chi phí và phê duyệt O01/A; tạo environment/biến GitHub; AMI/checksum/retention;
+cơ chế refresh credential ECR cho K3s; domain/TLS; Secret DB ngoài Git; storefront chạy root.
+
 ## Tiếp theo
 
 PLT-03: chạy CI remote, reviewer duyệt, sau đó service producer đầu tiên (CAT-01/USR-01)

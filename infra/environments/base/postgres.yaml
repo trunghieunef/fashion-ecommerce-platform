@@ -1,0 +1,80 @@
+# One PostgreSQL for staging; each service has its own database and credentials (05, 16).
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels: {app: postgres}
+  template:
+    metadata:
+      labels: {app: postgres}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 999
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: postgres
+          image: postgres:17.11@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f
+          ports:
+            - {name: postgres, containerPort: 5432}
+          env:
+            - {name: POSTGRES_DB, value: catalog}
+            - {name: POSTGRES_USER, value: catalog_admin}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: catalog-db-admin, key: password}
+            - name: CATALOG_MIGRATION_DB_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: catalog-db-migration, key: password}
+            - name: CATALOG_DB_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: catalog-db-runtime, key: password}
+            - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
+          readinessProbe:
+            exec:
+              command: [pg_isready, -U, catalog_admin, -d, catalog]
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: [pg_isready, -U, catalog_admin, -d, catalog]
+            periodSeconds: 20
+            failureThreshold: 6
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: "1", memory: 512Mi}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            runAsGroup: 999
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/postgresql/data}
+            - {name: init, mountPath: /docker-entrypoint-initdb.d, readOnly: true}
+            - {name: run, mountPath: /var/run/postgresql}
+      volumes:
+        - name: init
+          configMap: {name: postgres-init}
+        - name: run
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: {storage: 10Gi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  selector: {app: postgres}
+  ports:
+    - {name: postgres, port: 5432, targetPort: postgres}

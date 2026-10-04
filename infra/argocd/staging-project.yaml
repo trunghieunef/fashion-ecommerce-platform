@@ -1,0 +1,16 @@
+# Argo CD 3.5.3 project: this repository and the staging namespace only; no public UI (16).
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: fashion-staging
+  namespace: argocd
+spec:
+  description: fashion-ecommerce staging (single node, synthetic data)
+  sourceRepos:
+    - https://github.com/trunghieunef/fashion-ecommerce-platform.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: fashion-staging
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace

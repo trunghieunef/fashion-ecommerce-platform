@@ -1,0 +1,27 @@
+# HTTPS only. /api goes to the Gateway, which returns 404 for /internal and /actuator; the rest
+# goes to the SPA. Host and TLS secret are placeholders until the domain is chosen (O01).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: public
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [staging.example.invalid]
+      secretName: staging-tls
+  rules:
+    - host: staging.example.invalid
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway
+                port: {number: 8080}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: storefront
+                port: {number: 80}

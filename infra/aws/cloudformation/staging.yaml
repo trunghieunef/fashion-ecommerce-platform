@@ -1,0 +1,308 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  TASK:PLT-04.C - single-node K3s staging for fashion-ecommerce (16). Prepared only: create a
+  change set after PLT-04.A (O01) approval and execute it only after a separate explicit
+  approval. One EC2 node, no NAT/ALB/EKS/RDS; HTTP/HTTPS only; administration through SSM.
+
+Parameters:
+  Owner:
+    Type: String
+  ExpiresOn:
+    Type: String
+    Description: Review date tag (YYYY-MM-DD).
+  AmiId:
+    Type: AWS::EC2::Image::Id
+    Description: Ubuntu 24.04 LTS x86_64 AMI ID for the approved region, pinned at approval time.
+  InstanceType:
+    Type: String
+    Default: t3.large
+    AllowedValues: [t3.large]
+    Description: Fixed by 16; changing size needs a new sizing/budget approval.
+  K3sVersion:
+    Type: String
+    Default: v1.35.8+k3s1
+  K3sSha256:
+    Type: String
+    AllowedPattern: "^[0-9a-f]{64}$"
+    Description: SHA-256 of the k3s amd64 binary from the release's sha256sum-amd64.txt.
+  IngressCidr:
+    Type: String
+    Default: 0.0.0.0/0
+    Description: Allowed source for HTTP/HTTPS only.
+  BackupRetentionDays:
+    Type: Number
+    MinValue: 30
+    MaxValue: 90
+    Description: Backup retention inside the PO-approved 30-90 day range (13 section 3); choose at approval.
+  BudgetEmail:
+    Type: String
+    Description: Confirmed address that receives budget alerts.
+  MonthlyBudgetUsd:
+    Type: Number
+    Default: 50
+    Description: Proposed gross monthly budget (16 section 3.2); alert only, not a spending cap.
+
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.40.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - {Key: Name, Value: fashion-staging}
+        - {Key: Project, Value: fashion-ecommerce}
+        - {Key: Environment, Value: staging}
+        - {Key: Owner, Value: !Ref Owner}
+        - {Key: ExpiresOn, Value: !Ref ExpiresOn}
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.40.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - {Key: Project, Value: fashion-ecommerce}
+        - {Key: Environment, Value: staging}
+        - {Key: Owner, Value: !Ref Owner}
+        - {Key: ExpiresOn, Value: !Ref ExpiresOn}
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - {Key: Project, Value: fashion-ecommerce}
+        - {Key: Environment, Value: staging}
+        - {Key: Owner, Value: !Ref Owner}
+        - {Key: ExpiresOn, Value: !Ref ExpiresOn}
+
+  GatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - {Key: Project, Value: fashion-ecommerce}
+        - {Key: Environment, Value: staging}
+        - {Key: Owner, Value: !Ref Owner}
+        - {Key: ExpiresOn, Value: !Ref ExpiresOn}
+
+  DefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetRoutes:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  NodeSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Staging node - HTTP/HTTPS only. No SSH, Kubernetes API, DB, Kafka, Redis, Nacos or Argo CD.
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - {IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: !Ref IngressCidr, Description: HTTPS}
+        - {IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: !Ref IngressCidr, Description: HTTP redirect / certificate challenge}
+      Tags:
+        - {Key: Project, Value: fashion-ecommerce}
+        - {Key: Environment, Value: staging}
+        - {Key: Owner, Value: !Ref Owner}
+        - {Key: ExpiresOn, Value: !Ref ExpiresOn}
+
+  NodeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Staging node - SSM administration, pull fashion-ecommerce images, write backups.
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: {Service: ec2.amazonaws.com}
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: pull-images-and-backup
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - ecr:BatchGetImage
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchCheckLayerAvailability
+                Resource: !Sub arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/fashion-ecommerce/*
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: !GetAtt BackupBucket.Arn
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                Resource: !Sub ${BackupBucket.Arn}/*
+      Tags:
+        - {Key: Project, Value: fashion-ecommerce}
+        - {Key: Environment, Value: staging}
+        - {Key: Owner, Value: !Ref Owner}
+        - {Key: ExpiresOn, Value: !Ref ExpiresOn}
+
+  NodeInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref NodeRole]
+
+  Node:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref NodeInstanceProfile
+      SubnetId: !Ref PublicSubnet
+      SecurityGroupIds: [!Ref NodeSecurityGroup]
+      MetadataOptions:
+        HttpTokens: required
+        # Hop limit 1: host processes reach IMDS, pods do not get the node role.
+        HttpPutResponseHopLimit: 1
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeType: gp3
+            VolumeSize: 40
+            Encrypted: true
+            DeleteOnTermination: false
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          # Checksum-pinned K3s binary; no piped installer script.
+          set -euo pipefail
+          VERSION='${K3sVersion}'
+          curl -fsSL -o /usr/local/bin/k3s \
+            "https://github.com/k3s-io/k3s/releases/download/${!VERSION//+/%2B}/k3s"
+          echo '${K3sSha256}  /usr/local/bin/k3s' | sha256sum -c -
+          chmod 0755 /usr/local/bin/k3s
+          cat > /etc/systemd/system/k3s.service <<'UNIT'
+          [Unit]
+          Description=K3s server (fashion-ecommerce staging)
+          Wants=network-online.target
+          After=network-online.target
+          [Service]
+          Type=notify
+          ExecStart=/usr/local/bin/k3s server --secrets-encryption --write-kubeconfig-mode 0600
+          Restart=always
+          RestartSec=5s
+          [Install]
+          WantedBy=multi-user.target
+          UNIT
+          systemctl daemon-reload
+          systemctl enable --now k3s
+      Tags:
+        - {Key: Name, Value: fashion-staging-node}
+        - {Key: Project, Value: fashion-ecommerce}
+        - {Key: Environment, Value: staging}
+        - {Key: Owner, Value: !Ref Owner}
+        - {Key: ExpiresOn, Value: !Ref ExpiresOn}
+
+  NodeAddress:
+    Type: AWS::EC2::EIP
+    DependsOn: GatewayAttachment
+    Properties:
+      Domain: vpc
+      InstanceId: !Ref Node
+      Tags:
+        - {Key: Project, Value: fashion-ecommerce}
+        - {Key: Environment, Value: staging}
+        - {Key: Owner, Value: !Ref Owner}
+        - {Key: ExpiresOn, Value: !Ref ExpiresOn}
+
+  BackupBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: {SSEAlgorithm: AES256}
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-backups
+            Status: Enabled
+            ExpirationInDays: !Ref BackupRetentionDays
+            NoncurrentVersionExpiration:
+              NoncurrentDays: !Ref BackupRetentionDays
+      Tags:
+        - {Key: Project, Value: fashion-ecommerce}
+        - {Key: Environment, Value: staging}
+        - {Key: Owner, Value: !Ref Owner}
+        - {Key: ExpiresOn, Value: !Ref ExpiresOn}
+
+  BackupBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref BackupBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource:
+              - !GetAtt BackupBucket.Arn
+              - !Sub ${BackupBucket.Arn}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+
+  MonthlyBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit:
+          Amount: !Ref MonthlyBudgetUsd
+          Unit: USD
+        # Track usage before credits so a $0 bill does not hide consumption (16 section 3.3).
+        CostTypes:
+          IncludeCredit: false
+          IncludeRefund: false
+      NotificationsWithSubscribers:
+        - Notification: {NotificationType: ACTUAL, ComparisonOperator: GREATER_THAN, Threshold: 50, ThresholdType: PERCENTAGE}
+          Subscribers: [{SubscriptionType: EMAIL, Address: !Ref BudgetEmail}]
+        - Notification: {NotificationType: ACTUAL, ComparisonOperator: GREATER_THAN, Threshold: 80, ThresholdType: PERCENTAGE}
+          Subscribers: [{SubscriptionType: EMAIL, Address: !Ref BudgetEmail}]
+        - Notification: {NotificationType: ACTUAL, ComparisonOperator: GREATER_THAN, Threshold: 100, ThresholdType: PERCENTAGE}
+          Subscribers: [{SubscriptionType: EMAIL, Address: !Ref BudgetEmail}]
+        - Notification: {NotificationType: FORECASTED, ComparisonOperator: GREATER_THAN, Threshold: 100, ThresholdType: PERCENTAGE}
+          Subscribers: [{SubscriptionType: EMAIL, Address: !Ref BudgetEmail}]
+
+Outputs:
+  NodeInstanceId:
+    Value: !Ref Node
+  NodePublicIp:
+    Value: !Ref NodeAddress
+  BackupBucketName:
+    Value: !Ref BackupBucket

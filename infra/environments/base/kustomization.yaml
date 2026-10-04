@@ -1,0 +1,17 @@
+# TASK:PLT-04.E - staging workloads for the S1 sample: storefront -> Gateway -> catalog -> PostgreSQL.
+# Secrets are created out of band (13 section 3); images are pinned by digest in the overlay.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - network-policies.yaml
+  - postgres.yaml
+  - catalog.yaml
+  - gateway.yaml
+  - storefront.yaml
+  - ingress.yaml
+configMapGenerator:
+  # Copy of infra/local/postgres-init; tests/infrastructure fails if the two drift.
+  - name: postgres-init
+    files:
+      - postgres-init/01-catalog-roles.sh

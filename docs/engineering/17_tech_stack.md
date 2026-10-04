@@ -114,7 +114,7 @@ VI/EN, accessibility, validation form, token in-memory/refresh cookie và UI sta
 | Loki | **3.7.8** | Logs JSON có masking, giới hạn retention/disk |
 | Tempo | **3.0.3** | Đánh giá monolithic ở PLT-05; không mặc định dựng distributed tracing cluster |
 | OpenTelemetry / Micrometer | Theo Boot BOM | Instrumentation application; không tự pin Java agent/collector chưa cần |
-| IaC / manifests / CI | CloudFormation + Kustomize qua kubectl + GitHub Actions | Không thêm Terraform/Helm chỉ để có thêm công cụ |
+| IaC / manifests / CI | CloudFormation + Kustomize qua kubectl + GitHub Actions | Không thêm Terraform/Helm chỉ để có thêm công cụ. PLT-04 (2026-10-04): `cfn-lint` **1.57.1** để lint offline (pin tại `tests/infrastructure/requirements.txt`, chỉ tooling); render bằng `kubectl kustomize` (local: kubectl v1.34.1 / Kustomize v5.7.1; CI dùng kubectl có sẵn trên runner); action `aws-actions/configure-aws-credentials` v6.3.0 và `amazon-ecr-login` v2.1.7 pin commit SHA |
 | Docs checker | Python **3.10+**, stdlib | Có code thật; runner `ubuntu-24.04` hiện không pin exact Python patch |
 
 Nguồn: [Docker Engine](https://docs.docker.com/engine/release-notes/29/), [Compose releases](https://github.com/docker/compose/releases), [K3s 1.35 releases](https://docs.k3s.io/release-notes/v1.35.X), [Argo 3.5.3](https://github.com/argoproj/argo-cd/releases/tag/v3.5.3), [Argo tested Kubernetes versions](https://argo-cd.readthedocs.io/en/stable/operator-manual/installation/), [Prometheus LTS download](https://prometheus.io/download/), [Grafana](https://github.com/grafana/grafana/releases/tag/v13.2.2), [Loki](https://github.com/grafana/loki/releases/tag/v3.7.8), [Tempo](https://github.com/grafana/tempo/releases/tag/v3.0.3).

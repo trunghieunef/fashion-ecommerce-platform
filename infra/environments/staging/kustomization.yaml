@@ -1,0 +1,18 @@
+# Staging overlay. Image digests are placeholders (all zeros) until the first publish run; a
+# reviewed PR sets the real ECR registry and digests, and scripts/render-staging.sh --strict
+# rejects placeholders before that PR merges.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: fashion-staging
+resources:
+  - ../base
+images:
+  - name: catalog-service
+    newName: ecr-registry-pending/fashion-ecommerce/catalog-service
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  - name: gateway
+    newName: ecr-registry-pending/fashion-ecommerce/gateway
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  - name: storefront
+    newName: ecr-registry-pending/fashion-ecommerce/storefront
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000

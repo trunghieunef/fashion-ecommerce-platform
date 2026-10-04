@@ -12,7 +12,7 @@ Danh mục và bộ version R1 sau research ở [17 Tech Stack](17_tech_stack.md
 |---|---|
 | CI tài liệu | Có cấu hình [GitHub Actions](../../.github/workflows/docs-ci.yml), checker và test chạy local; [run PASS](https://github.com/trunghieunef/fashion-ecommerce-platform/actions/runs/36662487374) trên `d16151d` ngày 2026-09-30 |
 | CI ứng dụng | Có [Application CI](../../.github/workflows/application-ci.yml) cho S1-local, read-only, không AWS; [run PASS](https://github.com/trunghieunef/fashion-ecommerce-platform/actions/runs/36662487345) trên `d16151d`; chưa có scan hoặc build/push image registry |
-| CD / hạ tầng AWS | Chưa có workflow triển khai, CloudFormation hay manifest chạy được; tài liệu này là kế hoạch thực hiện PLT-04 |
+| CD / hạ tầng AWS | **Đã chuẩn bị offline (2026-10-04), chưa provision**: CloudFormation `identity-and-ecr.yaml` và `staging.yaml`, workflow `publish-images.yml` khóa bằng `AWS_PUBLISH_ENABLED`, manifest Kustomize và Argo CD; kiểm bằng `bash scripts/validate-infra.sh` (cfn-lint + policy tests, không gọi AWS). Xem §5.1 |
 | Cloud provider | AWS đã chọn; region/topology dưới đây là đề xuất chưa provision |
 | Credit / tài khoản | Chủ dự án báo có $200; loại plan, số dư khả dụng, dịch vụ áp dụng và ngày hết hạn cần kiểm tra Billing |
 | Production | Chưa được duyệt; staging một máy không đáp ứng mặc nhiên SLO/HA/RPO/RTO |
@@ -131,7 +131,19 @@ Rollback GitOps: revert PR digest/manifests về bản đã xác minh tương th
 | PLT-04.E — manifests & GitOps | DEVOPS + BE; D | Namespace, secrets injection, resource requests/limits, probes, DB credential riêng, migration, ArgoCD scoped; HTTPS và `/internal` không public |
 | PLT-04.F — proof & handoff | DEVOPS + QA; E, PLT-05 cho observability | Fresh deploy + smoke + app rollback + stop/start/recovery; lưu CPU/RAM/disk và chi phí; runbook/URL/access handoff; G0 review bởi TL |
 
-PLT-04.C dùng CloudFormation native để tránh thêm công cụ IaC khi chưa có công cụ sẵn; template thật chỉ viết sau khi khóa đầu vào A/O02. Không chạy installer không pin version/checksum hoặc copy kubeconfig/secrets vào repo. OPS-01 vẫn sở hữu backup/PITR/restore drill đầy đủ; task F không thay acceptance OPS-01.
+PLT-04.C dùng CloudFormation native để tránh thêm công cụ IaC khi chưa có công cụ sẵn. Chủ dự án chọn chuẩn bị template trước khi A/O01 được duyệt (2026-10-04): mọi đầu vào chưa chốt (AMI, checksum K3s, thời hạn backup, email budget, domain) là tham số bắt buộc, không có giá trị đoán; chưa tạo change set hay tài nguyên nào. Không chạy installer không pin version/checksum hoặc copy kubeconfig/secrets vào repo. OPS-01 vẫn sở hữu backup/PITR/restore drill đầy đủ; task F không thay acceptance OPS-01.
+
+### 5.1. Trạng thái chuẩn bị — 2026-10-04
+
+| Subtask | Đã có (offline, chưa chạy trên AWS) | Còn cần trước/khi deploy |
+|---|---|---|
+| A | Mẫu [dự toán chi phí](../evidence/aws-cost-template.md) với profile 160 giờ / 730 giờ | PO điền giá từ Pricing Calculator đúng region, xác nhận credit/hạn/plan, duyệt ngân sách và email alert |
+| C | [`staging.yaml`](../../infra/aws/cloudformation/staging.yaml): VPC, 1 subnet, IGW, 1 EC2 `t3.large` (IMDSv2, hop limit 1), gp3 40 GiB mã hóa và giữ lại khi terminate, SG chỉ 80/443, role SSM + đọc ECR + ghi backup, EIP, S3 backup private/TLS-only/Retain, budget cảnh báo trước credit. K3s `v1.35.8+k3s1` cài bằng binary kiểm SHA-256 | Chọn AMI, checksum K3s, `BackupRetentionDays` trong khoảng 30–90 đã duyệt; `validate-template` + change set để review; thực thi chỉ sau phê duyệt riêng |
+| D | [`identity-and-ecr.yaml`](../../infra/aws/cloudformation/identity-and-ecr.yaml): OIDC provider, role chỉ push 3 repo ECR (IMMUTABLE, scan on push, Retain); [`publish-images.yml`](../../.github/workflows/publish-images.yml) chạy sau Application CI trên `main`, environment `staging-publish` | Tạo environment `staging-publish` (chỉ branch `main`, có reviewer); đặt biến `AWS_PUBLISH_ROLE_ARN`, `AWS_REGION`, `AWS_PUBLISH_ENABLED=true`. Chọn cơ chế refresh credential ECR cho K3s (credential provider) và test sau khi token hết hạn |
+| E | [Kustomize base + overlay](../../infra/environments/staging/kustomization.yaml): namespace Pod Security `baseline`, default-deny NetworkPolicy, Service ClusterIP, Ingress HTTPS chỉ `/api` → gateway và `/` → storefront, probes, requests/limits, non-root (trừ storefront); [Argo CD project/app](../../infra/argocd/staging-project.yaml) giới hạn repo + namespace. `scripts/render-staging.sh --strict` chặn digest placeholder | PR cập nhật registry/digest thật; domain + secret TLS; tạo Secret DB ngoài Git; cài Argo CD 3.5.3 pin digest; xác minh NetworkPolicy không chặn probe; đổi storefront sang image nginx không root |
+| F | — | Thuộc PLT-05/G0: smoke staging, reboot, rollback, đo tài nguyên/chi phí |
+
+Chưa có lệnh AWS nào được chạy. Quét secret, cfn-lint và các policy test chạy trong Application CI.
 
 ## 6. Checklist lần triển khai AWS đầu tiên
 
