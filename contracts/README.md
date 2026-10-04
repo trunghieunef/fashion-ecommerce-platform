@@ -1,7 +1,26 @@
 # Contracts
 
 `TASK:PLT-02` · REQ: ORD-01/07, XCT-02 · dependency: PLT-01 S1-local accepted.
-Assignee: Codex (GPT-6); reviewer: chủ dự án. Parent task còn In progress.
+Assignee: Codex (GPT-6); reviewer contract core PR #3: Codex (GPT-6), theo chỉ định chủ dự án. Parent task còn In progress.
+
+## Xác nhận review contract core — 2026-10-04
+
+Codex (GPT-6) xác nhận phạm vi contract core của [PR #3](https://github.com/trunghieunef/fashion-ecommerce-platform/pull/3)
+tại commit `816527baa1ef91c242b449f8171209c4af6791ff` đạt sau review lại. Hai finding P2
+đã được xử lý: order item quantity 1–99 theo 05 và đọc JSON bằng `Decimal` để không
+làm mất phần thập phân của tiền trước khi validate. Không phát hiện blocker mới trong
+phạm vi đã kiểm tra; chủ dự án cho phép merge PR #3.
+
+Bằng chứng: 23 contract tests PASS; scripts tests 11 PASS, 1 SKIP vì JDK không có
+trong PATH; docs checker và `git diff --check` PASS. [Application CI](https://github.com/trunghieunef/fashion-ecommerce-platform/actions/runs/37190463356)
+và [Documentation CI](https://github.com/trunghieunef/fashion-ecommerce-platform/actions/runs/37190463361)
+PASS trên commit được review; reviewer không chạy lại Redocly/backend/browser ở local.
+
+Xác nhận này chấp nhận contract core để tiếp tục PLT-03 trong phạm vi dependency đã
+review; không đóng parent PLT-02 hoặc thay review producer/consumer khi có implementation.
+Consumer Java của trường tiền phải chặn chuyển token thập phân sang integer; schema
+tests chưa chứng minh hành vi runtime đó. PostgreSQL/Kafka, dedupe và recovery vẫn cần
+bằng chứng riêng của PLT-03.
 
 ## Phạm vi thực có
 
