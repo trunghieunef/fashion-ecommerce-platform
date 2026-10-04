@@ -236,6 +236,59 @@ thì test vẫn PASS vì Spring tự từ chối khi dựng `Jwt` có `exp ≤ i
 yêu cầu review, test `tokenExpiringBeforeItWasIssuedIsRejected` bảo vệ hành vi này.
 `./mvnw -pl services/platform-security test` PASS 16/16.
 
+## SEC-01 — tách actuator Gateway khỏi port public, TDD, 2026-10-04
+
+O06: chủ dự án (PO) ghi bảng retention đã duyệt vào 13 §3 (commit `58e5cf6`). Ngày hạn hoàn
+tất và giá trị cụ thể trong các khoảng vẫn chưa chọn, nên chưa có job cleanup/purge.
+
+| Bước | Kết quả |
+|---|---|
+| RED `actuatorIsNotServedOnThePublicPort` | `/actuator/health` trên port public trả 200 |
+| GREEN `management.server.port: ${GATEWAY_MANAGEMENT_PORT:9080}` | Gateway 12/12 (thêm test readiness trên management port) |
+| Compose healthcheck → `localhost:9080`; smoke kiểm `/actuator/health` public = 404 | `local-up` PASS, smoke PASS, Playwright 2/2 |
+| `bash scripts/nacos-compat-check.sh` | Lần 1 FAIL do lỗi Docker `network ... not found` khi start nacos (lỗi môi trường, không có container cũ để xóa); chạy lại PASS 4/4 (config import, discovery, `lb://`, reconnect) |
+
+## PLT-04 chuẩn bị offline — Claude Code, TDD, 2026-10-04
+
+`TASK:PLT-04` (A, C, D, E) · REQ: NFR-01/06 · dependency: PLT-01, SEC-01; O01 chưa duyệt.
+Chủ dự án chọn "chuẩn bị PLT-04, chưa tạo gì". **Không có lệnh AWS nào được chạy**, không đăng nhập,
+không tạo change set hay tài nguyên.
+
+| Chu trình | RED (lý do đã xác nhận) | GREEN |
+|---|---|---|
+| OIDC + ECR | Thiếu `identity-and-ecr.yaml` | Trust policy so khớp chính xác `repo:trunghieunef/fashion-ecommerce-platform:environment:staging-publish` và `aud`; role chỉ push 3 repo; 6 test |
+| Workflow publish | Thiếu `publish-images.yml` | Chỉ chạy sau Application CI trên `main` (push), khi `AWS_PUBLISH_ENABLED`; OIDC trong environment; action pin SHA; 5 test. Một assertion ban đầu bắt nhầm chữ "secrets." trong comment, đã sửa test |
+| Stack staging | Thiếu `staging.yaml` | 8 test (loại tài nguyên, chỉ 80/443, IMDSv2 hop 1, gp3 mã hóa + Retain, K3s kiểm checksum, role tối thiểu, S3 private/TLS, retention 30–90 không mặc định, budget trước credit). Một assertion ban đầu bắt nhầm `| sha256sum`, đã sửa thành regex |
+| Manifest + Argo CD | Kustomize render lỗi, thiếu file | 13 test trên bản render (namespace, ingress, ClusterIP, digest, probes/resources/securityContext, không Secret, credential theo service, default deny, render `--strict`, bản copy init script khớp local, Argo CD scope) |
+
+Mutation check (sửa tạm rồi khôi phục, đều FAIL đúng test): trust policy wildcard, thêm `ec2:RunInstances`,
+dùng secret dài hạn, bỏ công tắc bật, cài K3s bằng pipe script, mở SSH, IMDS hop 2, budget tính sau
+credit, ingress `/internal` tới catalog, Service lộ port 9080, overlay `newTag: latest`, mật khẩu
+plaintext, gateway bỏ non-root. Mutation đầu tiên đổi tag ở base không có tác dụng vì overlay ghi đè digest.
+
+| Lệnh | Kết quả |
+|---|---|
+| `bash scripts/validate-infra.sh` (venv đã pin, freeze khớp) | cfn-lint sạch; 32 test PASS |
+| `bash scripts/render-staging.sh --strict` | exit 1 như mong đợi (digest placeholder) |
+| gitleaks `dir` trên thư mục mới | Không có finding mới; chỉ token Nacos synthetic đã biết trong `.env.example`/`.env` local |
+
+Còn mở: số liệu chi phí và phê duyệt O01/A; tạo environment/biến GitHub; AMI/checksum/retention;
+cơ chế refresh credential ECR cho K3s; domain/TLS; Secret DB ngoài Git; storefront chạy root.
+
+## Xử lý review PR #6 — Claude Code, TDD, 2026-10-05
+
+Review của Codex (GPT-6) tại `a472fd3` gồm 1 P1 và 2 P2 trong cấu hình staging; CI của PR đều PASS.
+Cả 3 finding đều đúng khi đối chiếu template. Chưa tái hiện được trên AWS/K3s vì chưa được phép deploy.
+
+| Finding | Nguyên nhân | RED | GREEN |
+|---|---|---|---|
+| P1: Ingress chưa ép HTTPS | `spec.tls` chỉ cấp chứng chỉ; Traefik vẫn gắn router vào entrypoint `web`, SG mở port 80 | test yêu cầu annotation `router.entrypoints: websecure` + `router.tls: "true"` FAIL | thêm 2 annotation; HTTP không có router cho app |
+| P2: first boot có thể chưa có Internet | subnet không tự cấp public IP, EIP gắn sau khi tạo instance, `curl` chỉ thử một lần với `set -e` | test yêu cầu `DependsOn` route và `curl --retry-all-errors --retry-max-time` FAIL | `DependsOn: [DefaultRoute, PublicSubnetRoutes]`; curl retry tối đa 900 giây |
+| P2: backup sống tới 2 lần thời hạn | versioning bật nên Expiration chỉ tạo delete marker, bản noncurrent sống thêm N ngày | test tính thời gian lưu gồm mọi version FAIL | bỏ versioning; dữ liệu bị xóa sau đúng N ngày kể từ khi tạo (lifecycle trễ khoảng một ngày) |
+
+`bash scripts/validate-infra.sh` PASS: cfn-lint sạch, 34 test. Bằng chứng runtime (HTTP không trả app,
+K3s cài được ở first boot, thời điểm xóa backup thực tế) phải lưu khi deploy có phê duyệt.
+
 ## Tiếp theo
 
 PLT-03: chạy CI remote, reviewer duyệt, sau đó service producer đầu tiên (CAT-01/USR-01)

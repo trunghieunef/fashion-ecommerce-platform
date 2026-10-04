@@ -73,8 +73,10 @@ PLT-04/05, AWS/K3s/ECR/ArgoCD, provider sandbox và các task business Phase 1 k
   gitleaks pin digest. Đã có: `services/platform-security` (16 test sau review PR #5: 12 trường hợp phải từ chối, 3 trường hợp hợp lệ, 1 test không log token),
   `CsrfOriginFilter` ở Gateway (8 test), `scripts/scan-secrets.sh` trong Application CI,
   data inventory theo field và permission codes ở 13, cách nạp secret. Còn mở: JWT người dùng,
-  `auth_version` và U03/U24 (USR-01/02), service đầu tiên nối service token, actuator Gateway
-  trên port public (trước PLT-04), O06 chưa có ngày/thời hạn lưu.
+  `auth_version` và U03/U24 (USR-01/02), service đầu tiên nối service token. Actuator Gateway
+  đã tách sang management port 9080 không publish (2026-10-04). Chủ dự án (PO) đã duyệt toàn bộ [bảng retention và ngoại lệ](../operations/13_operations_security.md)
+  ngày 2026-10-04; O06 còn ngày hạn, giá trị cụ thể trong các khung thời gian, chi tiết policy,
+  nhóm dữ liệu ngoài bảng và xác minh pháp lý; chưa triển khai cleanup/purge.
   O01 chỉ chặn phần cloud, không chặn PLT-02/03 local; chưa provision/deploy.
 
 ## 2. Phase 0 — nền tảng
@@ -88,7 +90,7 @@ PLT-04/05, AWS/K3s/ECR/ArgoCD, provider sandbox và các task business Phase 1 k
 | PLT-05 | DEVOPS+BE / 1–3 | PLT-03, PLT-04 | NFR-01/03/04 | JSON logs, correlation HTTP/Kafka, RED metrics, dashboard/alerts mẫu; trace checkout giả đi qua 2 service; test redaction |
 | SEC-01 | TL+BE / 2–3 | PLT-01 | USR-07/08, XCT-02/03/06 | Threat/data inventory, service identity và permission matrix, CSRF strategy, secret injection; spoof header/cross-service token/PII logs bị chặn; O06 có owner/hạn |
 
-Subtasks PLT-04.A–F, owner theo vai trò, dependencies và acceptance ở [16 AWS deployment](../engineering/16_aws_deployment.md). Không cộng subtasks lần hai vào tổng package; estimate PLT-04 cần review lại sau sizing/compatibility spike. Parent vẫn Planned; CI S1 có evidence remote, staging chưa có.
+Subtasks PLT-04.A–F, owner theo vai trò, dependencies và acceptance ở [16 AWS deployment](../engineering/16_aws_deployment.md). Không cộng subtasks lần hai vào tổng package; estimate PLT-04 cần review lại sau sizing/compatibility spike. PLT-04 **In progress — chuẩn bị offline** (2026-10-04, chủ dự án chọn): template CloudFormation, workflow publish khóa, manifest Kustomize/Argo CD và policy tests đã có ([16 §5.1](../engineering/16_aws_deployment.md)); chưa provision, chưa có change set, chờ O01/PLT-04.A.
 
 ## 3. Phase 1 — identity, catalog, cart, stock
 

@@ -27,6 +27,9 @@ fashion:
     allowed-origins: ${GATEWAY_ALLOWED_ORIGINS:http://localhost:4173}
 
 management:
+  # Actuator on its own port, never published or routed (SEC-01, before PLT-04).
+  server:
+    port: ${GATEWAY_MANAGEMENT_PORT:9080}
   endpoints:
     web:
       exposure:

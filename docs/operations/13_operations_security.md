@@ -9,7 +9,7 @@ AWS đã chọn, chưa provision. [16 AWS deployment](../engineering/16_aws_depl
 | Boundary / rủi ro | Control bắt buộc | Proof |
 |---|---|---|
 | Browser → Gateway: giả danh header | Strip client identity headers; JWT/session verify, CORS/CSRF theo cookie | S1 Gateway strip `X-User-Id`, `X-User-Roles`, `X-Actor-Id`, `X-Service-Name`. SEC-01: `CsrfOriginFilter` (ADR-20) từ chối request ghi có cookie mà Origin lạ, `Origin: null`, cross-site, hoặc thiếu cả Origin lẫn Fetch-Metadata (test Gateway). JWT người dùng và U03/U24 còn mở (USR-01/02) |
-| Gateway → service: bypass gateway | Private network/caller identity + service authorization/ownership | S1 local: catalog không publish port, `/internal/**` 404 qua smoke; Gateway actuator (`health,info,metrics`) đang cùng port public — phải tách/chặn trước PLT-04. SEC-01: `platform-security` (ADR-19) từ chối token sai audience, caller ngoài allowlist, khóa sai, hết hạn hoặc sống quá TTL, `alg: none`, HS256; chưa service nào nối vào |
+| Gateway → service: bypass gateway | Private network/caller identity + service authorization/ownership | S1 local: catalog không publish port, `/internal/**` 404 qua smoke; Gateway actuator đã chuyển sang management port 9080 không publish; port public trả 404 cho `/actuator/**` (test Gateway + smoke, SEC-01). SEC-01: `platform-security` (ADR-19) từ chối token sai audience, caller ngoài allowlist, khóa sai, hết hạn hoặc sống quá TTL, `alg: none`, HS256; chưa service nào nối vào |
 | Guest cart/order: IDOR | Credential ngẫu nhiên đủ mạnh, hash server, cookie secure; scoped resource | T21 |
 | Service → DB: đọc chéo | Credentials riêng, least privilege, migrations role tách runtime | Runtime không đọc DB khác/không DDL |
 | Provider → callback: giả/trễ/lặp | Signature/auth theo adapter; reference/merchant/amount/currency; dedupe và TX trước ACK | U16/T06 |
@@ -59,10 +59,50 @@ Một người có thể nhiều role nhưng audit phải ghi actor/action/reaso
 | Notification recipient/rendered content | notification-db | Sender/support có scope; OTP dùng marker | O06 chốt TTL ngắn, cleanup verified trước launch |
 | Marketing preferences | notification-db | Opt-in, consent timestamp và unsubscribe hash | O06 chốt bằng chứng consent/retention |
 | Outbox/inbox | DB service | Application/ops bounded replay | Dự kiến SENT 30 ngày, dedupe 90 ngày; phải đủ replay window |
-| Logs/traces | Observability storage | RBAC, mask phone/email/token, không body webhook secret | Logs dự kiến 30 ngày; traces theo budget và O06 |
+| Logs/traces | Observability storage | RBAC, mask phone/email/token, không body webhook secret | PO duyệt khung logs 30–90 ngày tại bảng O06 bên dưới; traces theo budget và O06 |
 | Media | Object storage | Scoped upload, public chỉ approved assets | Dọn orphan sau policy; không xóa ảnh evidence tùy ý |
 
 Các mốc kỹ thuật không thay thời hạn pháp lý. PO/phụ trách pháp lý xác minh nghĩa vụ hiện hành trước G2, ghi nguồn và ngày vào O06. Request xem/xóa dữ liệu phải xác minh actor, kiểm tra nghĩa vụ lưu và xử lý từng DB owner; không cascade xóa order/payment lịch sử vì user yêu cầu xóa account.
+
+### Chính sách retention — PO đã duyệt ngày 2026-10-04
+
+`TASK:SEC-01` · REQ: XCT-06 · dependency: O06 (PO + phụ trách pháp lý).
+Người duyệt: **chủ dự án (vai trò PO)**, xác nhận trong phiên làm việc ngày 2026-10-04:
+"tick cho PO là đã duyệt hết rồi".
+
+- [x] PO duyệt toàn bộ 8 nhóm dữ liệu, thời hạn/khung thời hạn và cách xử lý trong bảng dưới đây.
+- [x] PO duyệt nguyên tắc giữ lại hồ sơ còn tranh chấp, đối soát, refund hoặc nghĩa vụ lưu bắt buộc.
+
+Phê duyệt áp dụng cho nội dung bảng, gồm các khoảng 30–90 ngày và 12–24 tháng;
+PO chưa chọn một giá trị cụ thể trong các khoảng này. Trước implementation phải chốt
+giá trị cấu hình cụ thể trong khung đã duyệt. **Chưa triển khai cleanup/purge**.
+
+| Nhóm dữ liệu | Thời hạn/khung thời hạn PO đã duyệt | Mốc bắt đầu tính / xử lý khi hết hạn |
+|---|---|---|
+| Tài khoản, email, địa chỉ đã lưu | Giữ khi tài khoản hoạt động; xem xét xóa/ẩn danh sau 24 tháng không hoạt động | Từ lần hoạt động cuối; PO chốt định nghĩa hoạt động và quy trình thông báo/xóa. Yêu cầu xóa hợp lệ được xử lý riêng, không buộc khách chờ 24 tháng |
+| Giỏ hàng bỏ quên | 30–90 ngày | Từ lần cập nhật giỏ cuối; chỉ dọn giỏ không còn checkout đang xử lý, không xóa dữ liệu đơn đã tạo |
+| Địa chỉ, ghi chú giao hàng trong đơn | 12–24 tháng | Từ khi đơn kết thúc và nghĩa vụ giao hàng/hoàn trả đã được xử lý; xóa/ẩn danh phần PII không còn cần thiết, giữ field cần cho chứng từ hoặc tranh chấp |
+| Log kỹ thuật đã che thông tin nhạy cảm | 30–90 ngày | Từ thời điểm log được tạo; tự hết hạn theo storage policy sau khi được duyệt |
+| Audit thao tác admin | 12 tháng | Từ thời điểm thao tác; audit liên quan tài chính giữ theo thời hạn hồ sơ tương ứng |
+| Backup luân phiên | 30–90 ngày | Từ ngày tạo bản backup; hết hạn thì loại bỏ theo lịch backup. Khi restore phải áp dụng lại các yêu cầu xóa/ẩn danh đã có để dữ liệu không xuất hiện trở lại trong hệ thống hoạt động |
+| OTP/reset token | Theo expiry hiện có: OTP 5 phút, reset 30 phút; vô hiệu ngay khi dùng xong | Từ lúc phát hành; dọn secret tạm sớm sau dùng/hết hạn, chỉ giữ hash/marker/audit cần thiết theo policy riêng |
+| Hóa đơn, chứng từ kế toán trực tiếp dùng để ghi sổ/lập báo cáo tài chính | Ít nhất 10 năm; PO đã duyệt, phụ trách pháp lý còn cần xác minh áp dụng | Mốc tính theo loại tài liệu và quy định kế toán, không mặc định tính từ ngày tạo order; không áp thời hạn này cho toàn bộ profile/address/log |
+
+Cơ sở tham khảo: [Luật Bảo vệ dữ liệu cá nhân 91/2025/QH15, Điều 3](https://datafiles.chinhphu.vn/cpp/files/vbpq/2025/7/91qh.signed.pdf)
+yêu cầu thời gian lưu phù hợp với mục đích xử lý, trừ quy định khác;
+[hướng dẫn lưu chứng từ/hóa đơn trên Cổng Chính phủ](https://baochinhphu.vn/quy-dinh-ve-tieu-huy-hoa-don-cu-102270958.htm)
+nêu nhóm chứng từ trực tiếp ghi sổ/lập báo cáo tài chính lưu ít nhất 10 năm. Các mốc
+vận hành khác trong bảng là chính sách dự án được PO duyệt, không phải thời hạn bắt buộc chung.
+
+Phần còn lại: **ngày hạn hoàn tất O06** (chưa được chỉ định), giá trị cụ thể cho từng
+khoảng thời gian và các chi tiết còn nêu trong bảng (định nghĩa hoạt động, quy trình
+thông báo/xóa, căn cứ và mốc tính cho từng loại chứng từ).
+Hồ sơ còn tranh chấp, đối soát, refund hoặc nghĩa vụ lưu bắt buộc phải được giữ lại
+trong phạm vi cần thiết; PO/phụ trách pháp lý chốt điều kiện giữ và điều kiện kết thúc.
+Notification/consent, traces, media và retention kỹ thuật outbox/inbox vẫn cần quyết
+định riêng; bảng này chưa bao phủ toàn bộ data inventory. Acceptance O06 trước G2
+cần chính sách được duyệt theo từng nhóm dữ liệu, gồm các nhóm còn mở này, và kế hoạch
+cleanup/retention/restore có kiểm thử; chưa bật purge dữ liệu tài chính.
 
 Secret inventory gồm JWT signing keys, service credentials, DB/Kafka/Redis credentials, merchant secrets, mail/SMS keys. Mỗi secret có owner, env, rotation plan; không lưu trong Nacos plaintext, image, Git hoặc ticket.
 

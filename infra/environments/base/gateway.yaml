@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: gateway}
+  template:
+    metadata:
+      labels: {app: gateway}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: gateway
+          image: gateway
+          ports:
+            - {name: http, containerPort: 8080}
+            - {name: management, containerPort: 9080}
+          env:
+            - {name: CATALOG_BASE_URL, value: "http://catalog:8081"}
+            # Set to the approved staging origin with O01 (domain).
+            - {name: GATEWAY_ALLOWED_ORIGINS, value: "https://staging.example.invalid"}
+            - {name: JAVA_TOOL_OPTIONS, value: "-XX:MaxRAMPercentage=75 -Duser.timezone=UTC"}
+          readinessProbe:
+            httpGet: {path: /actuator/health/readiness, port: management}
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /actuator/health/liveness, port: management}
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests: {cpu: 100m, memory: 384Mi}
+            limits: {cpu: "1", memory: 512Mi}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+# Only the public port; the management port 9080 stays pod-local.
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+spec:
+  selector: {app: gateway}
+  ports:
+    - {name: http, port: 8080, targetPort: http}

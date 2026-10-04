@@ -56,6 +56,12 @@ jobs:
           source /tmp/fashion-contracts-venv/bin/activate
           python3 -m pip install -r tests/contracts/requirements.txt
           bash scripts/validate-contracts.sh
+      - name: Infrastructure validation (offline, no AWS credentials)
+        run: |
+          python3 -m venv /tmp/fashion-infra-venv
+          source /tmp/fashion-infra-venv/bin/activate
+          python3 -m pip install -r tests/infrastructure/requirements.txt
+          bash scripts/validate-infra.sh
       - name: Start local stack
         run: bash scripts/local-up.sh
       - name: Local smoke

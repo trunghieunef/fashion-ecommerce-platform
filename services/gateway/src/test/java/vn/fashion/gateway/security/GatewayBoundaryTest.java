@@ -15,6 +15,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalManagementPort;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -28,6 +29,9 @@ class GatewayBoundaryTest {
 
   @LocalServerPort
   private int port;
+
+  @LocalManagementPort
+  private int managementPort;
 
   private WebTestClient client;
 
@@ -43,6 +47,7 @@ class GatewayBoundaryTest {
   static void catalogBaseUrl(DynamicPropertyRegistry registry) {
     registry.add("CATALOG_BASE_URL", CATALOG::baseUrl);
     registry.add("fashion.security.allowed-origins", () -> "http://localhost:4173");
+    registry.add("GATEWAY_MANAGEMENT_PORT", () -> "0");
   }
 
   @BeforeAll
@@ -133,6 +138,19 @@ class GatewayBoundaryTest {
     client.get().uri("/api/v1/catalog/products?limit=1").header("Cookie", "guest_cart=synthetic")
         .header("Origin", "https://evil.example").exchange().expectStatus().isOk();
     assertThat(CATALOG.requestCount()).isEqualTo(1);
+  }
+
+  @Test
+  void actuatorIsNotServedOnThePublicPort() {
+    client.get().uri("/actuator/health").exchange().expectStatus().isNotFound();
+    client.get().uri("/actuator/metrics").exchange().expectStatus().isNotFound();
+    assertThat(managementPort).isNotEqualTo(port);
+  }
+
+  @Test
+  void readinessIsServedOnTheManagementPort() {
+    WebTestClient.bindToServer().baseUrl("http://localhost:" + managementPort).build()
+        .get().uri("/actuator/health/readiness").exchange().expectStatus().isOk();
   }
 
   private WebTestClient.RequestHeadersSpec<?> cookiePost() {

@@ -59,6 +59,7 @@ chỉ copy JAR/`dist` vào image runtime pin tag + digest.
 | Docs | `python3 -B -m unittest discover -s scripts -p 'test_*.py' -v` và `python3 -B scripts/check_docs.py` |
 | Backend (PostgreSQL thật) | `./mvnw test`; một test: `./mvnw -pl services/catalog-service -Dtest=ProductQueryIntegrationTest test` |
 | Service identity (không cần Docker) | `./mvnw -pl services/platform-security test`; xem [README](../../services/platform-security/README.md) |
+| Hạ tầng offline (PLT-04) | `bash scripts/validate-infra.sh` (venv từ `tests/infrastructure/requirements.txt`: cfn-lint + policy tests, không gọi AWS); `bash scripts/render-staging.sh [--strict]` |
 | Secret scan (Docker) | `bash scripts/scan-secrets.sh` (gitleaks v8.30.1 pin digest, quét git history; finding đã review ghi trong `.gitleaksignore`) |
 | Durability primitives (PostgreSQL + Kafka thật) | `./mvnw -pl services/platform-durability test`; xem [README](../../services/platform-durability/README.md) |
 | Frontend | `npm ci && npm run typecheck && npm test && npm run build` |

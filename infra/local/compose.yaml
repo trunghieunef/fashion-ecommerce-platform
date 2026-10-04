@@ -83,7 +83,8 @@ services:
         condition: service_healthy
         required: false
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health/readiness"]
+      # Management port 9080 is container-internal only (not published).
+      test: ["CMD", "curl", "-fsS", "http://localhost:9080/actuator/health/readiness"]
       interval: 5s
       timeout: 3s
       retries: 30
