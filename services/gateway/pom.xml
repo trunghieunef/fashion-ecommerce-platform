@@ -31,6 +31,25 @@
       <artifactId>spring-cloud-starter-loadbalancer</artifactId>
     </dependency>
     <dependency>
+      <groupId>com.fashion</groupId>
+      <artifactId>platform-security</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <!-- PLT-05: W3C trace context via Micrometer Tracing + OpenTelemetry bridge (Boot BOM), no exporter. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-micrometer-tracing-opentelemetry</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.micrometer</groupId>
+      <artifactId>micrometer-tracing-bridge-otel</artifactId>
+    </dependency>
+    <!-- PLT-05: RED metrics scraped from the management port. -->
+    <dependency>
+      <groupId>io.micrometer</groupId>
+      <artifactId>micrometer-registry-prometheus</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-test</artifactId>
       <scope>test</scope>

@@ -289,6 +289,46 @@ Cả 3 finding đều đúng khi đối chiếu template. Chưa tái hiện đư
 `bash scripts/validate-infra.sh` PASS: cfn-lint sạch, 34 test. Bằng chứng runtime (HTTP không trả app,
 K3s cài được ở first boot, thời điểm xóa backup thực tế) phải lưu khi deploy có phê duyệt.
 
+## PLT-05 phần local, Gateway — Claude Code, TDD, 2026-10-05
+
+`TASK:PLT-05` · REQ: NFR-01/03/04, XCT-06 · dependency: PLT-03; phần staging chờ PLT-04.
+
+| Chu trình | RED (lý do đã xác nhận) | GREEN |
+|---|---|---|
+| Trace W3C | upstream không nhận `traceparent` khi client không gửi (test tiếp nối trace pass sẵn vì Gateway chuyển nguyên header) | `spring-boot-micrometer-tracing-opentelemetry`; lần đầu vẫn FAIL vì module này không kéo bridge, thêm `micrometer-tracing-bridge-otel` |
+| Redaction | thiếu `LogRedactor` | 6 test: email, Bearer/JWT, phone VN, `password=`/`otp:`, giữ nguyên ID/số tiền |
+| Log JSON | không có dòng log JSON đã che | ECS + `PiiRedactingJsonCustomizer`; assertion ban đầu sai format (ECS của Boot 4 lồng `log.level`), đã sửa test theo output thật |
+| Metrics | `/actuator/prometheus` 404 | `micrometer-registry-prometheus`; có `http_server_requests_seconds_count`, không có query string trong label, port public vẫn 404 |
+
+Mutation: bỏ cấu hình customizer làm test log FAIL. `./mvnw -B -pl services/gateway -am test`:
+platform-security 22, gateway 16 PASS. Docker Desktop không chạy trong phiên này nên chưa chạy
+catalog, Compose, smoke và Playwright.
+
+## PLT-05 phần local, catalog — Claude Code, 2026-10-05
+
+| Bước | Kết quả |
+|---|---|
+| RED: 2 test trace (tiếp nối `traceparent`; trace mới dạng 32 hex) | FAIL: catalog trả UUID ngẫu nhiên |
+| GREEN: `Tracer` vào `ProductQueryController`, tracing OTel + Prometheus + log ECS | catalog 12/12 |
+| Log JSON và Prometheus của catalog | Cấu hình được thêm **trước** test (lệch TDD). Bù lại: viết 2 test rồi mutation; bỏ expose `prometheus`, bỏ customizer, bỏ format ECS đều làm đúng test FAIL |
+| Smoke | Thêm kiểm tra `traceparent` qua Gateway → catalog quay về đúng trong `metadata.trace_id` |
+
+Lệnh đã chạy (Docker Desktop 29.2.0): `./mvnw -B test` PASS (durability 36, security 22,
+catalog 12, gateway 16); `local-up.sh` → `smoke-local.sh` PASS; Playwright 2/2; Nacos proof 4/4;
+log container Gateway đã ra JSON ECS.
+
+## Xử lý review PR #7 — Claude Code, TDD, 2026-10-05
+
+Review của Codex (GPT-6) tại `39478d0` gồm 2 finding P2 về redaction; CI của PR đều PASS. Cả hai đều đúng.
+
+| Finding | Nguyên nhân | RED | GREEN |
+|---|---|---|---|
+| Field MDC/key-value nhạy cảm ghi nguyên văn | customizer chỉ xử lý giá trị chuỗi, không xét tên field | test log JSON thật của Gateway với `MDC password`, key-value `token` và `otp` số FAIL | che theo tên field (`isSensitiveName`) với mọi kiểu giá trị, sau đó regex cho chuỗi |
+| Regex bỏ lọt JSON và giá trị có ngoặc kép | key không cho dấu `"`, giá trị dừng ở khoảng trắng | 4 test `LogRedactorTest` FAIL (thêm stub `isSensitiveName` để thấy lỗi hành vi thay vì lỗi compile) | key có ngoặc tùy chọn, tên ghép, giá trị trong `"…"`/`'…'`; giữ nguyên dấu phân cách |
+
+Mutation: bỏ nhánh che theo tên làm test MDC/key-value FAIL. `./mvnw -B test` PASS (durability 36,
+security 26, catalog 12, gateway 17).
+
 ## Tiếp theo
 
 PLT-03: chạy CI remote, reviewer duyệt, sau đó service producer đầu tiên (CAT-01/USR-01)

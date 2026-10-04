@@ -11,13 +11,19 @@
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <!-- Plain library: service-to-service identity (ADR-19). JOSE/Nimbus via the Spring Security BOM. -->
+  <!-- Plain library: service-to-service identity (ADR-19) and log redaction (XCT-06).
+       JOSE/Nimbus via the Spring Security BOM. -->
   <artifactId>platform-security</artifactId>
 
   <dependencies>
     <dependency>
       <groupId>org.springframework.security</groupId>
       <artifactId>spring-security-oauth2-jose</artifactId>
+    </dependency>
+    <!-- Structured logging customizer API (PiiRedactingJsonCustomizer). -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot</artifactId>
     </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>

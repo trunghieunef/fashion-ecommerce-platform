@@ -11,6 +11,10 @@ import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.slf4j.LoggerFactory;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -27,6 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @Testcontainers
+@ExtendWith(OutputCaptureExtension.class)
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class ProductQueryIntegrationTest {
   @Container
@@ -141,15 +146,60 @@ class ProductQueryIntegrationTest {
   }
 
   @Test
+  void continuesTheCallersW3cTraceInMetadataAndHeader() {
+    String traceId = "4bf92f3577b34da6a3ce929d0e0e4736";
+    var response = get("/api/v1/catalog/products?limit=1",
+        "traceparent", "00-" + traceId + "-00f067aa0ba902b7-01");
+    var body = readProductPage(response);
+
+    assertThat(body.metadata().traceId()).isEqualTo(traceId);
+    assertThat(response.headers().firstValue("X-Correlation-Id")).contains(traceId);
+  }
+
+  @Test
+  void startsANewW3cTraceWhenTheCallerSendsNone() {
+    var body = readProductPage(get("/api/v1/catalog/products?limit=1"));
+
+    assertThat(body.metadata().traceId()).matches("[0-9a-f]{32}");
+    assertThat(body.metadata().requestId()).isNotEqualTo(body.metadata().traceId());
+  }
+
+  @Test
+  void exposesRedMetricsWithTheUriTemplateOnly() {
+    get("/api/v1/catalog/products?limit=1");
+
+    var metrics = get("/actuator/prometheus");
+
+    assertThat(metrics.statusCode()).isEqualTo(HttpStatus.OK.value());
+    assertThat(metrics.body()).contains("http_server_requests_seconds_count")
+        .contains("uri=\"/api/v1/catalog/products\"").doesNotContain("limit=1");
+  }
+
+  @Test
+  void applicationLogsAreJsonAndRedacted(CapturedOutput output) {
+    LoggerFactory.getLogger(ProductQueryIntegrationTest.class)
+        .info("buyer person@example.test phone 0912345678 token=abc123");
+
+    String line = output.getOut().lines().filter(l -> l.contains("buyer [email]"))
+        .findFirst().orElseThrow(() -> new AssertionError("redacted JSON log line not found"));
+    assertThat(line).startsWith("{").contains("[phone]").contains("token=[redacted]");
+    assertThat(output.getAll()).doesNotContain("person@example.test", "0912345678", "abc123");
+  }
+
+  @Test
   void runtimeRoleCannotCreateTables() {
     assertThatThrownBy(() -> jdbc.execute("create table forbidden(id bigint)"))
         .hasStackTraceContaining("permission denied");
   }
 
-  private HttpResponse<String> get(String path) {
+  private HttpResponse<String> get(String path, String... headers) {
     try {
+      var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path)).GET();
+      if (headers.length > 0) {
+        request.headers(headers);
+      }
       return HttpClient.newHttpClient().send(
-          HttpRequest.newBuilder(URI.create("http://localhost:" + port + path)).GET().build(),
+          request.build(),
           HttpResponse.BodyHandlers.ofString());
     } catch (IOException exception) {
       throw new AssertionError(exception);

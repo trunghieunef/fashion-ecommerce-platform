@@ -89,6 +89,10 @@ fast nếu Nacos down lúc khởi động), đăng ký discovery `catalog-servic
 `management.info.env` để proof đọc giá trị import. Biến: `NACOS_SERVER_ADDR`,
 `NACOS_USERNAME`, `NACOS_PASSWORD`. Chạy proof: `bash scripts/nacos-compat-check.sh`.
 
-Actuator hiện chỉ expose `health`, `info`, `metrics`; chưa có Prometheus registry,
-dashboard, alert, tracing exporter hoặc retention policy. Các phần observability đó
-thuộc task sau.
+Observability (PLT-05, phần local): `metadata.trace_id` và header `X-Correlation-Id` là trace
+W3C của request (tiếp nối `traceparent` từ Gateway; không có span thì sinh 32 hex), còn
+`request_id` vẫn là UUID riêng của mỗi response. Log JSON dạng ECS qua
+`PiiRedactingJsonCustomizer` ([platform-security](../platform-security/README.md)). Actuator
+expose `health`, `info`, `metrics`, `prometheus` trên port 8081; port này không publish ra ngoài,
+label metrics dùng URI template. Chưa có tracing exporter, dashboard, alert hay retention policy
+(phần staging của PLT-05, sau PLT-04).

@@ -35,6 +35,19 @@ Các trường hợp bị từ chối: sai audience, caller ngoài allowlist, kh
 TTL, `iat` ở tương lai, `exp ≤ iat`, `sub ≠ iss`, `alg: none`, HS256, JWE, token rác hoặc rỗng. Test cũng khẳng định khi từ chối thì
 token không bị ghi ra log. Không dùng network hay Docker.
 
+## Che dữ liệu trong log (XCT-06, PLT-05)
+
+`LogRedactor.redact` che: giá trị của key chứa `password|passwd|secret|token|otp` (kể cả tên
+ghép như `access_token`, `refreshToken`) ở dạng `key=value`, `key: value` và JSON `"key":"value"`,
+giá trị trong ngoặc kép/đơn được che tới hết dấu đóng; `Bearer …`; chuỗi dạng JWT; email; số điện
+thoại VN (`0` hoặc `+84` + 9 chữ số). `PiiRedactingJsonCustomizer` che **theo tên field** trước:
+field MDC hoặc SLF4J key-value có tên nhạy cảm (`password`, `token`, `otp`, `authorization`,
+`cookie`, `credential`…) bị thay bằng `[redacted]` dù giá trị kiểu gì; mọi giá trị chuỗi khác
+đi qua `LogRedactor`. Bật bằng
+`logging.structured.json.customizer=vn.fashion.platform.security.PiiRedactingJsonCustomizer`.
+Đây chỉ là lưới an toàn: code vẫn không được log dữ liệu nhạy cảm. Regex không nhận diện được
+họ tên hay địa chỉ trong text tự do.
+
 ## Giới hạn
 
 - Chưa có token người dùng (member/admin JWT, JWKS của user-service, `auth_version`):

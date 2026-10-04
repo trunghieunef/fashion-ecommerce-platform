@@ -113,7 +113,7 @@ VI/EN, accessibility, validation form, token in-memory/refresh cookie và UI sta
 | Grafana OSS | **13.2.2** | Dashboard private, provision datasource/dashboard bằng Git |
 | Loki | **3.7.8** | Logs JSON có masking, giới hạn retention/disk |
 | Tempo | **3.0.3** | Đánh giá monolithic ở PLT-05; không mặc định dựng distributed tracing cluster |
-| OpenTelemetry / Micrometer | Theo Boot BOM | Instrumentation application; không tự pin Java agent/collector chưa cần |
+| OpenTelemetry / Micrometer | Theo Boot BOM | Instrumentation application; không tự pin Java agent/collector chưa cần. PLT-05 local (2026-10-05): `spring-boot-micrometer-tracing-opentelemetry` + `micrometer-tracing-bridge-otel` (Micrometer Tracing 1.6.7, OpenTelemetry 1.55.0), chưa có exporter OTLP; `micrometer-registry-prometheus` cho `/actuator/prometheus` trên management port; log JSON bằng structured logging ECS có sẵn của Boot |
 | IaC / manifests / CI | CloudFormation + Kustomize qua kubectl + GitHub Actions | Không thêm Terraform/Helm chỉ để có thêm công cụ. PLT-04 (2026-10-04): `cfn-lint` **1.57.1** để lint offline (pin tại `tests/infrastructure/requirements.txt`, chỉ tooling); render bằng `kubectl kustomize` (local: kubectl v1.34.1 / Kustomize v5.7.1; CI dùng kubectl có sẵn trên runner); action `aws-actions/configure-aws-credentials` v6.3.0 và `amazon-ecr-login` v2.1.7 pin commit SHA |
 | Docs checker | Python **3.10+**, stdlib | Có code thật; runner `ubuntu-24.04` hiện không pin exact Python patch |
 
