@@ -102,6 +102,10 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/RefreshResponse'}
+              example:
+                code: OK
+                data: {access_token: eyJhbGciOiJFUzI1NiJ9.synthetic.signature, token_type: Bearer, expires_in: 900} # gitleaks:allow synthetic example token
+                metadata: {request_id: 4c8a1f2e-0000-4000-8000-000000000016, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -220,10 +224,19 @@ components:
             - $ref: '#/components/schemas/Session'
             - required: [user]
         metadata: {$ref: './common.yaml#/components/schemas/Metadata'}
+    RefreshTokens:
+      description: Refresh only rotates tokens; it never returns the profile
+      type: object
+      required: [access_token, token_type, expires_in]
+      additionalProperties: false
+      properties:
+        access_token: {type: string, minLength: 1}
+        token_type: {const: Bearer}
+        expires_in: {const: 900}
     RefreshResponse:
       type: object
       required: [code, data, metadata]
       properties:
         code: {const: OK}
-        data: {$ref: '#/components/schemas/Session'}
+        data: {$ref: '#/components/schemas/RefreshTokens'}
         metadata: {$ref: './common.yaml#/components/schemas/Metadata'}

@@ -221,6 +221,106 @@ class AuthIntegrationTest {
   }
 
   @Test
+  void refreshResponseCarriesOnlyTheTokenFields() {
+    var rotated = refresh(refreshToken(setCookie(register("shape@example.test"))));
+
+    assertThat(body(rotated).path("data").propertyNames())
+        .containsExactlyInAnyOrder("access_token", "token_type", "expires_in");
+  }
+
+  @Test
+  void logoutDuringARotationAlsoRevokesTheRotatedToken() throws Exception {
+    String token = refreshToken(setCookie(register("race-logout@example.test")));
+
+    try (var pause = new InsertPause()) {
+      var rotation = CompletableFuture.supplyAsync(() -> refresh(token));
+      pause.awaitWaiters(1);
+      var logout = CompletableFuture.supplyAsync(() -> post("/api/v1/auth/logout", "", "refresh_token=" + token));
+      pause.awaitWaiters(2);
+      pause.release();
+
+      String rotated = refreshToken(setCookie(rotation.join()));
+      assertThat(logout.join().statusCode()).isEqualTo(204);
+      assertThat(refresh(rotated).statusCode()).as("descendant of a logged-out family").isEqualTo(401);
+    }
+  }
+
+  @Test
+  void replayOfAPredecessorDuringARotationRevokesTheNewToken() throws Exception {
+    String first = refreshToken(setCookie(register("race-replay@example.test")));
+    String second = refreshToken(setCookie(refresh(first)));
+
+    try (var pause = new InsertPause()) {
+      var rotation = CompletableFuture.supplyAsync(() -> refresh(second));
+      pause.awaitWaiters(1);
+      var replay = CompletableFuture.supplyAsync(() -> refresh(first));
+      pause.awaitWaiters(2);
+      pause.release();
+
+      String third = refreshToken(setCookie(rotation.join()));
+      assertThat(replay.join().statusCode()).isEqualTo(401);
+      assertThat(refresh(third).statusCode()).as("descendant of a replayed family").isEqualTo(401);
+    }
+  }
+
+  /**
+   * Pauses the next refresh_tokens insert (i.e. a rotation that already locked its token) until
+   * released, via a test-only trigger created with the container superuser.
+   */
+  static final class InsertPause implements AutoCloseable {
+    private static final long KEY = 7_421_337L;
+    private final java.sql.Connection admin;
+    private boolean released;
+
+    InsertPause() throws java.sql.SQLException {
+      admin = java.sql.DriverManager.getConnection(postgres.getJdbcUrl(), "postgres", "postgres");
+      try (var statement = admin.createStatement()) {
+        statement.execute("""
+            create or replace function test_pause_insert() returns trigger language plpgsql as $$
+            begin perform pg_advisory_lock(%d); perform pg_advisory_unlock(%d); return new; end $$
+            """.formatted(KEY, KEY));
+        statement.execute("drop trigger if exists test_pause on refresh_tokens");
+        statement.execute("create trigger test_pause before insert on refresh_tokens "
+            + "for each row execute function test_pause_insert()");
+        statement.execute("select pg_advisory_lock(" + KEY + ")");
+      }
+    }
+
+    void awaitWaiters(int count) throws Exception {
+      long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
+      while (System.nanoTime() < deadline) {
+        try (var statement = admin.createStatement();
+             var rs = statement.executeQuery("select count(*) from pg_locks where not granted")) {
+          rs.next();
+          if (rs.getInt(1) >= count) {
+            return;
+          }
+        }
+        Thread.sleep(50);
+      }
+      throw new AssertionError("expected " + count + " sessions waiting on a lock");
+    }
+
+    void release() throws java.sql.SQLException {
+      try (var statement = admin.createStatement()) {
+        statement.execute("select pg_advisory_unlock(" + KEY + ")");
+      }
+      released = true;
+    }
+
+    @Override
+    public void close() throws java.sql.SQLException {
+      if (!released) {
+        release();
+      }
+      try (var statement = admin.createStatement()) {
+        statement.execute("drop trigger if exists test_pause on refresh_tokens");
+      }
+      admin.close();
+    }
+  }
+
+  @Test
   void concurrentRefreshWithTheSameTokenSucceedsAtMostOnce() {
     String token = refreshToken(setCookie(register("parallel@example.test")));
 

@@ -11,7 +11,7 @@ Contract: [`contracts/openapi/user.yaml`](../../contracts/openapi/user.yaml); th
 |---|---|
 | `POST /api/v1/auth/register` | Email trim + lowercase, password 8 ký tự tới 72 byte (BCrypt cost 12), `full_name`, `locale` vi/en. 201 + access token + cookie refresh; email đã có → 409 `CONFLICT`. Ghi `USER_CREATED` (chỉ `user_id`, `locale`) vào outbox cùng transaction |
 | `POST /api/v1/auth/login` | 200 + token + cookie. Email không tồn tại, sai mật khẩu và tài khoản đang khóa đều trả cùng 401 `INVALID_CREDENTIALS`; tài khoản không tồn tại vẫn chạy BCrypt với hash giả để thời gian phản hồi không lộ thông tin |
-| `POST /api/v1/auth/refresh` | Cookie `refresh_token` dùng một lần: xoay sang token mới cùng family. Dùng lại token đã xoay → thu hồi cả family, trả 401 và xóa cookie |
+| `POST /api/v1/auth/refresh` | Cookie `refresh_token` dùng một lần: xoay sang token mới cùng family; response chỉ có `access_token`, `token_type`, `expires_in`. Dùng lại token đã xoay → thu hồi cả family, trả 401 và xóa cookie. Refresh, logout và thu hồi khi replay cùng lấy khóa `pg_advisory_xact_lock` theo family, nên việc thu hồi không bỏ sót token đang được tạo song song |
 | `POST /api/v1/auth/logout` | Thu hồi family, xóa cookie, 204 (idempotent) |
 
 - **Access token:** JWT ES256, 900 giây, `iss=user-service`, `aud=fashion-api`, `sub` = user id,

@@ -120,13 +120,20 @@ public class AuthService {
 
   /**
    * Rotate on use. A token that was already rotated or revoked is a replay: the whole family is
-   * revoked and that revocation commits before the caller gets 401.
+   * revoked and that revocation commits before the caller gets 401. Every write to a family
+   * (rotation, replay revocation, logout) first takes the family lock, so a revocation never
+   * misses a token that a concurrent rotation is inserting.
    */
   public Session refresh(String rawToken) {
     enum Outcome { ROTATED, REPLAY, INVALID }
     record Result(Outcome outcome, Session session) {
     }
     Result result = tx.execute(status -> {
+      Optional<UUID> family = familyOf(rawToken);
+      if (family.isEmpty()) {
+        return new Result(Outcome.INVALID, null);
+      }
+      lockFamily(family.get());
       record Token(UUID id, UUID userId, UUID familyId, boolean revoked, boolean expired) {
       }
       Optional<Token> token = jdbc.sql("""
@@ -180,12 +187,24 @@ public class AuthService {
     if (rawToken == null || rawToken.isBlank()) {
       return;
     }
-    jdbc.sql("""
-            update refresh_tokens set revoked_at = now()
-            where revoked_at is null
-              and family_id = (select family_id from refresh_tokens where token_hash = :hash)
-            """)
-        .param("hash", sha256(rawToken)).update();
+    tx.executeWithoutResult(status -> familyOf(rawToken).ifPresent(family -> {
+      lockFamily(family);
+      revokeFamily(family);
+    }));
+  }
+
+  private Optional<UUID> familyOf(String rawToken) {
+    return jdbc.sql("select family_id from refresh_tokens where token_hash = :hash")
+        .param("hash", sha256(rawToken)).query(UUID.class).optional();
+  }
+
+  /**
+   * Transaction-scoped lock per family. Statements after it see rows committed by the previous
+   * holder (READ COMMITTED), which row locks on one token alone do not guarantee.
+   */
+  private void lockFamily(UUID familyId) {
+    jdbc.sql("select pg_advisory_xact_lock(hashtextextended(cast(:family as text), 0))")
+        .param("family", familyId).query((rs, row) -> 1).list();
   }
 
   private void recordFailedLogin(UUID userId) {

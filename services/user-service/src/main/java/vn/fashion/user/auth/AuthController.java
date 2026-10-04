@@ -45,6 +45,10 @@ public class AuthController {
   public record SessionData(AuthService.UserView user, String accessToken, String tokenType, long expiresIn) {
   }
 
+  /** Refresh only rotates tokens; it does not return the profile (contract RefreshResponse). */
+  public record TokenData(String accessToken, String tokenType, long expiresIn) {
+  }
+
   public record Metadata(String requestId, String traceId) {
   }
 
@@ -88,12 +92,14 @@ public class AuthController {
   }
 
   @PostMapping("/refresh")
-  public ResponseEntity<ApiResponse<SessionData>> refresh(
+  public ResponseEntity<ApiResponse<TokenData>> refresh(
       @CookieValue(name = REFRESH_COOKIE, required = false) String refreshToken) {
     if (refreshToken == null || refreshToken.isBlank()) {
       throw new AuthService.InvalidRefreshTokenException();
     }
-    return session(HttpStatus.OK, auth.refresh(refreshToken));
+    AuthService.Session session = auth.refresh(refreshToken);
+    return withCookie(HttpStatus.OK, session.refreshToken(),
+        new TokenData(session.accessToken(), "Bearer", AccessTokenIssuer.TTL.toSeconds()));
   }
 
   @PostMapping("/logout")
@@ -137,12 +143,15 @@ public class AuthController {
   }
 
   private ResponseEntity<ApiResponse<SessionData>> session(HttpStatus status, AuthService.Session session) {
+    return withCookie(status, session.refreshToken(), new SessionData(session.user(), session.accessToken(),
+        "Bearer", AccessTokenIssuer.TTL.toSeconds()));
+  }
+
+  private <T> ResponseEntity<ApiResponse<T>> withCookie(HttpStatus status, String refreshToken, T data) {
     Metadata metadata = metadata();
-    var data = new SessionData(session.user(), session.accessToken(), "Bearer",
-        AccessTokenIssuer.TTL.toSeconds());
     return ResponseEntity.status(status)
         .header("X-Correlation-Id", metadata.traceId())
-        .header(HttpHeaders.SET_COOKIE, cookie(session.refreshToken(), AuthService.REFRESH_TTL.toSeconds()).toString())
+        .header(HttpHeaders.SET_COOKIE, cookie(refreshToken, AuthService.REFRESH_TTL.toSeconds()).toString())
         .body(new ApiResponse<>("OK", data, metadata));
   }
 

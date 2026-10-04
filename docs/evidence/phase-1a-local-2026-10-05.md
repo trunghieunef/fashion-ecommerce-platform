@@ -37,6 +37,18 @@ Chưa chạy fresh volume trên máy này (không xóa volume local của chủ 
 fresh. Chưa có relay Kafka cho outbox `user.events` (chưa có Kafka trong stack local, chưa có
 consumer bắt buộc).
 
+## Xử lý review PR #8 — 2026-10-05
+
+Review của Codex (GPT-6) tại `be7c4cc` gồm 1 P1 và 1 P2; CI của PR PASS. Cả hai đều đúng.
+
+| Finding | Nguyên nhân | RED | GREEN |
+|---|---|---|---|
+| P1: logout/replay chạy song song với rotation bỏ sót token mới | refresh chỉ khóa dòng token được gửi lên; `UPDATE` thu hồi family (READ COMMITTED) dùng snapshot trước lúc token mới được insert | 2 test race tất định (trigger test-only giữ insert lại, đợi phiên thứ hai đang chờ khóa rồi mới thả): token con vẫn refresh 200 | refresh, logout, thu hồi khi replay cùng lấy `pg_advisory_xact_lock` theo family trước khi đụng dòng token |
+| P2: refresh trả `"user": null` trái OpenAPI | dùng chung `SessionData` với user null | test kiểm data chỉ có 3 key FAIL | kiểu `TokenData` riêng; contract `RefreshTokens` (`additionalProperties: false`) + example |
+
+Mutation: bỏ khóa ở logout làm test logout-race FAIL; bỏ khóa ở refresh làm cả 2 test race FAIL.
+3 lần chạy lại 3 test đồng thời: 0 lỗi. user-service 19/19.
+
 ## Còn mở
 
 1b: quên/đặt lại/đổi mật khẩu, bàn giao secret cho notification, Redis + rate limit theo IP.
