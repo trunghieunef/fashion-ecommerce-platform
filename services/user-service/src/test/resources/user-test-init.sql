@@ -1,0 +1,10 @@
+CREATE ROLE user_migration LOGIN PASSWORD 'user_migration_test';
+CREATE ROLE user_runtime LOGIN PASSWORD 'user_runtime_test';
+GRANT CREATE ON DATABASE users TO user_migration;
+REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+GRANT USAGE, CREATE ON SCHEMA public TO user_migration;
+GRANT USAGE ON SCHEMA public TO user_runtime;
+ALTER DEFAULT PRIVILEGES FOR ROLE user_migration IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO user_runtime;
+ALTER DEFAULT PRIVILEGES FOR ROLE user_migration IN SCHEMA public
+  GRANT USAGE, SELECT ON SEQUENCES TO user_runtime;

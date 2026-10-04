@@ -104,7 +104,7 @@ Notification/consent, traces, media và retention kỹ thuật outbox/inbox vẫ
 cần chính sách được duyệt theo từng nhóm dữ liệu, gồm các nhóm còn mở này, và kế hoạch
 cleanup/retention/restore có kiểm thử; chưa bật purge dữ liệu tài chính.
 
-Secret inventory gồm JWT signing keys, service credentials, DB/Kafka/Redis credentials, merchant secrets, mail/SMS keys. Mỗi secret có owner, env, rotation plan; không lưu trong Nacos plaintext, image, Git hoặc ticket.
+Secret inventory gồm JWT signing keys (service token ADR-19 và access token member ADR-21 `USER_JWT_PRIVATE_KEY`), service credentials, DB/Kafka/Redis credentials, merchant secrets, mail/SMS keys. Mỗi secret có owner, env, rotation plan; không lưu trong Nacos plaintext, image, Git hoặc ticket.
 
 Data inventory theo field (SEC-01, từ 05). Dùng để masking log và để O06 chốt thời hạn lưu; bảng này **không** quyết định thời hạn lưu:
 
@@ -119,7 +119,7 @@ Data inventory theo field (SEC-01, từ 05). Dùng để masking log và để O
 | notification | `notifications.recipient`, `rendered_subject`, `rendered_body`; `notification_preferences.recipient`, `unsubscribe_token_hash` | OTP/reset chỉ lưu marker; TTL ngắn theo O06 |
 | mọi service | `audit_logs.before_data`, `after_data`, `source_ip`; outbox/inbox `payload`; `idempotency_requests.response_body` | Lọc PII không cần thiết; không chứa secret |
 
-Nạp secret (SEC-01): mọi secret vào qua biến môi trường hoặc file mount từ Compose `.env` local (giá trị synthetic, `.env` đã gitignore) hoặc Kubernetes Secret ở staging (PLT-04). Private key service (ADR-19) mỗi service một khóa, theo từng môi trường. Public key caller, allowed origins và issuer/audience là config không bí mật. `bash scripts/scan-secrets.sh` (gitleaks v8.30.1 pin digest) quét toàn bộ git history trong Application CI. Finding không phải secret được ghi vào `.gitleaksignore` theo fingerprint kèm lý do; không bỏ qua cả file hay cả rule.
+Nạp secret (SEC-01): mọi secret vào qua biến môi trường hoặc file mount từ Compose `.env` local (giá trị synthetic, `.env` đã gitignore) hoặc Kubernetes Secret ở staging (PLT-04). Private key service (ADR-19) mỗi service một khóa, theo từng môi trường. Public key caller, allowed origins và issuer/audience là config không bí mật. `bash scripts/scan-secrets.sh` (gitleaks v8.30.1 pin digest) quét toàn bộ git history trong Application CI. Finding không phải secret được ghi vào `.gitleaksignore` theo fingerprint kèm lý do, hoặc đánh dấu đúng dòng đó bằng comment `gitleaks:allow` kèm lý do (dữ liệu test/ví dụ synthetic); không bỏ qua cả file hay cả rule.
 
 ## 4. Monitoring và escalation
 

@@ -1,0 +1,229 @@
+openapi: 3.1.0
+info:
+  title: User auth API
+  version: 0.1.0
+  description: >
+    TASK:USR-01a — register, login, refresh and logout (docs/design/03_interfaces.md §2.1).
+    Access tokens are ES256 JWTs (iss user-service, aud fashion-api, 900 s). The refresh token
+    only travels in the `refresh_token` cookie (HttpOnly; Secure; SameSite=Strict;
+    Path=/api/v1/auth; Max-Age 30 days), never in JSON. Cookie POSTs pass the Gateway Origin
+    check (ADR-20). Password reset/change, profile and addresses belong to USR-01b/USR-02.
+servers:
+  - url: http://localhost:8080
+    description: Local Gateway
+paths:
+  /api/v1/auth/register:
+    post:
+      operationId: register
+      summary: Create a member account and start a session
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RegisterRequest'}
+            example: {email: person@example.test, password: Synthetic-pass-1, full_name: Synthetic Person, locale: vi}
+      responses:
+        '201':
+          description: Account created; access token in body, refresh token in Set-Cookie
+          headers:
+            Set-Cookie: {$ref: '#/components/headers/RefreshCookie'}
+            X-Correlation-Id: {$ref: './common.yaml#/components/headers/CorrelationId'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SessionResponse'}
+              example:
+                code: OK
+                data:
+                  user: {id: 88888888-8888-4888-8888-888888888888, email: person@example.test, full_name: Synthetic Person, locale: vi}
+                  access_token: eyJhbGciOiJFUzI1NiJ9.synthetic.signature # gitleaks:allow synthetic example token
+                  token_type: Bearer
+                  expires_in: 900
+                metadata: {request_id: 4c8a1f2e-0000-4000-8000-000000000011, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          description: E-mail already registered (compared after trim + lowercase)
+          headers:
+            X-Correlation-Id: {$ref: './common.yaml#/components/headers/CorrelationId'}
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './common.yaml#/components/schemas/ApiError'
+                  - properties:
+                      code: {const: CONFLICT}
+              example:
+                code: CONFLICT
+                message: EMAIL_ALREADY_REGISTERED
+                errors: []
+                metadata: {request_id: 4c8a1f2e-0000-4000-8000-000000000012, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+  /api/v1/auth/login:
+    post:
+      operationId: login
+      summary: Start a session with e-mail and password
+      description: >
+        Unknown e-mail, wrong password and a locked account (5 failures → 15 minutes) all return
+        the same 401 INVALID_CREDENTIALS so account existence is not revealed.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/LoginRequest'}
+            example: {email: person@example.test, password: Synthetic-pass-1}
+      responses:
+        '200':
+          description: Session started
+          headers:
+            Set-Cookie: {$ref: '#/components/headers/RefreshCookie'}
+            X-Correlation-Id: {$ref: './common.yaml#/components/headers/CorrelationId'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SessionResponse'}
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/auth/refresh:
+    post:
+      operationId: refresh
+      summary: Rotate the refresh cookie and issue a new access token
+      description: >
+        Each refresh token works once. Reusing a rotated token revokes the whole family (all
+        sessions from that login) and returns 401 with a cleared cookie.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/RefreshCookie'
+      responses:
+        '200':
+          description: Rotated
+          headers:
+            Set-Cookie: {$ref: '#/components/headers/RefreshCookie'}
+            X-Correlation-Id: {$ref: './common.yaml#/components/headers/CorrelationId'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RefreshResponse'}
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/CsrfRejected'
+  /api/v1/auth/logout:
+    post:
+      operationId: logout
+      summary: Revoke the refresh-token family and clear the cookie
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/RefreshCookie'
+      responses:
+        '204':
+          description: Revoked (also when the cookie is missing or unknown)
+          headers:
+            Set-Cookie: {$ref: '#/components/headers/RefreshCookie'}
+        '403':
+          $ref: '#/components/responses/CsrfRejected'
+components:
+  headers:
+    RefreshCookie:
+      description: refresh_token=<opaque>; Path=/api/v1/auth; Max-Age=2592000; Secure; HttpOnly; SameSite=Strict (Max-Age=0 clears)
+      schema: {type: string}
+  parameters:
+    RefreshCookie:
+      in: cookie
+      name: refresh_token
+      required: false
+      schema: {type: string, minLength: 1}
+  responses:
+    ValidationError:
+      description: Invalid input; errors name each field
+      headers:
+        X-Correlation-Id: {$ref: './common.yaml#/components/headers/CorrelationId'}
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: './common.yaml#/components/schemas/ApiError'
+              - properties:
+                  code: {const: VALIDATION_ERROR}
+          example:
+            code: VALIDATION_ERROR
+            message: INVALID_REGISTRATION
+            errors:
+              - {field: password, message: must be at least 8 characters and at most 72 bytes}
+            metadata: {request_id: 4c8a1f2e-0000-4000-8000-000000000013, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+    CsrfRejected:
+      description: Gateway rejected a cookie-carrying request from a non-allowlisted Origin (ADR-20)
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: './common.yaml#/components/schemas/ApiError'
+              - properties:
+                  code: {const: FORBIDDEN}
+          example:
+            code: FORBIDDEN
+            message: CSRF_ORIGIN_REJECTED
+            metadata: {request_id: 4c8a1f2e-0000-4000-8000-000000000015, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+    Unauthorized:
+      description: Generic authentication failure
+      headers:
+        X-Correlation-Id: {$ref: './common.yaml#/components/headers/CorrelationId'}
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: './common.yaml#/components/schemas/ApiError'
+              - properties:
+                  code: {const: UNAUTHORIZED}
+          example:
+            code: UNAUTHORIZED
+            message: INVALID_CREDENTIALS
+            errors: []
+            metadata: {request_id: 4c8a1f2e-0000-4000-8000-000000000014, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [email, password, full_name, locale]
+      properties:
+        email: {type: string, format: email, maxLength: 254}
+        password: {type: string, minLength: 8, description: At most 72 UTF-8 bytes (BCrypt)}
+        full_name: {type: string, minLength: 1, maxLength: 200}
+        locale: {enum: [vi, en]}
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: {type: string}
+        password: {type: string}
+    User:
+      type: object
+      required: [id, email, full_name, locale]
+      additionalProperties: false
+      properties:
+        id: {type: string, format: uuid}
+        email: {type: string}
+        full_name: {type: string}
+        locale: {enum: [vi, en]}
+    Session:
+      type: object
+      required: [access_token, token_type, expires_in]
+      properties:
+        user: {$ref: '#/components/schemas/User'}
+        access_token: {type: string, minLength: 1}
+        token_type: {const: Bearer}
+        expires_in: {const: 900}
+    SessionResponse:
+      type: object
+      required: [code, data, metadata]
+      properties:
+        code: {const: OK}
+        data:
+          allOf:
+            - $ref: '#/components/schemas/Session'
+            - required: [user]
+        metadata: {$ref: './common.yaml#/components/schemas/Metadata'}
+    RefreshResponse:
+      type: object
+      required: [code, data, metadata]
+      properties:
+        code: {const: OK}
+        data: {$ref: '#/components/schemas/Session'}
+        metadata: {$ref: './common.yaml#/components/schemas/Metadata'}

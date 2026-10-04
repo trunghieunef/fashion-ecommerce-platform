@@ -52,6 +52,8 @@ class GatewayBoundaryTest {
   @DynamicPropertySource
   static void catalogBaseUrl(DynamicPropertyRegistry registry) {
     registry.add("CATALOG_BASE_URL", CATALOG::baseUrl);
+    // The recording stub also stands in for user-service; tests check the forwarded path.
+    registry.add("USER_BASE_URL", CATALOG::baseUrl);
     registry.add("fashion.security.allowed-origins", () -> "http://localhost:4173");
     registry.add("GATEWAY_MANAGEMENT_PORT", () -> "0");
   }
@@ -80,6 +82,15 @@ class GatewayBoundaryTest {
     assertThat(CATALOG.requestCount()).isEqualTo(1);
     assertThat(CATALOG.headers()).doesNotContainKeys(
         "x-user-id", "x-user-roles", "x-actor-id", "x-service-name");
+  }
+
+  @Test
+  void routesAuthRequestsToUserService() {
+    client.post().uri("/api/v1/auth/login").header("Content-Type", "application/json")
+        .bodyValue("{}").exchange().expectStatus().isOk();
+
+    assertThat(CATALOG.requestCount()).isEqualTo(1);
+    assertThat(CATALOG.path()).isEqualTo("/api/v1/auth/login");
   }
 
   @Test
@@ -229,6 +240,7 @@ class GatewayBoundaryTest {
     private final HttpServer server;
     private final AtomicInteger requestCount = new AtomicInteger();
     private Map<String, List<String>> headers = Map.of();
+    private volatile String path;
 
     private RecordingCatalogServer() {
       try {
@@ -244,6 +256,7 @@ class GatewayBoundaryTest {
       headers = new ConcurrentHashMap<>();
       exchange.getRequestHeaders().forEach((name, values) ->
           headers.put(name.toLowerCase(), List.copyOf(values)));
+      path = exchange.getRequestURI().getPath();
       requestCount.incrementAndGet();
       byte[] response = "{\"code\":\"OK\",\"data\":{\"items\":[],\"next_cursor\":null},\"metadata\":{\"request_id\":\"test\",\"trace_id\":\"test\"}}"
           .getBytes(StandardCharsets.UTF_8);
@@ -268,6 +281,10 @@ class GatewayBoundaryTest {
     private void reset() {
       requestCount.set(0);
       headers = Map.of();
+    }
+
+    private String path() {
+      return path;
     }
 
     private int requestCount() {

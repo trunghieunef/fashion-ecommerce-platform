@@ -30,6 +30,7 @@ bằng chứng riêng của PLT-03.
   `Idempotency-Key` (1..128 theo 05), `limit`/`cursor` public, `page`/`size` admin,
   header `X-Correlation-Id`/`Retry-After`. Không khai báo operation; được lint qua API
   `$ref` tới nó.
+- `openapi/user.yaml` (`TASK:USR-01` phần 1a): register/login/refresh/logout, cookie refresh và lỗi 400/401/403/409.
 - `openapi/catalog.yaml`: operation đã implement duy nhất là `GET /api/v1/catalog/products`;
   dùng `Limit`, `Metadata`, `CorrelationId`, `ApiError` từ `common.yaml` (lỗi 400 thu hẹp
   về `VALIDATION_ERROR`). Wire format không đổi so với catalog-service.

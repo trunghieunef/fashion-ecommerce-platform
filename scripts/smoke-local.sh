@@ -38,6 +38,24 @@ curl --fail --silent --show-error -H "traceparent: 00-$TRACE_ID-00f067aa0ba902b7
   "$GATEWAY_URL/api/v1/catalog/products?limit=1" |
   python3 -c 'import json,sys; t=json.load(sys.stdin)["metadata"]["trace_id"]; assert t == sys.argv[1], t' "$TRACE_ID"
 
+# TASK:USR-01a through the Gateway: register -> refresh (cookie + allowed Origin, rotated) ->
+# replay of the old cookie rejected -> logout. Synthetic, unique account per run.
+ORIGIN="${STOREFRONT_URL}"
+EMAIL="smoke-$(date +%s)-$RANDOM@example.test"
+cookie_of() { grep -i '^set-cookie: refresh_token=' "$1" | sed -E 's/^[^=]*=([^;]*);.*/\1/I' | tr -d '\r'; }
+headers="$(mktemp)"; trap 'rm -f "$headers"' EXIT
+test "$(curl -sS -o /dev/null -D "$headers" -w '%{http_code}' -H 'Content-Type: application/json' \
+  -d "{\"email\":\"$EMAIL\",\"password\":\"Smoke-pass-123\",\"full_name\":\"Smoke Test\",\"locale\":\"vi\"}" \
+  "$GATEWAY_URL/api/v1/auth/register")" = 201
+first="$(cookie_of "$headers")"
+test "$(curl -sS -o /dev/null -D "$headers" -w '%{http_code}' -X POST -H "Origin: $ORIGIN" \
+  -H "Cookie: refresh_token=$first" "$GATEWAY_URL/api/v1/auth/refresh")" = 200
+second="$(cookie_of "$headers")"
+test -n "$second" && test "$second" != "$first"
+test "$(status -X POST -H "Origin: $ORIGIN" -H "Cookie: refresh_token=$first" "$GATEWAY_URL/api/v1/auth/refresh")" = 401
+test "$(status -X POST -H "Origin: https://evil.example" -H "Cookie: refresh_token=$second" "$GATEWAY_URL/api/v1/auth/logout")" = 403
+test "$(status -X POST -H "Origin: $ORIGIN" -H "Cookie: refresh_token=$second" "$GATEWAY_URL/api/v1/auth/logout")" = 204
+
 test "$(status "$STOREFRONT_URL/api/not-found")" = 404
 test "$(status "$STOREFRONT_URL/api")" = 404
 test "$(status "$STOREFRONT_URL/assets/missing.js")" = 404

@@ -61,6 +61,7 @@ chỉ copy JAR/`dist` vào image runtime pin tag + digest.
 | Service identity (không cần Docker) | `./mvnw -pl services/platform-security test`; xem [README](../../services/platform-security/README.md) |
 | Hạ tầng offline (PLT-04) | `bash scripts/validate-infra.sh` (venv từ `tests/infrastructure/requirements.txt`: cfn-lint + policy tests, không gọi AWS); `bash scripts/render-staging.sh [--strict]` |
 | Secret scan (Docker) | `bash scripts/scan-secrets.sh` (gitleaks v8.30.1 pin digest, quét git history; finding đã review ghi trong `.gitleaksignore`) |
+| User service (PostgreSQL thật) | `./mvnw -pl services/user-service -am test`; xem [README](../../services/user-service/README.md) |
 | Durability primitives (PostgreSQL + Kafka thật) | `./mvnw -pl services/platform-durability test`; xem [README](../../services/platform-durability/README.md) |
 | Frontend | `npm ci && npm run typecheck && npm test && npm run build` |
 | Contract | Cài `python3 -m pip install -r tests/contracts/requirements.txt`; chạy `bash scripts/validate-contracts.sh` (Redocly lint + event envelope tests). Chỉ event: `python3 -B -m unittest discover -s tests/contracts -p 'test_*.py' -v` |
