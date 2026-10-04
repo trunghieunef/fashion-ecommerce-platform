@@ -5,6 +5,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
@@ -29,8 +30,14 @@ public class LeaseRepository {
     this.table = table;
   }
 
-  /** Returns a new lease token when the row is unleased or its lease expired (database clock). */
+  /**
+   * Returns a new lease token when the row is unleased or its lease expired (database clock). Must
+   * commit before the work runs, so a caller transaction is rejected.
+   */
   public Optional<UUID> claim(UUID id, Duration lease) {
+    if (TransactionSynchronizationManager.isActualTransactionActive()) {
+      throw new IllegalStateException("lease claim must run outside a transaction");
+    }
     return jdbc.sql("update " + table + """
              set lease_token = gen_random_uuid(),
                 lease_until = now() + make_interval(secs => :leaseSeconds)

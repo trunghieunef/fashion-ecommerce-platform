@@ -178,6 +178,20 @@ riêng, không phải migration dùng chung (tránh trùng version Flyway và DB
 `correlation_id` vào outbox theo envelope 03. Chưa có CI remote, chưa có reviewer, chưa
 có service nào tích hợp; chưa có backoff relay, metrics (PLT-05) hay retention cleanup.
 
+## Xử lý review PR #4 — Claude Code, TDD, 2026-10-04
+
+Review của Codex (GPT-6) tại `958e78c` gồm 2 finding P1 về ranh giới transaction; CI của PR đều PASS.
+Cả hai finding đúng: `TransactionTemplate` mặc định REQUIRED nên join transaction của caller.
+
+| Finding | Nguyên nhân | RED | GREEN |
+|---|---|---|---|
+| `applyOnce` trả về trước khi commit nếu caller đã có transaction → ACK offset rồi rollback thì mất event | join transaction ngoài | test transaction ngoài + rollback: không có ngoại lệ, ACK xảy ra | `applyOnce` từ chối khi đã có transaction |
+| `relay` trong transaction nghiệp vụ publish outbox chưa commit và giữ lock | `claim` join transaction ngoài | test append + relay trong transaction ngoài: publisher bị gọi | `claim` (cả `relay`) từ chối khi đã có transaction |
+| Cùng nguyên nhân, review chưa nêu | `BackgroundTaskRepository.claimDue`, `LeaseRepository.claim` | 2 test claim trong transaction | cùng guard |
+
+RED: 5 test FAIL đúng lý do; GREEN: `./mvnw -pl services/platform-durability test` PASS 36/36.
+README của module có thêm bảng ranh giới transaction.
+
 ## Tiếp theo
 
 PLT-03: chạy CI remote, reviewer duyệt, sau đó service producer đầu tiên (CAT-01/USR-01)

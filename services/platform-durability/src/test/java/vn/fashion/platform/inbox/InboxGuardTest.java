@@ -8,6 +8,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import vn.fashion.platform.PostgresTestSupport;
 
@@ -54,6 +55,21 @@ class InboxGuardTest extends PostgresTestSupport {
     assertThat(inbox.applyOnce("catalog-projection", EVENT_ID, () -> recordEffect("a"))).isPresent();
     assertThat(inbox.applyOnce("inventory-register", EVENT_ID, () -> recordEffect("b"))).isPresent();
     assertThat(effects()).isEqualTo(2);
+  }
+
+  @Test
+  void applyOnceInsideCallerTransactionIsRejectedSoOffsetIsNeverAckedBeforeCommit() {
+    var acked = new AtomicInteger();
+    tx.executeWithoutResult(outer -> {
+      assertThatThrownBy(() -> {
+        inbox.applyOnce("test-consumer", EVENT_ID, () -> recordEffect("joined"));
+        acked.incrementAndGet();
+      }).isInstanceOf(IllegalStateException.class);
+      outer.setRollbackOnly();
+    });
+
+    assertThat(acked).hasValue(0);
+    assertThat(effects()).isZero();
   }
 
   private String recordEffect(String note) {

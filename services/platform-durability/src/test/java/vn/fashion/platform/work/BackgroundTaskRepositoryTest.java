@@ -89,6 +89,14 @@ class BackgroundTaskRepositoryTest extends PostgresTestSupport {
     assertThat(tasks.claimDue(KIND, 10, LEASE)).as("MANUAL keeps the obligation for an operator").isEmpty();
   }
 
+  @Test
+  void claimDueInsideTransactionIsRejected() {
+    enqueue("order-1");
+    tx.executeWithoutResult(outer -> assertThatThrownBy(() -> tasks.claimDue(KIND, 10, LEASE))
+        .isInstanceOf(IllegalStateException.class));
+    assertThat(status()).isEqualTo("PENDING");
+  }
+
   private boolean enqueue(String businessKey) {
     return tx.execute(s -> tasks.enqueue(KIND, businessKey, "{\"order_id\":\"" + businessKey + "\"}"));
   }

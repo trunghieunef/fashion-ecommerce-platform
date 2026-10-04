@@ -64,6 +64,13 @@ class LeaseRepositoryTest extends PostgresTestSupport {
         .isInstanceOf(IllegalArgumentException.class);
   }
 
+  @Test
+  void claimInsideTransactionIsRejected() {
+    tx.executeWithoutResult(outer -> assertThatThrownBy(() -> leases.claim(WORK_ID, LEASE))
+        .isInstanceOf(IllegalStateException.class));
+    assertThat(leases.claim(WORK_ID, LEASE)).isPresent();
+  }
+
   private void setResult(String value) {
     jdbc.sql("update test_work set result = :r where id = :id").param("r", value).param("id", WORK_ID)
         .update();

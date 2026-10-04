@@ -7,6 +7,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import vn.fashion.platform.PostgresTestSupport;
 
@@ -137,6 +138,28 @@ class OutboxRepositoryTest extends PostgresTestSupport {
         .param("id", failing.eventId()).query(String.class).single()).contains("broker unavailable");
     expireLeases();
     assertThat(ids(outbox.claim(10, LEASE))).containsExactly(failing.eventId());
+  }
+
+  @Test
+  void relayInsideBusinessTransactionIsRejectedBeforePublishing() {
+    var published = new AtomicInteger();
+    tx.executeWithoutResult(outer -> {
+      outbox.append(event("order-a", 0));
+      assertThatThrownBy(() -> outbox.relay(10, LEASE, message -> published.incrementAndGet()))
+          .isInstanceOf(IllegalStateException.class);
+      outer.setRollbackOnly();
+    });
+
+    assertThat(published).hasValue(0);
+    assertThat(count()).isZero();
+  }
+
+  @Test
+  void claimInsideTransactionIsRejected() {
+    append(event("order-a", 0));
+    tx.executeWithoutResult(outer -> assertThatThrownBy(() -> outbox.claim(10, LEASE))
+        .isInstanceOf(IllegalStateException.class));
+    assertThat(status(jdbc.sql("select id from outbox_events").query(UUID.class).single())).isEqualTo("PENDING");
   }
 
   static OutboxEvent event(String aggregateId, long version) {

@@ -53,9 +53,14 @@ public class OutboxRepository {
 
   /**
    * Leases up to {@code limit} events, at most the earliest unsent sequence per aggregate, so a
-   * leased or failed predecessor blocks its successors. Expiry uses the database clock.
+   * leased or failed predecessor blocks its successors. Expiry uses the database clock. Runs as its
+   * own committed statement: inside a business transaction it would expose uncommitted intents and
+   * hold row locks while publishing, so that is rejected (06 section 1.1).
    */
   public List<OutboxMessage> claim(int limit, Duration lease) {
+    if (TransactionSynchronizationManager.isActualTransactionActive()) {
+      throw new IllegalStateException("outbox claim/relay must run outside a transaction");
+    }
     return jdbc.sql("""
             with heads as (
               select o.id

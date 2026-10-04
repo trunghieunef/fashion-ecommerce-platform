@@ -36,8 +36,14 @@ public class BackgroundTaskRepository {
         .update() == 1;
   }
 
-  /** Leases due PENDING tasks and RUNNING tasks whose lease expired (database clock). */
+  /**
+   * Leases due PENDING tasks and RUNNING tasks whose lease expired (database clock). Must commit
+   * before the work runs, so a caller transaction is rejected.
+   */
   public List<ClaimedTask> claimDue(String kind, int limit, Duration lease) {
+    if (TransactionSynchronizationManager.isActualTransactionActive()) {
+      throw new IllegalStateException("task claim must run outside a transaction");
+    }
     return jdbc.sql("""
             with due as (
               select id from background_tasks

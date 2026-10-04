@@ -14,6 +14,16 @@ không có Kafka client, HTTP client hay domain entity.
 | `work.BackgroundTaskRepository` | `background_tasks`: `enqueue` trong transaction nghiệp vụ (unique theo kind + business key), `claimDue`, `complete`/`fail` CAS theo token; hết số lần retry thì chuyển `MANUAL` |
 | `work.LeaseRepository` | Lease và CAS trên bảng work của service (ví dụ `order_sagas`): worker có lease đã hết hạn không ghi được kết quả |
 
+## Ranh giới transaction
+
+| Phải gọi **trong** transaction nghiệp vụ | Phải gọi **ngoài** transaction (bị từ chối nếu có transaction) | Gọi ở đâu cũng được |
+|---|---|---|
+| `OutboxRepository.append`, `BackgroundTaskRepository.enqueue` (ghi cùng thay đổi nghiệp vụ) | `OutboxRepository.claim`/`relay`, `BackgroundTaskRepository.claimDue`, `LeaseRepository.claim`, `InboxGuard.applyOnce` | `markSent`, `complete`, `fail`, `IdempotencyStore.begin/finish` (nên ghi cùng transaction nghiệp vụ) |
+
+Claim phải commit trước khi publish hoặc chạy work, để không lộ intent chưa commit và không
+giữ row lock trong lúc chờ broker hay provider (06 §1.1). `applyOnce` tự sở hữu transaction, nên
+khi nó trả về thì inbox và effect đã commit, lúc đó mới ACK offset.
+
 Envelope Kafka được dựng bằng SQL theo 03 §5.1: `id` → `event_id`, `schema_version` → `version`,
 `created_at` (UTC `Z`) → `occurred_at`. Topic và partition key lấy từ `contracts/events/registry.json`.
 
