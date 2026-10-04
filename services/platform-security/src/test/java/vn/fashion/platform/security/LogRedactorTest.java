@@ -28,7 +28,35 @@ class LogRedactorTest {
   @Test
   void masksSecretKeyValues() {
     assertThat(LogRedactor.redact("login password=hunter2 otp: 123456 ok"))
-        .isEqualTo("login password=[redacted] otp=[redacted] ok");
+        .isEqualTo("login password=[redacted] otp: [redacted] ok");
+  }
+
+  @Test
+  void masksQuotedValuesWithSpacesCompletely() {
+    assertThat(LogRedactor.redact("password=\"SYNTH FIRST SECOND\" next"))
+        .isEqualTo("password=[redacted] next");
+    assertThat(LogRedactor.redact("secret='a b' next")).isEqualTo("secret=[redacted] next");
+  }
+
+  @Test
+  void masksJsonStyleKeys() {
+    assertThat(LogRedactor.redact("{\"password\":\"SYNTH_JSON_VALUE\",\"otp\":\"123456\"}"))
+        .isEqualTo("{\"password\":[redacted],\"otp\":[redacted]}");
+  }
+
+  @Test
+  void masksCompoundSecretKeyNames() {
+    assertThat(LogRedactor.redact("access_token=abc refreshToken: def client_secret=ghi"))
+        .isEqualTo("access_token=[redacted] refreshToken: [redacted] client_secret=[redacted]");
+  }
+
+  @Test
+  void flagsSensitiveFieldNames() {
+    assertThat(LogRedactor.isSensitiveName("password")).isTrue();
+    assertThat(LogRedactor.isSensitiveName("refresh_token")).isTrue();
+    assertThat(LogRedactor.isSensitiveName("Authorization")).isTrue();
+    assertThat(LogRedactor.isSensitiveName("trace.id")).isFalse();
+    assertThat(LogRedactor.isSensitiveName(null)).isFalse();
   }
 
   @Test

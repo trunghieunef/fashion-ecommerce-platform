@@ -317,6 +317,18 @@ Lệnh đã chạy (Docker Desktop 29.2.0): `./mvnw -B test` PASS (durability 36
 catalog 12, gateway 16); `local-up.sh` → `smoke-local.sh` PASS; Playwright 2/2; Nacos proof 4/4;
 log container Gateway đã ra JSON ECS.
 
+## Xử lý review PR #7 — Claude Code, TDD, 2026-10-05
+
+Review của Codex (GPT-6) tại `39478d0` gồm 2 finding P2 về redaction; CI của PR đều PASS. Cả hai đều đúng.
+
+| Finding | Nguyên nhân | RED | GREEN |
+|---|---|---|---|
+| Field MDC/key-value nhạy cảm ghi nguyên văn | customizer chỉ xử lý giá trị chuỗi, không xét tên field | test log JSON thật của Gateway với `MDC password`, key-value `token` và `otp` số FAIL | che theo tên field (`isSensitiveName`) với mọi kiểu giá trị, sau đó regex cho chuỗi |
+| Regex bỏ lọt JSON và giá trị có ngoặc kép | key không cho dấu `"`, giá trị dừng ở khoảng trắng | 4 test `LogRedactorTest` FAIL (thêm stub `isSensitiveName` để thấy lỗi hành vi thay vì lỗi compile) | key có ngoặc tùy chọn, tên ghép, giá trị trong `"…"`/`'…'`; giữ nguyên dấu phân cách |
+
+Mutation: bỏ nhánh che theo tên làm test MDC/key-value FAIL. `./mvnw -B test` PASS (durability 36,
+security 26, catalog 12, gateway 17).
+
 ## Tiếp theo
 
 PLT-03: chạy CI remote, reviewer duyệt, sau đó service producer đầu tiên (CAT-01/USR-01)

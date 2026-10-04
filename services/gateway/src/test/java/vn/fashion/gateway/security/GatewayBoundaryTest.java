@@ -16,6 +16,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -174,6 +175,24 @@ class GatewayBoundaryTest {
     assertThat(line).startsWith("{").contains("\"log\":{\"level\":\"INFO\"")
         .contains("Bearer [redacted]").contains("password=[redacted]");
     assertThat(output.getAll()).doesNotContain("person@example.test", "synthetic.token.value", "hunter2");
+  }
+
+  @Test
+  void sensitiveMdcAndKeyValueFieldsAreRedactedByName(CapturedOutput output) {
+    var logger = LoggerFactory.getLogger(GatewayBoundaryTest.class);
+    MDC.put("password", "SYNTH_PASSWORD_VALUE");
+    try {
+      logger.atInfo().addKeyValue("token", "SYNTH_TOKEN_VALUE").addKeyValue("otp", 123456)
+          .log("structured field redaction probe");
+    } finally {
+      MDC.remove("password");
+    }
+
+    String line = output.getOut().lines().filter(l -> l.contains("structured field redaction probe"))
+        .findFirst().orElseThrow(() -> new AssertionError("JSON log line not found"));
+    assertThat(line).contains("\"password\":\"[redacted]\"").contains("\"token\":\"[redacted]\"")
+        .contains("\"otp\":\"[redacted]\"");
+    assertThat(output.getAll()).doesNotContain("SYNTH_PASSWORD_VALUE", "SYNTH_TOKEN_VALUE", "123456");
   }
 
   @Test
