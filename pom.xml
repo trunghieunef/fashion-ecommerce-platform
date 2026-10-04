@@ -11,6 +11,7 @@
 
   <modules>
     <module>services/platform-durability</module>
+    <module>services/platform-security</module>
     <module>services/catalog-service</module>
     <module>services/gateway</module>
   </modules>

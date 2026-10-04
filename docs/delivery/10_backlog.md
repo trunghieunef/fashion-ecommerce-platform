@@ -66,8 +66,15 @@ PLT-04/05, AWS/K3s/ECR/ArgoCD, provider sandbox và các task business Phase 1 k
   (GPT-6) duyệt và merge PR #3 ngày 2026-10-04. `TASK:PLT-03` — **In progress**, assignee
   Claude Code (agent), reviewer chủ dự án: `services/platform-durability` có
   outbox/inbox/idempotency/background_tasks/lease với 31 test PostgreSQL + Kafka thật
-  (crash sau publish, lease hết hạn, cùng version không đảo sequence). Chưa có CI remote,
-  chưa có reviewer và chưa có service nào dùng thư viện.
+  (crash sau publish, lease hết hạn, cùng version không đảo sequence). PR #4 đã review/merge
+  (sửa 2 P1 về ranh giới transaction); chưa có service nào dùng thư viện.
+- `TASK:SEC-01` — **In progress**, assignee Claude Code (agent), reviewer chủ dự án.
+  Chủ dự án chốt ADR-19 (service JWT ES256 tự ký), ADR-20 (CSRF Origin/Fetch-Metadata) và
+  gitleaks pin digest. Đã có: `services/platform-security` (12 test: 9 trường hợp phải từ chối, 2 trường hợp hợp lệ, 1 test không log token),
+  `CsrfOriginFilter` ở Gateway (8 test), `scripts/scan-secrets.sh` trong Application CI,
+  data inventory theo field và permission codes ở 13, cách nạp secret. Còn mở: JWT người dùng,
+  `auth_version` và U03/U24 (USR-01/02), service đầu tiên nối service token, actuator Gateway
+  trên port public (trước PLT-04), O06 chưa có ngày/thời hạn lưu.
   O01 chỉ chặn phần cloud, không chặn PLT-02/03 local; chưa provision/deploy.
 
 ## 2. Phase 0 — nền tảng

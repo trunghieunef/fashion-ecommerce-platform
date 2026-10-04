@@ -1,11 +1,17 @@
 # Gateway
 
-`TASK:SEC-01` · `REQ:USR-07`, `REQ:XCT-03`.
+`TASK:SEC-01` · `REQ:USR-07`, `REQ:XCT-02`, `REQ:XCT-03`.
 
 Gateway là public ingress local của Sprint 1. Chỉ route
 `/api/v1/catalog/**` sang `CATALOG_BASE_URL`; không có catch-all route và không public
 `/internal/**`. Trước route, filter global với precedence cao nhất bỏ các header do browser
 có thể giả mạo: `X-User-Id`, `X-User-Roles`, `X-Actor-Id`, `X-Service-Name`.
+
+CSRF (ADR-20): `CsrfOriginFilter` chỉ áp dụng cho request ghi (không phải GET/HEAD/OPTIONS/TRACE)
+**có cookie**. `Origin` phải nằm trong allowlist. Nếu không có `Origin` thì chỉ chấp nhận
+`Sec-Fetch-Site: same-origin`; không có cả hai thì trả 403 `FORBIDDEN` và không forward
+(fail closed). Request chỉ dùng Bearer, không có cookie, không bị kiểm tra vì browser không
+tự gắn header này. Cookie phải đặt `Secure`, `HttpOnly`, `SameSite` khi task auth/cart tạo cookie.
 
 ## Chạy và kiểm tra
 
@@ -29,6 +35,7 @@ timeout không được biến mutation thành retry hay thành công giả.
 |---|---|---|
 | `GATEWAY_PORT` | `8080` | Public listener local |
 | `CATALOG_BASE_URL` | `http://localhost:8081` | Catalog upstream trong default profile |
+| `GATEWAY_ALLOWED_ORIGINS` | `http://localhost:4173` | Origin được phép gửi request ghi kèm cookie, phân tách bằng dấu phẩy; để rỗng thì từ chối tất cả |
 
 Actuator expose `health`, `info`, `metrics` trên cùng port public 8080; chấp nhận cho local,
 phải tách management port hoặc chặn trước staging (PLT-04). Gateway không có database,
@@ -38,6 +45,7 @@ Default route cố ý dùng URI cấu hình để cô lập Gateway boundary. Pr
 Nacos discovery (`NACOS_SERVER_ADDR`, `NACOS_USERNAME`, `NACOS_PASSWORD`); đặt
 `CATALOG_BASE_URL=lb://catalog-service` để route qua discovery (Compose:
 `GATEWAY_CATALOG_BASE_URL`). Proof: `bash scripts/nacos-compat-check.sh`. Service identity
-giữa Gateway và service vẫn chưa có.
+cho call nội bộ nằm ở [platform-security](../platform-security/README.md) (ADR-19); Gateway
+không route `/internal/**` nên không tự cấp service token.
 
 Trong Compose, Gateway chạy từ `Dockerfile` và chỉ publish `127.0.0.1:8080`.

@@ -58,6 +58,8 @@ chỉ copy JAR/`dist` vào image runtime pin tag + digest.
 | Toolchain/lockfile | `bash scripts/verify-toolchain.sh` |
 | Docs | `python3 -B -m unittest discover -s scripts -p 'test_*.py' -v` và `python3 -B scripts/check_docs.py` |
 | Backend (PostgreSQL thật) | `./mvnw test`; một test: `./mvnw -pl services/catalog-service -Dtest=ProductQueryIntegrationTest test` |
+| Service identity (không cần Docker) | `./mvnw -pl services/platform-security test`; xem [README](../../services/platform-security/README.md) |
+| Secret scan (Docker) | `bash scripts/scan-secrets.sh` (gitleaks v8.30.1 pin digest, quét git history; finding đã review ghi trong `.gitleaksignore`) |
 | Durability primitives (PostgreSQL + Kafka thật) | `./mvnw -pl services/platform-durability test`; xem [README](../../services/platform-durability/README.md) |
 | Frontend | `npm ci && npm run typecheck && npm test && npm run build` |
 | Contract | Cài `python3 -m pip install -r tests/contracts/requirements.txt`; chạy `bash scripts/validate-contracts.sh` (Redocly lint + event envelope tests). Chỉ event: `python3 -B -m unittest discover -s tests/contracts -p 'test_*.py' -v` |
@@ -122,7 +124,7 @@ Fresh-clone proof do người khác tác giả thực hiện, ghi OS/version/l�
 | Database | URL/user/password/schema/service ID | Credential riêng, pool bounded, secret injection |
 | Kafka | Bootstrap/topic prefix/group/client identity | Env isolation, TLS/SASL tùy platform, retry/DLQ policy |
 | Redis | Endpoint/auth/key prefix | Prefix env/service, TTL, không là nguồn stock/quota |
-| Gateway/auth | Issuer/audience/JWKS, caller token, allowed origins | Không trust client headers; internal private |
+| Gateway/auth | Issuer/audience/JWKS, caller token, allowed origins (`GATEWAY_ALLOWED_ORIGINS`) | Không trust client headers; internal private; service token ADR-19, CSRF ADR-20 |
 | Business | Quote 2m, online 15m, COD 24h, fee rules | Version/config audit; thay deadline không đổi snapshot đơn cũ |
 | Providers | Base URL, merchant/account IDs, secrets, callbacks | Sandbox/prod tách; không committed secret |
 | Workers | Poll interval, lease duration, retry/backoff/max delay | Đo lease theo timeout; token CAS; long tasks renew lease |
