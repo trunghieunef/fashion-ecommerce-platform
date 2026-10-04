@@ -1,12 +1,10 @@
 package vn.fashion.user.auth;
 
-import io.micrometer.tracing.Span;
 import io.micrometer.tracing.Tracer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-import java.util.UUID;
 import java.util.regex.Pattern;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -19,6 +17,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import vn.fashion.user.web.Api;
 
 /** Public auth API (03 section 2.1). The refresh token only travels in an HttpOnly cookie. */
 @RestController
@@ -49,31 +48,19 @@ public class AuthController {
   public record TokenData(String accessToken, String tokenType, long expiresIn) {
   }
 
-  public record Metadata(String requestId, String traceId) {
-  }
-
-  public record ApiResponse<T>(String code, T data, Metadata metadata) {
-  }
-
-  public record FieldError(String field, String message) {
-  }
-
-  public record ApiError(String code, String message, List<FieldError> errors, Metadata metadata) {
-  }
-
   @PostMapping("/register")
-  public ResponseEntity<ApiResponse<SessionData>> register(@RequestBody RegisterRequest request) {
+  public ResponseEntity<?> register(@RequestBody RegisterRequest request) {
     String email = normalize(request.email());
-    var errors = new ArrayList<FieldError>();
+    var errors = new ArrayList<Api.FieldError>();
     if (email == null || email.length() > 254 || !EMAIL.matcher(email).matches()) {
-      errors.add(new FieldError("email", "must be a valid e-mail address"));
+      errors.add(new Api.FieldError("email", "must be a valid e-mail address"));
     }
     validatePassword(request.password(), errors);
     if (request.fullName() == null || request.fullName().isBlank() || request.fullName().length() > 200) {
-      errors.add(new FieldError("full_name", "must be 1..200 characters"));
+      errors.add(new Api.FieldError("full_name", "must be 1..200 characters"));
     }
     if (request.locale() == null || !LOCALES.contains(request.locale())) {
-      errors.add(new FieldError("locale", "must be vi or en"));
+      errors.add(new Api.FieldError("locale", "must be vi or en"));
     }
     if (!errors.isEmpty()) {
       return error(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "INVALID_REGISTRATION", errors);
@@ -83,7 +70,7 @@ public class AuthController {
   }
 
   @PostMapping("/login")
-  public ResponseEntity<ApiResponse<SessionData>> login(@RequestBody LoginRequest request) {
+  public ResponseEntity<Api.Response<SessionData>> login(@RequestBody LoginRequest request) {
     String email = normalize(request.email());
     if (email == null || request.password() == null) {
       throw new AuthService.InvalidCredentialsException();
@@ -92,7 +79,7 @@ public class AuthController {
   }
 
   @PostMapping("/refresh")
-  public ResponseEntity<ApiResponse<TokenData>> refresh(
+  public ResponseEntity<Api.Response<TokenData>> refresh(
       @CookieValue(name = REFRESH_COOKIE, required = false) String refreshToken) {
     if (refreshToken == null || refreshToken.isBlank()) {
       throw new AuthService.InvalidRefreshTokenException();
@@ -109,32 +96,32 @@ public class AuthController {
   }
 
   @ExceptionHandler(AuthService.EmailTakenException.class)
-  ResponseEntity<ApiError> emailTaken() {
+  ResponseEntity<Api.Error> emailTaken() {
     return error(HttpStatus.CONFLICT, "CONFLICT", "EMAIL_ALREADY_REGISTERED", List.of());
   }
 
   @ExceptionHandler(AuthService.InvalidCredentialsException.class)
-  ResponseEntity<ApiError> invalidCredentials() {
+  ResponseEntity<Api.Error> invalidCredentials() {
     return error(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "INVALID_CREDENTIALS", List.of());
   }
 
   @ExceptionHandler(AuthService.InvalidRefreshTokenException.class)
-  ResponseEntity<ApiError> invalidRefresh() {
-    ResponseEntity<ApiError> response =
-        error(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "INVALID_REFRESH_TOKEN", List.of());
+  ResponseEntity<Api.Error> invalidRefresh() {
+    ResponseEntity<Api.Error> response =
+        Api.error(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "INVALID_REFRESH_TOKEN", List.of(), tracer);
     return ResponseEntity.status(response.getStatusCode()).headers(response.getHeaders())
         .header(HttpHeaders.SET_COOKIE, cookie("", 0).toString()).body(response.getBody());
   }
 
   @ExceptionHandler(HttpMessageNotReadableException.class)
-  ResponseEntity<ApiError> unreadable() {
+  ResponseEntity<Api.Error> unreadable() {
     return error(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "MALFORMED_JSON", List.of());
   }
 
-  private static void validatePassword(String password, List<FieldError> errors) {
+  private static void validatePassword(String password, List<Api.FieldError> errors) {
     // BCrypt only uses the first 72 bytes; longer input would be silently truncated.
     if (password == null || password.length() < 8 || password.getBytes(StandardCharsets.UTF_8).length > 72) {
-      errors.add(new FieldError("password", "must be at least 8 characters and at most 72 bytes"));
+      errors.add(new Api.FieldError("password", "must be at least 8 characters and at most 72 bytes"));
     }
   }
 
@@ -142,24 +129,21 @@ public class AuthController {
     return email == null ? null : email.strip().toLowerCase(java.util.Locale.ROOT);
   }
 
-  private ResponseEntity<ApiResponse<SessionData>> session(HttpStatus status, AuthService.Session session) {
+  private ResponseEntity<Api.Response<SessionData>> session(HttpStatus status, AuthService.Session session) {
     return withCookie(status, session.refreshToken(), new SessionData(session.user(), session.accessToken(),
         "Bearer", AccessTokenIssuer.TTL.toSeconds()));
   }
 
-  private <T> ResponseEntity<ApiResponse<T>> withCookie(HttpStatus status, String refreshToken, T data) {
-    Metadata metadata = metadata();
-    return ResponseEntity.status(status)
-        .header("X-Correlation-Id", metadata.traceId())
+  private <T> ResponseEntity<Api.Response<T>> withCookie(HttpStatus status, String refreshToken, T data) {
+    ResponseEntity<Api.Response<T>> response = Api.ok(status, data, tracer);
+    return ResponseEntity.status(response.getStatusCode()).headers(response.getHeaders())
         .header(HttpHeaders.SET_COOKIE, cookie(refreshToken, AuthService.REFRESH_TTL.toSeconds()).toString())
-        .body(new ApiResponse<>("OK", data, metadata));
+        .body(response.getBody());
   }
 
-  private <T> ResponseEntity<T> error(HttpStatus status, String code, String message, List<FieldError> errors) {
-    Metadata metadata = metadata();
-    @SuppressWarnings("unchecked")
-    T body = (T) new ApiError(code, message, errors, metadata);
-    return ResponseEntity.status(status).header("X-Correlation-Id", metadata.traceId()).body(body);
+  private ResponseEntity<Api.Error> error(HttpStatus status, String code, String message,
+                                          List<Api.FieldError> errors) {
+    return Api.error(status, code, message, errors, tracer);
   }
 
   private static ResponseCookie cookie(String value, long maxAgeSeconds) {
@@ -168,9 +152,4 @@ public class AuthController {
         .build();
   }
 
-  private Metadata metadata() {
-    Span span = tracer.currentSpan();
-    String traceId = span != null ? span.context().traceId() : UUID.randomUUID().toString().replace("-", "");
-    return new Metadata(UUID.randomUUID().toString(), traceId);
-  }
 }

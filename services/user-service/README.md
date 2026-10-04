@@ -1,6 +1,7 @@
 # User service
 
-`TASK:USR-01` phần 1a · REQ: USR-01, USR-03, USR-05, USR-07 · dependency: PLT-02, PLT-03, SEC-01.
+`TASK:USR-01` phần 1a, `TASK:USR-02` phần 2a · REQ: USR-01, USR-03, USR-05, USR-06, USR-07 ·
+dependency: PLT-02, PLT-03, SEC-01.
 
 Service sở hữu database `users`: tài khoản member và refresh-token family. Phạm vi 1a:
 đăng ký, đăng nhập (khóa tài khoản 15 phút sau 5 lần sai), refresh xoay vòng và đăng xuất.
@@ -13,6 +14,13 @@ Contract: [`contracts/openapi/user.yaml`](../../contracts/openapi/user.yaml); th
 | `POST /api/v1/auth/login` | 200 + token + cookie. Email không tồn tại, sai mật khẩu và tài khoản đang khóa đều trả cùng 401 `INVALID_CREDENTIALS`; tài khoản không tồn tại vẫn chạy BCrypt với hash giả để thời gian phản hồi không lộ thông tin |
 | `POST /api/v1/auth/refresh` | Cookie `refresh_token` dùng một lần: xoay sang token mới cùng family; response chỉ có `access_token`, `token_type`, `expires_in`. Dùng lại token đã xoay → thu hồi cả family, trả 401 và xóa cookie. Refresh, logout và thu hồi khi replay cùng lấy khóa `pg_advisory_xact_lock` theo family, nên việc thu hồi không bỏ sót token đang được tạo song song |
 | `POST /api/v1/auth/logout` | Thu hồi family, xóa cookie, 204 (idempotent) |
+| `GET, PUT /api/v1/users/me` | Cần Bearer access token. PUT chỉ đổi `full_name` và `locale`; `email`, role, `auth_version` trong body bị bỏ qua |
+| `GET, POST /api/v1/users/me/addresses`, `PUT, DELETE /api/v1/users/me/addresses/{id}` | Địa chỉ đầu tiên tự thành mặc định; luôn đúng một mặc định (khóa dòng user + unique index một phần); không bỏ được mặc định nếu chưa chọn địa chỉ khác (400 `DEFAULT_ADDRESS_REQUIRED`); xóa mặc định thì địa chỉ mới nhất còn lại thành mặc định; địa chỉ của người khác → 404 |
+
+Mọi endpoint `/users/me` kiểm token bằng `AccessTokenVerifier` (platform-security, ADR-21), rồi
+kiểm dòng user hiện tại: tài khoản phải `ACTIVE`, không bị khóa, và `auth_version` trong token phải
+bằng giá trị trong DB. Đổi role, khóa tài khoản hay đổi mật khẩu (tăng `auth_version`) sẽ làm token cũ
+mất hiệu lực ngay, không đợi hết 15 phút.
 
 - **Access token:** JWT ES256, 900 giây, `iss=user-service`, `aud=fashion-api`, `sub` = user id,
   có claim `auth_version`, `kid` lấy từ `USER_JWT_KEY_ID`. Verifier nhận public key qua config
@@ -42,8 +50,9 @@ Gateway gọi được.
 | `USER_MIGRATION_DB_URL` / `_USERNAME` / `_PASSWORD` | `.../users` / `user_migration` / synthetic | Flyway |
 | `USER_JWT_PRIVATE_KEY` | không có mặc định: thiếu thì service không khởi động | Base64 PKCS#8 EC P-256; staging/production lấy từ Secret |
 | `USER_JWT_KEY_ID` | `user-local` | `kid` trong header JWT |
+| `USER_JWT_PUBLIC_KEYS` | không có mặc định | `kid:base64-X.509`, cách nhau bằng dấu phẩy (2 kid khi xoay khóa); local do `local-up.sh` suy ra từ private key |
 
-Migration: `V001__users.sql` (users, refresh_tokens, outbox_events). Topic: ghi outbox
+Migration: `V001__users.sql` (users, refresh_tokens, outbox_events), `V002__user_addresses.sql`. Topic: ghi outbox
 `user.events` / `USER_CREATED`, **chưa có relay** vì stack local chưa có Kafka và chưa có
 consumer bắt buộc (03 §5.2). Health: `/actuator/health/{liveness,readiness}` trên port 8082.
 
@@ -51,5 +60,6 @@ consumer bắt buộc (03 §5.2). Health: `/actuator/health/{liveness,readiness}
 
 - Chưa có quên/đặt lại/đổi mật khẩu và bàn giao secret cho notification (1b, cần Redis).
 - Chưa có rate limit theo IP: chỉ khóa theo tài khoản trong PostgreSQL. Redis 8.2.9 thêm ở 1b.
-- Chưa có verifier JWT ở Gateway/service, chưa có `/users/me`, địa chỉ, role/permission (USR-02).
+- Chưa có role/permission, API admin đổi role/khóa, audit và admin bootstrap (USR-02 phần 2b).
+  Gateway chưa tự kiểm JWT; service đích kiểm (04 §7).
 - Chưa có manifest staging cho user-service (staging G0 chỉ có service mẫu).

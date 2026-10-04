@@ -7,7 +7,9 @@ info:
     Access tokens are ES256 JWTs (iss user-service, aud fashion-api, 900 s). The refresh token
     only travels in the `refresh_token` cookie (HttpOnly; Secure; SameSite=Strict;
     Path=/api/v1/auth; Max-Age 30 days), never in JSON. Cookie POSTs pass the Gateway Origin
-    check (ADR-20). Password reset/change, profile and addresses belong to USR-01b/USR-02.
+    check (ADR-20). TASK:USR-02 part 2a adds `/users/me` and addresses (Bearer access token;
+    the account must be ACTIVE and the token's auth_version current). Password reset/change
+    and admin roles belong to USR-01b / USR-02 part 2b.
 servers:
   - url: http://localhost:8080
     description: Local Gateway
@@ -124,7 +126,126 @@ paths:
             Set-Cookie: {$ref: '#/components/headers/RefreshCookie'}
         '403':
           $ref: '#/components/responses/CsrfRejected'
+  /api/v1/users/me:
+    get:
+      operationId: getProfile
+      summary: Current member profile
+      security: [{bearer: []}]
+      responses:
+        '200':
+          description: Profile
+          headers:
+            X-Correlation-Id: {$ref: './common.yaml#/components/headers/CorrelationId'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProfileResponse'}
+              example:
+                code: OK
+                data: {id: 88888888-8888-4888-8888-888888888888, email: person@example.test, full_name: Synthetic Person, locale: vi, email_verified: false}
+                metadata: {request_id: 4c8a1f2e-0000-4000-8000-000000000021, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+        '401':
+          $ref: '#/components/responses/InvalidAccessToken'
+    put:
+      operationId: updateProfile
+      summary: Change name and locale only (e-mail, roles and auth_version are ignored)
+      security: [{bearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ProfileUpdate'}
+            example: {full_name: New Name, locale: en}
+      responses:
+        '200':
+          description: Updated profile
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProfileResponse'}
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/InvalidAccessToken'
+  /api/v1/users/me/addresses:
+    get:
+      operationId: listAddresses
+      summary: Own addresses, default first
+      security: [{bearer: []}]
+      responses:
+        '200':
+          description: Addresses
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [code, data, metadata]
+                properties:
+                  code: {const: OK}
+                  data: {type: array, items: {$ref: '#/components/schemas/Address'}}
+                  metadata: {$ref: './common.yaml#/components/schemas/Metadata'}
+        '401':
+          $ref: '#/components/responses/InvalidAccessToken'
+    post:
+      operationId: createAddress
+      summary: Add an address; the first one becomes the default
+      security: [{bearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AddressInput'}
+            example: {recipient_name: Synthetic Person, phone: '0912345678', province_code: '79', ward_code: '26734', address_line: 1 Synthetic St, is_default: false}
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AddressResponse'}
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/InvalidAccessToken'
+  /api/v1/users/me/addresses/{id}:
+    parameters:
+      - {in: path, name: id, required: true, schema: {type: string, format: uuid}}
+    put:
+      operationId: updateAddress
+      summary: Replace an own address; is_default true moves the default here
+      description: Unsetting the current default without choosing another returns 400 DEFAULT_ADDRESS_REQUIRED.
+      security: [{bearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AddressInput'}
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AddressResponse'}
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/InvalidAccessToken'
+        '404':
+          $ref: '#/components/responses/AddressNotFound'
+    delete:
+      operationId: deleteAddress
+      summary: Delete an own address; deleting the default promotes the newest remaining one
+      security: [{bearer: []}]
+      responses:
+        '204':
+          description: Deleted
+        '401':
+          $ref: '#/components/responses/InvalidAccessToken'
+        '404':
+          $ref: '#/components/responses/AddressNotFound'
 components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT (ES256, ADR-21)
   headers:
     RefreshCookie:
       description: refresh_token=<opaque>; Path=/api/v1/auth; Max-Age=2592000; Secure; HttpOnly; SameSite=Strict (Max-Age=0 clears)
@@ -166,6 +287,34 @@ components:
             code: FORBIDDEN
             message: CSRF_ORIGIN_REJECTED
             metadata: {request_id: 4c8a1f2e-0000-4000-8000-000000000015, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+    InvalidAccessToken:
+      description: Missing, invalid or stale access token (auth_version changed, account not active)
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: './common.yaml#/components/schemas/ApiError'
+              - properties:
+                  code: {const: UNAUTHORIZED}
+          example:
+            code: UNAUTHORIZED
+            message: INVALID_ACCESS_TOKEN
+            errors: []
+            metadata: {request_id: 4c8a1f2e-0000-4000-8000-000000000022, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+    AddressNotFound:
+      description: Unknown address or another member's address (no existence leak)
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: './common.yaml#/components/schemas/ApiError'
+              - properties:
+                  code: {const: NOT_FOUND}
+          example:
+            code: NOT_FOUND
+            message: ADDRESS_NOT_FOUND
+            errors: []
+            metadata: {request_id: 4c8a1f2e-0000-4000-8000-000000000023, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
     Unauthorized:
       description: Generic authentication failure
       headers:
@@ -239,4 +388,58 @@ components:
       properties:
         code: {const: OK}
         data: {$ref: '#/components/schemas/RefreshTokens'}
+        metadata: {$ref: './common.yaml#/components/schemas/Metadata'}
+    Profile:
+      type: object
+      required: [id, email, full_name, locale, email_verified]
+      additionalProperties: false
+      properties:
+        id: {type: string, format: uuid}
+        email: {type: string}
+        full_name: {type: string}
+        locale: {enum: [vi, en]}
+        email_verified: {type: boolean}
+    ProfileUpdate:
+      type: object
+      required: [full_name, locale]
+      properties:
+        full_name: {type: string, minLength: 1, maxLength: 200}
+        locale: {enum: [vi, en]}
+    ProfileResponse:
+      type: object
+      required: [code, data, metadata]
+      properties:
+        code: {const: OK}
+        data: {$ref: '#/components/schemas/Profile'}
+        metadata: {$ref: './common.yaml#/components/schemas/Metadata'}
+    AddressInput:
+      type: object
+      required: [recipient_name, phone, province_code, ward_code, address_line]
+      properties:
+        recipient_name: {type: string, minLength: 1, maxLength: 100}
+        phone: {type: string, pattern: '^(0|\+84)\d{9}$'}
+        province_code: {type: string, minLength: 1, maxLength: 10}
+        district_code: {type: [string, 'null'], maxLength: 10}
+        ward_code: {type: string, minLength: 1, maxLength: 10}
+        address_line: {type: string, minLength: 1, maxLength: 255}
+        is_default: {type: boolean, default: false}
+    Address:
+      type: object
+      required: [id, recipient_name, phone, province_code, district_code, ward_code, address_line, is_default]
+      additionalProperties: false
+      properties:
+        id: {type: string, format: uuid}
+        recipient_name: {type: string}
+        phone: {type: string}
+        province_code: {type: string}
+        district_code: {type: [string, 'null']}
+        ward_code: {type: string}
+        address_line: {type: string}
+        is_default: {type: boolean}
+    AddressResponse:
+      type: object
+      required: [code, data, metadata]
+      properties:
+        code: {const: OK}
+        data: {$ref: '#/components/schemas/Address'}
         metadata: {$ref: './common.yaml#/components/schemas/Metadata'}

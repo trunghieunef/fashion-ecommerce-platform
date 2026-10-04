@@ -110,5 +110,9 @@ Gate task là work package trong [backlog](../delivery/10_backlog.md). Mã task 
   deploy hay báo 1A đạt checkpoint tích hợp. USR-01 chia 1a (đăng ký/đăng nhập/refresh/logout,
   khóa tài khoản trong PostgreSQL) và 1b (mật khẩu + bàn giao secret); rate limit theo IP và Redis
   8.2.9 hoãn tới 1b. Thêm ADR-21 và cột `users.failed_login_attempts`.
+- USR-02 trước USR-01b (2026-10-05, chủ dự án chọn): đổi mật khẩu cần verifier JWT của USR-02. USR-02
+  chia 2a (verifier, `/users/me`, địa chỉ) và 2b (RBAC, admin, audit). Ngưỡng rate limit mặc định cho
+  1b (config, đổi được): đăng nhập 20 request / 5 phút / IP; quên mật khẩu 5 / giờ / email và
+  20 / giờ / IP; vượt ngưỡng trả 429 + `Retry-After`; Redis lỗi thì fail closed.
 
 Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác và lý do; ảnh hưởng PRD/API/schema/test/task; người quyết định; ngày; link bằng chứng. Chưa có chữ ký phê duyệt giả định thương mại.

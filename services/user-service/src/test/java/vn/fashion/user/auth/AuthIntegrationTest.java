@@ -70,6 +70,8 @@ class AuthIntegrationTest {
     registry.add("USER_JWT_PRIVATE_KEY",
         () -> Base64.getEncoder().encodeToString(SIGNING_KEY.getPrivate().getEncoded()));
     registry.add("USER_JWT_KEY_ID", () -> "user-test");
+    registry.add("USER_JWT_PUBLIC_KEYS",
+        () -> "user-test:" + Base64.getEncoder().encodeToString(SIGNING_KEY.getPublic().getEncoded()));
   }
 
   @BeforeEach

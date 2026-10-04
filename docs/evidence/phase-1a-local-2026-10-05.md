@@ -49,6 +49,27 @@ Review của Codex (GPT-6) tại `be7c4cc` gồm 1 P1 và 1 P2; CI của PR PASS
 Mutation: bỏ khóa ở logout làm test logout-race FAIL; bỏ khóa ở refresh làm cả 2 test race FAIL.
 3 lần chạy lại 3 test đồng thời: 0 lỗi. user-service 19/19.
 
+## USR-02 phần 2a — 2026-10-05
+
+Chủ dự án chọn làm USR-02 trước USR-01b; USR-02 chia 2a/2b (ghi ở 08).
+
+| Chu trình | RED | GREEN |
+|---|---|---|
+| `AccessTokenVerifier` (platform-security) | thiếu class (compile) | 8 test: chọn khóa theo `kid` và xoay 2 khóa, sai khóa/kid/issuer/audience, hết hạn, `iat` tương lai, sống quá 15 phút, `sub` không phải UUID, thiếu `auth_version`, HS256, JWE, `alg: none`. Bỏ catch NPE, thay bằng kiểm tra `sub` tường minh |
+| `/users/me` + địa chỉ | bảng `user_addresses` chưa có | 9 test PostgreSQL thật; user-service 28/28 |
+| Route Gateway `/api/v1/users/**` | 404 | 19/19 |
+| Refactor envelope chung `Api` | — | không đổi hành vi, 28/28 |
+
+Mutation (đều FAIL đúng test): verifier bỏ kiểm issuer, audience, giới hạn thời gian sống, `auth_version`;
+profile bỏ khóa dòng user khi update (test race giờ bắt buộc mọi PUT song song đều 200), bỏ kiểm
+`auth_version` hiện tại, xóa mặc định không chọn địa chỉ thay thế, địa chỉ đầu không tự thành mặc
+định, cho bỏ mặc định, bỏ lọc chủ sở hữu. Một mutation tôi viết sai (gán `auth_version = auth_version`)
+không đổi hành vi nên không có giá trị; PUT bỏ qua `email`/`auth_version` vì record request không có
+các field này.
+
+Chuỗi local: `local-up.sh` suy ra `USER_JWT_PUBLIC_KEYS` từ private key; smoke PASS (`/users/me` qua
+Gateway, tạo địa chỉ đầu tiên thành mặc định, không token → 401); Playwright 2/2; Nacos 4/4.
+
 ## Còn mở
 
 1b: quên/đặt lại/đổi mật khẩu, bàn giao secret cho notification, Redis + rate limit theo IP.

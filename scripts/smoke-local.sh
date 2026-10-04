@@ -48,6 +48,16 @@ test "$(curl -sS -o /dev/null -D "$headers" -w '%{http_code}' -H 'Content-Type: 
   -d "{\"email\":\"$EMAIL\",\"password\":\"Smoke-pass-123\",\"full_name\":\"Smoke Test\",\"locale\":\"vi\"}" \
   "$GATEWAY_URL/api/v1/auth/register")" = 201
 first="$(cookie_of "$headers")"
+# TASK:USR-02 part 2a: Bearer access token -> /users/me and the first address becomes default.
+access="$(curl -sS -H 'Content-Type: application/json' \
+  -d "{\"email\":\"me-$EMAIL\",\"password\":\"Smoke-pass-123\",\"full_name\":\"Smoke Me\",\"locale\":\"en\"}" \
+  "$GATEWAY_URL/api/v1/auth/register" | python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["access_token"])')"
+curl --fail --silent --show-error -H "Authorization: Bearer $access" "$GATEWAY_URL/api/v1/users/me" |
+  python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["email"].startswith("me-") and d["locale"] == "en", d'
+curl --fail --silent --show-error -H "Authorization: Bearer $access" -H 'Content-Type: application/json' \
+  -d '{"recipient_name":"Smoke","phone":"0912345678","province_code":"79","ward_code":"26734","address_line":"1 Smoke St"}' \
+  "$GATEWAY_URL/api/v1/users/me/addresses" | python3 -c 'import json,sys; assert json.load(sys.stdin)["data"]["is_default"] is True'
+test "$(status "$GATEWAY_URL/api/v1/users/me")" = 401
 test "$(curl -sS -o /dev/null -D "$headers" -w '%{http_code}' -X POST -H "Origin: $ORIGIN" \
   -H "Cookie: refresh_token=$first" "$GATEWAY_URL/api/v1/auth/refresh")" = 200
 second="$(cookie_of "$headers")"

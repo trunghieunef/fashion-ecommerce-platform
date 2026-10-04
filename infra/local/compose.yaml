@@ -80,6 +80,7 @@ services:
       USER_MIGRATION_DB_PASSWORD: ${USER_MIGRATION_DB_PASSWORD:?set USER_MIGRATION_DB_PASSWORD}
       USER_JWT_PRIVATE_KEY: ${USER_JWT_PRIVATE_KEY:?run scripts/local-up.sh to generate USER_JWT_PRIVATE_KEY}
       USER_JWT_KEY_ID: ${USER_JWT_KEY_ID:-user-local}
+      USER_JWT_PUBLIC_KEYS: ${USER_JWT_PUBLIC_KEYS:?run scripts/local-up.sh to derive USER_JWT_PUBLIC_KEYS}
     depends_on:
       postgres:
         condition: service_healthy
