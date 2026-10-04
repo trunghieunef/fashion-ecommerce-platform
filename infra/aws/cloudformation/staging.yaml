@@ -169,6 +169,9 @@ Resources:
 
   Node:
     Type: AWS::EC2::Instance
+    # The Internet route exists before boot; the EIP is associated after the instance, so the
+    # download below retries (bounded) until outbound access works.
+    DependsOn: [DefaultRoute, PublicSubnetRoutes]
     Properties:
       ImageId: !Ref AmiId
       InstanceType: !Ref InstanceType
@@ -192,7 +195,8 @@ Resources:
           # Checksum-pinned K3s binary; no piped installer script.
           set -euo pipefail
           VERSION='${K3sVersion}'
-          curl -fsSL -o /usr/local/bin/k3s \
+          curl -fsSL --retry 60 --retry-delay 10 --retry-all-errors --retry-max-time 900 \
+            -o /usr/local/bin/k3s \
             "https://github.com/k3s-io/k3s/releases/download/${!VERSION//+/%2B}/k3s"
           echo '${K3sSha256}  /usr/local/bin/k3s' | sha256sum -c -
           chmod 0755 /usr/local/bin/k3s
@@ -243,15 +247,15 @@ Resources:
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault: {SSEAlgorithm: AES256}
-      VersioningConfiguration:
-        Status: Enabled
+      # No versioning: with it, Expiration only adds a delete marker and the data lives on as a
+      # noncurrent version, up to twice the retention. Backups use unique timestamped keys and the
+      # node role cannot delete; data is removed BackupRetentionDays after creation (lifecycle
+      # runs asynchronously, so removal can lag by about a day).
       LifecycleConfiguration:
         Rules:
           - Id: expire-backups
             Status: Enabled
             ExpirationInDays: !Ref BackupRetentionDays
-            NoncurrentVersionExpiration:
-              NoncurrentDays: !Ref BackupRetentionDays
       Tags:
         - {Key: Project, Value: fashion-ecommerce}
         - {Key: Environment, Value: staging}

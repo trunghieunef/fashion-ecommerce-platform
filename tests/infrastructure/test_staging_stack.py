@@ -56,6 +56,26 @@ class StagingStackTest(unittest.TestCase):
         self.assertRegex(self.parameters["K3sSha256"]["AllowedPattern"], r"\{64\}")
         self.assertEqual(self.parameters["K3sVersion"]["Default"], "v1.35.8+k3s1")
 
+    def test_first_boot_waits_for_internet_before_downloading_k3s(self):
+        (name,) = [n for n, r in self.resources.items() if r["Type"] == "AWS::EC2::Instance"]
+        depends = self.resources[name].get("DependsOn", [])
+        self.assertTrue({"DefaultRoute", "PublicSubnetRoutes"} <= set(depends if isinstance(depends, list) else [depends]))
+        script = str(self.resources[name]["Properties"]["UserData"])
+        # The EIP is associated only after the instance exists: the download must retry, bounded.
+        self.assertIn("--retry-all-errors", script)
+        self.assertRegex(script, r"--retry-max-time \d+")
+
+    def test_backups_do_not_outlive_the_retention_through_noncurrent_versions(self):
+        (bucket,) = self.of_type("AWS::S3::Bucket")
+        props = bucket["Properties"]
+        (rule,) = props["LifecycleConfiguration"]["Rules"]
+        self.assertEqual(rule["ExpirationInDays"], {"Ref": "BackupRetentionDays"})
+        versioned = props.get("VersioningConfiguration", {}).get("Status") == "Enabled"
+        # With versioning, Expiration only adds a delete marker and data lives on as noncurrent.
+        extra_days = rule.get("NoncurrentVersionExpiration", {}).get("NoncurrentDays", 0) if versioned else 0
+        self.assertEqual(extra_days, 0, "retention counts every version from creation (13 section 3)")
+        self.assertFalse(versioned and "NoncurrentVersionExpiration" not in rule, "versions would never expire")
+
     def test_instance_role_is_read_only_registry_and_ssm(self):
         (role,) = self.of_type("AWS::IAM::Role")
         props = role["Properties"]

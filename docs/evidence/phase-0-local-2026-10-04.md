@@ -275,6 +275,20 @@ plaintext, gateway bỏ non-root. Mutation đầu tiên đổi tag ở base khô
 Còn mở: số liệu chi phí và phê duyệt O01/A; tạo environment/biến GitHub; AMI/checksum/retention;
 cơ chế refresh credential ECR cho K3s; domain/TLS; Secret DB ngoài Git; storefront chạy root.
 
+## Xử lý review PR #6 — Claude Code, TDD, 2026-10-05
+
+Review của Codex (GPT-6) tại `a472fd3` gồm 1 P1 và 2 P2 trong cấu hình staging; CI của PR đều PASS.
+Cả 3 finding đều đúng khi đối chiếu template. Chưa tái hiện được trên AWS/K3s vì chưa được phép deploy.
+
+| Finding | Nguyên nhân | RED | GREEN |
+|---|---|---|---|
+| P1: Ingress chưa ép HTTPS | `spec.tls` chỉ cấp chứng chỉ; Traefik vẫn gắn router vào entrypoint `web`, SG mở port 80 | test yêu cầu annotation `router.entrypoints: websecure` + `router.tls: "true"` FAIL | thêm 2 annotation; HTTP không có router cho app |
+| P2: first boot có thể chưa có Internet | subnet không tự cấp public IP, EIP gắn sau khi tạo instance, `curl` chỉ thử một lần với `set -e` | test yêu cầu `DependsOn` route và `curl --retry-all-errors --retry-max-time` FAIL | `DependsOn: [DefaultRoute, PublicSubnetRoutes]`; curl retry tối đa 900 giây |
+| P2: backup sống tới 2 lần thời hạn | versioning bật nên Expiration chỉ tạo delete marker, bản noncurrent sống thêm N ngày | test tính thời gian lưu gồm mọi version FAIL | bỏ versioning; dữ liệu bị xóa sau đúng N ngày kể từ khi tạo (lifecycle trễ khoảng một ngày) |
+
+`bash scripts/validate-infra.sh` PASS: cfn-lint sạch, 34 test. Bằng chứng runtime (HTTP không trả app,
+K3s cài được ở first boot, thời điểm xóa backup thực tế) phải lưu khi deploy có phê duyệt.
+
 ## Tiếp theo
 
 PLT-03: chạy CI remote, reviewer duyệt, sau đó service producer đầu tiên (CAT-01/USR-01)

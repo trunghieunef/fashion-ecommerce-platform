@@ -44,7 +44,11 @@ class StagingManifestTest(unittest.TestCase):
                 paths.append(path["path"])
         self.assertEqual(backends, {"gateway", "storefront"})
         self.assertFalse([p for p in paths if p.startswith("/internal") or p.startswith("/actuator")])
-        self.assertTrue(ingress["spec"]["tls"], "HTTPS only")
+        self.assertTrue(ingress["spec"]["tls"])
+        annotations = ingress["metadata"].get("annotations", {})
+        # spec.tls alone still lets Traefik serve the app on the plain-HTTP "web" entrypoint.
+        self.assertEqual(annotations.get("traefik.ingress.kubernetes.io/router.entrypoints"), "websecure")
+        self.assertEqual(annotations.get("traefik.ingress.kubernetes.io/router.tls"), "true")
 
     def test_services_are_cluster_internal(self):
         for service in self.kinds("Service"):
