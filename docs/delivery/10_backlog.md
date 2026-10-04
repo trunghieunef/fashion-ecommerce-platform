@@ -70,7 +70,7 @@ PLT-04/05, AWS/K3s/ECR/ArgoCD, provider sandbox và các task business Phase 1 k
   (sửa 2 P1 về ranh giới transaction); chưa có service nào dùng thư viện.
 - `TASK:SEC-01` — **In progress**, assignee Claude Code (agent), reviewer chủ dự án.
   Chủ dự án chốt ADR-19 (service JWT ES256 tự ký), ADR-20 (CSRF Origin/Fetch-Metadata) và
-  gitleaks pin digest. Đã có: `services/platform-security` (12 test: 9 trường hợp phải từ chối, 2 trường hợp hợp lệ, 1 test không log token),
+  gitleaks pin digest. Đã có: `services/platform-security` (16 test sau review PR #5: 12 trường hợp phải từ chối, 3 trường hợp hợp lệ, 1 test không log token),
   `CsrfOriginFilter` ở Gateway (8 test), `scripts/scan-secrets.sh` trong Application CI,
   data inventory theo field và permission codes ở 13, cách nạp secret. Còn mở: JWT người dùng,
   `auth_version` và U03/U24 (USR-01/02), service đầu tiên nối service token, actuator Gateway

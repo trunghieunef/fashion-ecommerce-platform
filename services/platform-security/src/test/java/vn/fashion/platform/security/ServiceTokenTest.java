@@ -2,10 +2,15 @@ package vn.fashion.platform.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.nimbusds.jose.EncryptionMethod;
+import com.nimbusds.jose.JWEAlgorithm;
+import com.nimbusds.jose.JWEHeader;
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.JWSHeader;
+import com.nimbusds.jose.crypto.DirectEncrypter;
 import com.nimbusds.jose.crypto.ECDSASigner;
 import com.nimbusds.jose.crypto.MACSigner;
+import com.nimbusds.jwt.EncryptedJWT;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.PlainJWT;
 import com.nimbusds.jwt.SignedJWT;
@@ -83,6 +88,34 @@ class ServiceTokenTest {
     var jwt = new SignedJWT(new JWSHeader.Builder(JWSAlgorithm.ES256).keyID("order").build(), claims);
     jwt.sign(new ECDSASigner((ECPrivateKey) ORDER.getPrivate()));
     assertThat(inventory.verify(jwt.serialize())).isEmpty();
+  }
+
+  @Test
+  void tokenIssuedInTheFutureBeyondSkewIsRejected() {
+    var futureIssuer = Clock.fixed(NOW.plus(Duration.ofDays(365)), ZoneOffset.UTC);
+    assertThat(inventory.verify(issuer("order", ORDER, futureIssuer).issue("inventory"))).isEmpty();
+  }
+
+  @Test
+  void tokenIssuedSlightlyAheadWithinSkewIsAccepted() {
+    var slightlyAhead = Clock.fixed(NOW.plusSeconds(3), ZoneOffset.UTC);
+    assertThat(inventory.verify(issuer("order", ORDER, slightlyAhead).issue("inventory"))).contains("order");
+  }
+
+  @Test
+  void tokenExpiringBeforeItWasIssuedIsRejected() throws Exception {
+    var claims = new JWTClaimsSet.Builder(claims("order", "inventory"))
+        .issueTime(Date.from(NOW.plusSeconds(4))).expirationTime(Date.from(NOW.plusSeconds(2))).build();
+    var jwt = new SignedJWT(new JWSHeader.Builder(JWSAlgorithm.ES256).keyID("order").build(), claims);
+    jwt.sign(new ECDSASigner((ECPrivateKey) ORDER.getPrivate()));
+    assertThat(inventory.verify(jwt.serialize())).isEmpty();
+  }
+
+  @Test
+  void encryptedJwtIsRejectedWithoutException() throws Exception {
+    var jwe = new EncryptedJWT(new JWEHeader(JWEAlgorithm.DIR, EncryptionMethod.A128GCM), claims("order", "inventory"));
+    jwe.encrypt(new DirectEncrypter(new byte[16]));
+    assertThat(inventory.verify(jwe.serialize())).isEmpty();
   }
 
   @Test

@@ -222,6 +222,20 @@ không tạo `docs/security/*` trùng nội dung. Chưa làm `ActorContext` và 
 USR-01 chưa có issuer. Chưa có module `tests/integration/security`: test nằm trong module.
 PII redaction trong log ứng dụng thuộc PLT-05; ở đây chỉ chứng minh verifier không log token.
 
+## Xử lý review PR #5 — Claude Code, TDD, 2026-10-04
+
+Review của Codex (GPT-6) tại `c6aff6a` gồm 2 finding P2 trong `ServiceTokenVerifier`; CI của PR đều PASS. Cả hai đều đúng.
+
+| Finding | RED | GREEN |
+|---|---|---|
+| Token có `iat` ở tương lai được chấp nhận (issuer lệch đồng hồ +365 ngày thì dùng được cả năm) | `tokenIssuedInTheFutureBeyondSkewIsRejected` FAIL | validator `lifetime`: `iat ≤ now + 5s`, `exp > iat`, `exp ≤ iat + TTL + 5s`; test biên `iat` +3s vẫn hợp lệ |
+| JWE gây `NullPointerException` thay vì từ chối | `encryptedJwtIsRejectedWithoutException` ERROR (NPE) | chỉ parse `SignedJWT`, nên JWE và token không ký lỗi ngay ở bước parse |
+
+Mutation: bỏ chặn `iat` tương lai → FAIL; parse lại bằng `JWTParser` → ERROR. Bỏ `exp > iat`
+thì test vẫn PASS vì Spring tự từ chối khi dựng `Jwt` có `exp ≤ iat`; giữ kiểm tra tường minh theo
+yêu cầu review, test `tokenExpiringBeforeItWasIssuedIsRejected` bảo vệ hành vi này.
+`./mvnw -pl services/platform-security test` PASS 16/16.
+
 ## Tiếp theo
 
 PLT-03: chạy CI remote, reviewer duyệt, sau đó service producer đầu tiên (CAT-01/USR-01)

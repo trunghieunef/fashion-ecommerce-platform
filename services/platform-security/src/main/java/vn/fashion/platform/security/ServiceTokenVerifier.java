@@ -7,7 +7,7 @@ import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.proc.JWSVerificationKeySelector;
 import com.nimbusds.jose.proc.SecurityContext;
-import com.nimbusds.jwt.JWTParser;
+import com.nimbusds.jwt.SignedJWT;
 import com.nimbusds.jwt.proc.DefaultJWTProcessor;
 import java.security.interfaces.ECPublicKey;
 import java.text.ParseException;
@@ -51,7 +51,8 @@ public class ServiceTokenVerifier {
       return Optional.empty();
     }
     try {
-      String caller = JWTParser.parse(token).getJWTClaimsSet().getIssuer();
+      // Only JWS: JWE and unsecured tokens fail to parse here instead of yielding null claims.
+      String caller = SignedJWT.parse(token).getJWTClaimsSet().getIssuer();
       JwtDecoder decoder = caller == null ? null : decoders.get(caller);
       if (decoder == null) {
         return Optional.empty();
@@ -77,14 +78,17 @@ public class ServiceTokenVerifier {
         new JwtIssuerValidator(caller),
         new JwtClaimValidator<String>(JwtClaimNames.SUB, caller::equals),
         new JwtClaimValidator<List<String>>(JwtClaimNames.AUD, aud -> aud != null && aud.contains(serviceName)),
-        ServiceTokenVerifier::shortLived)));
+        jwt -> lifetime(jwt, clock))));
     return decoder;
   }
 
-  private static OAuth2TokenValidatorResult shortLived(Jwt jwt) {
+  /** iat not in the future beyond skew, exp after iat, and lifetime at most the TTL. */
+  private static OAuth2TokenValidatorResult lifetime(Jwt jwt, Clock clock) {
     Instant issuedAt = jwt.getIssuedAt();
     Instant expiresAt = jwt.getExpiresAt();
     boolean ok = issuedAt != null && expiresAt != null
+        && !issuedAt.isAfter(clock.instant().plus(CLOCK_SKEW))
+        && expiresAt.isAfter(issuedAt)
         && !expiresAt.isAfter(issuedAt.plus(ServiceTokenIssuer.TTL).plus(CLOCK_SKEW));
     return ok
         ? OAuth2TokenValidatorResult.success()

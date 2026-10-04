@@ -9,7 +9,7 @@ BOM (do Boot import); thư viện này kéo theo Nimbus JOSE.
 | Class | Việc làm |
 |---|---|
 | `ServiceTokenIssuer` | Caller ký token ES256 bằng khóa riêng của mình: `iss = sub = kid =` tên service, `aud =` đúng một service đích, `exp = iat + 60s`, có `jti` |
-| `ServiceTokenVerifier` | Service đích kiểm tra và từ chối mặc định: chỉ chấp nhận ES256, ký bằng public key được allowlist cho caller đó (theo `kid`/`iss`); `aud` phải chứa chính service này; `sub = iss`; còn hạn (lệch đồng hồ tối đa 5s); không sống quá TTL. Trả về tên caller, hoặc rỗng nếu không hợp lệ |
+| `ServiceTokenVerifier` | Service đích kiểm tra và từ chối mặc định: chỉ chấp nhận ES256, ký bằng public key được allowlist cho caller đó (theo `kid`/`iss`); `aud` phải chứa chính service này; `sub = iss`; còn hạn; `iat` không ở tương lai quá 5s, `exp > iat`, không sống quá TTL (lệch đồng hồ tối đa 5s). Chỉ nhận JWS: JWE và token không ký bị từ chối mà không ném lỗi. Trả về tên caller, hoặc rỗng nếu không hợp lệ |
 
 Endpoint internal vẫn phải tự kiểm tra caller có nằm trong allowlist của operation đó không
 (03 §4), và vẫn kiểm tra quyền/ownership của actor. Token hợp lệ chỉ chứng minh request đến
@@ -32,7 +32,7 @@ từ service nào, không cấp quyền nghiệp vụ.
 ```
 
 Các trường hợp bị từ chối: sai audience, caller ngoài allowlist, khóa sai, hết hạn, sống quá
-TTL, `sub ≠ iss`, `alg: none`, HS256, token rác hoặc rỗng. Test cũng khẳng định khi từ chối thì
+TTL, `iat` ở tương lai, `exp ≤ iat`, `sub ≠ iss`, `alg: none`, HS256, JWE, token rác hoặc rỗng. Test cũng khẳng định khi từ chối thì
 token không bị ghi ra log. Không dùng network hay Docker.
 
 ## Giới hạn
