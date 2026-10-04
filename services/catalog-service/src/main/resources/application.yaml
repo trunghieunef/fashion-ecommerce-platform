@@ -25,11 +25,19 @@ spring:
     password: ${CATALOG_MIGRATION_DB_PASSWORD:catalog_migration_local}
     locations: classpath:db/migration
 
+logging:
+  structured:
+    format:
+      # PLT-05: JSON (ECS) logs with trace ids; every string value is redacted (XCT-06).
+      console: ecs
+    json:
+      customizer: vn.fashion.platform.security.PiiRedactingJsonCustomizer
+
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info,metrics,prometheus
   endpoint:
     health:
       probes:

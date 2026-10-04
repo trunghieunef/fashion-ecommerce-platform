@@ -2,6 +2,8 @@ package vn.fashion.catalog.product;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
+import io.micrometer.tracing.Span;
+import io.micrometer.tracing.Tracer;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -16,9 +18,11 @@ import org.springframework.web.server.ResponseStatusException;
 @RequestMapping("/api/v1/catalog/products")
 public class ProductQueryController {
   private final ProductQueryRepository products;
+  private final Tracer tracer;
 
-  public ProductQueryController(ProductQueryRepository products) {
+  public ProductQueryController(ProductQueryRepository products, Tracer tracer) {
     this.products = products;
+    this.tracer = tracer;
   }
 
   @GetMapping
@@ -54,8 +58,11 @@ public class ProductQueryController {
             metadata));
   }
 
+  /** trace_id is the W3C trace of this request (continued from the Gateway's traceparent). */
   private ResponseMetadata metadata() {
-    return new ResponseMetadata(UUID.randomUUID().toString(), UUID.randomUUID().toString());
+    Span span = tracer.currentSpan();
+    String traceId = span != null ? span.context().traceId() : UUID.randomUUID().toString().replace("-", "");
+    return new ResponseMetadata(UUID.randomUUID().toString(), traceId);
   }
 
   public record ApiResponse<T>(String code, T data, ResponseMetadata metadata) {

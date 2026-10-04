@@ -1,5 +1,6 @@
 package vn.fashion.catalog.product;
 
+import io.micrometer.tracing.Tracer;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
@@ -13,7 +14,7 @@ class ProductQueryControllerErrorResponseTest {
 
   @Test
   void returnsFieldLevelValidationErrorWithCorrelationHeader() {
-    var controller = new ProductQueryController(null);
+    var controller = new ProductQueryController(null, Tracer.NOOP);
     var response = controller.invalidRequest(
         new ResponseStatusException(HttpStatus.BAD_REQUEST, "INVALID_LIMIT"));
     var body = objectMapper.valueToTree(response.getBody());

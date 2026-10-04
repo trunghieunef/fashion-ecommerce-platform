@@ -304,6 +304,19 @@ Mutation: bỏ cấu hình customizer làm test log FAIL. `./mvnw -B -pl service
 platform-security 22, gateway 16 PASS. Docker Desktop không chạy trong phiên này nên chưa chạy
 catalog, Compose, smoke và Playwright.
 
+## PLT-05 phần local, catalog — Claude Code, 2026-10-05
+
+| Bước | Kết quả |
+|---|---|
+| RED: 2 test trace (tiếp nối `traceparent`; trace mới dạng 32 hex) | FAIL: catalog trả UUID ngẫu nhiên |
+| GREEN: `Tracer` vào `ProductQueryController`, tracing OTel + Prometheus + log ECS | catalog 12/12 |
+| Log JSON và Prometheus của catalog | Cấu hình được thêm **trước** test (lệch TDD). Bù lại: viết 2 test rồi mutation; bỏ expose `prometheus`, bỏ customizer, bỏ format ECS đều làm đúng test FAIL |
+| Smoke | Thêm kiểm tra `traceparent` qua Gateway → catalog quay về đúng trong `metadata.trace_id` |
+
+Lệnh đã chạy (Docker Desktop 29.2.0): `./mvnw -B test` PASS (durability 36, security 22,
+catalog 12, gateway 16); `local-up.sh` → `smoke-local.sh` PASS; Playwright 2/2; Nacos proof 4/4;
+log container Gateway đã ra JSON ECS.
+
 ## Tiếp theo
 
 PLT-03: chạy CI remote, reviewer duyệt, sau đó service producer đầu tiên (CAT-01/USR-01)

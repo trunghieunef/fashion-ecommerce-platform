@@ -79,8 +79,8 @@ PLT-04/05, AWS/K3s/ECR/ArgoCD, provider sandbox và các task business Phase 1 k
   nhóm dữ liệu ngoài bảng và xác minh pháp lý; chưa triển khai cleanup/purge.
   O01 chỉ chặn phần cloud, không chặn PLT-02/03 local; chưa provision/deploy.
 - `TASK:PLT-05` — **In progress, phần local** (2026-10-05, assignee Claude Code, reviewer chủ dự án):
-  Gateway đã có trace W3C, log JSON ECS có redaction và `/actuator/prometheus` trên management port.
-  Catalog (trace_id thật trong `metadata`, log JSON, metrics) chờ Docker để test PostgreSQL thật.
+  Gateway và catalog đã có trace W3C (smoke kiểm trace đi Gateway → catalog và quay về trong
+  `metadata.trace_id`), log JSON ECS có redaction và `/actuator/prometheus` (Gateway trên port 9080).
   Còn: correlation qua Kafka khi có producer/consumer, gauge outbox cũ nhất, dashboard/alert và
   trace xuyên 2 service trên staging (cần PLT-04).
 

@@ -32,6 +32,12 @@ check_page "$(curl --fail --silent --show-error "$STOREFRONT_URL/api/v1/catalog/
 
 test "$(status -H 'X-User-Roles: SUPER_ADMIN' "$GATEWAY_URL/internal/api/v1/platform/ping")" = 404
 test "$(status "$GATEWAY_URL/api/v1/catalog/products?limit=0")" = 400
+# PLT-05: the W3C trace crosses Gateway -> catalog and comes back as metadata.trace_id.
+TRACE_ID=4bf92f3577b34da6a3ce929d0e0e4736
+curl --fail --silent --show-error -H "traceparent: 00-$TRACE_ID-00f067aa0ba902b7-01" \
+  "$GATEWAY_URL/api/v1/catalog/products?limit=1" |
+  python3 -c 'import json,sys; t=json.load(sys.stdin)["metadata"]["trace_id"]; assert t == sys.argv[1], t' "$TRACE_ID"
+
 test "$(status "$STOREFRONT_URL/api/not-found")" = 404
 test "$(status "$STOREFRONT_URL/api")" = 404
 test "$(status "$STOREFRONT_URL/assets/missing.js")" = 404
