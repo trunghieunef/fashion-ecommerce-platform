@@ -1,0 +1,27 @@
+{
+  "event_id": "44444442-4444-4444-8444-444444444444",
+  "event_type": "ORDER_CONFIRMED",
+  "version": 1,
+  "occurred_at": "2026-10-04T03:05:00Z",
+  "aggregate_id": "55555555-5555-4555-8555-555555555555",
+  "aggregate_version": 1,
+  "aggregate_sequence": 2,
+  "correlation_id": "synthetic-contract-example",
+  "payload": {
+    "order_id": "55555555-5555-4555-8555-555555555555",
+    "order_no": "FS-SYNTH-0001",
+    "user_id": null,
+    "status": "CONFIRMED",
+    "order_version": 1,
+    "items": [
+      {
+        "variant_id": "66666666-6666-4666-8666-666666666666",
+        "sku": "SYNTH-TEE-M-BLK",
+        "quantity": 2
+      }
+    ],
+    "total_amount": 398000,
+    "currency": "VND",
+    "method": "COD"
+  }
+}

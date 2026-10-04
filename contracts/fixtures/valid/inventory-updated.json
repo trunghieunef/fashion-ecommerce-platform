@@ -1,0 +1,18 @@
+{
+  "event_id": "77777777-7777-4777-8777-777777777773",
+  "event_type": "INVENTORY_UPDATED",
+  "version": 1,
+  "occurred_at": "2026-10-04T03:10:00Z",
+  "aggregate_id": "SYNTH-TEE-M-BLK",
+  "aggregate_version": 5,
+  "aggregate_sequence": 6,
+  "correlation_id": "synthetic-contract-example",
+  "payload": {
+    "sku": "SYNTH-TEE-M-BLK",
+    "on_hand": 10,
+    "reserved": 2,
+    "available": 8,
+    "stock_version": 5,
+    "observed_at": "2026-10-04T03:10:00Z"
+  }
+}
