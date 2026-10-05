@@ -10,7 +10,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
-import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -111,11 +110,6 @@ public class AuthController {
         Api.error(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "INVALID_REFRESH_TOKEN", List.of(), tracer);
     return ResponseEntity.status(response.getStatusCode()).headers(response.getHeaders())
         .header(HttpHeaders.SET_COOKIE, cookie("", 0).toString()).body(response.getBody());
-  }
-
-  @ExceptionHandler(HttpMessageNotReadableException.class)
-  ResponseEntity<Api.Error> unreadable() {
-    return error(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "MALFORMED_JSON", List.of());
   }
 
   private static void validatePassword(String password, List<Api.FieldError> errors) {

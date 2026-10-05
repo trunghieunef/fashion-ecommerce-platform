@@ -236,6 +236,8 @@ paths:
       responses:
         '204':
           description: Deleted
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/InvalidAccessToken'
         '404':
@@ -258,7 +260,7 @@ components:
       schema: {type: string, minLength: 1}
   responses:
     ValidationError:
-      description: Invalid input; errors name each field
+      description: Invalid input; errors name each field. Unparseable JSON returns message MALFORMED_JSON; a malformed path parameter returns INVALID_PARAMETER naming it.
       headers:
         X-Correlation-Id: {$ref: './common.yaml#/components/headers/CorrelationId'}
       content:

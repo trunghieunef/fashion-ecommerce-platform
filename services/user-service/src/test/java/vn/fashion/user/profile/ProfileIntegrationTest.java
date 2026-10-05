@@ -191,6 +191,28 @@ class ProfileIntegrationTest {
     assertThat(fields).containsExactlyInAnyOrder("recipient_name", "phone");
   }
 
+  @Test
+  void bindingErrorsUseTheApiErrorEnvelope() {
+    String token = registerAndToken("binding@example.test");
+    var cases = List.of(
+        call("PUT", "/api/v1/users/me", token, "{"),
+        call("POST", "/api/v1/auth/register", null, "{"),
+        call("POST", "/api/v1/users/me/addresses", token, "{"),
+        call("PUT", "/api/v1/users/me/addresses/not-a-uuid", token, addressJson("A", true)),
+        call("DELETE", "/api/v1/users/me/addresses/not-a-uuid", token, null));
+
+    for (var response : cases) {
+      assertThat(response.statusCode()).isEqualTo(400);
+      var error = body(response);
+      assertThat(error.path("code").asText()).as(response.uri().toString()).isEqualTo("VALIDATION_ERROR");
+      assertThat(error.path("message").asText()).isNotBlank();
+      assertThat(error.path("metadata").path("request_id").asText()).isNotBlank();
+      assertThat(error.has("timestamp")).isFalse();
+      assertThat(response.headers().firstValue("X-Correlation-Id")).isPresent();
+    }
+    assertThat(body(cases.get(3)).path("errors").get(0).path("field").asText()).isEqualTo("id");
+  }
+
   private String registerAndToken(String email) {
     var response = call("POST", "/api/v1/auth/register", null, "{\"email\":\"" + email
         + "\",\"password\":\"Synthetic-pass-1\",\"full_name\":\"Synthetic Person\",\"locale\":\"vi\"}"); // gitleaks:allow synthetic test password

@@ -70,6 +70,17 @@ các field này.
 Chuỗi local: `local-up.sh` suy ra `USER_JWT_PUBLIC_KEYS` từ private key; smoke PASS (`/users/me` qua
 Gateway, tạo địa chỉ đầu tiên thành mặc định, không token → 401); Playwright 2/2; Nacos 4/4.
 
+## Xử lý review PR #9 — 2026-10-05
+
+Review của Codex (GPT-6) tại `89768d6` có 1 finding P2, đúng.
+
+| Finding | Nguyên nhân | RED | GREEN |
+|---|---|---|---|
+| P2: lỗi binding ở profile/địa chỉ trả body mặc định của Spring (`timestamp/status/error/path`), thiếu `code`/`metadata` của `ApiError` | handler `MALFORMED_JSON` chỉ nằm cục bộ trong `AuthController`; lỗi `{id}` không phải UUID chưa có handler | test `bindingErrorsUseTheApiErrorEnvelope` (JSON hỏng ở PUT `/users/me`, POST địa chỉ, register; `{id}` sai ở PUT/DELETE): `code` rỗng | `ApiExceptionHandler` dùng chung xử lý `HttpMessageNotReadableException` (`MALFORMED_JSON`) và `MethodArgumentTypeMismatchException` (`INVALID_PARAMETER`, `errors` nêu tham số); contract thêm `400` cho DELETE địa chỉ |
+
+Mutation: bỏ handler type-mismatch thì test FAIL ở `{id}` sai. user-service 29/29 (Testcontainers,
+Docker Desktop 29.2.0); `validate-contracts.sh` PASS.
+
 ## Còn mở
 
 1b: quên/đặt lại/đổi mật khẩu, bàn giao secret cho notification, Redis + rate limit theo IP.
