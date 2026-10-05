@@ -19,6 +19,10 @@ if ! grep -q '^USER_JWT_PRIVATE_KEY=.' "$ENV_FILE"; then
   sed -i "s|^USER_JWT_PRIVATE_KEY=.*|USER_JWT_PRIVATE_KEY=$key|" "$ENV_FILE"
   sed -i "s|^USER_JWT_PUBLIC_KEYS=.*|USER_JWT_PUBLIC_KEYS=|" "$ENV_FILE"
 fi
+# Local-only AES-256 key for the reset-token handoff in Redis (TASK:USR-01b).
+if ! grep -q '^USER_SECRET_KEY=.' "$ENV_FILE"; then
+  sed -i "s|^USER_SECRET_KEY=.*|USER_SECRET_KEY=$(openssl rand -base64 32 | tr -d '\r\n')|" "$ENV_FILE"
+fi
 # Verifier key (ADR-21) derived from the private key: kid:base64-X.509.
 if ! grep -q '^USER_JWT_PUBLIC_KEYS=.' "$ENV_FILE"; then
   private="$(grep '^USER_JWT_PRIVATE_KEY=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r')"

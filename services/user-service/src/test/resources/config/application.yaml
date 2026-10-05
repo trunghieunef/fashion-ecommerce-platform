@@ -1,0 +1,5 @@
+# Test-only settings layered over the main application.yaml (classpath:/config wins).
+fashion:
+  user:
+    # Synthetic AES-256 key for the secret handoff in tests; never used outside tests.
+    secret-key: c3ludGhldGljLXRlc3Qtc2VjcmV0LWtleS0zMmJ5dGU= # gitleaks:allow synthetic test key

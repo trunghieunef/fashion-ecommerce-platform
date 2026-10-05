@@ -21,6 +21,19 @@ services:
       timeout: 3s
       retries: 20
 
+  # TASK:USR-01b: short-lived encrypted secrets (and rate limits in 1b-ii). Private, password
+  # protected, no persistence: PostgreSQL stays the source of truth. License: see 17 (open item).
+  redis:
+    image: redis:8.2.9@sha256:66b7f4c2f3c6ef1b298bbd7b13c806bc6f71e61f1136a4f58710daf2cb053b21
+    environment:
+      REDISCLI_AUTH: ${USER_REDIS_PASSWORD:?set USER_REDIS_PASSWORD}
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDISCLI_AUTH\" --save '' --appendonly no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   # Only with --profile nacos-compat (O02 compatibility proof). No published ports.
   nacos:
     image: nacos/nacos-server:v3.2.4@sha256:1c191c30c8cd5ff2a72bf576555dbaa57a616378c55168651a74aefadedf7708
@@ -82,8 +95,14 @@ services:
       USER_JWT_KEY_ID: ${USER_JWT_KEY_ID:-user-local}
       USER_JWT_PUBLIC_KEYS: ${USER_JWT_PUBLIC_KEYS:?run scripts/local-up.sh to derive USER_JWT_PUBLIC_KEYS}
       USER_BOOTSTRAP_ADMIN_EMAIL: ${USER_BOOTSTRAP_ADMIN_EMAIL:-}
+      USER_REDIS_HOST: redis
+      USER_REDIS_PASSWORD: ${USER_REDIS_PASSWORD:?set USER_REDIS_PASSWORD}
+      USER_SECRET_KEY: ${USER_SECRET_KEY:?run scripts/local-up.sh to generate USER_SECRET_KEY}
+      USER_INTERNAL_CALLERS: ${USER_INTERNAL_CALLERS:-}
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8082/actuator/health/readiness"]

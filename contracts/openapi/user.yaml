@@ -10,7 +10,9 @@ info:
     check (ADR-20). TASK:USR-02 part 2a adds `/users/me` and addresses (Bearer access token;
     the account must be ACTIVE and the token's auth_version current). TASK:USR-02 part 2b adds
     `/admin/api/v1/users` (permission user.manage) and the access-token `permissions` claim
-    (permission codes of the user's roles, 13 §2). Password reset/change belong to USR-01b.
+    (permission codes of the user's roles, 13 §2). TASK:USR-01 part 1b-i adds password change,
+    forgot and reset; the reset token reaches notification only through the internal handoff
+    in user-internal.yaml. Rate limits belong to part 1b-ii.
 servers:
   - url: http://localhost:8080
     description: Local Gateway
@@ -127,6 +129,85 @@ paths:
             Set-Cookie: {$ref: '#/components/headers/RefreshCookie'}
         '403':
           $ref: '#/components/responses/CsrfRejected'
+  /api/v1/auth/password/change:
+    post:
+      operationId: changePassword
+      summary: Change the password; revokes every session including this one
+      description: >
+        Bumps auth_version and revokes all refresh tokens, then clears the refresh cookie; the
+        client signs in again. A wrong current_password is a field error and counts toward the
+        five-failure lockout.
+      security: [{bearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PasswordChange'}
+      responses:
+        '204':
+          description: Changed; Set-Cookie clears refresh_token (Max-Age=0)
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/InvalidAccessToken'
+  /api/v1/auth/password/forgot:
+    post:
+      operationId: forgotPassword
+      summary: Request a reset e-mail; the answer never reveals whether the account exists
+      security: []
+      description: >
+        For an ACTIVE account, creates a one-time token valid 30 minutes (stored as SHA-256),
+        voids earlier unused reset tokens and queues NOTIFY_RESET_PASSWORD with a challenge_id
+        only. The handoff store is checked before the account lookup: while it is unavailable
+        every well-formed e-mail gets the same 503, so the status never reveals an account.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ForgotPassword'}
+            example: {email: member@example.test}
+      responses:
+        '202':
+          description: Accepted, same body for every well-formed e-mail
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ForgotAcceptedResponse'}
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '503':
+          $ref: '#/components/responses/TemporarilyUnavailable'
+  /api/v1/auth/password/reset:
+    post:
+      operationId: resetPassword
+      summary: Consume a reset token once and set a new password; revokes every session
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PasswordReset'}
+      responses:
+        '204':
+          description: >
+            Password replaced; auth_version bumped; refresh tokens revoked; failed-login lock
+            cleared. A login that checked the old password before this committed is refused.
+        '400':
+          description: Invalid input, or a token that is unknown, used, superseded or expired (message INVALID_RESET_TOKEN, field token)
+          headers:
+            X-Correlation-Id: {$ref: './common.yaml#/components/headers/CorrelationId'}
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './common.yaml#/components/schemas/ApiError'
+                  - properties:
+                      code: {const: VALIDATION_ERROR}
+              example:
+                code: VALIDATION_ERROR
+                message: INVALID_RESET_TOKEN
+                errors:
+                  - {field: token, message: 'is invalid, used or expired'}
+                metadata: {request_id: 4c8a1f2e-0000-4000-8000-000000000041, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
   /api/v1/users/me:
     get:
       operationId: getProfile
@@ -405,6 +486,20 @@ components:
             message: ADDRESS_NOT_FOUND
             errors: []
             metadata: {request_id: 4c8a1f2e-0000-4000-8000-000000000023, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+    TemporarilyUnavailable:
+      description: A dependency (the secret handoff store) is unavailable; nothing was queued, retry later
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: './common.yaml#/components/schemas/ApiError'
+              - properties:
+                  code: {const: TEMPORARILY_UNAVAILABLE}
+          example:
+            code: TEMPORARILY_UNAVAILABLE
+            message: DEPENDENCY_UNAVAILABLE
+            errors: []
+            metadata: {request_id: 4c8a1f2e-0000-4000-8000-000000000042, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
     PermissionRequired:
       description: The token lacks the permission, or an admin targets their own account
       content:
@@ -632,3 +727,32 @@ components:
             size: {type: integer, minimum: 1, maximum: 100}
             total: {type: integer, minimum: 0}
         metadata: {$ref: './common.yaml#/components/schemas/Metadata'}
+    PasswordChange:
+      type: object
+      required: [current_password, new_password]
+      properties:
+        current_password: {type: string, minLength: 1}
+        new_password: {type: string, minLength: 8, description: At most 72 UTF-8 bytes (BCrypt)}
+    ForgotPassword:
+      type: object
+      required: [email]
+      properties:
+        email: {type: string, format: email, maxLength: 254}
+    ForgotAcceptedResponse:
+      type: object
+      required: [code, data, metadata]
+      properties:
+        code: {const: OK}
+        data:
+          type: object
+          required: [message]
+          additionalProperties: false
+          properties:
+            message: {const: RESET_EMAIL_REQUESTED}
+        metadata: {$ref: './common.yaml#/components/schemas/Metadata'}
+    PasswordReset:
+      type: object
+      required: [token, new_password]
+      properties:
+        token: {type: string, minLength: 1, maxLength: 128}
+        new_password: {type: string, minLength: 8, description: At most 72 UTF-8 bytes (BCrypt)}

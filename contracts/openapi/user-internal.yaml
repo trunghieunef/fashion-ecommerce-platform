@@ -1,0 +1,76 @@
+openapi: 3.1.0
+info:
+  title: User internal API
+  version: 0.1.0
+  description: >
+    TASK:USR-01 part 1b-i — internal operations of user-service (docs/design/03_interfaces.md §4).
+    Callers send a service token (ADR-19) as `Authorization: Bearer`; each operation also checks
+    its own caller allowlist. Not routed by the public Gateway.
+servers:
+  - url: http://user-service:8082
+    description: In-cluster / Compose network only
+paths:
+  /internal/api/v1/users/notification-secrets/{challenge_id}:
+    get:
+      operationId: getNotificationSecret
+      summary: Fetch the reset token for a queued NOTIFY_RESET_PASSWORD (caller notification-service only)
+      description: >
+        Returns the secret while its token is unused and unexpired; afterwards 404. The response
+        is `Cache-Control: no-store` and must never be logged or persisted by the caller; do not
+        send after expires_at.
+      security: [{serviceToken: []}]
+      parameters:
+        - {in: path, name: challenge_id, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: The secret
+          headers:
+            Cache-Control:
+              schema: {type: string, pattern: no-store}
+            X-Correlation-Id: {$ref: './common.yaml#/components/headers/CorrelationId'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/NotificationSecretResponse'}
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+components:
+  securitySchemes:
+    serviceToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT (ES256 service token, ADR-19; aud user-service)
+  responses:
+    Error:
+      description: >
+        400 VALIDATION_ERROR (challenge_id not a UUID), 401 UNAUTHORIZED INVALID_SERVICE_TOKEN,
+        403 FORBIDDEN CALLER_NOT_ALLOWED, 404 NOT_FOUND SECRET_NOT_FOUND (unknown, used, superseded or expired)
+      content:
+        application/json:
+          schema: {$ref: './common.yaml#/components/schemas/ApiError'}
+          example:
+            code: NOT_FOUND
+            message: SECRET_NOT_FOUND
+            errors: []
+            metadata: {request_id: 4c8a1f2e-0000-4000-8000-000000000051, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+  schemas:
+    NotificationSecretResponse:
+      type: object
+      required: [code, data, metadata]
+      properties:
+        code: {const: OK}
+        data:
+          type: object
+          required: [challenge_id, purpose, secret, expires_at]
+          additionalProperties: false
+          properties:
+            challenge_id: {type: string, format: uuid}
+            purpose: {const: RESET_PASSWORD}
+            secret: {type: string, minLength: 1}
+            expires_at: {type: string, format: date-time}
+        metadata: {$ref: './common.yaml#/components/schemas/Metadata'}

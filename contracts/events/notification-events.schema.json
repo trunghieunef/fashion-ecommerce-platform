@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fashion.local/contracts/events/notification-events.schema.json",
+  "title": "notification.events payloads (03 §5.2/5.3)",
+  "$defs": {
+    "NotifyResetPassword": {
+      "description": "Produced by user (USR-01b). Carries only the secret reference challenge_id; notification fetches the reset token from GET /internal/api/v1/users/notification-secrets/{challenge_id} and must not send after expires_at",
+      "type": "object",
+      "required": ["dedupe_key", "user_id", "recipient", "channel", "locale", "template_key", "challenge_id", "expires_at"],
+      "properties": {
+        "dedupe_key": {"type": "string", "pattern": "^RESET_PASSWORD:[0-9a-f-]{36}$"},
+        "user_id": {"$ref": "common.schema.json#/$defs/uuid"},
+        "recipient": {
+          "type": "object",
+          "required": ["email"],
+          "properties": {"email": {"type": "string", "minLength": 3, "maxLength": 254}},
+          "additionalProperties": false
+        },
+        "channel": {"const": "EMAIL"},
+        "locale": {"enum": ["vi", "en"]},
+        "template_key": {"const": "RESET_PASSWORD"},
+        "challenge_id": {"$ref": "common.schema.json#/$defs/uuid"},
+        "expires_at": {"$ref": "common.schema.json#/$defs/utc_timestamp"}
+      },
+      "additionalProperties": false
+    }
+  }
+}

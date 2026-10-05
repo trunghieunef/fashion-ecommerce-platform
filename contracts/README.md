@@ -30,7 +30,8 @@ bằng chứng riêng của PLT-03.
   `Idempotency-Key` (1..128 theo 05), `limit`/`cursor` public, `page`/`size` admin,
   header `X-Correlation-Id`/`Retry-After`. Không khai báo operation; được lint qua API
   `$ref` tới nó.
-- `openapi/user.yaml` (`TASK:USR-01` phần 1a): register/login/refresh/logout, cookie refresh và lỗi 400/401/403/409.
+- `openapi/user.yaml` (`TASK:USR-01` phần 1a/1b-i, `TASK:USR-02`): register/login/refresh/logout, đổi/quên/đặt lại mật khẩu, `/users/me`, địa chỉ, `/admin/api/v1/users`.
+- `openapi/user-internal.yaml` (`TASK:USR-01` phần 1b-i): `GET /internal/api/v1/users/notification-secrets/{challenge_id}` cho notification-service (service token ADR-19).
 - `openapi/catalog.yaml`: operation đã implement duy nhất là `GET /api/v1/catalog/products`;
   dùng `Limit`, `Metadata`, `CorrelationId`, `ApiError` từ `common.yaml` (lỗi 400 thu hẹp
   về `VALIDATION_ERROR`). Wire format không đổi so với catalog-service.
@@ -44,7 +45,7 @@ bằng chứng riêng của PLT-03.
   phải là field bắt buộc và `aggregate_id` của envelope phải bằng field đã khai báo. `events/common.schema.json`: UUID, UTC `Z`, business version, tiền VND
   integer 0..bigint (không float/string), `currency` = `VND`, `payment_method`
   COD/VNPAY/MOMO, SKU ≤ 64, stock int ≥ 0, order item quantity 1–99 (05).
-- Payload theo 03 §5.3: `user-events` (USER_CREATED, không password/token), `catalog-events`
+- Payload theo 03 §5.3: `user-events` (USER_CREATED, không password/token), `notification-events` (NOTIFY_RESET_PASSWORD, chỉ `challenge_id`, không token), `catalog-events`
   (VARIANT_CREATED, CATALOG_CHANGED), `stock-events` (INVENTORY_UPDATED/RESTOCKED),
   `order-events` (ORDER_CREATED/CONFIRMED/PAID; CANCELLED bắt buộc `reason`). Payload
   strict (`additionalProperties`/`unevaluatedProperties: false`) để bắt lệch tên field ở

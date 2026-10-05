@@ -23,8 +23,10 @@ từ service nào, không cấp quyền nghiệp vụ.
 - Public key của các caller được phép là cấu hình không bí mật, khai báo theo service đích.
 - Xoay khóa: tạm thời allowlist cả key mới lẫn key cũ, deploy caller dùng key mới, rồi gỡ key cũ.
   Token chỉ sống 60s nên không cần danh sách thu hồi.
-- Chưa có service nào gọi `/internal` thật. Việc nối thư viện vào service (filter MVC, cấu hình
-  key) làm trong task đầu tiên có internal call (CART/ORD/INV).
+- Service đích đầu tiên dùng `ServiceTokenVerifier`: user-service (`TASK:USR-01` phần 1b-i,
+  `GET /internal/api/v1/users/notification-secrets/{id}`, caller allowlist `USER_INTERNAL_CALLERS`
+  theo dạng `service:base64-X.509`, token gửi bằng `Authorization: Bearer`). Chưa có caller thật
+  (notification-service thuộc NOT-01).
 
 ## Test
 

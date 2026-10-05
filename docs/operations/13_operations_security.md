@@ -104,7 +104,7 @@ Notification/consent, traces, media và retention kỹ thuật outbox/inbox vẫ
 cần chính sách được duyệt theo từng nhóm dữ liệu, gồm các nhóm còn mở này, và kế hoạch
 cleanup/retention/restore có kiểm thử; chưa bật purge dữ liệu tài chính.
 
-Secret inventory gồm JWT signing keys (service token ADR-19 và access token member ADR-21 `USER_JWT_PRIVATE_KEY`), service credentials, DB/Kafka/Redis credentials, merchant secrets, mail/SMS keys. Mỗi secret có owner, env, rotation plan; không lưu trong Nacos plaintext, image, Git hoặc ticket.
+Secret inventory gồm JWT signing keys (service token ADR-19 và access token member ADR-21 `USER_JWT_PRIVATE_KEY`), khóa mã hóa secret tạm `USER_SECRET_KEY` (AES-256, USR-01b), service credentials, DB/Kafka/Redis credentials, merchant secrets, mail/SMS keys. Mỗi secret có owner, env, rotation plan; không lưu trong Nacos plaintext, image, Git hoặc ticket.
 
 Data inventory theo field (SEC-01, từ 05). Dùng để masking log và để O06 chốt thời hạn lưu; bảng này **không** quyết định thời hạn lưu:
 

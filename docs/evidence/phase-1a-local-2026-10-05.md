@@ -98,6 +98,11 @@ không thu hồi refresh token; đổi role không tăng `auth_version`; bỏ ki
 kiểm SUPER_ADMIN đã có; cho tự sửa mình; bỏ version guard; bỏ replay idempotency; token không có
 permission.
 
+> **Đính chính 2026-10-06:** lúc ghi đoạn trên, chỉ mutation `FOR SHARE` được chạy bằng `./mvnw`
+> thật. Các mutation còn lại chạy qua script Python gọi `cmd /c mvnw.cmd`, lệnh này không chạy được
+> (`'mvnw.cmd' is not recognized`) nên exit code khác 0 bị hiểu nhầm là test FAIL. Đã chạy lại toàn bộ
+> bằng `./mvnw` với kiểm tra có đúng một test chạy và không lỗi compile: xem mục USR-01 phần 1b-i.
+
 Chuỗi local (Docker Desktop 29.2.0, volume cũ): `local-up.sh` chạy V003 (flyway 001–003 thành công)
 và tự thêm `USER_BOOTSTRAP_ADMIN_EMAIL` vào `.env`; smoke PASS (member gọi `/admin/api/v1/users` → 403).
 Bootstrap qua Compose với tài khoản synthetic: trước 403 → đặt biến, khởi động lại user-service → log
@@ -117,9 +122,49 @@ Review của Codex (GPT-6) tại `dafc7ad` có 2 finding P2, đều đúng.
 
 user-service 40/40; chạy lại 3 lần test login đồng thời và race khóa ↔ refresh: 0 lỗi, 0 deadlock.
 
+## USR-01 phần 1b-i — 2026-10-06
+
+`TASK:USR-01` (phần 1b-i) · REQ: USR-03, USR-05. Chủ dự án chọn: dùng Redis 8.2.9 cho local/test
+(license vẫn mở theo 17) và chia 1b thành 1b-i (mật khẩu + bàn giao secret) và 1b-ii (rate limit).
+
+| Chu trình | RED | GREEN |
+|---|---|---|
+| Contract `NOTIFY_RESET_PASSWORD` (registry + fixture + case token lọt vào event) | schema chưa có: `Unresolvable ...NotifyResetPassword` | `notification-events.schema.json`; 23 test contract |
+| `PasswordIntegrationTest` (7 test, PostgreSQL + Redis 8.2.9 thật): đổi mật khẩu thu hồi mọi phiên, sai mật khẩu hiện tại tính vào khóa; forgot trả cùng 202 cho email có/không có; chỉ lưu hash, event chỉ có `challenge_id`, Redis không chứa plaintext; chỉ notification-service lấy được secret, `no-store`; reset dùng một lần và thu hồi phiên; token cũ/hết hạn bị từ chối; log không có mật khẩu/secret | bảng `user_action_tokens` chưa có | V004, `PasswordService`, `SecretVault` (AES-256-GCM), `NotificationSecretController`; 7/7 |
+| `RedisDownIntegrationTest`: Redis không kết nối được | forgot trả 500 | 503 `TEMPORARILY_UNAVAILABLE`, không có token/outbox |
+
+Mutation chạy bằng `./mvnw` thật, mỗi lượt kiểm có đúng một test chạy, không lỗi compile; 22/22 bị
+test bắt. USR-02b: bỏ `FOR SHARE` ở refresh, login lấy share lock rồi nâng cấp (deadlock), bỏ `REVOKE`
+audit, khóa không thu hồi phiên, đổi role không tăng `auth_version`, bỏ kiểm permission, bootstrap
+lặp, cho tự sửa mình, bỏ version guard, nhận version âm, bỏ replay idempotency, token không có
+permission. 1b-i: không thu hồi phiên, không tăng `auth_version`, sai mật khẩu hiện tại không tính,
+token cũ còn hiệu lực, bỏ kiểm hạn, cho dùng lại token, lưu plaintext trong Redis, mọi caller lấy
+được secret, bỏ `no-store`, đưa token vào event.
+
+Chuỗi local (volume cũ): `local-up.sh` thêm Redis (healthy), sinh `USER_SECRET_KEY` vào `.env`, Flyway
+tới V004. Smoke lần đầu sau khi tạo lại container user-service gặp một 504 ở Gateway (nhiều khả năng
+kết nối cũ tới container vừa thay), hai lần chạy lại PASS: forgot 202 cho email có/không có, đổi mật
+khẩu 204 rồi token cũ 401. Playwright 2/2, Nacos PASS; log user-service không chứa mật khẩu/secret.
+user-service 48/48.
+
+## Xử lý review PR #11 — 2026-10-06
+
+Review của Codex tại `b6404df` có 1 P1 và 4 P2, đều đúng; cả 5 được tái hiện bằng test trước khi sửa.
+
+| Finding | Nguyên nhân | RED | GREEN |
+|---|---|---|---|
+| P1: login bằng mật khẩu cũ xếp hàng sau đổi/đặt lại mật khẩu vẫn tạo phiên hợp lệ | login kiểm BCrypt trên hash đọc trước khóa, dưới khóa chỉ đọc lại `auth_version` | 2 test tất định (kết nối test giữ `FOR SHARE`, xếp change/reset rồi login): login 200 | login chỉ cấp phiên khi `password_hash` dưới khóa vẫn là hash đã kiểm: 401, không còn refresh token |
+| P2: reset/forgot báo lỗi khi dọn Redis sau commit dù đã đổi | `vault.delete` sau commit ném lỗi | pause Redis trong reset: 500; spy `delete` ném lỗi ở forgot lần 2: 500 | dọn secret là best effort (log tên exception, không log secret); reset 204, forgot 202 |
+| P2: token hết hạn trong lúc chờ khóa vẫn dùng được | `now()` là lúc bắt đầu transaction | token còn 3 giây, giữ khóa user tới khi DB xác nhận hết hạn rồi thả: 204 | `expires_at > clock_timestamp()` khi tiêu thụ: 400 |
+| P2: forgot lộ email tồn tại khi Redis lỗi | email lạ không chạm Redis | Redis bị pause: known 500, unknown 202 | PING Redis trước khi tra email: known/unknown/inactive cùng 503 `TEMPORARILY_UNAVAILABLE` |
+| P2: timeout lệnh Redis không map vào `ApiError` | `QueryTimeoutException` không thuộc `DataAccessResourceFailureException` | (cùng test pause) body mặc định 500 | advice map thêm `QueryTimeoutException` → 503 |
+
+user-service 54/54; chạy lại 3 lần các test race/outage và login đồng thời: 0 lỗi, 0 deadlock.
+
 ## Còn mở
 
-1b: quên/đặt lại/đổi mật khẩu, bàn giao secret cho notification, Redis + rate limit theo IP.
+1b-ii: rate limit theo IP/email bằng Redis, 429 + `Retry-After`, fail closed. NOT-01 tiêu thụ
+`NOTIFY_RESET_PASSWORD` và gọi endpoint internal; relay outbox chưa có.
 USR-02: reviewer nghiệm thu; mở khóa tài khoản và UI admin (ADM-01) chưa có; service khác kiểm
 `permissions` khi tạo endpoint admin.
 Manifest staging cho user-service khi deploy được.

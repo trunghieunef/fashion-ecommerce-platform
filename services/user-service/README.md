@@ -1,6 +1,6 @@
 # User service
 
-`TASK:USR-01` phần 1a, `TASK:USR-02` phần 2a + 2b · REQ: USR-01, USR-03, USR-05, USR-06, USR-07,
+`TASK:USR-01` phần 1a + 1b-i, `TASK:USR-02` phần 2a + 2b · REQ: USR-01, USR-03, USR-05, USR-06, USR-07,
 USR-08, ADM-06 · dependency: PLT-02, PLT-03, SEC-01.
 
 Service sở hữu database `users`: tài khoản member và refresh-token family. Phạm vi 1a:
@@ -14,6 +14,10 @@ Contract: [`contracts/openapi/user.yaml`](../../contracts/openapi/user.yaml); th
 | `POST /api/v1/auth/login` | 200 + token + cookie. Email không tồn tại, sai mật khẩu và tài khoản đang khóa đều trả cùng 401 `INVALID_CREDENTIALS`; tài khoản không tồn tại vẫn chạy BCrypt với hash giả để thời gian phản hồi không lộ thông tin |
 | `POST /api/v1/auth/refresh` | Cookie `refresh_token` dùng một lần: xoay sang token mới cùng family; response chỉ có `access_token`, `token_type`, `expires_in`. Dùng lại token đã xoay → thu hồi cả family, trả 401 và xóa cookie. Refresh, logout và thu hồi khi replay cùng lấy khóa `pg_advisory_xact_lock` theo family, nên việc thu hồi không bỏ sót token đang được tạo song song |
 | `POST /api/v1/auth/logout` | Thu hồi family, xóa cookie, 204 (idempotent) |
+| `POST /api/v1/auth/password/change` | Bearer + `current_password`, `new_password`. Sai mật khẩu hiện tại → 400 (field `current_password`) và tính vào ngưỡng khóa 5 lần. Thành công: tăng `auth_version`, thu hồi mọi refresh token (kể cả phiên này), xóa cookie, 204 |
+| `POST /api/v1/auth/password/forgot` | Luôn 202 cùng body. Tài khoản `ACTIVE`: tạo token 32 byte ngẫu nhiên, hạn 30 phút, DB chỉ lưu SHA-256 (`user_action_tokens`); vô hiệu token reset cũ chưa dùng; ghi `NOTIFY_RESET_PASSWORD` (chỉ `challenge_id`) vào outbox và token mã hóa vào Redis trong cùng transaction. Redis được PING trước khi tra email, nên khi Redis lỗi (mất kết nối hoặc timeout) mọi email đều nhận cùng 503 và không ghi gì; dọn secret cũ sau commit là best effort |
+| `POST /api/v1/auth/password/reset` | `token`, `new_password`. Dùng một lần, còn hạn tại lúc tiêu thụ (`clock_timestamp()`, kể cả khi phải chờ khóa), email hiện tại phải khớp `target_email`; đổi mật khẩu, tăng `auth_version`, thu hồi mọi refresh token, xóa khóa đăng nhập sai; xóa secret trong Redis là best effort sau commit (Redis lỗi lúc đó vẫn trả 204; DB đã chặn dùng lại, entry tự hết hạn); token sai/đã dùng/hết hạn → 400 field `token` |
+| `GET /internal/api/v1/users/notification-secrets/{challenge_id}` | Không qua Gateway. Service token ADR-19 (`Authorization: Bearer`, `aud=user-service`); chỉ caller `notification-service` (403 với caller hợp lệ khác). Trả token reset khi còn chưa dùng và còn hạn, `Cache-Control: no-store`; ngược lại 404 |
 | `GET, PUT /api/v1/users/me` | Cần Bearer access token. PUT chỉ đổi `full_name` và `locale`; `email`, role, `auth_version` trong body bị bỏ qua |
 | `GET /admin/api/v1/users?page=&size=` | Cần permission `user.manage`. Danh sách tài khoản (cũ trước) kèm `roles`, `status`, `version` (= `auth_version`); không trả hash mật khẩu |
 | `PUT /admin/api/v1/users/{id}/roles` | `roles`, `reason`, `expected_version`. Khóa dòng user, thay role, tăng `auth_version`, ghi `audit_logs` (`user.roles_changed`, role trước/sau, `request_id` của response). Gửi đúng role hiện có → 200 không đổi gì; version cũ → 409 `VERSION_CONFLICT`; role lạ → 400 |
@@ -60,11 +64,16 @@ Gateway gọi được.
 | `USER_JWT_PRIVATE_KEY` | không có mặc định: thiếu thì service không khởi động | Base64 PKCS#8 EC P-256; staging/production lấy từ Secret |
 | `USER_JWT_KEY_ID` | `user-local` | `kid` trong header JWT |
 | `USER_JWT_PUBLIC_KEYS` | không có mặc định | `kid:base64-X.509`, cách nhau bằng dấu phẩy (2 kid khi xoay khóa); local do `local-up.sh` suy ra từ private key |
+| `USER_REDIS_HOST` / `USER_REDIS_PORT` / `USER_REDIS_PASSWORD` | `localhost` / `6379` / rỗng | Redis 8.2.9 cho secret tạm (Compose: service `redis`, không publish port) |
+| `USER_SECRET_KEY` | không có mặc định: thiếu thì service không khởi động | Base64 32 byte, khóa AES-256-GCM mã hóa token reset trong Redis; local do `local-up.sh` sinh vào `.env` |
+| `USER_INTERNAL_CALLERS` | rỗng (không caller nào) | Allowlist caller `/internal` (ADR-19): `service:base64-X.509`, cách nhau dấu phẩy |
 | `USER_BOOTSTRAP_ADMIN_EMAIL` | rỗng (tắt) | Email của tài khoản **đã đăng ký** sẽ thành SUPER_ADMIN đầu tiên lúc khởi động, chỉ khi chưa có SUPER_ADMIN nào; audit actor SYSTEM. Không có mật khẩu admin mặc định. Đăng ký sau khi service chạy thì phải khởi động lại |
 
 Migration: `V001__users.sql` (users, refresh_tokens, outbox_events), `V002__user_addresses.sql`,
 `V003__roles_permissions_audit.sql` (roles/permissions + seed theo 13 §2, `audit_logs` chỉ
-INSERT/SELECT cho `user_runtime`, `idempotency_requests`). Topic: ghi outbox
+INSERT/SELECT cho `user_runtime`, `idempotency_requests`), `V004__user_action_tokens.sql`
+(token reset một lần, chỉ hash). Ghi outbox `notification.events` / `NOTIFY_RESET_PASSWORD`
+(partition `dedupe_key` = `RESET_PASSWORD:<challenge_id>`), cũng **chưa có relay**. Topic: ghi outbox
 `user.events` / `USER_CREATED`, **chưa có relay** vì stack local chưa có Kafka và chưa có
 consumer bắt buộc (03 §5.2). Health: `/actuator/health/{liveness,readiness}` trên port 8082.
 
@@ -75,8 +84,13 @@ Tạo SUPER_ADMIN đầu tiên trên local: đăng ký tài khoản, đặt `USE
 
 ## Giới hạn (phần 1b / USR-02)
 
-- Chưa có quên/đặt lại/đổi mật khẩu và bàn giao secret cho notification (1b, cần Redis).
-- Chưa có rate limit theo IP: chỉ khóa theo tài khoản trong PostgreSQL. Redis 8.2.9 thêm ở 1b.
+- Login kiểm lại `password_hash` dưới khóa dòng user, nên login đã qua BCrypt với mật khẩu cũ nhưng
+  chạy sau một lần đổi/đặt lại mật khẩu vừa commit sẽ bị từ chối.
+- Chưa có rate limit theo IP/email (1b-ii): chỉ khóa theo tài khoản trong PostgreSQL. Readiness
+  chưa gồm Redis; Redis lỗi chỉ làm `forgot` trả 503 (lỗi kết nối hoặc timeout lệnh).
+- Chưa có notification-service (NOT-01) nên chưa ai gọi endpoint internal và chưa gửi e-mail thật.
+  `forgot` với email có và không có tài khoản khác nhau về thời gian xử lý (có ghi DB/Redis); rate
+  limit 1b-ii giới hạn việc dò. License Redis 8 vẫn chờ PO/TL (17).
 - Chưa có mở khóa tài khoản và UI admin (ADM-01). `audit_logs.source_ip` để NULL: chưa có cách tin
   IP client qua Gateway. Gateway chưa tự kiểm JWT; service đích kiểm (04 §7).
 - Chưa có manifest staging cho user-service (staging G0 chỉ có service mẫu).
