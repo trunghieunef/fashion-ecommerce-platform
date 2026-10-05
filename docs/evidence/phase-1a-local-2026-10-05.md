@@ -81,8 +81,34 @@ Review của Codex (GPT-6) tại `89768d6` có 1 finding P2, đúng.
 Mutation: bỏ handler type-mismatch thì test FAIL ở `{id}` sai. user-service 29/29 (Testcontainers,
 Docker Desktop 29.2.0); `validate-contracts.sh` PASS.
 
+## USR-02 phần 2b — 2026-10-05
+
+`TASK:USR-02` (phần 2b) · REQ: USR-08, ADM-06. Chủ dự án chọn: bootstrap admin bằng biến môi
+trường, service kiểm quyền bằng claim `permissions` trong access token (ghi ở 08).
+
+| Chu trình | RED | GREEN |
+|---|---|---|
+| Verifier đọc `permissions` (bắt buộc, mảng chuỗi) | `Actor` chưa có field (compile) | security 35/35 |
+| `AdminIntegrationTest` (10 test PostgreSQL thật): seed đúng ma trận 13 §2; `audit_logs` runtime không UPDATE/DELETE được; bootstrap một lần + audit SYSTEM; token mang `permissions`; 401/403/200 theo `user.manage`; đổi role tăng `auth_version` + audit có `request_id` của response; version cũ 409, role lạ/thiếu reason/thiếu version 400, user lạ 404; tự đổi/tự khóa 403; khóa thu hồi phiên + replay theo `Idempotency-Key`; race khóa ↔ refresh | thiếu `AdminBootstrap` (compile) | `V003`, `AdminService`/`AdminController`/`AdminBootstrap`, issuer thêm claim, refresh/login khóa dòng user `FOR SHARE`; user-service 39/39 lần chạy đầu |
+| Route Gateway `/admin/api/v1/users` | 404 | 20/20 |
+
+Mutation (đều FAIL đúng test): refresh bỏ `FOR SHARE` (PostgreSQL báo deadlock giữa refresh và
+khóa, 500, nên thứ tự khóa "dòng user rồi token" là bắt buộc); bỏ `REVOKE` trên `audit_logs`; khóa
+không thu hồi refresh token; đổi role không tăng `auth_version`; bỏ kiểm permission; bootstrap không
+kiểm SUPER_ADMIN đã có; cho tự sửa mình; bỏ version guard; bỏ replay idempotency; token không có
+permission.
+
+Chuỗi local (Docker Desktop 29.2.0, volume cũ): `local-up.sh` chạy V003 (flyway 001–003 thành công)
+và tự thêm `USER_BOOTSTRAP_ADMIN_EMAIL` vào `.env`; smoke PASS (member gọi `/admin/api/v1/users` → 403).
+Bootstrap qua Compose với tài khoản synthetic: trước 403 → đặt biến, khởi động lại user-service → log
+"Admin bootstrap granted SUPER_ADMIN" (không có email trong log) → danh sách admin 200, đúng 1
+SUPER_ADMIN; biến được trả về rỗng sau đó. Tài khoản synthetic này còn trong volume local nên
+bootstrap lần sau trên volume này sẽ bỏ qua. `./mvnw -B test`: durability 36, security 35, user 39,
+catalog 12, gateway 20; Playwright 2/2; Nacos PASS; `validate-contracts.sh` PASS.
+
 ## Còn mở
 
 1b: quên/đặt lại/đổi mật khẩu, bàn giao secret cho notification, Redis + rate limit theo IP.
-USR-02: verifier JWT ở Gateway/service, `/users/me`, địa chỉ, role/permission, `auth_version`.
+USR-02: reviewer nghiệm thu; mở khóa tài khoản và UI admin (ADM-01) chưa có; service khác kiểm
+`permissions` khi tạo endpoint admin.
 Manifest staging cho user-service khi deploy được.

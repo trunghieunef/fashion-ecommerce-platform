@@ -9,7 +9,7 @@ BOM (do Boot import); thư viện này kéo theo Nimbus JOSE.
 | Class | Việc làm |
 |---|---|
 | `ServiceTokenIssuer` | Caller ký token ES256 bằng khóa riêng của mình: `iss = sub = kid =` tên service, `aud =` đúng một service đích, `exp = iat + 60s`, có `jti` |
-| `AccessTokenVerifier` | Kiểm access token member/admin (ADR-21): ES256 với public key cấu hình theo `kid` (`parseKeys("kid:base64,…")`, 2 kid khi xoay khóa), `iss=user-service`, `aud=fashion-api`, còn hạn, `iat` không ở tương lai, sống tối đa 15 phút, `sub` là UUID, có `auth_version`. Chỉ nhận JWS. Trả `Actor(userId, authVersion)` hoặc rỗng |
+| `AccessTokenVerifier` | Kiểm access token member/admin (ADR-21): ES256 với public key cấu hình theo `kid` (`parseKeys("kid:base64,…")`, 2 kid khi xoay khóa), `iss=user-service`, `aud=fashion-api`, còn hạn, `iat` không ở tương lai, sống tối đa 15 phút, `sub` là UUID, có `auth_version` và `permissions` (mảng chuỗi, có thể rỗng). Chỉ nhận JWS. Trả `Actor(userId, authVersion, permissions)` hoặc rỗng; service vẫn tự kiểm permission code và ownership |
 | `ServiceTokenVerifier` | Service đích kiểm tra và từ chối mặc định: chỉ chấp nhận ES256, ký bằng public key được allowlist cho caller đó (theo `kid`/`iss`); `aud` phải chứa chính service này; `sub = iss`; còn hạn; `iat` không ở tương lai quá 5s, `exp > iat`, không sống quá TTL (lệch đồng hồ tối đa 5s). Chỉ nhận JWS: JWE và token không ký bị từ chối mà không ném lỗi. Trả về tên caller, hoặc rỗng nếu không hợp lệ |
 
 Endpoint internal vẫn phải tự kiểm tra caller có nằm trong allowlist của operation đó không
@@ -51,7 +51,7 @@ họ tên hay địa chỉ trong text tự do.
 
 ## Giới hạn
 
-- Chưa có token người dùng (member/admin JWT, JWKS của user-service, `auth_version`):
-  thuộc USR-01/USR-02.
+- Token người dùng do user-service phát hành (ADR-21); thư viện này chỉ verify, không có JWKS.
+  Quyền trong `permissions` có thể cũ tối đa 15 phút với service không phải user-service.
 - Chưa kiểm tra trùng `jti` (replay trong 60s): mutation internal đã cần Idempotency-Key và
   business key (03 §4). Chưa có mTLS; đây là lựa chọn của ADR-19.

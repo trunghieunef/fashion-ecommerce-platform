@@ -29,7 +29,7 @@ Không đưa role/user_id/amount từ public input thành authority. Account lin
 | User role/lock | Không | Không | Không | Có | Không |
 | Deploy/backup/replay hạ tầng | Không | Phối hợp đối soát | Không | Không mặc nhiên | Có theo release/incident process |
 
-Permission code đề xuất để USR-02 seed (từ 03 §3). Service kiểm tra code, không kiểm tra tên role; đổi code thì phải cập nhật bảng này, seed và test cùng lúc:
+Permission code do USR-02 seed (`V003` của user-service, từ 03 §3) và đưa vào claim `permissions` của access token (ADR-21). Service kiểm tra code, không kiểm tra tên role; đổi code thì phải cập nhật bảng này, seed và test cùng lúc:
 
 | Permission | Endpoint admin (03 §3) | Role mặc định | Phase |
 |---|---|---|---|

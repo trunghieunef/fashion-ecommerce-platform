@@ -88,10 +88,13 @@ PLT-04/05, AWS/K3s/ECR/ArgoCD, provider sandbox và các task business Phase 1 k
   có khóa 15 phút, refresh xoay vòng + thu hồi family khi dùng lại, logout, `USER_CREATED` qua
   outbox; 16 test PostgreSQL thật; Gateway route `/api/v1/auth/**`; smoke chạy qua Gateway.
   Còn (1b): quên/đặt lại/đổi mật khẩu + bàn giao secret, rate limit IP (Redis); làm sau USR-02.
-- `TASK:USR-02` — **In progress, phần 2a** (2026-10-05, assignee Claude Code, reviewer chủ dự án).
-  `AccessTokenVerifier` (platform-security), `/users/me` GET/PUT, sổ địa chỉ với đúng một mặc định
-  (khóa dòng user), kiểm `auth_version`/status hiện tại; Gateway route `/api/v1/users/**`.
-  Còn (2b): seed role/permission theo 13 §2, admin đổi role/khóa, audit append-only, admin bootstrap.
+- `TASK:USR-02` — **In progress, 2a + 2b đã code** (2026-10-05, assignee Claude Code, reviewer chủ dự án).
+  2a: `AccessTokenVerifier` (platform-security), `/users/me` GET/PUT, sổ địa chỉ với đúng một mặc
+  định (khóa dòng user), kiểm `auth_version`/status hiện tại; Gateway route `/api/v1/users/**`.
+  2b: `V003` seed role/permission theo 13 §2, `audit_logs` append-only bằng quyền DB, claim
+  `permissions` trong access token, `/admin/api/v1/users` (danh sách, đổi role, khóa) cần
+  `user.manage`, admin bootstrap qua `USER_BOOTSTRAP_ADMIN_EMAIL`. Còn: UI admin (ADM-01), endpoint
+  admin của service khác kiểm `permissions` khi được tạo; reviewer nghiệm thu.
 
 ## 2. Phase 0 — nền tảng
 

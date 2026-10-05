@@ -51,7 +51,7 @@ Thiết kế B1 cho MVP và Phase 2; bảng Phase 2 chỉ tạo khi triển khai
 | `outbox_events` (C) | `id`, `aggregate_type text`, `aggregate_id text`, `aggregate_version bigint`, `aggregate_sequence bigint`, `event_type text`, `schema_version int = 1`, `topic text`, `partition_key text`, `correlation_id text`, `payload jsonb`, `status varchar(32) = 'PENDING'`, `attempts int = 0`, `next_attempt_at timestamptz = now()`, `lease_until timestamptz?`, `lease_token uuid?`, `published_at timestamptz?`, `last_error text?` | Status PENDING/IN_FLIGHT/SENT; partial index `(next_attempt_at, created_at)` WHERE status <> 'SENT'; UNIQUE `(aggregate_type, aggregate_id, aggregate_sequence)` |
 | `processed_events` | `consumer_name text`, `event_id uuid`, `processed_at timestamptz = now()` | PK `(consumer_name, event_id)`; ghi trong cùng transaction với thay đổi nghiệp vụ |
 | `idempotency_requests` (T) | `actor_key text`, `operation text`, `key varchar(128)`, `request_hash char(64)`, `resource_id uuid?`, `status varchar(32) = 'PROCESSING'`, `response_code int?`, `response_body jsonb?`, `expires_at timestamptz?` | PK `(actor_key, operation, key)`; PROCESSING/COMPLETED; actor từ auth/session đã xác minh; không lưu secret trong response |
-| `audit_logs` (C) | `id`, `actor_id uuid`, `action text`, `resource_type text`, `resource_id text`, `reason text?`, `before_data jsonb?`, `after_data jsonb?`, `request_id uuid`, `source_ip inet?` | Append-only bằng quyền DB; index `(resource_type, resource_id, created_at)`; che secret/PII không cần thiết |
+| `audit_logs` (C) | `id`, `actor_id uuid?` (NULL = SYSTEM, vd. admin bootstrap), `action text`, `resource_type text`, `resource_id text`, `reason text?`, `before_data jsonb?`, `after_data jsonb?`, `request_id uuid`, `source_ip inet?` | Append-only bằng quyền DB; index `(resource_type, resource_id, created_at)`; che secret/PII không cần thiết |
 
 - Outbox tại service phát event/notification; processed_events tại service consume event. Idempotency tại API có mutation retry được. Audit tại mutation admin.
 - `TASK:PLT-03`: DDL tham chiếu và primitive Java nằm ở [platform-durability](../../services/platform-durability/README.md) (outbox, processed_events, idempotency_requests, background_tasks §15). `correlation_id` được thêm vào outbox vì envelope 03 §5.1 bắt buộc trường này; `created_at` là `occurred_at`. Có thêm CHECK giữa status và lease/published_at. Service chép DDL vào migration riêng của mình, không dùng chung DB.
@@ -81,8 +81,8 @@ erDiagram
 | `user_oauth` (C, Phase 2) | `id`, `user_id uuid FK users`, `provider varchar(16)`, `provider_subject text`, `provider_email text?` | UNIQUE `(provider, provider_subject)`; index user_id; không tự merge bằng email |
 | `refresh_tokens` (C) | `id`, `user_id uuid FK users`, `family_id uuid`, `token_hash char(64)`, `expires_at timestamptz`, `revoked_at timestamptz?`, `replaced_by uuid? FK refresh_tokens`, `device_info text?` | UNIQUE token_hash; index `(user_id, family_id)`; index expires_at |
 | `user_action_tokens` (C) | `id`, `user_id uuid FK users`, `purpose varchar(16)`, `target_email varchar(254)?`, `token_hash char(64)`, `expires_at timestamptz`, `used_at timestamptz?` | UNIQUE token_hash; index expires_at; dùng một lần; purpose RESET_PASSWORD/EMAIL_VERIFY; EMAIL_VERIFY cần target_email |
-| `roles` | `id`, `code varchar(32)`, `name text` | UNIQUE code; seed SUPER_ADMIN/OPS/MARKETING/FINANCE |
-| `permissions` | `id`, `code text` | UNIQUE code; quyền endpoint được seed |
+| `roles` (`V003`, `TASK:USR-02` phần 2b) | `id`, `code varchar(32)`, `name text` | UNIQUE code; seed SUPER_ADMIN/OPS/MARKETING/FINANCE |
+| `permissions` (`V003`) | `id`, `code text` | UNIQUE code; seed và gán role theo bảng permission ở 13 §2 |
 | `user_roles` | `user_id uuid FK users`, `role_id uuid FK roles` | PK `(user_id, role_id)` |
 | `role_permissions` | `role_id uuid FK roles`, `permission_id uuid FK permissions` | PK `(role_id, permission_id)` |
 
@@ -298,7 +298,7 @@ OTP dùng NOTIFY_OTP chỉ mang challenge_id và đích nhận, không mang plai
 ## 13. Migration, lưu trữ và kiểm tra thiết kế
 
 - Flyway theo service; tạo bảng cha trước bảng con, constraints và seed roles/templates trong migration có version. Migration production theo hướng thêm trước, backfill nếu có dữ liệu, đổi code rồi mới bỏ cột cũ.
-- Seed chỉ dữ liệu cấu hình; không seed password admin mặc định hoặc secret thật. Tài khoản admin đầu tiên tạo qua quy trình bootstrap có audit.
+- Seed chỉ dữ liệu cấu hình; không seed password admin mặc định hoặc secret thật. Tài khoản admin đầu tiên tạo qua quy trình bootstrap có audit (user-service: `USER_BOOTSTRAP_ADMIN_EMAIL` gán SUPER_ADMIN cho tài khoản đã đăng ký khi chưa có SUPER_ADMIN nào; `audit_logs` của user-service thu hồi UPDATE/DELETE/TRUNCATE khỏi role runtime trong `V003`).
 - Backup/PITR theo mục tiêu architecture; cần diễn tập restore từng DB cùng đối soát event/payment trước go-live. Snapshot các DB không tự tạo giao dịch nhất quán xuyên service.
 - Đề xuất kỹ thuật chờ chốt: cleanup cart guest quá hạn; outbox SENT giữ 30 ngày; processed_events giữ ít nhất toàn bộ cửa sổ replay, tạm 90 ngày. Replay cũ hơn phải kiểm tra khóa nghiệp vụ và kế hoạch replay riêng trước khi chạy.
 - Payment/order/refund/audit không tự purge trong bản đầu; thời gian lưu theo chính sách được chủ dự án chốt trước launch. Dữ liệu recipient/rendered_body và webhook chứa PII phải có thời hạn ngắn riêng; không xem các mốc kỹ thuật trên là quy định pháp lý.

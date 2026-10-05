@@ -28,6 +28,11 @@ spring:
               uri: ${USER_BASE_URL:http://localhost:8082}
               predicates:
                 - Path=/api/v1/users/**
+            # Admin user management (USR-02b); user-service checks the user.manage permission.
+            - id: user-admin
+              uri: ${USER_BASE_URL:http://localhost:8082}
+              predicates:
+                - Path=/admin/api/v1/users,/admin/api/v1/users/**
 
 logging:
   structured:

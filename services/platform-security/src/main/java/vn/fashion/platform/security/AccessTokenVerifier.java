@@ -22,6 +22,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2Error;
@@ -37,11 +38,13 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 /**
  * Verifies member/admin access tokens issued by user-service (ADR-21), deny by default: ES256
  * signed by a configured key selected by kid (two kids during rotation), iss user-service, aud
- * fashion-api, unexpired, iat not in the future, lifetime at most 15 minutes, UUID subject and an
- * auth_version claim. Returns the actor; callers still check ownership and permissions.
+ * fashion-api, unexpired, iat not in the future, lifetime at most 15 minutes, UUID subject, an
+ * auth_version claim and a permissions list of strings. Returns the actor; callers still check
+ * ownership and the permission each operation needs.
  */
 public class AccessTokenVerifier {
-  public record Actor(UUID userId, long authVersion) {
+  /** permissions are the actor's codes (13 section 2) when the token was issued. */
+  public record Actor(UUID userId, long authVersion, Set<String> permissions) {
   }
 
   public static final String ISSUER = "user-service";
@@ -96,10 +99,13 @@ public class AccessTokenVerifier {
       SignedJWT.parse(token); // JWS only: JWE and unsecured tokens are rejected here.
       Jwt jwt = decoder.decode(token);
       Object version = jwt.getClaims().get("auth_version");
-      if (jwt.getSubject() == null || !(version instanceof Number number)) {
+      if (jwt.getSubject() == null || !(version instanceof Number number)
+          || !(jwt.getClaims().get("permissions") instanceof List<?> codes)
+          || !codes.stream().allMatch(String.class::isInstance)) {
         return Optional.empty();
       }
-      return Optional.of(new Actor(UUID.fromString(jwt.getSubject()), number.longValue()));
+      return Optional.of(new Actor(UUID.fromString(jwt.getSubject()), number.longValue(),
+          Set.copyOf(codes.stream().map(String.class::cast).toList())));
     } catch (ParseException | JwtException | IllegalArgumentException e) {
       return Optional.empty();
     }

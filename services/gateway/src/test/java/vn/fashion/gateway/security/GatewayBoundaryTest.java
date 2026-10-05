@@ -103,6 +103,15 @@ class GatewayBoundaryTest {
   }
 
   @Test
+  void routesAdminUserRequestsToUserService() {
+    client.get().uri("/admin/api/v1/users?page=1").header("Authorization", "Bearer synthetic")
+        .exchange().expectStatus().isOk();
+
+    assertThat(CATALOG.requestCount()).isEqualTo(1);
+    assertThat(CATALOG.path()).isEqualTo("/admin/api/v1/users");
+  }
+
+  @Test
   void neverRoutesInternalPath() {
     client.get()
         .uri("/internal/api/v1/platform/ping")

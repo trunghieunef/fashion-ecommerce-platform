@@ -49,7 +49,7 @@ Gate task là work package trong [backlog](../delivery/10_backlog.md). Mã task 
 | ADR-18 | Sprint 1 chỉ triển khai local; AWS/cloud bắt đầu sau checkpoint S1-local | Chủ dự án chốt 2026-09-19. Sprint 1 hoàn thành nền tảng local chạy từ fresh clone, không đồng nghĩa toàn bộ G2 MVP; không provision AWS/K3s/ECR/ArgoCD hoặc gọi provider thật. Phạm vi và exit ở 09/10 |
 | ADR-19 | Service identity cho `/internal`: mỗi service tự ký JWT ES256 bằng khóa riêng (`iss = sub = kid =` tên service, `aud =` service đích, TTL 60s); service đích kiểm tra theo allowlist public key của từng caller, sau đó endpoint kiểm tra caller allowlist 03 §4 | Chủ dự án chọn 2026-10-04 (SEC-01). Chạy được cả Compose local và K3s, không cần CA hay service mesh. Phương án khác: K8s service-account token (local không có), mTLS (nặng vận hành). Private key qua Secret, public key là config. Hiện thực tại `services/platform-security`; chưa có service gọi internal thật |
 | ADR-20 | CSRF cho request ghi dùng cookie: kiểm `Origin` theo allowlist, nếu không có Origin thì chỉ nhận `Sec-Fetch-Site: same-origin`, không có cả hai thì từ chối; cookie `Secure`, `HttpOnly`, `SameSite`. Không dùng CSRF token | Chủ dự án chọn 2026-10-04 (SEC-01). Thực thi tại Gateway (`CsrfOriginFilter`, `GATEWAY_ALLOWED_ORIGINS`). FE không cần gửi token. Request chỉ dùng Bearer không bị kiểm. Nếu sau này cần double-submit token thì ghi ADR mới |
-| ADR-21 | Access token member/admin: JWT ES256 do user-service ký (`iss=user-service`, `aud=fashion-api`, TTL 900 s, `auth_version`, `kid`); verifier nhận public key qua config, xoay khóa bằng cách allowlist 2 `kid`. Không có endpoint JWKS | Chủ dự án chọn 2026-10-05 (USR-01). Cùng mô hình ADR-19, không phụ thuộc mạng lúc verify. Phương án khác: ES256/RS256 + JWKS (tự xoay khóa nhưng thêm route/cache). Private key qua Secret; local do `local-up.sh` sinh vào `.env` |
+| ADR-21 | Access token member/admin: JWT ES256 do user-service ký (`iss=user-service`, `aud=fashion-api`, TTL 900 s, `auth_version`, `permissions` = mảng permission code của các role, `kid`; thêm `permissions` 2026-10-05 ở USR-02b); verifier nhận public key qua config, xoay khóa bằng cách allowlist 2 `kid`. Không có endpoint JWKS | Chủ dự án chọn 2026-10-05 (USR-01). Cùng mô hình ADR-19, không phụ thuộc mạng lúc verify. Phương án khác: ES256/RS256 + JWKS (tự xoay khóa nhưng thêm route/cache). Private key qua Secret; local do `local-up.sh` sinh vào `.env` |
 
 ## 4. Vấn đề mở
 
@@ -114,5 +114,12 @@ Gate task là work package trong [backlog](../delivery/10_backlog.md). Mã task 
   chia 2a (verifier, `/users/me`, địa chỉ) và 2b (RBAC, admin, audit). Ngưỡng rate limit mặc định cho
   1b (config, đổi được): đăng nhập 20 request / 5 phút / IP; quên mật khẩu 5 / giờ / email và
   20 / giờ / IP; vượt ngưỡng trả 429 + `Retry-After`; Redis lỗi thì fail closed.
+- USR-02b (2026-10-05, chủ dự án chọn): service kiểm quyền bằng claim `permissions` trong access
+  token (ADR-21), không gọi user-service mỗi request; đánh đổi: service khác thấy quyền bị thu hồi
+  muộn tối đa 15 phút (TTL token), còn user-service kiểm `auth_version` nên có hiệu lực ngay.
+  SUPER_ADMIN đầu tiên do biến môi trường `USER_BOOTSTRAP_ADMIN_EMAIL` cấp khi khởi động (tài khoản
+  đã đăng ký, chỉ khi chưa có SUPER_ADMIN), audit actor SYSTEM (`actor_id` NULL). Agent tự chọn,
+  cần reviewer xác nhận: admin không được tự đổi role/tự khóa mình; Phase 1 chưa có mở khóa (03 §3
+  chỉ có lock); SUPER_ADMIN chỉ có `user.manage`.
 
 Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác và lý do; ảnh hưởng PRD/API/schema/test/task; người quyết định; ngày; link bằng chứng. Chưa có chữ ký phê duyệt giả định thương mại.

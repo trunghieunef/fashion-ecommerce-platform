@@ -14,14 +14,15 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.Date;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
  * Member access token (03 section 2.1, USR-05): ES256 JWT, 900 s, iss user-service, aud fashion-api,
- * sub = user id, auth_version for sensitive re-checks. The public key reaches verifiers through
- * configuration with its kid (decided 2026-10-05, same model as ADR-19).
+ * sub = user id, auth_version for sensitive re-checks and the permission codes of the user's roles
+ * (13 section 2). The public key reaches verifiers through configuration with its kid (ADR-21).
  */
 @Component
 public class AccessTokenIssuer {
@@ -44,7 +45,7 @@ public class AccessTokenIssuer {
     this.keyId = keyId;
   }
 
-  public String issue(UUID userId, long authVersion) {
+  public String issue(UUID userId, long authVersion, List<String> permissions) {
     Instant now = clock.instant();
     var claims = new JWTClaimsSet.Builder()
         .issuer(ISSUER)
@@ -54,6 +55,7 @@ public class AccessTokenIssuer {
         .expirationTime(Date.from(now.plus(TTL)))
         .jwtID(UUID.randomUUID().toString())
         .claim("auth_version", authVersion)
+        .claim("permissions", List.copyOf(permissions))
         .build();
     var jwt = new SignedJWT(new JWSHeader.Builder(JWSAlgorithm.ES256).keyID(keyId).build(), claims);
     try {

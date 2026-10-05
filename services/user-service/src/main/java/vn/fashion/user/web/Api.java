@@ -58,7 +58,11 @@ public final class Api {
   }
 
   public static <T> ResponseEntity<Response<T>> ok(HttpStatus status, T data, Tracer tracer) {
-    Metadata metadata = metadata(tracer);
+    return ok(status, data, metadata(tracer));
+  }
+
+  /** For callers that record metadata.request_id elsewhere (audit) before responding. */
+  public static <T> ResponseEntity<Response<T>> ok(HttpStatus status, T data, Metadata metadata) {
     return ResponseEntity.status(status).header("X-Correlation-Id", metadata.traceId())
         .body(new Response<>("OK", data, metadata));
   }

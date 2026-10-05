@@ -58,6 +58,8 @@ curl --fail --silent --show-error -H "Authorization: Bearer $access" -H 'Content
   -d '{"recipient_name":"Smoke","phone":"0912345678","province_code":"79","ward_code":"26734","address_line":"1 Smoke St"}' \
   "$GATEWAY_URL/api/v1/users/me/addresses" | python3 -c 'import json,sys; assert json.load(sys.stdin)["data"]["is_default"] is True'
 test "$(status "$GATEWAY_URL/api/v1/users/me")" = 401
+# TASK:USR-02 part 2b: admin API is routed but a member without user.manage gets 403.
+test "$(status -H "Authorization: Bearer $access" "$GATEWAY_URL/admin/api/v1/users")" = 403
 test "$(curl -sS -o /dev/null -D "$headers" -w '%{http_code}' -X POST -H "Origin: $ORIGIN" \
   -H "Cookie: refresh_token=$first" "$GATEWAY_URL/api/v1/auth/refresh")" = 200
 second="$(cookie_of "$headers")"
