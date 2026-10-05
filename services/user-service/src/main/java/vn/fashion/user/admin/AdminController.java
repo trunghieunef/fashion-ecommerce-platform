@@ -96,8 +96,8 @@ public class AdminController {
     if (reason == null || reason.isBlank() || reason.length() > 500) {
       errors.add(new Api.FieldError("reason", "must be 1..500 characters"));
     }
-    if (expectedVersion == null) {
-      errors.add(new Api.FieldError("expected_version", "is required"));
+    if (expectedVersion == null || expectedVersion < 0) {
+      errors.add(new Api.FieldError("expected_version", "is required and at least 0"));
     }
   }
 

@@ -191,6 +191,40 @@ class AuthIntegrationTest {
   }
 
   @Test
+  void concurrentLoginsToOneAccountBothSucceed() throws Exception {
+    register("twice@example.test");
+
+    // A share lock held by the test lines both logins up at the account row before either writes it.
+    try (var gate = java.sql.DriverManager.getConnection(postgres.getJdbcUrl(), "postgres", "postgres")) {
+      gate.setAutoCommit(false);
+      try (var statement = gate.createStatement()) {
+        statement.execute("select id from users where email = 'twice@example.test' for share");
+      }
+      var first = CompletableFuture.supplyAsync(() -> login("twice@example.test", PASSWORD));
+      var second = CompletableFuture.supplyAsync(() -> login("twice@example.test", PASSWORD));
+      awaitLockWaiters(gate, 2);
+      gate.commit();
+
+      assertThat(List.of(first.join().statusCode(), second.join().statusCode())).containsOnly(200);
+    }
+  }
+
+  private static void awaitLockWaiters(java.sql.Connection connection, int count) throws Exception {
+    long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
+    while (System.nanoTime() < deadline) {
+      try (var statement = connection.createStatement();
+           var rs = statement.executeQuery("select count(*) from pg_locks where not granted")) {
+        rs.next();
+        if (rs.getInt(1) >= count) {
+          return;
+        }
+      }
+      Thread.sleep(50);
+    }
+    throw new AssertionError("expected " + count + " sessions waiting on a lock");
+  }
+
+  @Test
   void fiveFailedLoginsLockTheAccountForFifteenMinutes() {
     register("lock@example.test");
     for (int i = 0; i < 5; i++) {

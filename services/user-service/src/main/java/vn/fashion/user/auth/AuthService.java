@@ -113,7 +113,10 @@ public class AuthService {
     }
     return tx.execute(status -> {
       // Re-read under the account lock: an admin lock or role change since the password check wins.
-      long authVersion = lockActiveAccount(found.id()).orElseThrow(InvalidCredentialsException::new);
+      // Login writes this row next, so it takes the write lock up front: two logins upgrading
+      // shared locks would deadlock.
+      long authVersion = lockActiveAccount(found.id(), "for no key update")
+          .orElseThrow(InvalidCredentialsException::new);
       jdbc.sql("update users set failed_login_attempts = 0, locked_until = null, updated_at = now() where id = :id")
           .param("id", found.id()).update();
       String refresh = newRefreshToken(found.id(), UUID.randomUUID());
@@ -144,7 +147,7 @@ public class AuthService {
         return new Result(Outcome.INVALID, null);
       }
       lockFamily(ref.get().familyId());
-      Optional<Long> authVersion = lockActiveAccount(ref.get().userId());
+      Optional<Long> authVersion = lockActiveAccount(ref.get().userId(), "for share");
       record Token(UUID id, UUID userId, UUID familyId, boolean revoked, boolean expired) {
       }
       Optional<Token> token = jdbc.sql("""
@@ -211,13 +214,15 @@ public class AuthService {
         .param("family", familyId).query((rs, row) -> 1).list();
   }
 
-  /** auth_version of an ACTIVE, unlocked account, share-locking its row until the transaction ends. */
-  private Optional<Long> lockActiveAccount(UUID userId) {
+  /**
+   * auth_version of an ACTIVE, unlocked account, locking its row until the transaction ends with
+   * {@code lockClause} ("for share" to only read it, "for no key update" when the row is written next).
+   */
+  private Optional<Long> lockActiveAccount(UUID userId, String lockClause) {
     return jdbc.sql("""
             select auth_version from users
             where id = :id and status = 'ACTIVE' and coalesce(locked_until <= now(), true)
-            for share
-            """)
+            """ + lockClause)
         .param("id", userId).query(Long.class).optional();
   }
 

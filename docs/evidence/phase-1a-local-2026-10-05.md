@@ -106,6 +106,17 @@ SUPER_ADMIN; biến được trả về rỗng sau đó. Tài khoản synthetic 
 bootstrap lần sau trên volume này sẽ bỏ qua. `./mvnw -B test`: durability 36, security 35, user 39,
 catalog 12, gateway 20; Playwright 2/2; Nacos PASS; `validate-contracts.sh` PASS.
 
+## Xử lý review PR #10 — 2026-10-05
+
+Review của Codex (GPT-6) tại `dafc7ad` có 2 finding P2, đều đúng.
+
+| Finding | Nguyên nhân | RED | GREEN |
+|---|---|---|---|
+| P2: hai login đồng thời cùng tài khoản có thể deadlock (500) | login lấy `FOR SHARE` rồi `UPDATE` cùng dòng user: hai phiên cùng giữ khóa share và chờ nhau nâng cấp | `concurrentLoginsToOneAccountBothSucceed` (một kết nối test giữ `FOR SHARE` để hai login xếp hàng ở dòng user rồi thả): 200 + 500, log `deadlock detected` | login lấy `FOR NO KEY UPDATE` ngay từ đầu (vẫn khóa dòng user trước token); refresh giữ `FOR SHARE` vì không ghi dòng user |
+| P2: `expected_version` âm được nhận (đổi role không đổi gì trả 200) | validation chỉ kiểm `null` | `expected_version: -1` ở đổi role (role không đổi) và khóa: 200 thay vì 400 | 400 `VALIDATION_ERROR` nêu `expected_version`, trước nhánh no-op |
+
+user-service 40/40; chạy lại 3 lần test login đồng thời và race khóa ↔ refresh: 0 lỗi, 0 deadlock.
+
 ## Còn mở
 
 1b: quên/đặt lại/đổi mật khẩu, bàn giao secret cho notification, Redis + rate limit theo IP.

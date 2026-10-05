@@ -26,7 +26,8 @@ bằng giá trị trong DB. Đổi role, khóa tài khoản hay đổi mật kh�
 mất hiệu lực ngay, không đợi hết 15 phút.
 
 Admin không được tự đổi role hay tự khóa mình (403). Thứ tự khóa: dòng user rồi mới tới token, ở cả
-refresh (`FOR SHARE`) và thao tác admin (`FOR UPDATE`), nên khóa tài khoản chạy song song với một lần
+refresh (`FOR SHARE`), login (`FOR NO KEY UPDATE`, vì login ghi lại dòng user; hai khóa share cùng
+nâng cấp sẽ deadlock) và thao tác admin (`FOR UPDATE`), nên khóa tài khoản chạy song song với một lần
 refresh sẽ đợi rồi thu hồi luôn token vừa xoay (test race tất định trong `AdminIntegrationTest`).
 
 - **Access token:** JWT ES256, 900 giây, `iss=user-service`, `aud=fashion-api`, `sub` = user id,

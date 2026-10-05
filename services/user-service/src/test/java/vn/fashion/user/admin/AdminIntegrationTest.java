@@ -210,6 +210,10 @@ class AdminIntegrationTest {
         .containsExactlyInAnyOrder("roles", "reason");
     assertThat(fields(call("PUT", path, admin, null, "{\"roles\":[],\"reason\":\"r\"}")))
         .containsExactly("expected_version");
+    assertThat(fields(call("PUT", path, admin, null, "{\"roles\":[],\"reason\":\"r\",\"expected_version\":-1}")))
+        .as("negative version even when the roles are unchanged").containsExactly("expected_version");
+    assertThat(fields(call("POST", "/admin/api/v1/users/" + idOf("staff@example.test") + "/lock", admin, "neg",
+        "{\"reason\":\"r\",\"expected_version\":-1}"))).containsExactly("expected_version");
     assertThat(call("PUT", "/admin/api/v1/users/" + UUID.randomUUID() + "/roles", admin, null,
         "{\"roles\":[],\"reason\":\"r\",\"expected_version\":0}").statusCode()).isEqualTo(404);
     assertThat(jdbc.queryForObject("select count(*) from audit_logs where action = 'user.roles_changed'",
