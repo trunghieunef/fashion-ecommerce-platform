@@ -3,6 +3,7 @@ package vn.fashion.user.web;
 import io.micrometer.tracing.Tracer;
 import java.util.List;
 import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.QueryTimeoutException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -23,8 +24,11 @@ public class ApiExceptionHandler {
     return Api.error(problem.status(), problem.code(), problem.getMessage(), problem.errors(), tracer);
   }
 
-  /** Redis or PostgreSQL unreachable: the transaction rolled back, so nothing happened (03 section 1.2). */
-  @ExceptionHandler(DataAccessResourceFailureException.class)
+  /**
+   * Redis or PostgreSQL unreachable or not answering in time while the request's transaction was
+   * still open, so it rolled back (03 section 1.2). Work after a commit handles its own failures.
+   */
+  @ExceptionHandler({DataAccessResourceFailureException.class, QueryTimeoutException.class})
   ResponseEntity<Api.Error> unavailable() {
     return Api.error(HttpStatus.SERVICE_UNAVAILABLE, "TEMPORARILY_UNAVAILABLE", "DEPENDENCY_UNAVAILABLE", List.of(),
         tracer);

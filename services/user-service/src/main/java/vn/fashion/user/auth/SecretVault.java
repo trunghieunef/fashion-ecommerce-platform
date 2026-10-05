@@ -13,6 +13,7 @@ import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;
@@ -73,6 +74,11 @@ public class SecretVault {
     byte[] sealed = java.util.Arrays.copyOfRange(stored, 12, stored.length);
     String plain = new String(crypt(Cipher.DECRYPT_MODE, iv, meta, sealed), StandardCharsets.UTF_8);
     return Optional.of(new Secret(challengeId, meta.purpose(), plain, meta.expiresAt()));
+  }
+
+  /** Throws a DataAccessException when Redis cannot answer (connection failure or timeout). */
+  public void requireAvailable() {
+    redis.execute((RedisCallback<String>) connection -> connection.ping());
   }
 
   public void delete(UUID challengeId) {

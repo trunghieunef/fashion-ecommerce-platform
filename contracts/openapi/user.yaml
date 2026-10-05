@@ -158,7 +158,8 @@ paths:
       description: >
         For an ACTIVE account, creates a one-time token valid 30 minutes (stored as SHA-256),
         voids earlier unused reset tokens and queues NOTIFY_RESET_PASSWORD with a challenge_id
-        only. 503 when the secret handoff store is unavailable.
+        only. The handoff store is checked before the account lookup: while it is unavailable
+        every well-formed e-mail gets the same 503, so the status never reveals an account.
       requestBody:
         required: true
         content:
@@ -187,7 +188,9 @@ paths:
             schema: {$ref: '#/components/schemas/PasswordReset'}
       responses:
         '204':
-          description: Password replaced; auth_version bumped; refresh tokens revoked; failed-login lock cleared
+          description: >
+            Password replaced; auth_version bumped; refresh tokens revoked; failed-login lock
+            cleared. A login that checked the old password before this committed is refused.
         '400':
           description: Invalid input, or a token that is unknown, used, superseded or expired (message INVALID_RESET_TOKEN, field token)
           headers:

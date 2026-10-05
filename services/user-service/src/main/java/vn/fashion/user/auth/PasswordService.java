@@ -10,6 +10,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -31,6 +34,7 @@ public class PasswordService {
   static final String RESET = "RESET_PASSWORD";
   static final Duration RESET_TTL = Duration.ofMinutes(30);
   private static final SecureRandom RANDOM = new SecureRandom();
+  private static final Logger log = LoggerFactory.getLogger(PasswordService.class);
 
   private final JdbcClient jdbc;
   private final TransactionTemplate tx;
@@ -68,8 +72,12 @@ public class PasswordService {
     }
   }
 
-  /** Always succeeds for the caller; only an ACTIVE account gets a token, older ones are voided. */
+  /**
+   * Always succeeds for the caller; only an ACTIVE account gets a token, older ones are voided.
+   * Redis is checked before the account lookup, so an outage answers 503 for every e-mail alike.
+   */
   public void forgot(String email) {
+    vault.requireAvailable();
     record Account(UUID id, String locale, long authVersion) {
     }
     Optional<Account> account = jdbc.sql("select id, locale, auth_version from users where email = :email and status = 'ACTIVE'")
@@ -112,7 +120,7 @@ public class PasswordService {
       vault.put(new SecretVault.Secret(challengeId, RESET, token, expiresAt));
       return previous;
     });
-    superseded.forEach(vault::delete);
+    superseded.forEach(this::discardSecret);
   }
 
   public void reset(String token, String newPassword) {
@@ -130,7 +138,7 @@ public class PasswordService {
           .param("id", pending.get().userId()).query(String.class).optional();
       int used = email.isEmpty() ? 0 : jdbc.sql("""
               update user_action_tokens set used_at = now()
-              where id = :id and used_at is null and expires_at > now() and target_email = :email
+              where id = :id and used_at is null and expires_at > clock_timestamp() and target_email = :email
               """)
           .param("id", pending.get().id()).param("email", email.get()).update();
       if (used == 0) {
@@ -142,10 +150,10 @@ public class PasswordService {
           .param("id", pending.get().userId()).update();
       return true;
     }));
-    vault.delete(pending.get().id());
     if (!consumed) {
       throw invalidToken();
     }
+    discardSecret(pending.get().id());
   }
 
   /** The secret while its token is still unused and unexpired (03 section 4). */
@@ -153,6 +161,18 @@ public class PasswordService {
     boolean live = jdbc.sql("select count(*) from user_action_tokens where id = :id and used_at is null and expires_at > now()")
         .param("id", challengeId).query(Integer.class).single() == 1;
     return live ? vault.get(challengeId) : Optional.empty();
+  }
+
+  /**
+   * Best effort after commit: the committed outcome stands even if Redis fails here. The database
+   * already refuses the token and {@link #secret} checks it, and the Redis entry expires with it.
+   */
+  private void discardSecret(UUID challengeId) {
+    try {
+      vault.delete(challengeId);
+    } catch (DataAccessException e) {
+      log.warn("Secret cleanup skipped; the Redis entry expires with its token: {}", e.getClass().getSimpleName());
+    }
   }
 
   private void replacePassword(UUID userId, String newHash) {

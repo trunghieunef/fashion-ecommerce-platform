@@ -15,8 +15,8 @@ Contract: [`contracts/openapi/user.yaml`](../../contracts/openapi/user.yaml); th
 | `POST /api/v1/auth/refresh` | Cookie `refresh_token` dùng một lần: xoay sang token mới cùng family; response chỉ có `access_token`, `token_type`, `expires_in`. Dùng lại token đã xoay → thu hồi cả family, trả 401 và xóa cookie. Refresh, logout và thu hồi khi replay cùng lấy khóa `pg_advisory_xact_lock` theo family, nên việc thu hồi không bỏ sót token đang được tạo song song |
 | `POST /api/v1/auth/logout` | Thu hồi family, xóa cookie, 204 (idempotent) |
 | `POST /api/v1/auth/password/change` | Bearer + `current_password`, `new_password`. Sai mật khẩu hiện tại → 400 (field `current_password`) và tính vào ngưỡng khóa 5 lần. Thành công: tăng `auth_version`, thu hồi mọi refresh token (kể cả phiên này), xóa cookie, 204 |
-| `POST /api/v1/auth/password/forgot` | Luôn 202 cùng body. Tài khoản `ACTIVE`: tạo token 32 byte ngẫu nhiên, hạn 30 phút, DB chỉ lưu SHA-256 (`user_action_tokens`); vô hiệu token reset cũ chưa dùng; ghi `NOTIFY_RESET_PASSWORD` (chỉ `challenge_id`) vào outbox và token mã hóa vào Redis trong cùng transaction. Redis lỗi → 503, không ghi gì |
-| `POST /api/v1/auth/password/reset` | `token`, `new_password`. Dùng một lần, còn hạn, email hiện tại phải khớp `target_email`; đổi mật khẩu, tăng `auth_version`, thu hồi mọi refresh token, xóa khóa đăng nhập sai, xóa secret trong Redis; token sai/đã dùng/hết hạn → 400 field `token` |
+| `POST /api/v1/auth/password/forgot` | Luôn 202 cùng body. Tài khoản `ACTIVE`: tạo token 32 byte ngẫu nhiên, hạn 30 phút, DB chỉ lưu SHA-256 (`user_action_tokens`); vô hiệu token reset cũ chưa dùng; ghi `NOTIFY_RESET_PASSWORD` (chỉ `challenge_id`) vào outbox và token mã hóa vào Redis trong cùng transaction. Redis được PING trước khi tra email, nên khi Redis lỗi (mất kết nối hoặc timeout) mọi email đều nhận cùng 503 và không ghi gì; dọn secret cũ sau commit là best effort |
+| `POST /api/v1/auth/password/reset` | `token`, `new_password`. Dùng một lần, còn hạn tại lúc tiêu thụ (`clock_timestamp()`, kể cả khi phải chờ khóa), email hiện tại phải khớp `target_email`; đổi mật khẩu, tăng `auth_version`, thu hồi mọi refresh token, xóa khóa đăng nhập sai; xóa secret trong Redis là best effort sau commit (Redis lỗi lúc đó vẫn trả 204; DB đã chặn dùng lại, entry tự hết hạn); token sai/đã dùng/hết hạn → 400 field `token` |
 | `GET /internal/api/v1/users/notification-secrets/{challenge_id}` | Không qua Gateway. Service token ADR-19 (`Authorization: Bearer`, `aud=user-service`); chỉ caller `notification-service` (403 với caller hợp lệ khác). Trả token reset khi còn chưa dùng và còn hạn, `Cache-Control: no-store`; ngược lại 404 |
 | `GET, PUT /api/v1/users/me` | Cần Bearer access token. PUT chỉ đổi `full_name` và `locale`; `email`, role, `auth_version` trong body bị bỏ qua |
 | `GET /admin/api/v1/users?page=&size=` | Cần permission `user.manage`. Danh sách tài khoản (cũ trước) kèm `roles`, `status`, `version` (= `auth_version`); không trả hash mật khẩu |
@@ -84,8 +84,10 @@ Tạo SUPER_ADMIN đầu tiên trên local: đăng ký tài khoản, đặt `USE
 
 ## Giới hạn (phần 1b / USR-02)
 
+- Login kiểm lại `password_hash` dưới khóa dòng user, nên login đã qua BCrypt với mật khẩu cũ nhưng
+  chạy sau một lần đổi/đặt lại mật khẩu vừa commit sẽ bị từ chối.
 - Chưa có rate limit theo IP/email (1b-ii): chỉ khóa theo tài khoản trong PostgreSQL. Readiness
-  chưa gồm Redis; Redis lỗi chỉ làm `forgot` trả 503.
+  chưa gồm Redis; Redis lỗi chỉ làm `forgot` trả 503 (lỗi kết nối hoặc timeout lệnh).
 - Chưa có notification-service (NOT-01) nên chưa ai gọi endpoint internal và chưa gửi e-mail thật.
   `forgot` với email có và không có tài khoản khác nhau về thời gian xử lý (có ghi DB/Redis); rate
   limit 1b-ii giới hạn việc dò. License Redis 8 vẫn chờ PO/TL (17).

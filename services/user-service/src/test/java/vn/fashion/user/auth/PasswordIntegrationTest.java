@@ -252,6 +252,99 @@ class PasswordIntegrationTest {
     assertThat(output.getAll()).doesNotContain(secret, NEW_PASSWORD, PASSWORD);
   }
 
+  @Test
+  void loginWithTheOldPasswordQueuedBehindAChangeIsRejected() throws Exception {
+    String access = body(register("race-change@example.test")).path("data").path("access_token").asText();
+
+    var outcome = queueBehind("race-change@example.test",
+        () -> post("/api/v1/auth/password/change", access,
+            "{\"current_password\":\"" + PASSWORD + "\",\"new_password\":\"" + NEW_PASSWORD + "\"}"));
+
+    assertThat(outcome.first().statusCode()).isEqualTo(204);
+    assertThat(outcome.login().statusCode()).as("old password after the change committed").isEqualTo(401);
+    assertThat(liveRefreshTokens()).isZero();
+  }
+
+  @Test
+  void loginWithTheOldPasswordQueuedBehindAResetIsRejected() throws Exception {
+    register("race-reset@example.test");
+    post("/api/v1/auth/password/forgot", null, "{\"email\":\"race-reset@example.test\"}");
+    String secret = secret(jdbc.queryForObject("select id::text from user_action_tokens", String.class));
+
+    var outcome = queueBehind("race-reset@example.test", () -> post("/api/v1/auth/password/reset", null,
+        "{\"token\":\"" + secret + "\",\"new_password\":\"" + NEW_PASSWORD + "\"}"));
+
+    assertThat(outcome.first().statusCode()).isEqualTo(204);
+    assertThat(outcome.login().statusCode()).as("old password after the reset committed").isEqualTo(401);
+    assertThat(liveRefreshTokens()).isZero();
+  }
+
+  @Test
+  void aTokenThatExpiresWhileWaitingForTheAccountLockIsRejected() throws Exception {
+    register("slow@example.test");
+    post("/api/v1/auth/password/forgot", null, "{\"email\":\"slow@example.test\"}");
+    String secret = secret(jdbc.queryForObject("select id::text from user_action_tokens", String.class));
+    jdbc.update("update user_action_tokens set expires_at = clock_timestamp() + interval '3 seconds'");
+
+    try (var gate = lockAccount("slow@example.test")) {
+      var reset = java.util.concurrent.CompletableFuture.supplyAsync(() -> post("/api/v1/auth/password/reset", null,
+          "{\"token\":\"" + secret + "\",\"new_password\":\"" + NEW_PASSWORD + "\"}"));
+      awaitLockWaiters(gate, 1);
+      while (!jdbc.queryForObject("select bool_and(expires_at < clock_timestamp()) from user_action_tokens",
+          Boolean.class)) {
+        Thread.sleep(100);
+      }
+      gate.commit();
+
+      assertThat(fields(reset.join())).as("expired before it was consumed").containsExactly("token");
+    }
+    assertThat(login("slow@example.test", PASSWORD).statusCode()).isEqualTo(200);
+  }
+
+  private record Queued(HttpResponse<String> first, HttpResponse<String> login) {
+  }
+
+  /** Holds the account row so {@code first} and then a login with the old password queue up in order. */
+  private Queued queueBehind(String email, java.util.function.Supplier<HttpResponse<String>> first) throws Exception {
+    try (var gate = lockAccount(email)) {
+      var firstCall = java.util.concurrent.CompletableFuture.supplyAsync(first);
+      awaitLockWaiters(gate, 1);
+      var login = java.util.concurrent.CompletableFuture.supplyAsync(() -> login(email, PASSWORD));
+      awaitLockWaiters(gate, 2);
+      gate.commit();
+      return new Queued(firstCall.join(), login.join());
+    }
+  }
+
+  private static java.sql.Connection lockAccount(String email) throws java.sql.SQLException {
+    var gate = java.sql.DriverManager.getConnection(postgres.getJdbcUrl(), "postgres", "postgres");
+    gate.setAutoCommit(false);
+    try (var statement = gate.prepareStatement("select id from users where email = ? for share")) {
+      statement.setString(1, email);
+      statement.executeQuery().close();
+    }
+    return gate;
+  }
+
+  private static void awaitLockWaiters(java.sql.Connection gate, int count) throws Exception {
+    long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
+    while (System.nanoTime() < deadline) {
+      try (var statement = gate.createStatement();
+           var rs = statement.executeQuery("select count(*) from pg_locks where not granted")) {
+        rs.next();
+        if (rs.getInt(1) >= count) {
+          return;
+        }
+      }
+      Thread.sleep(50);
+    }
+    throw new AssertionError("expected " + count + " sessions waiting on a lock");
+  }
+
+  private int liveRefreshTokens() {
+    return jdbc.queryForObject("select count(*) from refresh_tokens where revoked_at is null", Integer.class);
+  }
+
   private String secret(String challengeId) {
     var response = internal("/internal/api/v1/users/notification-secrets/" + challengeId,
         serviceToken(NOTIFICATION_KEY, "notification-service", "user-service"));

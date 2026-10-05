@@ -147,6 +147,20 @@ kết nối cũ tới container vừa thay), hai lần chạy lại PASS: forgot
 khẩu 204 rồi token cũ 401. Playwright 2/2, Nacos PASS; log user-service không chứa mật khẩu/secret.
 user-service 48/48.
 
+## Xử lý review PR #11 — 2026-10-06
+
+Review của Codex tại `b6404df` có 1 P1 và 4 P2, đều đúng; cả 5 được tái hiện bằng test trước khi sửa.
+
+| Finding | Nguyên nhân | RED | GREEN |
+|---|---|---|---|
+| P1: login bằng mật khẩu cũ xếp hàng sau đổi/đặt lại mật khẩu vẫn tạo phiên hợp lệ | login kiểm BCrypt trên hash đọc trước khóa, dưới khóa chỉ đọc lại `auth_version` | 2 test tất định (kết nối test giữ `FOR SHARE`, xếp change/reset rồi login): login 200 | login chỉ cấp phiên khi `password_hash` dưới khóa vẫn là hash đã kiểm: 401, không còn refresh token |
+| P2: reset/forgot báo lỗi khi dọn Redis sau commit dù đã đổi | `vault.delete` sau commit ném lỗi | pause Redis trong reset: 500; spy `delete` ném lỗi ở forgot lần 2: 500 | dọn secret là best effort (log tên exception, không log secret); reset 204, forgot 202 |
+| P2: token hết hạn trong lúc chờ khóa vẫn dùng được | `now()` là lúc bắt đầu transaction | token còn 3 giây, giữ khóa user tới khi DB xác nhận hết hạn rồi thả: 204 | `expires_at > clock_timestamp()` khi tiêu thụ: 400 |
+| P2: forgot lộ email tồn tại khi Redis lỗi | email lạ không chạm Redis | Redis bị pause: known 500, unknown 202 | PING Redis trước khi tra email: known/unknown/inactive cùng 503 `TEMPORARILY_UNAVAILABLE` |
+| P2: timeout lệnh Redis không map vào `ApiError` | `QueryTimeoutException` không thuộc `DataAccessResourceFailureException` | (cùng test pause) body mặc định 500 | advice map thêm `QueryTimeoutException` → 503 |
+
+user-service 54/54; chạy lại 3 lần các test race/outage và login đồng thời: 0 lỗi, 0 deadlock.
+
 ## Còn mở
 
 1b-ii: rate limit theo IP/email bằng Redis, 429 + `Retry-After`, fail closed. NOT-01 tiêu thụ
