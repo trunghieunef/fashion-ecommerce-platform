@@ -65,7 +65,7 @@ Alibaba 2025.1.0.0 công bố tổ hợp tham chiếu Cloud 2025.1.0, Boot 4.0.0
 
 Nguồn: [PostgreSQL versioning](https://www.postgresql.org/support/versioning/), [Boot BOM](https://docs.spring.io/spring-boot/4.0/appendix/dependency-versions/coordinates.html), [Kafka downloads](https://kafka.apache.org/community/downloads/), [Redis 8.2 release notes](https://redis.io/docs/latest/operate/oss_and_stack/stack-with-enterprise/release-notes/redisce/redisos-8.2-release-notes/), [Redis version policy](https://redis.io/docs/latest/operate/oss_and_stack/install/version-mgmt/).
 
-Redis 8 có các lựa chọn license AGPLv3/RSALv2/SSPLv1; không được ghi Redis 8 là BSD. PO/TL phải xác nhận license phù hợp cách phân phối/vận hành trước release; R1 không phải kết luận pháp lý. [Redis licenses](https://redis.io/legal/licenses/).
+Redis 8 có các lựa chọn license AGPLv3/RSALv2/SSPLv1; không được ghi Redis 8 là BSD. PO/TL phải xác nhận license phù hợp cách phân phối/vận hành trước release; R1 không phải kết luận pháp lý. Từ `TASK:USR-01` phần 1b-i (2026-10-05), Redis 8.2.9 chạy trong Compose local (`redis:8.2.9@sha256:66b7f4c2…3b21`, không publish port, có password, không persistence) và Testcontainers; chủ dự án chấp nhận dùng cho dev/test, license vẫn là mục mở. [Redis licenses](https://redis.io/legal/licenses/).
 
 Giữ các invariant của [04](../design/04_architecture.md), [05](../design/05_database_design.md), [06](../design/06_service_flows.md):
 

@@ -14,9 +14,11 @@ import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import vn.fashion.user.web.Api;
+import vn.fashion.user.web.MemberAuth;
 
 /** Public auth API (03 section 2.1). The refresh token only travels in an HttpOnly cookie. */
 @RestController
@@ -27,10 +29,14 @@ public class AuthController {
   private static final Set<String> LOCALES = Set.of("vi", "en");
 
   private final AuthService auth;
+  private final PasswordService passwords;
+  private final MemberAuth members;
   private final Tracer tracer;
 
-  public AuthController(AuthService auth, Tracer tracer) {
+  public AuthController(AuthService auth, PasswordService passwords, MemberAuth members, Tracer tracer) {
     this.auth = auth;
+    this.passwords = passwords;
+    this.members = members;
     this.tracer = tracer;
   }
 
@@ -41,6 +47,19 @@ public class AuthController {
   }
 
   public record SessionData(AuthService.UserView user, String accessToken, String tokenType, long expiresIn) {
+  }
+
+  public record PasswordChange(String currentPassword, String newPassword) {
+  }
+
+  public record ForgotRequest(String email) {
+  }
+
+  public record ResetRequest(String token, String newPassword) {
+  }
+
+  /** The same answer whether or not the e-mail has an account (PRD USR-03). */
+  public record ForgotAccepted(String message) {
   }
 
   /** Refresh only rotates tokens; it does not return the profile (contract RefreshResponse). */
@@ -54,7 +73,7 @@ public class AuthController {
     if (email == null || email.length() > 254 || !EMAIL.matcher(email).matches()) {
       errors.add(new Api.FieldError("email", "must be a valid e-mail address"));
     }
-    validatePassword(request.password(), errors);
+    validatePassword("password", request.password(), errors);
     if (request.fullName() == null || request.fullName().isBlank() || request.fullName().length() > 200) {
       errors.add(new Api.FieldError("full_name", "must be 1..200 characters"));
     }
@@ -94,6 +113,44 @@ public class AuthController {
     return ResponseEntity.noContent().header(HttpHeaders.SET_COOKIE, cookie("", 0).toString()).build();
   }
 
+  /** Revokes every session including the caller's; the client signs in again. */
+  @PostMapping("/password/change")
+  public ResponseEntity<Void> changePassword(
+      @RequestHeader(name = "Authorization", required = false) String authorization,
+      @RequestBody PasswordChange request) {
+    var userId = members.requireMember(authorization);
+    var errors = new ArrayList<Api.FieldError>();
+    if (request.currentPassword() == null || request.currentPassword().isEmpty()) {
+      errors.add(new Api.FieldError("current_password", "is required"));
+    }
+    validatePassword("new_password", request.newPassword(), errors);
+    requireValid(errors, "INVALID_PASSWORD_CHANGE");
+    passwords.change(userId, request.currentPassword(), request.newPassword());
+    return ResponseEntity.noContent().header(HttpHeaders.SET_COOKIE, cookie("", 0).toString()).build();
+  }
+
+  @PostMapping("/password/forgot")
+  public ResponseEntity<Api.Response<ForgotAccepted>> forgotPassword(@RequestBody ForgotRequest request) {
+    String email = normalize(request.email());
+    if (email == null || email.length() > 254 || !EMAIL.matcher(email).matches()) {
+      requireValid(List.of(new Api.FieldError("email", "must be a valid e-mail address")), "INVALID_EMAIL");
+    }
+    passwords.forgot(email);
+    return Api.ok(HttpStatus.ACCEPTED, new ForgotAccepted("RESET_EMAIL_REQUESTED"), tracer);
+  }
+
+  @PostMapping("/password/reset")
+  public ResponseEntity<Void> resetPassword(@RequestBody ResetRequest request) {
+    var errors = new ArrayList<Api.FieldError>();
+    if (request.token() == null || request.token().isBlank() || request.token().length() > 128) {
+      errors.add(new Api.FieldError("token", "is required"));
+    }
+    validatePassword("new_password", request.newPassword(), errors);
+    requireValid(errors, "INVALID_PASSWORD_RESET");
+    passwords.reset(request.token(), request.newPassword());
+    return ResponseEntity.noContent().build();
+  }
+
   @ExceptionHandler(AuthService.EmailTakenException.class)
   ResponseEntity<Api.Error> emailTaken() {
     return error(HttpStatus.CONFLICT, "CONFLICT", "EMAIL_ALREADY_REGISTERED", List.of());
@@ -112,10 +169,16 @@ public class AuthController {
         .header(HttpHeaders.SET_COOKIE, cookie("", 0).toString()).body(response.getBody());
   }
 
-  private static void validatePassword(String password, List<Api.FieldError> errors) {
+  private static void requireValid(List<Api.FieldError> errors, String message) {
+    if (!errors.isEmpty()) {
+      throw new Api.Problem(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", message, errors);
+    }
+  }
+
+  private static void validatePassword(String field, String password, List<Api.FieldError> errors) {
     // BCrypt only uses the first 72 bytes; longer input would be silently truncated.
     if (password == null || password.length() < 8 || password.getBytes(StandardCharsets.UTF_8).length > 72) {
-      errors.add(new Api.FieldError("password", "must be at least 8 characters and at most 72 bytes"));
+      errors.add(new Api.FieldError(field, "must be at least 8 characters and at most 72 bytes"));
     }
   }
 

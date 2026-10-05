@@ -83,11 +83,13 @@ PLT-04/05, AWS/K3s/ECR/ArgoCD, provider sandbox và các task business Phase 1 k
   `metadata.trace_id`), log JSON ECS có redaction và `/actuator/prometheus` (Gateway trên port 9080).
   Còn: correlation qua Kafka khi có producer/consumer, gauge outbox cũ nhất, dashboard/alert và
   trace xuyên 2 service trên staging (cần PLT-04).
-- `TASK:USR-01` — **In progress, phần 1a** (2026-10-05, assignee Claude Code, reviewer chủ dự án;
-  Phase 1A bắt đầu trước G0 theo quyết định ở 08). `services/user-service`: đăng ký, đăng nhập
-  có khóa 15 phút, refresh xoay vòng + thu hồi family khi dùng lại, logout, `USER_CREATED` qua
-  outbox; 16 test PostgreSQL thật; Gateway route `/api/v1/auth/**`; smoke chạy qua Gateway.
-  Còn (1b): quên/đặt lại/đổi mật khẩu + bàn giao secret, rate limit IP (Redis); làm sau USR-02.
+- `TASK:USR-01` — **In progress, 1a + 1b-i đã code** (2026-10-05, assignee Claude Code, reviewer chủ
+  dự án; Phase 1A bắt đầu trước G0 theo quyết định ở 08). 1a: đăng ký, đăng nhập có khóa 15 phút,
+  refresh xoay vòng + thu hồi family khi dùng lại, logout, `USER_CREATED` qua outbox; Gateway route
+  `/api/v1/auth/**`. 1b-i: đổi mật khẩu, quên/đặt lại mật khẩu (token một lần 30 phút, chỉ lưu
+  hash), bàn giao secret mã hóa qua Redis 8.2.9 + `GET /internal/api/v1/users/notification-secrets/{id}`
+  (service token ADR-19, chỉ notification-service), `NOTIFY_RESET_PASSWORD` vào registry. Còn
+  (1b-ii): rate limit theo IP/email bằng Redis, 429 + `Retry-After`, fail closed. NOT-01 tiêu thụ event.
 - `TASK:USR-02` — **In progress, 2a + 2b đã code** (2026-10-05, assignee Claude Code, reviewer chủ dự án).
   2a: `AccessTokenVerifier` (platform-security), `/users/me` GET/PUT, sổ địa chỉ với đúng một mặc
   định (khóa dòng user), kiểm `auth_version`/status hiện tại; Gateway route `/api/v1/users/**`.

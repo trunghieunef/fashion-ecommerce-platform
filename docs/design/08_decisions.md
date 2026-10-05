@@ -121,5 +121,12 @@ Gate task là work package trong [backlog](../delivery/10_backlog.md). Mã task 
   đã đăng ký, chỉ khi chưa có SUPER_ADMIN), audit actor SYSTEM (`actor_id` NULL). Agent tự chọn,
   cần reviewer xác nhận: admin không được tự đổi role/tự khóa mình; Phase 1 chưa có mở khóa (03 §3
   chỉ có lock); SUPER_ADMIN chỉ có `user.manage`.
+- USR-01b (2026-10-05, chủ dự án chọn): dùng Redis 8.2.9 cho local/test trong khi license Redis 8
+  (AGPLv3/RSALv2/SSPLv1, 17) vẫn chờ PO/TL chốt trước release; chia 1b-i (mật khẩu + bàn giao secret)
+  và 1b-ii (rate limit). Agent tự chọn, cần reviewer xác nhận: token reset mã hóa AES-256-GCM
+  (`USER_SECRET_KEY`, challenge id + purpose làm associated data) trong Redis, TTL bằng hạn token;
+  `NOTIFY_RESET_PASSWORD` mang `recipient.email` và `challenge_id`, không mang token; service token
+  ADR-19 gửi bằng `Authorization: Bearer`; đổi mật khẩu thu hồi cả phiên hiện tại (client đăng nhập
+  lại) và sai mật khẩu hiện tại tính vào ngưỡng khóa 5 lần; đặt lại mật khẩu xóa khóa đăng nhập sai.
 
 Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác và lý do; ảnh hưởng PRD/API/schema/test/task; người quyết định; ngày; link bằng chứng. Chưa có chữ ký phê duyệt giả định thương mại.

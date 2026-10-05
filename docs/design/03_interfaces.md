@@ -70,7 +70,7 @@ Mutation cart/admin dùng expected_version; thiếu version bắt buộc trả 4
 | GET | /auth/social/{provider}/callback | Provider flow / 2 | verified identity → session hoặc yêu cầu link |
 | POST, DELETE | /users/me/social/{provider} | Member + reauth / 2 | Link có verified provider proof / unlink nếu còn phương thức đăng nhập |
 
-Contract thực thi của register/login/refresh/logout (`TASK:USR-01` phần 1a) và `/users/me` + địa chỉ (`TASK:USR-02` phần 2a): [`contracts/openapi/user.yaml`](../../contracts/openapi/user.yaml). `/users/me` cần Bearer; token có `auth_version` cũ hoặc tài khoản không còn ACTIVE trả 401 `INVALID_ACCESS_TOKEN`; địa chỉ của người khác trả 404. Access token là JWT ES256 (`iss=user-service`, `aud=fashion-api`, `sub`, `auth_version`, `permissions`, `kid`), public key cấp cho verifier qua config (ADR-21). `permissions` là mảng permission code (13 §2) của các role tại lúc cấp token; service kiểm code đó cho endpoint admin. Cookie `refresh_token`: HttpOnly, Secure, SameSite=Strict, Path=/api/v1/auth, 30 ngày; dùng lại token đã xoay thì thu hồi cả family. Refresh token không nằm JSON response/localStorage. Guest có credential ngẫu nhiên do cart/order cấp bằng Secure HttpOnly cookie; lưu hash ở server.
+Contract thực thi của register/login/refresh/logout (`TASK:USR-01` phần 1a), đổi/quên/đặt lại mật khẩu (`TASK:USR-01` phần 1b-i; secret chỉ qua [`user-internal.yaml`](../../contracts/openapi/user-internal.yaml)) và `/users/me` + địa chỉ (`TASK:USR-02` phần 2a): [`contracts/openapi/user.yaml`](../../contracts/openapi/user.yaml). `/users/me` cần Bearer; token có `auth_version` cũ hoặc tài khoản không còn ACTIVE trả 401 `INVALID_ACCESS_TOKEN`; địa chỉ của người khác trả 404. Access token là JWT ES256 (`iss=user-service`, `aud=fashion-api`, `sub`, `auth_version`, `permissions`, `kid`), public key cấp cho verifier qua config (ADR-21). `permissions` là mảng permission code (13 §2) của các role tại lúc cấp token; service kiểm code đó cho endpoint admin. Cookie `refresh_token`: HttpOnly, Secure, SameSite=Strict, Path=/api/v1/auth, 30 ngày; dùng lại token đã xoay thì thu hồi cả family. Refresh token không nằm JSON response/localStorage. Guest có credential ngẫu nhiên do cart/order cấp bằng Secure HttpOnly cookie; lưu hash ở server.
 
 ### 2.2 Catalog, cart và tương tác Phase 2
 
@@ -230,7 +230,7 @@ Report orders do order sở hữu, cash do payment, stock do inventory; dashboar
 | GET /shipping/shipments/by-order/{order_id} | order → shipping | Status,handed_over_at,tracking |
 | POST /shipping/shipments/{order_id}/cancel | order → shipping | Original snapshot/hash,key → cancellation/tombstone |
 | POST /users/recipients/resolve | notification,inventory → user | Scoped IDs/purpose → minimal recipient/locale/verified |
-| GET /users/notification-secrets/{challenge_id} | notification → user | Purpose/expiry/caller check → secret tạm, no-store |
+| GET /users/notification-secrets/{challenge_id} | notification → user | Purpose/expiry/caller check → secret tạm, no-store. Thực thi: [`user-internal.yaml`](../../contracts/openapi/user-internal.yaml) (`TASK:USR-01` phần 1b-i); service token ADR-19 gửi qua `Authorization: Bearer` |
 | GET /users/{user_id}/auth-state | gateway, các service có admin action → user | auth_version/status/permissions cho sensitive authorization |
 
 Internal stock return chỉ order; OPS dùng admin order returns để giữ evidence và orchestration. Query pure POST không cần idempotency key; mọi command còn lại cần key + stable business reference. Hash canonical tại service đích phải khớp original payload; không chỉ so chuỗi caller gửi.
@@ -267,7 +267,7 @@ Relay giữ thứ tự chưa gửi theo aggregate_sequence. Consumer dedupe tron
 | payment.events / order_no | payment | PAYMENT_CREATED, PAYMENT_COMPLETED, PAYMENT_FAILED, PAYMENT_REFUNDED | order saga/tài chính COD; không inventory tự deduct |
 | promotion.events / variant_id | promotion | PRICE_CHANGED | catalog invalidation |
 | shipping.events / order_no | shipping | SHIPMENT_CREATED, SHIPMENT_STATUS_UPDATED, COD_COLLECTED, COD_REMITTED | order giao hàng; payment COD evidence |
-| notification.events / dedupe_key | Domain owners | NOTIFY_* | Chỉ notification gửi |
+| notification.events / dedupe_key | Domain owners | NOTIFY_* (schema thực thi: NOTIFY_RESET_PASSWORD do user, `TASK:USR-01` phần 1b) | Chỉ notification gửi |
 | notification.results / dedupe_key | notification | NOTIFICATION_SENT, NOTIFICATION_FAILED | user dọn secret, inventory subscription result |
 
 NOTIFY_ORDER_CONFIRMED do order phát khi online ready hoặc COD tiếp nhận; NOTIFY_PAYMENT_SUCCESS/REFUND_RESULT do payment; NOTIFY_SHIPMENT_STATUS do shipping; NOTIFY_RESTOCK_ALERT/LOW_STOCK do inventory; NOTIFY_RESET_PASSWORD/EMAIL_VERIFY/OTP do user. Một business notification chỉ có một producer/dedupe key.

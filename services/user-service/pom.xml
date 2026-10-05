@@ -39,6 +39,11 @@
       <artifactId>postgresql</artifactId>
       <scope>runtime</scope>
     </dependency>
+    <!-- USR-01b: encrypted short-lived secret handoff (Redis 8.2.9, Lettuce via Boot BOM). -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-data-redis</artifactId>
+    </dependency>
     <!-- BCrypt only; no web security filter chain (service checks are explicit). -->
     <dependency>
       <groupId>org.springframework.security</groupId>

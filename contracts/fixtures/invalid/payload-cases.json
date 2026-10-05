@@ -220,5 +220,6 @@
     "path": [
       "observed_at"
     ]
-  }
+  },
+  {"name": "reset notification carries the token instead of a reference", "fixture": "notify-reset-password.json", "changes": {"token": "synthetic-reset-token"}, "validator": "additionalProperties", "path": []}
 ]

@@ -237,7 +237,7 @@ public class AuthService {
     return accessTokens.issue(userId, authVersion, permissions);
   }
 
-  private void recordFailedLogin(UUID userId) {
+  void recordFailedLogin(UUID userId) {
     // After an expired lock the count restarts at 1; the fifth failure locks for 15 minutes.
     jdbc.sql("""
             update users set
@@ -272,7 +272,7 @@ public class AuthService {
     return raw;
   }
 
-  private String correlationId() {
+  String correlationId() {
     Span span = tracer.currentSpan();
     return span != null ? span.context().traceId() : UUID.randomUUID().toString().replace("-", "");
   }

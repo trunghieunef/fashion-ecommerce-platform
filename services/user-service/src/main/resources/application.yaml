@@ -15,6 +15,13 @@ spring:
     user: ${USER_MIGRATION_DB_USERNAME:user_migration}
     password: ${USER_MIGRATION_DB_PASSWORD:user_migration_local}
     locations: classpath:db/migration
+  data:
+    redis:
+      # USR-01b: short-lived encrypted secrets only; PostgreSQL stays the source of truth.
+      host: ${USER_REDIS_HOST:localhost}
+      port: ${USER_REDIS_PORT:6379}
+      password: ${USER_REDIS_PASSWORD:}
+      timeout: 2s
   jackson:
     # JSON names are snake_case (03 section 1.1).
     property-naming-strategy: SNAKE_CASE
@@ -29,6 +36,10 @@ fashion:
       public-keys: ${USER_JWT_PUBLIC_KEYS}
     # Email of an already registered account to make the first SUPER_ADMIN; ignored once one exists.
     bootstrap-admin-email: ${USER_BOOTSTRAP_ADMIN_EMAIL:}
+    # Base64 AES-256 key encrypting reset tokens in Redis; no default so the service fails closed.
+    secret-key: ${USER_SECRET_KEY}
+    # ADR-19 callers of /internal: service:base64-X.509 entries; empty allows none.
+    internal-callers: ${USER_INTERNAL_CALLERS:}
 
 logging:
   structured:

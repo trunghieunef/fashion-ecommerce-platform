@@ -60,6 +60,16 @@ curl --fail --silent --show-error -H "Authorization: Bearer $access" -H 'Content
 test "$(status "$GATEWAY_URL/api/v1/users/me")" = 401
 # TASK:USR-02 part 2b: admin API is routed but a member without user.manage gets 403.
 test "$(status -H "Authorization: Bearer $access" "$GATEWAY_URL/admin/api/v1/users")" = 403
+# TASK:USR-01 part 1b-i: forgot answers 202 for known and unknown e-mails (Redis handoff in
+# Compose); change password revokes the current access token.
+for target in "me-$EMAIL" "nobody-$EMAIL"; do
+  test "$(status -X POST -H 'Content-Type: application/json' -d "{\"email\":\"$target\"}" \
+    "$GATEWAY_URL/api/v1/auth/password/forgot")" = 202
+done
+change='{"current_password":"Smoke-pass-123","new_password":"Smoke-pass-456"}' # gitleaks:allow synthetic smoke passwords
+test "$(status -X POST -H "Authorization: Bearer $access" -H 'Content-Type: application/json' \
+  -d "$change" "$GATEWAY_URL/api/v1/auth/password/change")" = 204
+test "$(status -H "Authorization: Bearer $access" "$GATEWAY_URL/api/v1/users/me")" = 401
 test "$(curl -sS -o /dev/null -D "$headers" -w '%{http_code}' -X POST -H "Origin: $ORIGIN" \
   -H "Cookie: refresh_token=$first" "$GATEWAY_URL/api/v1/auth/refresh")" = 200
 second="$(cookie_of "$headers")"

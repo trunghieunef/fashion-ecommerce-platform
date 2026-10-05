@@ -79,7 +79,7 @@ class AdminIntegrationTest {
     // audit_logs is append-only for the runtime role; the superuser clears it between tests.
     try (var admin = java.sql.DriverManager.getConnection(postgres.getJdbcUrl(), "postgres", "postgres");
          var statement = admin.createStatement()) {
-      statement.execute("truncate audit_logs, idempotency_requests, user_roles, user_addresses, "
+      statement.execute("truncate audit_logs, idempotency_requests, user_roles, user_addresses, user_action_tokens, "
           + "refresh_tokens, outbox_events, users");
     } catch (java.sql.SQLException e) {
       throw new IllegalStateException(e);
