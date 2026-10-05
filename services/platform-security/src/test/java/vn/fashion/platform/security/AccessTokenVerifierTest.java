@@ -25,7 +25,9 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Base64;
 import java.util.Date;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
@@ -44,7 +46,21 @@ class AccessTokenVerifierTest {
   @Test
   void validTokenYieldsTheActor() throws Exception {
     assertThat(verifier.verify(sign(CURRENT, "user-1", claims().build())))
-        .contains(new AccessTokenVerifier.Actor(USER, 3));
+        .contains(new AccessTokenVerifier.Actor(USER, 3, Set.of("user.manage", "order.read")));
+  }
+
+  @Test
+  void permissionsClaimMustBeAListOfStrings() throws Exception {
+    var none = new JWTClaimsSet.Builder(claims().build()).claim("permissions", null).build();
+    var notList = new JWTClaimsSet.Builder(claims().build()).claim("permissions", "user.manage").build();
+    var mixed = new JWTClaimsSet.Builder(claims().build()).claim("permissions", List.of("user.manage", 7)).build();
+    var empty = new JWTClaimsSet.Builder(claims().build()).claim("permissions", List.of()).build();
+
+    assertThat(verifier.verify(sign(CURRENT, "user-1", none))).isEmpty();
+    assertThat(verifier.verify(sign(CURRENT, "user-1", notList))).isEmpty();
+    assertThat(verifier.verify(sign(CURRENT, "user-1", mixed))).isEmpty();
+    assertThat(verifier.verify(sign(CURRENT, "user-1", empty)).map(AccessTokenVerifier.Actor::permissions))
+        .contains(Set.of());
   }
 
   @Test
@@ -111,7 +127,8 @@ class AccessTokenVerifierTest {
     return new JWTClaimsSet.Builder()
         .issuer("user-service").audience("fashion-api").subject(USER.toString())
         .issueTime(Date.from(NOW)).expirationTime(Date.from(NOW.plusSeconds(900)))
-        .claim("auth_version", 3L);
+        .claim("auth_version", 3L)
+        .claim("permissions", List.of("user.manage", "order.read"));
   }
 
   private static String sign(KeyPair keys, String kid, JWTClaimsSet claims) throws Exception {

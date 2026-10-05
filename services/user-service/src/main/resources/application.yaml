@@ -27,6 +27,8 @@ fashion:
       key-id: ${USER_JWT_KEY_ID:user-local}
       # ADR-21 verifier keys: kid:base64-X.509 entries, comma separated (two during rotation).
       public-keys: ${USER_JWT_PUBLIC_KEYS}
+    # Email of an already registered account to make the first SUPER_ADMIN; ignored once one exists.
+    bootstrap-admin-email: ${USER_BOOTSTRAP_ADMIN_EMAIL:}
 
 logging:
   structured:

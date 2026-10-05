@@ -8,8 +8,9 @@ info:
     only travels in the `refresh_token` cookie (HttpOnly; Secure; SameSite=Strict;
     Path=/api/v1/auth; Max-Age 30 days), never in JSON. Cookie POSTs pass the Gateway Origin
     check (ADR-20). TASK:USR-02 part 2a adds `/users/me` and addresses (Bearer access token;
-    the account must be ACTIVE and the token's auth_version current). Password reset/change
-    and admin roles belong to USR-01b / USR-02 part 2b.
+    the account must be ACTIVE and the token's auth_version current). TASK:USR-02 part 2b adds
+    `/admin/api/v1/users` (permission user.manage) and the access-token `permissions` claim
+    (permission codes of the user's roles, 13 §2). Password reset/change belong to USR-01b.
 servers:
   - url: http://localhost:8080
     description: Local Gateway
@@ -242,6 +243,93 @@ paths:
           $ref: '#/components/responses/InvalidAccessToken'
         '404':
           $ref: '#/components/responses/AddressNotFound'
+  /admin/api/v1/users:
+    get:
+      operationId: listUsers
+      summary: Page through accounts with their roles (permission user.manage)
+      security: [{bearer: []}]
+      parameters:
+        - $ref: './common.yaml#/components/parameters/Page'
+        - $ref: './common.yaml#/components/parameters/Size'
+      responses:
+        '200':
+          description: One page, oldest accounts first
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdminUserPageResponse'}
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/InvalidAccessToken'
+        '403':
+          $ref: '#/components/responses/PermissionRequired'
+  /admin/api/v1/users/{id}/roles:
+    parameters:
+      - {in: path, name: id, required: true, schema: {type: string, format: uuid}}
+    put:
+      operationId: changeUserRoles
+      summary: Replace a user's roles; bumps auth_version and writes an audit row with the reason
+      description: >
+        Sending the roles the user already has returns 200 without a change (a safe retry).
+        An admin cannot change their own roles (403 SELF_MODIFICATION_FORBIDDEN).
+      security: [{bearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RolesChange'}
+            example: {roles: [OPS], reason: Joins warehouse team, expected_version: 0}
+      responses:
+        '200':
+          description: The user after the change
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdminUserResponse'}
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/InvalidAccessToken'
+        '403':
+          $ref: '#/components/responses/PermissionRequired'
+        '404':
+          $ref: '#/components/responses/UserNotFound'
+        '409':
+          $ref: '#/components/responses/VersionConflict'
+  /admin/api/v1/users/{id}/lock:
+    parameters:
+      - {in: path, name: id, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: lockUser
+      summary: Lock an account; revokes its refresh tokens and bumps auth_version, audited
+      description: >
+        There is no unlock endpoint in Phase 1. The same Idempotency-Key and body return the
+        stored response; the same key with another body is 409 CONFLICT IDEMPOTENCY_KEY_REUSED.
+        An admin cannot lock themselves (403 SELF_MODIFICATION_FORBIDDEN).
+      security: [{bearer: []}]
+      parameters:
+        - $ref: './common.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/LockRequest'}
+            example: {reason: Suspicious activity, expected_version: 0}
+      responses:
+        '200':
+          description: The locked user
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdminUserResponse'}
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/InvalidAccessToken'
+        '403':
+          $ref: '#/components/responses/PermissionRequired'
+        '404':
+          $ref: '#/components/responses/UserNotFound'
+        '409':
+          $ref: '#/components/responses/VersionConflict'
 components:
   securitySchemes:
     bearer:
@@ -317,6 +405,48 @@ components:
             message: ADDRESS_NOT_FOUND
             errors: []
             metadata: {request_id: 4c8a1f2e-0000-4000-8000-000000000023, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+    PermissionRequired:
+      description: The token lacks the permission, or an admin targets their own account
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: './common.yaml#/components/schemas/ApiError'
+              - properties:
+                  code: {const: FORBIDDEN}
+          example:
+            code: FORBIDDEN
+            message: PERMISSION_REQUIRED
+            errors: []
+            metadata: {request_id: 4c8a1f2e-0000-4000-8000-000000000031, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+    UserNotFound:
+      description: Unknown user id
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: './common.yaml#/components/schemas/ApiError'
+              - properties:
+                  code: {const: NOT_FOUND}
+          example:
+            code: NOT_FOUND
+            message: USER_NOT_FOUND
+            errors: []
+            metadata: {request_id: 4c8a1f2e-0000-4000-8000-000000000032, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+    VersionConflict:
+      description: Stale expected_version (VERSION_CONFLICT) or an Idempotency-Key reused with another body (CONFLICT)
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: './common.yaml#/components/schemas/ApiError'
+              - properties:
+                  code: {enum: [VERSION_CONFLICT, CONFLICT]}
+          example:
+            code: VERSION_CONFLICT
+            message: STALE_VERSION
+            errors: []
+            metadata: {request_id: 4c8a1f2e-0000-4000-8000-000000000033, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
     Unauthorized:
       description: Generic authentication failure
       headers:
@@ -444,4 +574,61 @@ components:
       properties:
         code: {const: OK}
         data: {$ref: '#/components/schemas/Address'}
+        metadata: {$ref: './common.yaml#/components/schemas/Metadata'}
+    RolesChange:
+      allOf:
+        - $ref: './common.yaml#/components/schemas/ExpectedVersion'
+        - type: object
+          required: [roles, reason]
+          properties:
+            roles:
+              type: array
+              uniqueItems: true
+              items: {enum: [SUPER_ADMIN, OPS, FINANCE, MARKETING]}
+            reason: {type: string, minLength: 1, maxLength: 500}
+    LockRequest:
+      allOf:
+        - $ref: './common.yaml#/components/schemas/ExpectedVersion'
+        - type: object
+          required: [reason]
+          properties:
+            reason: {type: string, minLength: 1, maxLength: 500}
+    AdminUser:
+      description: version is auth_version; send it back as expected_version
+      type: object
+      required: [id, email, full_name, status, roles, version, created_at]
+      additionalProperties: false
+      properties:
+        id: {type: string, format: uuid}
+        email: {type: [string, 'null']}
+        full_name: {type: string}
+        status: {enum: [ACTIVE, LOCKED, INACTIVE]}
+        roles:
+          type: array
+          items: {enum: [SUPER_ADMIN, OPS, FINANCE, MARKETING]}
+        version: {type: integer, minimum: 0}
+        created_at: {type: string, format: date-time}
+    AdminUserResponse:
+      type: object
+      required: [code, data, metadata]
+      properties:
+        code: {const: OK}
+        data: {$ref: '#/components/schemas/AdminUser'}
+        metadata: {$ref: './common.yaml#/components/schemas/Metadata'}
+    AdminUserPageResponse:
+      type: object
+      required: [code, data, metadata]
+      properties:
+        code: {const: OK}
+        data:
+          type: object
+          required: [items, page, size, total]
+          additionalProperties: false
+          properties:
+            items:
+              type: array
+              items: {$ref: '#/components/schemas/AdminUser'}
+            page: {type: integer, minimum: 1}
+            size: {type: integer, minimum: 1, maximum: 100}
+            total: {type: integer, minimum: 0}
         metadata: {$ref: './common.yaml#/components/schemas/Metadata'}

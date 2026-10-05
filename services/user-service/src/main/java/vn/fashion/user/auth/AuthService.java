@@ -9,6 +9,7 @@ import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.dao.DuplicateKeyException;
@@ -81,7 +82,8 @@ public class AuthService {
             "user.events", userId.toString(), correlationId(),
             json.writeValueAsString(java.util.Map.of("user_id", userId.toString(), "locale", locale))));
         String refresh = newRefreshToken(userId, UUID.randomUUID());
-        return new Session(new UserView(userId, email, fullName, locale), accessTokens.issue(userId, 0), refresh);
+        return new Session(new UserView(userId, email, fullName, locale),
+            accessTokens.issue(userId, 0, List.of()), refresh);
       });
     } catch (DuplicateKeyException e) {
       throw new EmailTakenException();
@@ -89,16 +91,16 @@ public class AuthService {
   }
 
   public Session login(String email, String password) {
-    record Account(UUID id, String hash, String fullName, String locale, long authVersion, boolean locked) {
+    record Account(UUID id, String hash, String fullName, String locale, boolean locked) {
     }
     Optional<Account> account = jdbc.sql("""
-            select id, password_hash, full_name, locale, auth_version,
+            select id, password_hash, full_name, locale,
                    coalesce(locked_until > now(), false) as locked
             from users where email = :email and status = 'ACTIVE'
             """)
         .param("email", email)
         .query((rs, row) -> new Account(rs.getObject("id", UUID.class), rs.getString("password_hash"),
-            rs.getString("full_name"), rs.getString("locale"), rs.getLong("auth_version"), rs.getBoolean("locked")))
+            rs.getString("full_name"), rs.getString("locale"), rs.getBoolean("locked")))
         .optional();
     if (account.isEmpty() || account.get().locked() || account.get().hash() == null) {
       passwords.matches(password, dummyHash);
@@ -110,11 +112,16 @@ public class AuthService {
       throw new InvalidCredentialsException();
     }
     return tx.execute(status -> {
+      // Re-read under the account lock: an admin lock or role change since the password check wins.
+      // Login writes this row next, so it takes the write lock up front: two logins upgrading
+      // shared locks would deadlock.
+      long authVersion = lockActiveAccount(found.id(), "for no key update")
+          .orElseThrow(InvalidCredentialsException::new);
       jdbc.sql("update users set failed_login_attempts = 0, locked_until = null, updated_at = now() where id = :id")
           .param("id", found.id()).update();
       String refresh = newRefreshToken(found.id(), UUID.randomUUID());
       return new Session(new UserView(found.id(), email, found.fullName(), found.locale()),
-          accessTokens.issue(found.id(), found.authVersion()), refresh);
+          accessToken(found.id(), authVersion), refresh);
     });
   }
 
@@ -122,18 +129,25 @@ public class AuthService {
    * Rotate on use. A token that was already rotated or revoked is a replay: the whole family is
    * revoked and that revocation commits before the caller gets 401. Every write to a family
    * (rotation, replay revocation, logout) first takes the family lock, so a revocation never
-   * misses a token that a concurrent rotation is inserting.
+   * misses a token that a concurrent rotation is inserting. The account row is share-locked before
+   * the token row (same order as an admin lock), so a lock or role change waits for this rotation
+   * and then revokes or outdates what it produced.
    */
   public Session refresh(String rawToken) {
     enum Outcome { ROTATED, REPLAY, INVALID }
     record Result(Outcome outcome, Session session) {
     }
     Result result = tx.execute(status -> {
-      Optional<UUID> family = familyOf(rawToken);
-      if (family.isEmpty()) {
+      record Ref(UUID familyId, UUID userId) {
+      }
+      Optional<Ref> ref = jdbc.sql("select family_id, user_id from refresh_tokens where token_hash = :hash")
+          .param("hash", sha256(rawToken))
+          .query((rs, row) -> new Ref(rs.getObject(1, UUID.class), rs.getObject(2, UUID.class))).optional();
+      if (ref.isEmpty()) {
         return new Result(Outcome.INVALID, null);
       }
-      lockFamily(family.get());
+      lockFamily(ref.get().familyId());
+      Optional<Long> authVersion = lockActiveAccount(ref.get().userId(), "for share");
       record Token(UUID id, UUID userId, UUID familyId, boolean revoked, boolean expired) {
       }
       Optional<Token> token = jdbc.sql("""
@@ -155,14 +169,7 @@ public class AuthService {
       if (current.expired()) {
         return new Result(Outcome.INVALID, null);
       }
-      record Owner(long authVersion) {
-      }
-      Optional<Owner> owner = jdbc.sql("""
-              select auth_version from users
-              where id = :id and status = 'ACTIVE' and coalesce(locked_until <= now(), true)
-              """)
-          .param("id", current.userId()).query((rs, row) -> new Owner(rs.getLong(1))).optional();
-      if (owner.isEmpty()) {
+      if (authVersion.isEmpty()) {
         revokeFamily(current.familyId());
         return new Result(Outcome.INVALID, null);
       }
@@ -174,7 +181,7 @@ public class AuthService {
               """)
           .param("next", sha256(next)).param("id", current.id()).update();
       return new Result(Outcome.ROTATED,
-          new Session(null, accessTokens.issue(current.userId(), owner.get().authVersion()), next));
+          new Session(null, accessToken(current.userId(), authVersion.get()), next));
     });
     if (result.outcome() != Outcome.ROTATED) {
       throw new InvalidRefreshTokenException();
@@ -205,6 +212,29 @@ public class AuthService {
   private void lockFamily(UUID familyId) {
     jdbc.sql("select pg_advisory_xact_lock(hashtextextended(cast(:family as text), 0))")
         .param("family", familyId).query((rs, row) -> 1).list();
+  }
+
+  /**
+   * auth_version of an ACTIVE, unlocked account, locking its row until the transaction ends with
+   * {@code lockClause} ("for share" to only read it, "for no key update" when the row is written next).
+   */
+  private Optional<Long> lockActiveAccount(UUID userId, String lockClause) {
+    return jdbc.sql("""
+            select auth_version from users
+            where id = :id and status = 'ACTIVE' and coalesce(locked_until <= now(), true)
+            """ + lockClause)
+        .param("id", userId).query(Long.class).optional();
+  }
+
+  private String accessToken(UUID userId, long authVersion) {
+    List<String> permissions = jdbc.sql("""
+            select distinct p.code from user_roles ur
+            join role_permissions rp on rp.role_id = ur.role_id
+            join permissions p on p.id = rp.permission_id
+            where ur.user_id = :id order by p.code
+            """)
+        .param("id", userId).query(String.class).list();
+    return accessTokens.issue(userId, authVersion, permissions);
   }
 
   private void recordFailedLogin(UUID userId) {
@@ -247,7 +277,7 @@ public class AuthService {
     return span != null ? span.context().traceId() : UUID.randomUUID().toString().replace("-", "");
   }
 
-  static String sha256(String value) {
+  public static String sha256(String value) {
     try {
       return HexFormat.of().formatHex(
           MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
