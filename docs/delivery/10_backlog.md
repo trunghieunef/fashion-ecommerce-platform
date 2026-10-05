@@ -87,7 +87,11 @@ PLT-04/05, AWS/K3s/ECR/ArgoCD, provider sandbox và các task business Phase 1 k
   Phase 1A bắt đầu trước G0 theo quyết định ở 08). `services/user-service`: đăng ký, đăng nhập
   có khóa 15 phút, refresh xoay vòng + thu hồi family khi dùng lại, logout, `USER_CREATED` qua
   outbox; 16 test PostgreSQL thật; Gateway route `/api/v1/auth/**`; smoke chạy qua Gateway.
-  Còn (1b): quên/đặt lại/đổi mật khẩu + bàn giao secret, rate limit IP (Redis). USR-02 chưa bắt đầu.
+  Còn (1b): quên/đặt lại/đổi mật khẩu + bàn giao secret, rate limit IP (Redis); làm sau USR-02.
+- `TASK:USR-02` — **In progress, phần 2a** (2026-10-05, assignee Claude Code, reviewer chủ dự án).
+  `AccessTokenVerifier` (platform-security), `/users/me` GET/PUT, sổ địa chỉ với đúng một mặc định
+  (khóa dòng user), kiểm `auth_version`/status hiện tại; Gateway route `/api/v1/users/**`.
+  Còn (2b): seed role/permission theo 13 §2, admin đổi role/khóa, audit append-only, admin bootstrap.
 
 ## 2. Phase 0 — nền tảng
 

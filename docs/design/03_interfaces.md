@@ -70,7 +70,7 @@ Mutation cart/admin dùng expected_version; thiếu version bắt buộc trả 4
 | GET | /auth/social/{provider}/callback | Provider flow / 2 | verified identity → session hoặc yêu cầu link |
 | POST, DELETE | /users/me/social/{provider} | Member + reauth / 2 | Link có verified provider proof / unlink nếu còn phương thức đăng nhập |
 
-Contract thực thi của 4 endpoint register/login/refresh/logout (`TASK:USR-01` phần 1a): [`contracts/openapi/user.yaml`](../../contracts/openapi/user.yaml). Access token là JWT ES256 (`iss=user-service`, `aud=fashion-api`, `sub`, `auth_version`, `kid`), public key cấp cho verifier qua config (ADR-21). Cookie `refresh_token`: HttpOnly, Secure, SameSite=Strict, Path=/api/v1/auth, 30 ngày; dùng lại token đã xoay thì thu hồi cả family. Refresh token không nằm JSON response/localStorage. Guest có credential ngẫu nhiên do cart/order cấp bằng Secure HttpOnly cookie; lưu hash ở server.
+Contract thực thi của register/login/refresh/logout (`TASK:USR-01` phần 1a) và `/users/me` + địa chỉ (`TASK:USR-02` phần 2a): [`contracts/openapi/user.yaml`](../../contracts/openapi/user.yaml). `/users/me` cần Bearer; token có `auth_version` cũ hoặc tài khoản không còn ACTIVE trả 401 `INVALID_ACCESS_TOKEN`; địa chỉ của người khác trả 404. Access token là JWT ES256 (`iss=user-service`, `aud=fashion-api`, `sub`, `auth_version`, `kid`), public key cấp cho verifier qua config (ADR-21). Cookie `refresh_token`: HttpOnly, Secure, SameSite=Strict, Path=/api/v1/auth, 30 ngày; dùng lại token đã xoay thì thu hồi cả family. Refresh token không nằm JSON response/localStorage. Guest có credential ngẫu nhiên do cart/order cấp bằng Secure HttpOnly cookie; lưu hash ở server.
 
 ### 2.2 Catalog, cart và tương tác Phase 2
 

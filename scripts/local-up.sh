@@ -17,6 +17,14 @@ if ! grep -q '^USER_JWT_PRIVATE_KEY=.' "$ENV_FILE"; then
   key="$(openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 |
     openssl pkcs8 -topk8 -nocrypt -outform DER | base64 | tr -d '\r\n')"
   sed -i "s|^USER_JWT_PRIVATE_KEY=.*|USER_JWT_PRIVATE_KEY=$key|" "$ENV_FILE"
+  sed -i "s|^USER_JWT_PUBLIC_KEYS=.*|USER_JWT_PUBLIC_KEYS=|" "$ENV_FILE"
+fi
+# Verifier key (ADR-21) derived from the private key: kid:base64-X.509.
+if ! grep -q '^USER_JWT_PUBLIC_KEYS=.' "$ENV_FILE"; then
+  private="$(grep '^USER_JWT_PRIVATE_KEY=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r')"
+  kid="$(grep '^USER_JWT_KEY_ID=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r')"
+  public="$(printf '%s' "$private" | base64 -d | openssl pkey -inform DER -pubout -outform DER | base64 | tr -d '\r\n')"
+  sed -i "s|^USER_JWT_PUBLIC_KEYS=.*|USER_JWT_PUBLIC_KEYS=${kid:-user-local}:$public|" "$ENV_FILE"
 fi
 
 ./mvnw -q -DskipTests package
