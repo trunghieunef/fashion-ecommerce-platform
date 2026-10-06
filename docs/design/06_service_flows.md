@@ -119,6 +119,11 @@ flowchart LR
 
 Catalog quote nội bộ trả variants ACTIVE, phiên bản, giá cơ sở/override, tên/size/màu/ảnh/weight. Promotion chịu trách nhiệm giá campaign. Order tạo quote dùng thời hạn ngắn (baseline 2 phút) được server ký và ràng buộc actor, cart_version, items, địa chỉ, phương thức, tổng tiền; không chứa secret. Nếu giá/version thay đổi trước tạo order, trả PRICE_CHANGED kèm quote mới để khách xác nhận.
 
+CAT-01a tạo `VARIANT_CREATED` ngay khi tạo variant (không đợi publish): khóa product → insert
+variant → tăng product version → outbox → audit → kết quả idempotency trong cùng transaction.
+Payload giữ contract hiện có, `version` là version variant (0), aggregate_version là product
+version mới; retry cùng key không tạo event khác. Hiện intent PENDING, relay và INV-01 chưa có.
+
 ## 4. `cart-service`
 
 ```mermaid

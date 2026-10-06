@@ -22,9 +22,14 @@ Product admin đã có GET list (page/size/status), POST draft, GET/PUT theo id;
 kiểm version. Description VI/EN qua jsoup 1.23.2 Safelist.basic + h2/h3, link chỉ http/https,
 rel nofollow/noopener; giới hạn sau sanitize 20.000 ký tự. Giá VND bigint, từ chối JSON thập phân.
 
-Đây chưa phải acceptance đầy đủ của `TASK:CAT-01`: chưa có publish, variant mutation,
+Variant admin đã có POST `/products/{id}/variants` và PUT `/variants/{id}`: SKU/size/color/product
+bất biến, sửa price_override/weight/status với version. Tạo variant tăng product version và ghi
+đúng một `VARIANT_CREATED` PENDING tại `catalog.events`, key product_id, trong cùng transaction
+với variant, audit và kết quả idempotency. Chưa có relay/Kafka local; chưa có inventory consumer.
+
+Đây chưa phải acceptance đầy đủ của `TASK:CAT-01`: chưa có publish,
 collection/size-guide/media, filter/search public, cursor thật, cache hoặc Kafka. `next_cursor` luôn
-`null`; topics producer/consumer: **none trong S1**.
+`null`; producer intent `catalog.events` trong outbox, chưa publish; consumer: none.
 
 ## Chạy local
 

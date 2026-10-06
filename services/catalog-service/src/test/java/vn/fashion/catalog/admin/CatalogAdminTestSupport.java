@@ -114,4 +114,6 @@ public abstract class CatalogAdminTestSupport {
         "base_price", 100000L, "description_vi", "<p>Safe<strong>text</strong></p>", "tags", List.of("cotton")));
   }
   UUID createProduct(String slug) { return UUID.fromString(data(call("POST", "/products", productInput(slug)), 201).path("id").asText()); }
+  Map<String,Object> variantInput(String sku) { return new java.util.HashMap<>(Map.of("sku", sku, "size", "M", "color", "Blue", "weight_grams", 100)); }
+  JsonNode createVariant(UUID product, String sku) { return data(call("POST", "/products/" + product + "/variants", variantInput(sku)), 201); }
 }
