@@ -18,8 +18,12 @@ Endpoint trả các product `ACTIVE` theo `created_at DESC, id DESC`; `limit` m�
 `rejected_value`) và metadata đầy đủ. Header `X-Correlation-Id` bằng `trace_id` của
 response, kể cả lỗi validation.
 
-Đây chưa phải acceptance đầy đủ của `TASK:CAT-01`: chưa có product CRUD/publish, variant,
-category, filter/search, cursor thật, cache, auth hoặc Kafka. `next_cursor` luôn
+Product admin đã có GET list (page/size/status), POST draft, GET/PUT theo id; PUT giữ trạng thái,
+kiểm version. Description VI/EN qua jsoup 1.23.2 Safelist.basic + h2/h3, link chỉ http/https,
+rel nofollow/noopener; giới hạn sau sanitize 20.000 ký tự. Giá VND bigint, từ chối JSON thập phân.
+
+Đây chưa phải acceptance đầy đủ của `TASK:CAT-01`: chưa có publish, variant mutation,
+collection/size-guide/media, filter/search public, cursor thật, cache hoặc Kafka. `next_cursor` luôn
 `null`; topics producer/consumer: **none trong S1**.
 
 ## Chạy local

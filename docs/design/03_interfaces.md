@@ -184,7 +184,9 @@ HTTP 202 kèm Location=status_url và Retry-After. HTTP 201 khi đã WAITING_PAY
 
 Tất cả có Bearer + permission, auth_version hiện hành; mutation có reason/key/version khi áp dụng. Paths CRUD viết {id} là tài nguyên riêng, không có endpoint “...” ngầm.
 
-CAT-01a đang triển khai trên local: GET/POST categories/brands và PUT theo id tại catalog-service
+CAT-01a đang triển khai trên local: GET/POST categories/brands và PUT theo id, GET/POST products,
+GET/PUT products theo id tại catalog-service. Product POST tạo DRAFT; PUT chỉ sửa nội dung,
+description lưu HTML đã sanitize, tiền là bigint VND (không nhận số thập phân). Các endpoint
 cần `catalog.write` (OPS), POST có `Idempotency-Key`, PUT có `expected_version`.
 Token được kiểm bằng `AccessTokenVerifier`, không gọi user-service; thu hồi quyền trễ tối đa
 15 phút theo ADR-21. Gateway route và OpenAPI admin sẽ được bổ sung ở Task 6 của plan;

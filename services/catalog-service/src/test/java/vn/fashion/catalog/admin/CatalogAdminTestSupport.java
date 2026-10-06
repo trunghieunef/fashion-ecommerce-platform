@@ -109,4 +109,9 @@ public abstract class CatalogAdminTestSupport {
     return Map.of("name_vi", "Áo", "name_en", "Shirt", "slug", slug, "sort_order", 1);
   }
   UUID createCategory(String slug) { return UUID.fromString(data(call("POST", "/categories", category(slug)), 201).path("id").asText()); }
+  Map<String,Object> productInput(String slug) {
+    return new java.util.HashMap<>(Map.of("category_id", SEED, "name_vi", "Áo", "name_en", "Shirt", "slug", slug,
+        "base_price", 100000L, "description_vi", "<p>Safe<strong>text</strong></p>", "tags", List.of("cotton")));
+  }
+  UUID createProduct(String slug) { return UUID.fromString(data(call("POST", "/products", productInput(slug)), 201).path("id").asText()); }
 }

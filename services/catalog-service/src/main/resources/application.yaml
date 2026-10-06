@@ -6,6 +6,7 @@ spring:
     property-naming-strategy: SNAKE_CASE
     deserialization:
       fail-on-unknown-properties: false
+      accept-float-as-int: false
   application:
     name: catalog-service
   datasource:
