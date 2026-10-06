@@ -48,9 +48,9 @@ chuỗi login → token OPS. Slug/SKU ngẫu nhiên; dữ liệu smoke tích lũ
 Yêu cầu JDK 21 và Docker daemon mà user hiện tại được phép truy cập. Từ repo root:
 
 ```bash
-cp infra/local/.env.example infra/local/.env
-docker compose --env-file infra/local/.env -f infra/local/compose.yaml up -d postgres
+bash scripts/local-up.sh # sinh khóa local, tạo roles và chạy stack
 set -a; source infra/local/.env; set +a
+export CATALOG_JWT_PUBLIC_KEYS="$USER_JWT_PUBLIC_KEYS"
 ./mvnw -pl services/catalog-service spring-boot:run
 ```
 
@@ -91,7 +91,9 @@ Surefire chạy JVM test với `-Duser.timezone=UTC` để pgjdbc không gửi a
 (ví dụ `Asia/Saigon` trên Windows) mà PostgreSQL từ chối.
 Hai lệnh dùng Testcontainers PostgreSQL `17.11`; chúng cần Docker daemon khả dụng,
 không dùng H2 hoặc mock repository thay thế. Test kiểm tra migration, active-only
-query, limit, response envelope, readiness và runtime role không thể tạo table.
+query, limit, response envelope, readiness và runtime role không thể tạo table, cùng admin
+auth, version/SKU races, idempotency, sanitize, publish và rollback outbox/audit. CAT-01a local
+có 62 test catalog; tổng reactor và mutation tại [evidence](../../docs/evidence/cat-01a-local-2026-10-07.md).
 
 Sau khi service chạy:
 

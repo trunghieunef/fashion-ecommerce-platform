@@ -110,8 +110,8 @@ erDiagram
 
 | Bảng | Cột | Constraints / index |
 |---|---|---|
-| `categories` (T) | `id`, `parent_id uuid? FK categories`, `name_vi text`, `name_en text`, `slug text`, `sort_order int = 0`, `status varchar(32) = 'ACTIVE'` | UNIQUE slug; CHECK parent_id <> id; service chống chu kỳ và quá 2 cấp; ACTIVE/INACTIVE |
-| `brands` (T) | `id`, `name text`, `logo_url text?`, `status varchar(32) = 'ACTIVE'` | ACTIVE/INACTIVE |
+| `categories` (T) | `id`, `parent_id uuid? FK categories`, `name_vi text`, `name_en text`, `slug text`, `sort_order int = 0`, `status varchar(32) = 'ACTIVE'`, `version bigint = 0` | UNIQUE slug; CHECK parent_id <> id; service chống chu kỳ và quá 2 cấp; ACTIVE/INACTIVE; version guard |
+| `brands` (T) | `id`, `name text`, `logo_url text?`, `status varchar(32) = 'ACTIVE'`, `version bigint = 0` | ACTIVE/INACTIVE; version guard |
 | `products` (T) | `id`, `category_id uuid FK categories`, `brand_id uuid? FK brands`, `name_vi text`, `name_en text`, `slug text`, `description_vi text = ''`, `description_en text = ''`, `base_price bigint`, `tags text[] = '{}'`, `status varchar(32) = 'DRAFT'`, `published_at timestamptz?`, `version bigint = 0`, `sold_quantity bigint = 0` | UNIQUE slug; price/sold_quantity >= 0; DRAFT/ACTIVE/INACTIVE; indexes `(category_id, status, published_at, id)`, `(status, base_price, id)`, `(status, sold_quantity, id)` |
 | `product_variants` (T) | `id`, `product_id uuid FK products`, `sku varchar(64)`, `size text`, `color text`, `price_override bigint?`, `weight_grams int`, `status varchar(32) = 'ACTIVE'`, `version bigint = 0` | UNIQUE sku, `(product_id, size, color)`; price >= 0, weight > 0; ACTIVE/INACTIVE; SKU bất biến |
 | `product_images` | `id`, `product_id uuid FK products`, `variant_color text?`, `url text`, `thumb_url text`, `alt_vi text`, `alt_en text`, `sort_order int = 0` | Index `(product_id, sort_order)`; kiểm tra màu thuộc sản phẩm tại service |
@@ -128,6 +128,9 @@ product có category/brand, description, base_price, tags, published_at và sold
 variant có constraint SKU/product-size-color và trigger giữ bất biến sku/size/color/product_id.
 Migration gán sản phẩm sample vào category seed `uncategorized`
 (`00000000-0000-4000-8000-000000000001`), base_price 0, giữ trạng thái cũ.
+Product ACTIVE từ V001 có thể còn `published_at` null. Unpublish giữ giá trị cũ; chỉ publish
+đặt `coalesce(published_at, now())`. Backfill hoặc xử lý null khi sort/index theo published_at
+thuộc CAT-02; các index price/sold_quantity trong bảng là mục tiêu CAT-02, chưa có trong V002.
 Outbox/idempotency/audit thuộc catalog-db; audit runtime chỉ INSERT/SELECT. Collection,
 size-guide và media chưa có; đây chưa phải acceptance toàn bộ CAT-01.
 

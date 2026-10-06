@@ -150,4 +150,19 @@ Gate task là work package trong [backlog](../delivery/10_backlog.md). Mã task 
   luân phiên địa chỉ trong /64. Cần chốt /64, /56 hay giữ per-IP theo NAT/fairness và test
   topology thực; gom subnet thay đổi actor/quota nên không tự đưa vào bản sửa PR #12.
 
+- CAT-01a (2026-10-07, chủ dự án giao thực thi spec/plan đã duyệt): dùng jsoup **1.23.2**
+  (`Safelist.basic` + h2/h3, chỉ http/https, rel nofollow/noopener); JdbcClient và durability
+  primitives hiện có. Các điểm spec §10 được giữ để reviewer đối chiếu: size/color bất biến,
+  taxonomy version và list không phân trang, ngưng category không cascade, publish/unpublish
+  có key + version, seed uncategorized. Không mở rộng collection/size-guide, điều kiện ảnh,
+  CATALOG_CHANGED hoặc Kafka relay trong 1a.
+- Chủ dự án chốt trong phiên CAT-01a: record canonical nhận reason null, thiếu version trả 400;
+  chỉ publish đặt `published_at = coalesce(published_at, now())`, unpublish không sửa timestamp.
+  ACTIVE từ V001 có thể còn null; backfill/xử lý null cho sort/index để CAT-02.
+- Chủ dự án duyệt smoke OPS qua Gateway bằng JWT synthetic chỉ trong script local, ký bằng
+  khóa `.env` trong memory, ADR-21 ES256/kid/iss/aud, sub UUID mới, auth_version 0,
+  permissions chỉ catalog.write và exp ≤ 300 giây. Không sửa user DB; giữ 401/403 member thật.
+  Fixture slug/SKU ngẫu nhiên tích lũy vì không DELETE; smoke không chứng minh login → token OPS.
+  Chi tiết và giới hạn: [evidence CAT-01a](../evidence/cat-01a-local-2026-10-07.md).
+
 Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác và lý do; ảnh hưởng PRD/API/schema/test/task; người quyết định; ngày; link bằng chứng. Chưa có chữ ký phê duyệt giả định thương mại.

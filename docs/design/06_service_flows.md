@@ -128,6 +128,8 @@ Publish CAT-01a kiểm category/brand ACTIVE và ít nhất một variant ACTIVE
 dưới khóa product + version guard; key/reason/idempotency và audit theo spec đã duyệt.
 Điều kiện có ảnh hoãn tới CAT-03 theo quyết định chủ dự án ngày 2026-10-07; chưa đủ acceptance
 CAT-01. CATALOG_CHANGED/cache invalidation không nằm trong phần 1a.
+Publish đặt `published_at` lần đầu; unpublish không sửa cột này, kể cả ACTIVE legacy từ V001
+còn null. CAT-02 chốt backfill/xử lý null cho sort/index theo published_at.
 
 ## 4. `cart-service`
 

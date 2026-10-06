@@ -106,6 +106,13 @@ quota IP/email, normalization, expiry, concurrency, spoof header, Redis outage v
 Parent chưa Done; NOT-01/relay và reviewer nghiệm thu vẫn còn mở. Kiểm thử và giới hạn ở
 [evidence USR-01b-ii](../evidence/usr-01b-ii-local-2026-10-06.md).
 
+Update 2026-10-07: `TASK:CAT-01` — **In progress**, phần 1a catalog admin đã code và kiểm tra
+local trên `dev`, chờ review nhánh; REQ CAT-01/02, dependency PLT-02/03 và USR-02. Có taxonomy,
+product/variant, publish/unpublish, HTML sanitize, SKU immutable, version/idempotency/audit và
+VARIANT_CREATED durable outbox. Acceptance phần 1a và bằng chứng tại
+[evidence CAT-01a](../evidence/cat-01a-local-2026-10-07.md). Chưa Done: còn CAT-01b
+collection/size-guide, ảnh/publish gate CAT-03, reviewer nghiệm thu; relay/Kafka ngoài phạm vi 1a.
+
 ## 2. Phase 0 — nền tảng
 
 | Task | Owner role / ngày | Phụ thuộc | REQ | Đầu ra và acceptance |

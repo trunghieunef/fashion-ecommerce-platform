@@ -53,7 +53,7 @@ Mỗi loại dữ liệu có một tài liệu chủ quản như bảng trên. K
 2. Thay đổi nghiệp vụ: PO quyết định; đổi boundary/contract/schema: TL và producer/consumer cùng review.
 3. Cập nhật 08 trước hoặc cùng PR thay đổi; không dùng lại mã yêu cầu cũ cho nghĩa khác.
 4. OpenAPI/JSON Schema được tạo trong PLT-02 từ 03. Khi có code, contract thực thi và tài liệu phải cùng PR; CI kiểm tra drift.
-5. Trạng thái task: Planned, In progress, Review, Done, Blocked. S1-local được Codex (GPT-6) nghiệm thu theo chỉ định chủ dự án ngày 2026-10-04. Parent PLT-01/02/03, SEC-01 vẫn In progress; contract core đã review, durability/security được user-service dùng. Phase 1A có USR-01/02 và rate limit 1b-ii đang review; chưa có catalog đầy đủ/cart/checkout/UI auth-admin. Chưa nghiệm thu G0 hoặc PLT-04; O01/SEO/O02 ngoài S1 còn mở. Chi tiết ở 10/16 và evidence.
+5. Trạng thái task: Planned, In progress, Review, Done, Blocked. S1-local được Codex (GPT-6) nghiệm thu theo chỉ định chủ dự án ngày 2026-10-04. Parent PLT-01/02/03, SEC-01 vẫn In progress; contract core đã review, durability/security được user-service dùng. Phase 1A có USR-01/02 đã merge và catalog admin CAT-01a kiểm tra local trên dev; parent còn chờ nghiệm thu. [Handoff CAT-01a](superpowers/plans/2026-10-07-cat-01a-handoff.md) là bản mới nhất; còn catalog 1b/media, cart/checkout và UI auth-admin. Chưa nghiệm thu G0 hoặc PLT-04; O01/SEO/O02 ngoài S1 còn mở. Chi tiết ở 10/16 và evidence.
 6. Chỉ đánh dấu đã test/deploy/duyệt khi có bằng chứng, người xác nhận và ngày.
 
 ## 4. Thuật ngữ chung

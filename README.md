@@ -3,7 +3,7 @@
 Nền tảng bán lẻ thời trang một shop tại Việt Nam: React storefront/admin, 9 service Spring Boot, PostgreSQL, Kafka, Redis và Kubernetes.
 
 Repo có tài liệu, CI và nền tảng S1-local; Phase 1A đã có `user-service` (auth, profile/địa chỉ,
-RBAC/admin, mật khẩu và rate limit Redis), các thư viện durability/security, catalog mẫu,
+RBAC/admin, mật khẩu và rate limit Redis), các thư viện durability/security, catalog admin CAT-01a,
 Gateway và storefront shell. Có cấu hình AWS/GitOps chuẩn bị offline, chưa provision/deploy.
 USR-01/02 còn chờ nghiệm thu; catalog/cart/checkout và UI nghiệp vụ chưa hoàn thành.
 Các chỉ số tải là mục tiêu nghiệm thu, không phải kết quả đo.
