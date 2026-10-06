@@ -63,6 +63,23 @@ class RedisDownIntegrationTest {
   }
 
   @Test
+  void loginFailsClosedAndReadinessIsDownWhenRedisIsUnavailable() throws Exception {
+    int sessionsBefore = jdbc.queryForObject("select count(*) from refresh_tokens", Integer.class);
+    var response = post("/api/v1/auth/login", "{\"email\":\"unknown@example.test\",\"password\":\"Synthetic-pass-1\"}");
+    assertThat(response.statusCode()).isEqualTo(503);
+    assertThat(json.readTree(response.body()).path("code").asText()).isEqualTo("TEMPORARILY_UNAVAILABLE");
+    assertThat(jdbc.queryForObject("select count(*) from refresh_tokens", Integer.class)).isEqualTo(sessionsBefore);
+    var readiness = HttpClient.newHttpClient().send(HttpRequest.newBuilder(
+        URI.create("http://localhost:" + port + "/actuator/health/readiness")).GET().build(),
+        HttpResponse.BodyHandlers.ofString());
+    assertThat(readiness.statusCode()).isEqualTo(503);
+    var liveness = HttpClient.newHttpClient().send(HttpRequest.newBuilder(
+        URI.create("http://localhost:" + port + "/actuator/health/liveness")).GET().build(),
+        HttpResponse.BodyHandlers.ofString());
+    assertThat(liveness.statusCode()).isEqualTo(200);
+  }
+
+  @Test
   void forgotPasswordFailsClosedWithoutQueueingAnything() {
     var registered = post("/api/v1/auth/register", "{\"email\":\"down@example.test\",\"password\":\""
         + "Synthetic-pass-1\",\"full_name\":\"Synthetic Person\",\"locale\":\"vi\"}"); // gitleaks:allow synthetic

@@ -129,4 +129,12 @@ Gate task là work package trong [backlog](../delivery/10_backlog.md). Mã task 
   ADR-19 gửi bằng `Authorization: Bearer`; đổi mật khẩu thu hồi cả phiên hiện tại (client đăng nhập
   lại) và sai mật khẩu hiện tại tính vào ngưỡng khóa 5 lần; đặt lại mật khẩu xóa khóa đăng nhập sai.
 
+- USR-01b-ii (2026-10-06, chủ dự án duyệt thiết kế trong phiên): Gateway xác minh IP theo
+  proxy allowlist, xóa header client tự gửi; user-service chỉ tin IP từ Gateway được allowlist.
+  Local nginx ghi đè X-Forwarded-For bằng socket peer; Compose tin hostname `storefront` ở
+  Gateway và `gateway` ở user-service. Standalone mặc định không tin proxy nào. Chọn cửa sổ
+  cố định bắt đầu ở lần thử đầu, Lua Redis atomic, quota đã chốt ngày 2026-10-05;
+  429 + Retry-After, Redis lỗi fail closed 503 và readiness gồm Redis. Không đổi schema/event;
+  chưa triển khai các rate tier còn lại hay staging. USR-01 parent vẫn In progress chờ nghiệm thu.
+
 Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác và lý do; ảnh hưởng PRD/API/schema/test/task; người quyết định; ngày; link bằng chứng. Chưa có chữ ký phê duyệt giả định thương mại.

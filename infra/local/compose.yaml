@@ -99,6 +99,7 @@ services:
       USER_REDIS_PASSWORD: ${USER_REDIS_PASSWORD:?set USER_REDIS_PASSWORD}
       USER_SECRET_KEY: ${USER_SECRET_KEY:?run scripts/local-up.sh to generate USER_SECRET_KEY}
       USER_INTERNAL_CALLERS: ${USER_INTERNAL_CALLERS:-}
+      USER_TRUSTED_GATEWAYS: gateway
     depends_on:
       postgres:
         condition: service_healthy
@@ -116,6 +117,7 @@ services:
       # nacos-compat proof sets GATEWAY_CATALOG_BASE_URL=lb://catalog-service.
       CATALOG_BASE_URL: ${GATEWAY_CATALOG_BASE_URL:-http://catalog:8081}
       USER_BASE_URL: http://user-service:8082
+      GATEWAY_TRUSTED_PROXIES: storefront
       SPRING_PROFILES_ACTIVE: ${APP_PROFILES:-}
       NACOS_SERVER_ADDR: nacos:8848
       NACOS_USERNAME: ${NACOS_USERNAME:-nacos}

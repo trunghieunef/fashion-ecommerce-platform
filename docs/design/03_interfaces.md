@@ -36,6 +36,22 @@ Public list: limit mặc định 20, tối đa 100; cursor opaque gồm sort val
 
 Rate-limit khởi điểm: anonymous 60 rpm/IP; member 300 rpm/user; checkout 10 rpm/actor + IP; admin 60 rpm/user; flash-sale 5 rpm/actor. Poll trạng thái dùng tier đọc, không dùng tier checkout. Guest actor theo session đã xác minh; bổ sung phone/IP chống giữ hàng COD. Webhooks có ingress limit riêng không dùng limiter người mua.
 
+`TASK:USR-01b-ii` hiện thực riêng login/forgot (không thay nghiệm thu các tier chung trên): login
+20 request/300 giây/IP; forgot 20/3600 giây/IP và 5/3600 giây/email đã trim + lowercase.
+Cửa sổ bắt đầu ở request đầu; request bị giới hạn không kéo dài cửa sổ. `429 RATE_LIMITED`
+trả `Retry-After` giây làm tròn lên, body chung không nêu email/IP/tier; Redis lỗi →
+`503 TEMPORARILY_UNAVAILABLE`, không tạo phiên/token reset. IP quota kiểm trước validation
+field của body đã bind; JSON không bind được vẫn trả 400. Chưa có generic ingress limiter.
+
+IP dùng cho quota đi theo hop được xác minh: nginx ghi đè `X-Forwarded-For` bằng socket peer;
+Gateway chỉ nhận một IP literal từ header này nếu peer nằm trong `GATEWAY_TRUSTED_PROXIES`,
+xóa `Forwarded`, `X-Forwarded-For`, `X-Real-IP`, `X-Client-IP` từ request rồi đặt `X-Client-IP`.
+User-service chỉ nhận header đó từ `USER_TRUSTED_GATEWAYS`; peer không được tin, header thiếu,
+trùng hoặc không hợp lệ thì dùng socket peer. Allowlist rỗng mặc định; nhận IP literal hoặc
+hostname DNS nội bộ, không nhận wildcard/CIDR. Forwarded-header rewriting của server bị tắt
+để allowlist luôn xét peer thực. Khi deploy thêm ingress phải cấu hình hop tin cậy và kiểm lại
+spoofing; không tự tin mọi địa chỉ private.
+
 ### 1.3 Idempotency và version
 
 POST tạo order/payment/refund/reservation/shipment, inventory import/adjust, admin actions và cart merge/cleanup yêu cầu Idempotency-Key. Cart add cũng bắt buộc để retry không cộng quantity. PUT/DELETE có effect idempotent và version guard khi cần.

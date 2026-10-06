@@ -57,6 +57,13 @@ Luồng và state machine duy nhất ở [06](06_service_flows.md), constraints 
 | OTP challenge | 5 phút | Expire; fail closed khi thiếu auth store |
 | Rate limit | Theo cửa sổ từng route | Auth fail closed; browse degraded có giới hạn |
 
+USR-01b-ii hiện có Lua Redis atomic cho login IP và forgot IP/email trong user-service;
+cửa sổ/quota cấu hình được. IP đi qua nginx → Gateway → service với proxy allowlist
+theo 03 §1.2. Readiness user-service gồm DB + Redis vì login cần abuse controls;
+liveness không phụ thuộc Redis. Các tier browse/checkout/admin chưa hiện thực.
+Redis connect/command timeout mỗi loại 500ms, thấp hơn budget Gateway 2s để service kịp
+trả 503 chung khi kết nối mới hoặc command bị treo; không retry mutation tự động.
+
 Namespace Redis theo env + service; không đọc key của service khác để thay API. Stock/cache payload có version và observed_at; event cũ không làm lùi. Invalidation task phải durable; nếu TTL hết mà projection chưa cập nhật, query nguồn hoặc hiển thị unknown. Consumer không ACK rồi bỏ mất effect Redis.
 
 PostgreSQL mỗi DB một credential và Flyway history riêng; có thể dùng chung cluster. Backup base + WAL/PITR; restore từng DB phải đối soát saga/payment/outbox trước mở traffic. Query plan/index dựa workload thực; chưa sharding. Search ILIKE ban đầu, search nâng cao Phase 3.

@@ -88,8 +88,9 @@ PLT-04/05, AWS/K3s/ECR/ArgoCD, provider sandbox và các task business Phase 1 k
   refresh xoay vòng + thu hồi family khi dùng lại, logout, `USER_CREATED` qua outbox; Gateway route
   `/api/v1/auth/**`. 1b-i: đổi mật khẩu, quên/đặt lại mật khẩu (token một lần 30 phút, chỉ lưu
   hash), bàn giao secret mã hóa qua Redis 8.2.9 + `GET /internal/api/v1/users/notification-secrets/{id}`
-  (service token ADR-19, chỉ notification-service), `NOTIFY_RESET_PASSWORD` vào registry. Còn
-  (1b-ii): rate limit theo IP/email bằng Redis, 429 + `Retry-After`, fail closed. NOT-01 tiêu thụ event.
+  (service token ADR-19, chỉ notification-service), `NOTIFY_RESET_PASSWORD` vào registry.
+  (1b-ii) đã code, đang Review: rate limit theo IP/email bằng Redis, 429 + `Retry-After`, fail closed.
+  Còn reviewer nghiệm thu và NOT-01 tiêu thụ event.
 - `TASK:USR-02` — **In progress, 2a + 2b đã code** (2026-10-05, assignee Claude Code, reviewer chủ dự án).
   2a: `AccessTokenVerifier` (platform-security), `/users/me` GET/PUT, sổ địa chỉ với đúng một mặc
   định (khóa dòng user), kiểm `auth_version`/status hiện tại; Gateway route `/api/v1/users/**`.
@@ -97,6 +98,13 @@ PLT-04/05, AWS/K3s/ECR/ArgoCD, provider sandbox và các task business Phase 1 k
   `permissions` trong access token, `/admin/api/v1/users` (danh sách, đổi role, khóa) cần
   `user.manage`, admin bootstrap qua `USER_BOOTSTRAP_ADMIN_EMAIL`. Còn: UI admin (ADM-01), endpoint
   admin của service khác kiểm `permissions` khi được tạo; reviewer nghiệm thu.
+
+Update 2026-10-06: `TASK:USR-01b-ii` (thuộc `TASK:USR-01`) — **Review**; REQ: USR-03/05,
+XCT-02; dependency: PLT-02/03, SEC-01. Đã code Redis auth quotas, 429 + Retry-After,
+fail closed 503, proxy allowlist/IP handoff và readiness Redis. Acceptance của phần này:
+quota IP/email, normalization, expiry, concurrency, spoof header, Redis outage và liveness.
+Parent chưa Done; NOT-01/relay và reviewer nghiệm thu vẫn còn mở. Kiểm thử và giới hạn ở
+[evidence USR-01b-ii](../evidence/usr-01b-ii-local-2026-10-06.md).
 
 ## 2. Phase 0 — nền tảng
 

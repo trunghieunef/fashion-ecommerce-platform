@@ -2,7 +2,11 @@
 
 Nền tảng bán lẻ thời trang một shop tại Việt Nam: React storefront/admin, 9 service Spring Boot, PostgreSQL, Kafka, Redis và Kubernetes.
 
-Repo chứa tài liệu thiết kế, kế hoạch triển khai, CI tài liệu và nền tảng Sprint 1 (S1-local): `catalog-service` mẫu, Gateway, storefront shell và Compose local. Chưa có service nghiệp vụ nào khác, chưa có hạ tầng cloud. Các chỉ số tải là mục tiêu nghiệm thu, không phải kết quả đo.
+Repo có tài liệu, CI và nền tảng S1-local; Phase 1A đã có `user-service` (auth, profile/địa chỉ,
+RBAC/admin, mật khẩu và rate limit Redis), các thư viện durability/security, catalog mẫu,
+Gateway và storefront shell. Có cấu hình AWS/GitOps chuẩn bị offline, chưa provision/deploy.
+USR-01/02 còn chờ nghiệm thu; catalog/cart/checkout và UI nghiệp vụ chưa hoàn thành.
+Các chỉ số tải là mục tiêu nghiệm thu, không phải kết quả đo.
 
 Sprint 1 theo ADR-18 chỉ xây local-first MVP foundation: frontend shell → Gateway → service mẫu → PostgreSQL chạy được từ fresh clone. Không provision AWS hoặc tuyên bố toàn bộ business MVP/G0/G1/G2 hoàn thành trong Sprint 1.
 
@@ -33,8 +37,10 @@ ghi rõ các kiểm tra đã chạy và phần fresh-clone runtime bị mạng c
 [Fresh-clone review ngày 2026-10-04](docs/evidence/s1-local-2026-10-04.md) chạy đủ chuỗi trên Windows
 sau khi sửa lỗi timezone; S1-local đã được Codex (GPT-6) nghiệm thu theo chỉ định
 chủ dự án ngày 2026-10-04, với CI PASS trên patch `b62f963`. Đây không phải G0/G1/G2.
-Phase 0 local bắt đầu với [PLT-02 contracts](contracts/README.md); PLT-03 implementation
-chờ contract review theo dependency trong backlog.
+Contract core đã review; [platform-durability](services/platform-durability/README.md) được
+user-service dùng cho outbox/idempotency, nhưng chưa có relay Kafka/notification-service.
+Chi tiết phần auth đang review ở [User service](services/user-service/README.md).
+Tiến độ mới nhất và bước tiếp ở [handoff USR-01b-ii](docs/superpowers/plans/2026-10-06-usr-01b-ii-handoff.md).
 
 Chuyển sang máy mới: dùng [handoff S1-local](docs/superpowers/plans/2026-10-02-s1-local-machine-handoff.md)
 để tiếp tục đúng checklist và ghi evidence trên commit được pull từ `origin/dev`.

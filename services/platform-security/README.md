@@ -8,6 +8,7 @@ BOM (do Boot import); thư viện này kéo theo Nimbus JOSE.
 
 | Class | Việc làm |
 |---|---|
+| `ProxyClientIp` | Chuẩn hóa IP literal (IPv4/IPv6); chỉ nhận IP chuyển tiếp từ socket peer thuộc allowlist IP/hostname. Không tin chain/hostname trong header; DNS allowlist lỗi thì dùng peer |
 | `ServiceTokenIssuer` | Caller ký token ES256 bằng khóa riêng của mình: `iss = sub = kid =` tên service, `aud =` đúng một service đích, `exp = iat + 60s`, có `jti` |
 | `AccessTokenVerifier` | Kiểm access token member/admin (ADR-21): ES256 với public key cấu hình theo `kid` (`parseKeys("kid:base64,…")`, 2 kid khi xoay khóa), `iss=user-service`, `aud=fashion-api`, còn hạn, `iat` không ở tương lai, sống tối đa 15 phút, `sub` là UUID, có `auth_version` và `permissions` (mảng chuỗi, có thể rỗng). Chỉ nhận JWS. Trả `Actor(userId, authVersion, permissions)` hoặc rỗng; service vẫn tự kiểm permission code và ownership |
 | `ServiceTokenVerifier` | Service đích kiểm tra và từ chối mặc định: chỉ chấp nhận ES256, ký bằng public key được allowlist cho caller đó (theo `kid`/`iss`); `aud` phải chứa chính service này; `sub = iss`; còn hạn; `iat` không ở tương lai quá 5s, `exp > iat`, không sống quá TTL (lệch đồng hồ tối đa 5s). Chỉ nhận JWS: JWE và token không ký bị từ chối mà không ném lỗi. Trả về tên caller, hoặc rỗng nếu không hợp lệ |

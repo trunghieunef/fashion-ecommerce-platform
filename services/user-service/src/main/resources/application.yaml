@@ -1,5 +1,6 @@
 server:
   port: ${SERVER_PORT:8082}
+  forward-headers-strategy: none
 
 spring:
   application:
@@ -17,11 +18,13 @@ spring:
     locations: classpath:db/migration
   data:
     redis:
-      # USR-01b: short-lived encrypted secrets only; PostgreSQL stays the source of truth.
+      # USR-01b: auth quotas and encrypted ephemeral secrets; PostgreSQL owns business data.
       host: ${USER_REDIS_HOST:localhost}
       port: ${USER_REDIS_PORT:6379}
       password: ${USER_REDIS_PASSWORD:}
-      timeout: 2s
+      # Leave margin for the public Gateway's 2s response budget, including first connection.
+      connect-timeout: 500ms
+      timeout: 500ms
   jackson:
     # JSON names are snake_case (03 section 1.1).
     property-naming-strategy: SNAKE_CASE
@@ -40,6 +43,13 @@ fashion:
     secret-key: ${USER_SECRET_KEY}
     # ADR-19 callers of /internal: service:base64-X.509 entries; empty allows none.
     internal-callers: ${USER_INTERNAL_CALLERS:}
+    trusted-gateways: ${USER_TRUSTED_GATEWAYS:}
+    rate-limit:
+      login-limit: ${USER_LOGIN_RATE_LIMIT:20}
+      login-window-seconds: ${USER_LOGIN_RATE_WINDOW_SECONDS:300}
+      forgot-ip-limit: ${USER_FORGOT_IP_RATE_LIMIT:20}
+      forgot-email-limit: ${USER_FORGOT_EMAIL_RATE_LIMIT:5}
+      forgot-window-seconds: ${USER_FORGOT_RATE_WINDOW_SECONDS:3600}
 
 logging:
   structured:
@@ -62,4 +72,4 @@ management:
         liveness:
           include: livenessState
         readiness:
-          include: readinessState,db
+          include: readinessState,db,redis

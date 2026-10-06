@@ -2,10 +2,17 @@
 
 `TASK:SEC-01` · `REQ:USR-07`, `REQ:XCT-02`, `REQ:XCT-03`.
 
-Gateway là public ingress local của Sprint 1. Chỉ route
-`/api/v1/catalog/**` sang `CATALOG_BASE_URL`; không có catch-all route và không public
+Gateway route `/api/v1/catalog/**` sang `CATALOG_BASE_URL`, `/api/v1/auth/**`,
+`/api/v1/users/**`, `/admin/api/v1/users/**` sang `USER_BASE_URL`; không có catch-all route và không public
 `/internal/**`. Trước route, filter global với precedence cao nhất bỏ các header do browser
 có thể giả mạo: `X-User-Id`, `X-User-Roles`, `X-Actor-Id`, `X-Service-Name`.
+
+USR-01b-ii: filter cũng xóa `Forwarded`, `X-Forwarded-For`, `X-Real-IP`, `X-Client-IP`,
+rồi đặt `X-Client-IP` bằng socket peer. Chỉ khi peer thuộc `GATEWAY_TRUSTED_PROXIES` mới
+nhận một IP literal từ `X-Forwarded-For` (header thiếu/trùng/chain/hostname sai thì dùng peer).
+Allowlist nhận IP hoặc hostname nội bộ, không wildcard/CIDR; Compose tin `storefront`.
+nginx ghi đè forwarding header bằng `$remote_addr`. Server không tự rewrite socket peer;
+DNS allowlist resolve ngoài Netty event loop. Khi thêm ingress cần kiểm lại trust chain.
 
 CSRF (ADR-20): `CsrfOriginFilter` chỉ áp dụng cho request ghi (không phải GET/HEAD/OPTIONS/TRACE)
 **có cookie**. `Origin` phải nằm trong allowlist. Nếu không có `Origin` thì chỉ chấp nhận
@@ -35,6 +42,8 @@ timeout không được biến mutation thành retry hay thành công giả.
 |---|---|---|
 | `GATEWAY_PORT` | `8080` | Public listener local |
 | `CATALOG_BASE_URL` | `http://localhost:8081` | Catalog upstream trong default profile |
+| `USER_BASE_URL` | `http://localhost:8082` | User/auth/admin upstream; service tự kiểm quyền |
+| `GATEWAY_TRUSTED_PROXIES` | rỗng; Compose: `storefront` | IP/hostname proxy có thể cung cấp một `X-Forwarded-For`, cách nhau dấu phẩy |
 | `GATEWAY_MANAGEMENT_PORT` | `9080` | Actuator/health; chỉ trong container hoặc mạng nội bộ, không publish |
 | `GATEWAY_ALLOWED_ORIGINS` | `http://localhost:4173` | Origin được phép gửi request ghi kèm cookie, phân tách bằng dấu phẩy; để rỗng thì từ chối tất cả |
 

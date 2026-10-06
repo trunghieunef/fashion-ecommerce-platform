@@ -30,6 +30,11 @@ phục vụ route UI; `vite.config.ts` proxy riêng `/api` sang `VITE_GATEWAY_BA
 (mặc định `http://localhost:8080`) để API miss vẫn do Gateway trả HTTP 404, không bị rewrite
 thành `index.html`.
 
+USR-01b-ii: nginx ghi đè `X-Forwarded-For` bằng `$remote_addr` và xóa `X-Client-IP`,
+`Forwarded`, `X-Real-IP` từ client. Gateway chỉ tin header đó từ proxy allowlist
+(`storefront` trong Compose). Vite dev không thuộc allowlist mặc định: quota dùng IP
+kết nối của dev proxy; khi dùng dev server cho nhiều client cần cấu hình hop tin cậy riêng.
+
 ## Kiểm thử
 
 ```bash

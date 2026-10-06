@@ -1,5 +1,6 @@
 server:
   port: ${GATEWAY_PORT:8080}
+  forward-headers-strategy: none
 
 spring:
   application:
@@ -46,6 +47,7 @@ fashion:
   security:
     # ADR-20: browser origins allowed for cookie-authenticated mutations; empty = reject all.
     allowed-origins: ${GATEWAY_ALLOWED_ORIGINS:http://localhost:4173}
+    trusted-proxies: ${GATEWAY_TRUSTED_PROXIES:}
 
 management:
   # Actuator on its own port, never published or routed (SEC-01, before PLT-04).
