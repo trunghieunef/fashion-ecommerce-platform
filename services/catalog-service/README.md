@@ -27,7 +27,14 @@ bất biến, sửa price_override/weight/status với version. Tạo variant t�
 đúng một `VARIANT_CREATED` PENDING tại `catalog.events`, key product_id, trong cùng transaction
 với variant, audit và kết quả idempotency. Chưa có relay/Kafka local; chưa có inventory consumer.
 
-Đây chưa phải acceptance đầy đủ của `TASK:CAT-01`: chưa có publish,
+Publish/unpublish qua POST `/products/{id}/publish|unpublish` cần key + expected_version,
+reason tùy chọn ≤ 500. Publish DRAFT/INACTIVE → ACTIVE kiểm category/brand ACTIVE và có variant
+ACTIVE; thiếu điều kiện trả 400 và rollback. Unpublish ACTIVE → INACTIVE; cạnh khác 409.
+Published_at giữ mốc publish đầu. Điều kiện ảnh được chủ dự án hoãn tới CAT-03.
+Product ACTIVE từ V001 có thể còn `published_at` null: unpublish giữ null, publish lại mới đặt
+timestamp. Quyết định backfill hoặc xử lý null trong sort/index theo `published_at` thuộc CAT-02.
+
+Đây chưa phải acceptance đầy đủ của `TASK:CAT-01`: còn
 collection/size-guide/media, filter/search public, cursor thật, cache hoặc Kafka. `next_cursor` luôn
 `null`; producer intent `catalog.events` trong outbox, chưa publish; consumer: none.
 

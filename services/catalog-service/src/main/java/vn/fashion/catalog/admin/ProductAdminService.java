@@ -22,6 +22,8 @@ public class ProductAdminService {
   public record ProductPage(List<Product> items, int page, int size, long total) { }
   public record Input(UUID categoryId, UUID brandId, String nameVi, String nameEn, String slug,
       String descriptionVi, String descriptionEn, Long basePrice, List<String> tags, Long expectedVersion) { }
+  public record StatusInput(Long expectedVersion, String reason) { }
+  public record StatusChange(UUID productId, String operation, Long expectedVersion, String reason) { }
   private final JdbcClient jdbc;
   private final DataSource source;
   private final AdminCommands commands;
@@ -102,6 +104,35 @@ public class ProductAdminService {
     return commands.update(() -> {
       var before = lockForUpdate(id); AdminCommands.requireVersion(r.expectedVersion(), before.version());
       var p = write(id, r, false); audit.record(actor, "catalog.product.update", "product", id, null, before, p); return p;
+    });
+  }
+  AdminCommands.Replay changeStatus(UUID actor, UUID id, String operation, String key, StatusInput input) {
+    var errors = new ArrayList<Api.FieldError>();
+    if (input.expectedVersion() == null) errors.add(new Api.FieldError("expected_version", "is required"));
+    if (input.reason() != null && input.reason().length() > 500) errors.add(new Api.FieldError("reason", "maximum 500 characters"));
+    TaxonomyService.valid(errors);
+    var request = new StatusChange(id, operation, input.expectedVersion(), TaxonomyService.strip(input.reason()));
+    return commands.create(actor, "catalog.product." + operation + ":" + id, key, request, () -> {
+      var before = lockForUpdate(id); AdminCommands.requireVersion(request.expectedVersion(), before.version());
+      boolean publish = "publish".equals(operation);
+      if (publish ? "ACTIVE".equals(before.status()) : !"ACTIVE".equals(before.status()))
+        throw new Api.Problem(org.springframework.http.HttpStatus.CONFLICT, "CONFLICT", "INVALID_TRANSITION", List.of());
+      if (publish) {
+        var invalid = new ArrayList<Api.FieldError>();
+        TaxonomyService.text(invalid, "name_vi", before.nameVi(), 255); TaxonomyService.text(invalid, "name_en", before.nameEn(), 255);
+        if (!jdbc.sql("select exists(select 1 from categories where id=:id and status='ACTIVE')").param("id", before.categoryId()).query(Boolean.class).single())
+          invalid.add(new Api.FieldError("category_id", "category must be ACTIVE"));
+        if (before.brandId() != null && !jdbc.sql("select exists(select 1 from brands where id=:id and status='ACTIVE')").param("id", before.brandId()).query(Boolean.class).single())
+          invalid.add(new Api.FieldError("brand_id", "brand must be ACTIVE"));
+        if (!jdbc.sql("select exists(select 1 from product_variants where product_id=:id and status='ACTIVE')").param("id", id).query(Boolean.class).single())
+          invalid.add(new Api.FieldError("variants", "at least one ACTIVE variant is required"));
+        TaxonomyService.valid(invalid);
+      }
+      jdbc.sql("update products set status=:status,version=version+1,updated_at=now()"
+          + (publish ? ",published_at=coalesce(published_at,now())" : "") + " where id=:id")
+          .param("status", publish ? "ACTIVE" : "INACTIVE").param("id", id).update();
+      var result = load(id); audit.record(actor, "catalog.product." + operation, "product", id, request.reason(), before, result);
+      return new AdminCommands.Result(id, 200, result);
     });
   }
 }

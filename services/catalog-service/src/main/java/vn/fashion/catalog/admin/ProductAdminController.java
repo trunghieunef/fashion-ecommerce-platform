@@ -38,4 +38,16 @@ public class ProductAdminController {
       @PathVariable UUID id, @RequestBody ProductAdminService.Input input) {
     UUID actor = auth.requireCatalogWriter(authorization); return Api.ok(HttpStatus.OK, service.update(actor, id, service.normalize(input, false)), tracer);
   }
+  @PostMapping("/{id}/publish") public ResponseEntity<Api.Response<JsonNode>> publish(@RequestHeader(value="Authorization", required=false) String authorization,
+      @RequestHeader(value="Idempotency-Key", required=false) String key, @PathVariable UUID id, @RequestBody ProductAdminService.StatusInput input) {
+    UUID actor = auth.requireCatalogWriter(authorization);
+    var result = service.changeStatus(actor, id, "publish", key, input);
+    return Api.ok(HttpStatus.valueOf(result.status()), result.data(), tracer);
+  }
+  @PostMapping("/{id}/unpublish") public ResponseEntity<Api.Response<JsonNode>> unpublish(@RequestHeader(value="Authorization", required=false) String authorization,
+      @RequestHeader(value="Idempotency-Key", required=false) String key, @PathVariable UUID id, @RequestBody ProductAdminService.StatusInput input) {
+    UUID actor = auth.requireCatalogWriter(authorization);
+    var result = service.changeStatus(actor, id, "unpublish", key, input);
+    return Api.ok(HttpStatus.valueOf(result.status()), result.data(), tracer);
+  }
 }

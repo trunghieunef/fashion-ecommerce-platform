@@ -124,6 +124,11 @@ variant → tăng product version → outbox → audit → kết quả idempoten
 Payload giữ contract hiện có, `version` là version variant (0), aggregate_version là product
 version mới; retry cùng key không tạo event khác. Hiện intent PENDING, relay và INV-01 chưa có.
 
+Publish CAT-01a kiểm category/brand ACTIVE và ít nhất một variant ACTIVE, tên VI/EN bắt buộc,
+dưới khóa product + version guard; key/reason/idempotency và audit theo spec đã duyệt.
+Điều kiện có ảnh hoãn tới CAT-03 theo quyết định chủ dự án ngày 2026-10-07; chưa đủ acceptance
+CAT-01. CATALOG_CHANGED/cache invalidation không nằm trong phần 1a.
+
 ## 4. `cart-service`
 
 ```mermaid

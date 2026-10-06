@@ -236,6 +236,7 @@ Lưu ý: `ProductQueryIntegrationTest` insert product không có `category_id`/`
 @Test void publishWithoutActiveVariantIs400AndStaysDraft()   // errors chứa field "variants"; status DRAFT; version 0
 @Test void publishWithInactiveCategoryOrBrandIs400()         // field "category_id" / "brand_id"
 @Test void publishSetsActiveAndPublishedAtOnce()             // 200 ACTIVE, published_at != null; unpublish → INACTIVE; publish lại → published_at không đổi
+@Test void legacyActiveWithoutPublishedAtKeepsNullUntilRepublished() // ACTIVE legacy/null → unpublish INACTIVE/null → publish ACTIVE/timestamp được đặt
 @Test void publishAfterLastVariantDeactivatedIs400()         // variant ACTIVE → PUT INACTIVE → publish 400
 @Test void invalidTransitionIs409()                          // unpublish DRAFT → 409 CONFLICT INVALID_TRANSITION; publish ACTIVE (key mới) → 409
 @Test void publishNeedsVersionAndKey()                       // thiếu expected_version 400 field expected_version (không 500); stale 409 VERSION_CONFLICT; thiếu key 400
@@ -246,7 +247,7 @@ Lưu ý: `ProductQueryIntegrationTest` insert product không có `category_id`/`
 
 - [ ] **Step 2: Chạy, đỏ.**
 
-- [ ] **Step 3: Implement.** Canonical request = record `StatusChange(UUID productId, String operation, Long expectedVersion, String reason)` (nhận null; không dùng `List.of`/`Map.of` vì ném NPE với null → 500). Trước `AdminCommands.create`: `expected_version` null → 400 field `expected_version`, `reason` > 500 → 400 (không chạm idempotency). `reason` null hợp lệ. Thứ tự trong transaction: `lockForUpdate` → `requireVersion` → kiểm cạnh (409 `INVALID_TRANSITION`) → (publish) kiểm điều kiện: `name_vi/name_en` không rỗng, category ACTIVE, brand null hoặc ACTIVE, `exists(variant ACTIVE)` → 400 gom lý do → update `status`, `published_at = coalesce(published_at, now())`, `version+1` → audit. `reason` ≤ 500.
+- [ ] **Step 3: Implement.** Canonical request = record `StatusChange(UUID productId, String operation, Long expectedVersion, String reason)` (nhận null; không dùng `List.of`/`Map.of` vì ném NPE với null → 500). Trước `AdminCommands.create`: `expected_version` null → 400 field `expected_version`, `reason` > 500 → 400 (không chạm idempotency). `reason` null hợp lệ. Thứ tự trong transaction: `lockForUpdate` → `requireVersion` → kiểm cạnh (409 `INVALID_TRANSITION`) → (publish) kiểm điều kiện: `name_vi/name_en` không rỗng, category ACTIVE, brand null hoặc ACTIVE, `exists(variant ACTIVE)` → 400 gom lý do → update `status`, `version+1`; chỉ publish đặt `published_at = coalesce(published_at, now())`, unpublish không sửa `published_at` → audit. `reason` ≤ 500.
 
 - [ ] **Step 4: Xanh module.**
 
