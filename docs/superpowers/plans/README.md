@@ -12,6 +12,7 @@ Bộ kế hoạch này chuyển baseline B1 thành các gói triển khai tuần
 | — | [Handoff Phase 0/1A — cuối ngày 2026-10-05](2026-10-05-phase-1a-handoff.md) | PR #9 mở (USR-02a), trạng thái USR-01/02, PLT-04/05, bước tiếp USR-02b → USR-01b | Không thay gate |
 | — | [Handoff Phase 1A — 2026-10-06](2026-10-06-phase-1a-handoff.md) | Đã merge tới PR #11 (USR-01 1a + 1b-i, USR-02 2a + 2b); đã được thay bởi handoff USR-01b-ii bên dưới | Không thay gate |
 | — | [Handoff USR-01b-ii — 2026-10-06](2026-10-06-usr-01b-ii-handoff.md) | Auth rate limit/IP trust, evidence local, PR chờ review và bước tiếp CAT-01 | Không thay gate |
+| — | [Handoff phiên làm việc — 2026-10-07](2026-10-07-session-handoff.md) | **Mới nhất.** `main` = `dev` sau PR #13; USR-01/02 đã merge; mục mở cần chủ dự án; bước tiếp CAT-01 | Không thay gate |
 | 2 | [Phase 0 — platform và AWS staging](2026-09-19-phase-0-platform-staging.md) | Contract core, durable primitives, CI ứng dụng, AWS staging một service mẫu, observability và rollback | G0 |
 | 3 | [Phase 1A — commerce core](2026-09-19-phase-1a-commerce-core.md) | Identity, catalog, inventory, cart và UI cơ bản chạy bằng contract thật | Integration checkpoint |
 | 4 | [Phase 1B — COD vertical slice](2026-09-19-phase-1b-cod-vertical-slice.md) | Guest/member checkout COD, SELF fulfillment, notification, admin và settlement | G1 |
