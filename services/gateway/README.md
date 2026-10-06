@@ -47,6 +47,13 @@ timeout không được biến mutation thành retry hay thành công giả.
 | `GATEWAY_MANAGEMENT_PORT` | `9080` | Actuator/health; chỉ trong container hoặc mạng nội bộ, không publish |
 | `GATEWAY_ALLOWED_ORIGINS` | `http://localhost:4173` | Origin được phép gửi request ghi kèm cookie, phân tách bằng dấu phẩy; để rỗng thì từ chối tất cả |
 
+Header không được đưa vào DNS. Chỉ lookup hostname proxy do operator cấu hình và chỉ
+offload sang `boundedElastic` khi có đúng một forwarded header với allowlist cần DNS;
+không có header, allowlist rỗng hoặc toàn literal thì giữ trên calling thread. Không thể
+biết peer thuộc hostname allowlist trước lookup nên lookup đó vẫn phải offload.
+Socket peer IPv6 có zone được chuẩn hóa; nếu remote/address không có, xóa identity/IP
+header và không đặt `X-Client-IP`, service dùng socket peer của hop Gateway thay vì tin client.
+
 Observability (PLT-05, phần local):
 
 - Trace W3C: Gateway tạo `traceparent` nếu client chưa gửi, nếu có thì tiếp nối, và chuyển

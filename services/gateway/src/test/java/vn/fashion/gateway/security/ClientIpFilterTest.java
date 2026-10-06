@@ -1,6 +1,7 @@
 package vn.fashion.gateway.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 import java.net.InetSocketAddress;
 import java.util.concurrent.atomic.AtomicReference;
@@ -40,15 +41,44 @@ class ClientIpFilterTest {
     }
   }
 
+  @Test
+  void missingSocketPeerStripsForgedIdentityWithoutInventingAClientIp() {
+    var request = MockServerHttpRequest.post("/api/v1/auth/login")
+        .header("X-Client-IP", "203.0.113.7").header("X-Forwarded-For", "203.0.113.7")
+        .header("X-User-Id", "spoofed").build();
+    var result = assertDoesNotThrow(() -> forwardRequest(request));
+    for (String header : new String[]{"X-Client-IP", "X-Forwarded-For", "X-User-Id"}) {
+      assertThat(result.getRequest().getHeaders().containsHeader(header)).isFalse();
+    }
+  }
+
+  @Test
+  void requestsWithoutForwardedHeadersStayOnTheCallingThread() {
+    var request = MockServerHttpRequest.get("/api/v1/catalog/products")
+        .remoteAddress(new InetSocketAddress("127.0.0.1", 1234)).build();
+    Thread caller = Thread.currentThread();
+    var chainThread = new AtomicReference<Thread>();
+    filter.filter(MockServerWebExchange.from(request), exchange -> {
+      chainThread.set(Thread.currentThread());
+      assertThat(exchange.getRequest().getHeaders().getFirst("X-Client-IP")).isEqualTo("127.0.0.1");
+      return Mono.empty();
+    }).block();
+    assertThat(chainThread.get()).isSameAs(caller);
+  }
+
   private String forward(String peer, String... forwarded) {
     var request = MockServerHttpRequest.post("/api/v1/auth/login")
         .remoteAddress(new InetSocketAddress(peer, 1234))
         .header("X-Forwarded-For", forwarded).header("X-Client-IP", "198.51.100.7").build();
+    return forwardRequest(request).getRequest().getHeaders().getFirst("X-Client-IP");
+  }
+
+  private ServerWebExchange forwardRequest(MockServerHttpRequest request) {
     var result = new AtomicReference<ServerWebExchange>();
     filter.filter(MockServerWebExchange.from(request), exchange -> {
       result.set(exchange);
       return Mono.empty();
     }).block();
-    return result.get().getRequest().getHeaders().getFirst("X-Client-IP");
+    return result.get();
   }
 }

@@ -19,9 +19,12 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -65,6 +68,7 @@ class RateLimitIntegrationTest {
     r.add("USER_JWT_PUBLIC_KEYS", () -> "user-local:" + Base64.getEncoder().encodeToString(KEY.getPublic().getEncoded()));
     r.add("USER_REDIS_HOST", redis::getHost);
     r.add("USER_REDIS_PORT", () -> redis.getMappedPort(6379));
+    r.add("fashion.environment", () -> "rate-test");
   }
 
   @BeforeEach
@@ -113,7 +117,7 @@ class RateLimitIntegrationTest {
           .isInstanceOf(AuthService.InvalidCredentialsException.class);
     }
     assertThatThrownBy(() -> controller.login(credentials, request)).isInstanceOf(AuthRateLimiter.Limited.class);
-    assertThat(counters.keys("user:rate:login:*")).hasSize(3);
+    assertThat(counters.keys("rate-test:user:rate:login:*")).hasSize(3);
   }
 
   @Test
@@ -121,7 +125,7 @@ class RateLimitIntegrationTest {
     for (int i = 0; i < 20; i++) {
       assertThat(post("/login", "{}", "198.51.100.7").statusCode()).isEqualTo(401);
     }
-    var keys = counters.keys("user:rate:*");
+    var keys = counters.keys("rate-test:user:rate:*");
     assertThat(keys).hasSize(1);
     String key = keys.iterator().next();
     assertThat(counters.getExpire(key, TimeUnit.MILLISECONDS)).isBetween(1L, 300_000L);
@@ -154,7 +158,7 @@ class RateLimitIntegrationTest {
       assertThat(blocked.body()).doesNotContain(email, "known", "unknown");
     }
     assertThat(jdbc.queryForObject("select count(*) from user_action_tokens", Integer.class)).isEqualTo(5);
-    assertThat(counters.keys("user:rate:*")).allSatisfy(key ->
+    assertThat(counters.keys("rate-test:user:rate:*")).allSatisfy(key ->
         assertThat(key).doesNotContain("@", "known", "unknown", "127.0.0.1"));
   }
 
@@ -165,6 +169,46 @@ class RateLimitIntegrationTest {
     }
     limited(forgot("another@example.test"), 3600);
     assertThat(jdbc.queryForObject("select count(*) from user_action_tokens", Integer.class)).isZero();
+  }
+
+  @Test
+  void bucketKeysAreNotDictionaryHashesOfClientIdentity() {
+    assertThat(post("/login", "{}", "198.51.100.7").statusCode()).isEqualTo(401);
+    String key = counters.keys("*").iterator().next();
+    assertThat(key).doesNotEndWith(AuthService.sha256("127.0.0.1"));
+    assertThat(key).doesNotEndWith(AuthService.sha256("0:0:0:0:0:0:0:1"));
+  }
+
+  @Test
+  void bucketKeysUseTheConfiguredEnvironment() {
+    assertThat(post("/login", "{}", "198.51.100.7").statusCode()).isEqualTo(401);
+    assertThat(counters.keys("rate-test:user:rate:login:ip:*")).hasSize(1);
+  }
+
+  @Test
+  void differentEnvironmentsAndSecretKeysHaveIndependentQuotas() {
+    byte[] firstKey = new byte[32], secondKey = new byte[32];
+    secondKey[0] = 1;
+    var first = new AuthRateLimiter(counters, 20, 300, 20, 5, 3600, "isolation-a",
+        Base64.getEncoder().encodeToString(firstKey));
+    var otherEnvironment = new AuthRateLimiter(counters, 20, 300, 20, 5, 3600, "isolation-b",
+        Base64.getEncoder().encodeToString(firstKey));
+    var otherSecret = new AuthRateLimiter(counters, 20, 300, 20, 5, 3600, "isolation-a",
+        Base64.getEncoder().encodeToString(secondKey));
+    for (int i = 0; i < 20; i++) first.login("203.0.113.7");
+    assertThatThrownBy(() -> first.login("203.0.113.7")).isInstanceOf(AuthRateLimiter.Limited.class);
+    org.assertj.core.api.Assertions.assertThatCode(() -> otherEnvironment.login("203.0.113.7"))
+        .doesNotThrowAnyException();
+    org.assertj.core.api.Assertions.assertThatCode(() -> otherSecret.login("203.0.113.7"))
+        .doesNotThrowAnyException();
+    assertThat(counters.keys("*:user:rate:login:ip:*")).hasSize(3);
+  }
+
+  @Test
+  @ExtendWith(OutputCaptureExtension.class)
+  void emptyGatewayAllowlistWarnsThatQuotaWillUseSocketPeers(CapturedOutput output) {
+    new AuthController(null, null, null, null, limits, "");
+    assertThat(output.getAll()).contains("WARN", "USER_TRUSTED_GATEWAYS");
   }
 
   private void limited(HttpResponse<String> response, int maxSeconds) {

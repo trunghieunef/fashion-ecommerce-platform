@@ -30,6 +30,7 @@ spring:
     property-naming-strategy: SNAKE_CASE
 
 fashion:
+  environment: ${FASHION_ENV:local}
   user:
     jwt:
       # Base64 PKCS#8 EC P-256 private key; no default so the service fails closed without it.
@@ -39,7 +40,7 @@ fashion:
       public-keys: ${USER_JWT_PUBLIC_KEYS}
     # Email of an already registered account to make the first SUPER_ADMIN; ignored once one exists.
     bootstrap-admin-email: ${USER_BOOTSTRAP_ADMIN_EMAIL:}
-    # Base64 AES-256 key encrypting reset tokens in Redis; no default so the service fails closed.
+    # Base64 AES-256 master: reset-token encryption and a derived HMAC key for auth quota identity.
     secret-key: ${USER_SECRET_KEY}
     # ADR-19 callers of /internal: service:base64-X.509 entries; empty allows none.
     internal-callers: ${USER_INTERNAL_CALLERS:}

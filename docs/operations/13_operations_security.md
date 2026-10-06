@@ -182,6 +182,12 @@ Redis connect/command timeout hiện là 500ms, Gateway response budget 2s. Sau 
 `bash scripts/smoke-auth-redis-timeout.sh` pause Redis local, kiểm public login/forgot 503,
 readiness 503/liveness 200, DB không đổi và readiness phục hồi; script unpause khi exit.
 Chỉ chạy trên stack local không có traffic người dùng; không áp dụng script này lên staging/production.
+Quota keys có env + service + HMAC; mọi replica phải đồng bộ `FASHION_ENV`/`USER_SECRET_KEY`.
+Đổi namespace hoặc master tạo quota mới; không purge key cũ để che lỗi, chúng tự hết TTL.
+HMAC giảm dò từ điển nhưng key vẫn là pseudonym; giữ Redis private/auth và env isolation.
+Master cũng mã hóa secret reset: trước rotation phải xét secret đang chờ, không chỉ limiter.
+Readiness Redis hiện được giữ theo thiết kế local đã duyệt. Trước manifest user-service K8s
+phải chốt tác động rút pod tới refresh/profile/admin và phương án health riêng tại 08.
 
 ### RB-05 — Carrier lỗi hoặc hàng hoàn
 

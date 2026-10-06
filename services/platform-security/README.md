@@ -8,7 +8,7 @@ BOM (do Boot import); thư viện này kéo theo Nimbus JOSE.
 
 | Class | Việc làm |
 |---|---|
-| `ProxyClientIp` | Chuẩn hóa IP literal (IPv4/IPv6); chỉ nhận IP chuyển tiếp từ socket peer thuộc allowlist IP/hostname. Không tin chain/hostname trong header; DNS allowlist lỗi thì dùng peer |
+| `ProxyClientIp` | Chuẩn hóa IP literal (IPv4/IPv6); chỉ parse header sau khi peer thuộc allowlist IP/hostname. IPv4 kiểm octet 0..255, không đưa header vào DNS; loại zone của socket peer, từ chối zone trong header. DNS chỉ dành cho hostname operator cấu hình, lỗi thì dùng peer |
 | `ServiceTokenIssuer` | Caller ký token ES256 bằng khóa riêng của mình: `iss = sub = kid =` tên service, `aud =` đúng một service đích, `exp = iat + 60s`, có `jti` |
 | `AccessTokenVerifier` | Kiểm access token member/admin (ADR-21): ES256 với public key cấu hình theo `kid` (`parseKeys("kid:base64,…")`, 2 kid khi xoay khóa), `iss=user-service`, `aud=fashion-api`, còn hạn, `iat` không ở tương lai, sống tối đa 15 phút, `sub` là UUID, có `auth_version` và `permissions` (mảng chuỗi, có thể rỗng). Chỉ nhận JWS. Trả `Actor(userId, authVersion, permissions)` hoặc rỗng; service vẫn tự kiểm permission code và ownership |
 | `ServiceTokenVerifier` | Service đích kiểm tra và từ chối mặc định: chỉ chấp nhận ES256, ký bằng public key được allowlist cho caller đó (theo `kid`/`iss`); `aud` phải chứa chính service này; `sub = iss`; còn hạn; `iat` không ở tương lai quá 5s, `exp > iat`, không sống quá TTL (lệch đồng hồ tối đa 5s). Chỉ nhận JWS: JWE và token không ký bị từ chối mà không ném lỗi. Trả về tên caller, hoặc rỗng nếu không hợp lệ |
@@ -53,6 +53,10 @@ field MDC hoặc SLF4J key-value có tên nhạy cảm (`password`, `token`, `ot
 họ tên hay địa chỉ trong text tự do.
 
 ## Giới hạn
+
+`ProxyClientIpTest` dùng child JVM với `jdk.net.hosts.file` test-only để ánh xạ IPv4 sai
+octet thành hostname có địa chỉ; regression phải từ chối dù resolver có trả lời.
+Không gọi DNS public và không thay resolver của JVM chạy các test khác.
 
 - Token người dùng do user-service phát hành (ADR-21); thư viện này chỉ verify, không có JWKS.
   Quyền trong `permissions` có thể cũ tối đa 15 phút với service không phải user-service.

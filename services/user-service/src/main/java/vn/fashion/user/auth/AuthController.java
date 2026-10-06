@@ -8,6 +8,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Value;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
@@ -28,6 +30,7 @@ import vn.fashion.platform.security.ProxyClientIp;
 @RequestMapping("/api/v1/auth")
 public class AuthController {
   static final String REFRESH_COOKIE = "refresh_token";
+  private static final Logger LOG = LoggerFactory.getLogger(AuthController.class);
   private static final Pattern EMAIL = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
   private static final Set<String> LOCALES = Set.of("vi", "en");
 
@@ -46,6 +49,9 @@ public class AuthController {
     this.tracer = tracer;
     this.limits = limits;
     this.clientIp = new ProxyClientIp(gateways);
+    if (gateways.replace(",", "").isBlank()) {
+      LOG.warn("USER_TRUSTED_GATEWAYS is empty; auth IP quotas use socket peers. Configure trusted Gateway peers before exposing behind a proxy.");
+    }
   }
 
   public record RegisterRequest(String email, String password, String fullName, String locale) {

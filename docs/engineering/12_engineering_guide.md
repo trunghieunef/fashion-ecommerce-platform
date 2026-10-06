@@ -17,6 +17,9 @@ Phase 1A hiện có [user-service](../../services/user-service/README.md),
 login/forgot cần Redis để rate limit (USR-01b-ii), readiness user-service gồm DB + Redis.
 Proxy allowlist/IP handoff ở 03 §1.2 và README Gateway/user-service; mặc định standalone
 không tin header chuyển tiếp. Chưa có Kafka relay, notification-service hoặc UI auth/admin.
+Quota namespace lấy từ `FASHION_ENV` (local mặc định); HMAC identity dùng khóa dẫn xuất từ
+master sẵn có. Allowlist rỗng phát WARN để tránh quên config khi chạy sau Gateway; header
+không được lookup DNS. Readiness/subnet IPv6 staging còn cần chốt ở 08.
 
 Evidence local hiện có ghi tại [17 §7](17_tech_stack.md): catalog/Gateway, frontend,
 Compose smoke chuỗi thật và Nacos proof ngày 2026-09-28. CI remote **PASS** cho commit

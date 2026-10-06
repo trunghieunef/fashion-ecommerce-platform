@@ -37,7 +37,7 @@ mọi Redis key thay vì namespace secret. Đã bổ sung Redis thật/flush fix
 
 | Lệnh | Kết quả |
 |---|---|
-| `./mvnw -B test` trên implementation cuối | 169/169 PASS, 0 failures/errors/skips: durability 36, security 35, user 61, catalog 12, Gateway 25 |
+| `./mvnw -B test` trên implementation trước review (`96e6ea0`) | 169/169 PASS, 0 failures/errors/skips: durability 36, security 35, user 61, catalog 12, Gateway 25 |
 | `npm run typecheck`; `npm test`; `npm run build` | PASS; Vitest 2/2 |
 | `bash scripts/validate-contracts.sh` | 3 OpenAPI hợp lệ, 23 contract test PASS |
 | `bash scripts/validate-infra.sh` | cfn-lint offline + 34 test PASS; không gọi AWS |
@@ -62,3 +62,42 @@ dependency trong task này. Browse/member/checkout/admin generic limiter, notifi
 constant-time forgot, license Redis và staging topology chưa được nghiệm thu.
 Parent USR-01 vẫn In progress, phần 1b-ii Review; PR chờ chủ dự án review rồi mới merge.
 Không deploy AWS/provider hoặc tuyên bố G0/G1/G2/MVP hoàn thành.
+
+## Xử lý review PR #12 trên `96e6ea0`
+
+Review của chủ dự án (Claude Code reviewer) ghi 1 Important implementation, 1 Important
+mức plan, 7 Minor. Codex kiểm lại code/callers và tái hiện lỗi trước khi sửa.
+
+| Finding | Đánh giá và xử lý |
+|---|---|
+| Important: forwarded `999.1.1.1` đi DNS | Đúng. RED child JVM hosts file ánh xạ thành `10.9.9.9` bị chấp nhận. GREEN: IPv4 octet strict, kiểm trusted peer trước parse header; DNS chỉ cho proxy hostname operator cấu hình |
+| Important plan: Redis readiness rút toàn pod K8s | Đúng về tác động tương lai; không phải implementation sai. Giữ readiness đã được chủ dự án duyệt, ghi quyết định mở trước manifest user-service staging trong 08/04/13 |
+| Minor: IPv6 đổi địa chỉ trong /64 có quota mới | Giới hạn đúng của per-IP; gom subnet đổi chính sách quota/actor đã duyệt. Ghi open PO/TL + QA trước ingress dual-stack, không tự đổi contract |
+| Minor: SHA-256 key có thể dò IP/email | Đúng. Thay bằng HMAC-SHA256 với khóa dẫn xuất từ master sẵn có, domain/env riêng; `Mac` mới/request, không log key |
+| Minor: socket zone/null gây 500 | RED: scoped peer exception và Gateway NPE. GREEN: bỏ zone chỉ trên socket peer; thiếu/unresolved remote thì xóa identity header, không đặt client IP giả, service lấy peer thật |
+| Minor: mọi request offload | RED: request không có forwarded header vẫn sang boundedElastic. GREEN: chỉ offload khi có một header và hostname allowlist cần DNS; không thể biết peer thuộc hostname allowlist trước lookup |
+| Minor: thiếu unit parser | Thêm `ProxyClientIpTest` (3 test), hosts fixture trong child JVM tách cache, không gọi public DNS |
+| Minor: thiếu env namespace | `FASHION_ENV` default local, validated; key `<env>:user:rate:<scope>:<HMAC>`, Compose/example đồng bộ, env/secret khác có quota độc lập |
+| Minor: allowlist rỗng im lặng | RED không có log. GREEN WARN tại startup khi không có gateway hiệu lực, kể cả local/test; giữ default standalone không tin proxy |
+
+Không đổi quota/window, schema, API payload hoặc dependency. Chuyển key format/đổi env/master
+tạo bucket mới; key cũ tự hết TTL, không purge. `USER_SECRET_KEY` còn mã hóa reset secret,
+rotation cần xử lý secret đang chờ theo runbook trước deploy. Redis vẫn private/auth, mỗi env
+có instance/credential riêng; HMAC không làm key thành dữ liệu vô danh.
+
+| Kiểm tra patch review | Kết quả |
+|---|---|
+| Focused parser/Gateway/RateLimit | Parser 3/3, Gateway 27/27, RateLimit 9/9 GREEN; full suite thêm isolation test |
+| `./mvnw -B test` | 178/178 PASS, 0 failures/errors/skips: durability 36, security 38, user 65, catalog 12, Gateway 27 |
+| `bash scripts/validate-infra.sh`; Compose config quiet | 34 test + cfn-lint offline PASS; Compose hợp lệ, không gọi AWS |
+| Scripts unit tests trong Git Bash với pinned Java/PATH | 14/14 PASS. Lượt PowerShell trước đó chọn WSL bash, `test_clean_history_passes` fail127 và Maven wrapper test skip thiếu JAVA_HOME; đã xác định môi trường và chạy lại đúng toolchain, không sửa script ngoài scope |
+| `bash scripts/local-up.sh`; `bash scripts/smoke-local.sh`; `bash scripts/smoke-auth-redis-timeout.sh`; `npx playwright test` | PASS: 6 service healthy; public 503 + DB không đổi + health/recovery đúng; Chromium desktop/mobile 2/2 |
+| Docs/diff/gitleaks staged diff | PASS: 38 Markdown, diff không lỗi whitespace, staged patch không có secret |
+
+Review độc lập Superpowers trên patch source không còn finding cần sửa; reviewer không tự
+chạy suite/Compose thay tác giả. CI remote trên `96e6ea0` đã PASS:
+[Application](https://github.com/trunghieunef/fashion-ecommerce-platform/actions/runs/37491448957),
+[Documentation](https://github.com/trunghieunef/fashion-ecommerce-platform/actions/runs/37491449019).
+Patch mới phải chạy CI riêng trên SHA mới; chưa merge và chưa nghiệm thu parent.
+Không chạy lại frontend unit/contract lint/Nacos proof trong patch review: frontend, contract,
+route/profile/dependency không đổi; build frontend và browser/HTTP smoke đã chạy lại.

@@ -10,6 +10,10 @@ và [User service](../../../services/user-service/README.md) trước khi tiếp
   và health. Superpowers: thiết kế được duyệt → TDD → review độc lập → verification → PR.
 - Phần 1b-ii ở Review, parent USR-01 vẫn In progress. Workflow do chủ dự án yêu cầu:
   tạo PR cho chủ dự án review; chỉ merge sau review/approval. Chưa có approval merge.
+- [PR #12](https://github.com/trunghieunef/fashion-ecommerce-platform/pull/12) có review trên
+  `96e6ea0`: parser DNS/zone/peer/scheduler đã sửa, bổ sung unit regression, HMAC/env quota
+  và startup WARN. CI baseline `96e6ea0` PASS; phải kiểm lại SHA patch mới. Readiness Redis
+  và IPv6 subnet policy vẫn giữ hiện trạng đã duyệt, ghi open trước staging/dual-stack ở 08.
 - USR-02a/2b có profile/address/RBAC/admin API; UI auth/admin, catalog đầy đủ, inventory,
   cart/checkout chưa có. S1-local accepted, G0 còn O01; chưa đạt G1/G2.
 - Handoff Phase 1A ngày 2026-10-06 trên local `dev` tại `df06231` chưa có trên origin/main;

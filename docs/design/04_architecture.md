@@ -61,8 +61,15 @@ USR-01b-ii hiện có Lua Redis atomic cho login IP và forgot IP/email trong us
 cửa sổ/quota cấu hình được. IP đi qua nginx → Gateway → service với proxy allowlist
 theo 03 §1.2. Readiness user-service gồm DB + Redis vì login cần abuse controls;
 liveness không phụ thuộc Redis. Các tier browse/checkout/admin chưa hiện thực.
+Quota keys dùng `<FASHION_ENV>:user:rate:<scope>:<HMAC-SHA256>`, khóa dẫn xuất có domain/env
+từ master `USER_SECRET_KEY`; không dùng hash IP/email công khai, vẫn bảo vệ Redis/credential.
+Đổi env/master tạo bucket mới, key cũ hết TTL. Secret handoff hiện cần Redis instance/credential
+riêng theo env; không dùng quota namespace thay bằng chứng cách ly toàn bộ auth store.
 Redis connect/command timeout mỗi loại 500ms, thấp hơn budget Gateway 2s để service kịp
 trả 503 chung khi kết nối mới hoặc command bị treo; không retry mutation tự động.
+Trước manifest user-service staging, PO/TL phải chốt readiness khi Redis down: readiness hiện
+DOWN sẽ rút cả pod khỏi Kubernetes Service, ảnh hưởng cả refresh/profile/admin dù chúng không
+cần Redis. Local dùng URL tĩnh; chưa đổi quyết định đã duyệt. Theo dõi mục mở tại 08.
 
 Namespace Redis theo env + service; không đọc key của service khác để thay API. Stock/cache payload có version và observed_at; event cũ không làm lùi. Invalidation task phải durable; nếu TTL hết mà projection chưa cập nhật, query nguồn hoặc hiển thị unknown. Consumer không ACK rồi bỏ mất effect Redis.
 

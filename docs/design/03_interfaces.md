@@ -51,6 +51,9 @@ trùng hoặc không hợp lệ thì dùng socket peer. Allowlist rỗng mặc �
 hostname DNS nội bộ, không nhận wildcard/CIDR. Forwarded-header rewriting của server bị tắt
 để allowlist luôn xét peer thực. Khi deploy thêm ingress phải cấu hình hop tin cậy và kiểm lại
 spoofing; không tự tin mọi địa chỉ private.
+Header chỉ được parse sau khi peer tin cậy, IPv4 kiểm đủ octet để không fallback sang DNS.
+Zone ID được bỏ khỏi IPv6 socket peer, vẫn từ chối trong header; thiếu peer tại Gateway thì
+xóa IP/identity header và để service dùng socket peer Gateway, không tạo IP giả.
 
 ### 1.3 Idempotency và version
 

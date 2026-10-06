@@ -85,6 +85,7 @@ services:
   user-service:
     build: ../../services/user-service
     environment:
+      FASHION_ENV: ${FASHION_ENV:-local}
       USER_DB_URL: jdbc:postgresql://postgres:5432/users
       USER_DB_USERNAME: user_runtime
       USER_DB_PASSWORD: ${USER_DB_PASSWORD:?set USER_DB_PASSWORD}

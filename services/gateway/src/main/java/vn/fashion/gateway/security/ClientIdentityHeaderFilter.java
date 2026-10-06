@@ -26,14 +26,25 @@ public class ClientIdentityHeaderFilter implements GlobalFilter, Ordered {
   public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
     var request = exchange.getRequest();
     var forwarded = request.getHeaders().get("X-Forwarded-For");
-    // Proxy hostnames use Docker/private DNS. Resolve off the Netty event loop.
-    return Mono.fromCallable(() -> clientIp.resolve(request.getRemoteAddress().getAddress().getHostAddress(),
-            forwarded != null && forwarded.size() == 1 ? forwarded.getFirst() : null))
-        .subscribeOn(Schedulers.boundedElastic())
-        .flatMap(ip -> chain.filter(exchange.mutate().request(request.mutate().headers(headers -> {
+    var remote = request.getRemoteAddress();
+    // Without an actual socket address no forwarded identity can be authenticated.
+    if (remote == null || remote.getAddress() == null) {
+      return forward(exchange, chain, null);
+    }
+    String candidate = forwarded != null && forwarded.size() == 1 ? forwarded.getFirst() : null;
+    var resolved = Mono.fromCallable(() -> clientIp.resolve(remote.getAddress().getHostAddress(), candidate));
+    // Only configured proxy hostnames can need DNS; keep numeric/no-header paths on Netty.
+    if (candidate != null && clientIp.requiresDns()) {
+      resolved = resolved.subscribeOn(Schedulers.boundedElastic());
+    }
+    return resolved.flatMap(ip -> forward(exchange, chain, ip));
+  }
+
+  private Mono<Void> forward(ServerWebExchange exchange, GatewayFilterChain chain, String ip) {
+    return chain.filter(exchange.mutate().request(exchange.getRequest().mutate().headers(headers -> {
           UNTRUSTED_HEADERS.forEach(headers::remove);
-          headers.set(ProxyClientIp.HEADER, ip);
-        }).build()).build()));
+          if (ip != null) headers.set(ProxyClientIp.HEADER, ip);
+        }).build()).build());
   }
 
   @Override

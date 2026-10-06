@@ -48,8 +48,12 @@ refresh sẽ đợi rồi thu hồi luôn token vừa xoay (test race tất đ�
 Rate limit 1b-ii: login 20 request/300 giây/IP; forgot 20/3600 giây/IP và 5/3600 giây/email
 trim + lowercase, kể cả email không tồn tại. Redis Lua kiểm/increment/expiry atomic; cửa sổ
 bắt đầu ở request đầu, request bị chặn không kéo dài TTL. IP quota chạy trước kiểm field;
-email quota sau validation và trước lookup account. Keys chỉ chứa SHA-256 của IP/email;
-không log chúng. Vượt ngưỡng trả `429 RATE_LIMITED`, body chung `RETRY_LATER`, `Retry-After`
+email quota sau validation và trước lookup account. Keys có dạng
+`<FASHION_ENV>:user:rate:<scope>:<HMAC-SHA256>`; khóa HMAC dẫn xuất từ `USER_SECRET_KEY`
+với domain riêng `fashion:user:rate-limit:v1:<env>`, input gồm scope + identity. Không dùng
+hash công khai có thể dò từ điển, không log key; HMAC là pseudonym, không thay access control
+cho Redis. Mọi replica trong một env phải dùng cùng env/master key. Vượt ngưỡng trả
+`429 RATE_LIMITED`, body chung `RETRY_LATER`, `Retry-After`
 làm tròn lên giây còn lại. Redis lỗi → `503 TEMPORARILY_UNAVAILABLE`, không cấp phiên/token.
 Redis connect/command timeout đều `500ms`, có margin trước Gateway `2s`. Script timeout
 smoke tạm pause Redis local, kiểm public 503 + health + DB không đổi, rồi khôi phục Redis;
@@ -61,7 +65,10 @@ trong `X-Client-IP` khi socket peer thuộc `USER_TRUSTED_GATEWAYS` (IP hoặc h
 không wildcard/CIDR); trường hợp khác dùng socket peer. Compose tin hostname `gateway`;
 standalone mặc định không tin header. Server không tự rewrite peer theo forwarding headers.
 DNS proxy không resolve được thì không tin header, quota gom theo peer; kiểm allowlist/DNS
-nếu nhiều client bị gom quota. Cần cấu hình lại hop khi thêm ingress staging.
+nếu nhiều client bị gom quota. Allowlist hiệu lực rỗng phát WARN lúc khởi động (kể cả standalone
+local/test), không log IP/email. Header không được đưa vào DNS; zone chỉ bị loại trên peer socket.
+Cần cấu hình lại hop khi thêm ingress staging. IPv6 hiện vẫn quota từng địa chỉ; subnet aggregation
+và tác động Redis readiness trên Kubernetes phải được PO/TL chốt trước staging dual-stack.
 
 ```bash
 ./mvnw -pl services/user-service -am test     # cần Docker (Testcontainers postgres:17.11)
@@ -84,7 +91,8 @@ Gateway gọi được.
 | `USER_JWT_KEY_ID` | `user-local` | `kid` trong header JWT |
 | `USER_JWT_PUBLIC_KEYS` | không có mặc định | `kid:base64-X.509`, cách nhau bằng dấu phẩy (2 kid khi xoay khóa); local do `local-up.sh` suy ra từ private key |
 | `USER_REDIS_HOST` / `USER_REDIS_PORT` / `USER_REDIS_PASSWORD` | `localhost` / `6379` / rỗng | Redis 8.2.9 cho secret tạm (Compose: service `redis`, không publish port) |
-| `USER_SECRET_KEY` | không có mặc định: thiếu thì service không khởi động | Base64 32 byte, khóa AES-256-GCM mã hóa token reset trong Redis; local do `local-up.sh` sinh vào `.env` |
+| `FASHION_ENV` | `local` | Namespace quota; 1..32 ký tự chữ thường/số/`-`/`_`, bắt đầu bằng chữ/số. Không thay Redis/credential isolation giữa env |
+| `USER_SECRET_KEY` | không có mặc định: thiếu thì service không khởi động | Base64 32 byte master cho AES-256-GCM reset secret và khóa HMAC auth quota dẫn xuất; local do `local-up.sh` sinh vào `.env` |
 | `USER_INTERNAL_CALLERS` | rỗng (không caller nào) | Allowlist caller `/internal` (ADR-19): `service:base64-X.509`, cách nhau dấu phẩy |
 | `USER_TRUSTED_GATEWAYS` | rỗng; Compose: `gateway` | IP/hostname proxy được phép cung cấp `X-Client-IP`, cách nhau dấu phẩy |
 | `USER_LOGIN_RATE_LIMIT` / `USER_LOGIN_RATE_WINDOW_SECONDS` | `20` / `300` | Quota và cửa sổ login theo IP |
@@ -110,6 +118,9 @@ Tạo SUPER_ADMIN đầu tiên trên local: đăng ký tài khoản, đặt `USE
   chạy sau một lần đổi/đặt lại mật khẩu vừa commit sẽ bị từ chối.
 - Readiness gồm PostgreSQL và Redis; liveness chỉ gồm `livenessState`. Redis loss có thể mất
   quota ephemeral và secret tạm; PostgreSQL vẫn giữ tài khoản/token, không tự bỏ limiter khi Redis down.
+- Chuyển từ key SHA-256 cũ sang HMAC/env hoặc rotate `USER_SECRET_KEY`/đổi `FASHION_ENV` tạo
+  bucket mới, quota bắt đầu lại; key cũ tự hết TTL, không purge hay thay đổi dữ liệu tài khoản.
+  Rotation master còn ảnh hưởng giải mã secret reset đang chờ, cần runbook riêng trước deploy.
 - Chưa có notification-service (NOT-01) nên chưa ai gọi endpoint internal và chưa gửi e-mail thật.
   `forgot` với email có và không có tài khoản khác nhau về thời gian xử lý (có ghi DB/Redis);
   rate limit giới hạn việc dò, không chứng minh thời gian constant-time. License Redis 8 vẫn chờ PO/TL (17).
