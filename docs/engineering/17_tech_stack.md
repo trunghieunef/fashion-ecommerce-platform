@@ -31,6 +31,7 @@ Thay định hướng Boot 3 bằng Boot 4 và chọn frontend toolchain đượ
 | Nacos server | **3.2.4** | Bản vá server; private network, bật auth, lưu metadata riêng |
 | Nacos Java client | **3.1.1**, qua Alibaba BOM | Không ép client bằng server version |
 | Apache Maven | **3.9.16** | Maven Wrapper là entry point build; không phụ thuộc Maven cài tùy ý trên máy |
+| jsoup | **1.23.2** | CAT-01a dùng HTML Safelist cho mô tả sản phẩm; dependency pin tại root POM, kiểm bằng test sanitizer trong task |
 
 Nguồn: [Temurin security release](https://adoptium.net/news/2026/09/eclipse-temurin-8u504-110321-170201-210121-25041-26021-available), [Temurin support](https://adoptium.net/support/), [Boot managed dependencies](https://docs.spring.io/spring-boot/4.0/appendix/dependency-versions/coordinates.html), [Cloud 2025.1.3](https://github.com/spring-cloud/spring-cloud-release/releases/tag/v2025.1.3), [Alibaba version mapping](https://sca.aliyun.com/docs/2025.x/overview/version-explain/), [Nacos 3.2.4](https://github.com/alibaba/nacos/releases/tag/3.2.4), [Maven download](https://maven.apache.org/download.cgi).
 

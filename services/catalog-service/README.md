@@ -3,8 +3,11 @@
 `TASK:PLT-01` · partial `TASK:CAT-01` · `REQ:CAT-01`, `REQ:XCT-06`.
 
 Service sở hữu database `catalog`. Phần nền read-only Sprint 1 chạy Flyway `V001`;
-CAT-01a đang bổ sung `V002` (category/brand, product fields, variant identity trigger,
-outbox/idempotency/audit), chưa có endpoint admin ở checkpoint schema.
+CAT-01a bổ sung `V002` (category/brand, product fields, variant identity trigger,
+outbox/idempotency/audit). Admin taxonomy đã có GET/POST categories/brands và PUT theo id
+tại `/admin/api/v1/catalog`. Mọi endpoint kiểm ES256 và `catalog.write` tại service;
+POST cần `Idempotency-Key`, PUT cần `expected_version`; mutation và audit cùng transaction.
+Thu hồi quyền ở catalog trễ tối đa TTL access token 15 phút theo ADR-21.
 Public API hiện có `GET /api/v1/catalog/products`.
 Endpoint trả các product `ACTIVE` theo `created_at DESC, id DESC`; `limit` mặc định
 `20`, tối đa `100`. Response thành công theo [contract 03 §1.2](../../docs/design/03_interfaces.md):
@@ -15,7 +18,7 @@ Endpoint trả các product `ACTIVE` theo `created_at DESC, id DESC`; `limit` m�
 `rejected_value`) và metadata đầy đủ. Header `X-Correlation-Id` bằng `trace_id` của
 response, kể cả lỗi validation.
 
-Đây chưa phải acceptance đầy đủ của `TASK:CAT-01`: không có CRUD/admin, variant,
+Đây chưa phải acceptance đầy đủ của `TASK:CAT-01`: chưa có product CRUD/publish, variant,
 category, filter/search, cursor thật, cache, auth hoặc Kafka. `next_cursor` luôn
 `null`; topics producer/consumer: **none trong S1**.
 
@@ -43,6 +46,7 @@ Lệnh này giữ volume local; chỉ dùng `down -v` khi chủ động xóa to�
 | `CATALOG_DB_URL` | `jdbc:postgresql://localhost:5432/catalog` | Runtime datasource |
 | `CATALOG_DB_USERNAME` / `CATALOG_DB_PASSWORD` | `catalog_runtime` / synthetic local value | Runtime datasource |
 | `CATALOG_DB_MAX_POOL_SIZE` | `10` | Hikari runtime pool |
+| `CATALOG_JWT_PUBLIC_KEYS` | bắt buộc, không default | `kid:base64-X.509` để kiểm access token ES256; dùng public keys của user-service |
 | `CATALOG_MIGRATION_DB_URL` | `jdbc:postgresql://localhost:5432/catalog` | Flyway datasource |
 | `CATALOG_MIGRATION_DB_USERNAME` / `CATALOG_MIGRATION_DB_PASSWORD` | `catalog_migration` / synthetic local value | Flyway migration |
 
