@@ -2,8 +2,10 @@
 
 `TASK:PLT-01` · partial `TASK:CAT-01` · `REQ:CAT-01`, `REQ:XCT-06`.
 
-Service này là vertical slice catalog read-only của Sprint 1. Nó sở hữu database
-`catalog`, chạy Flyway migration `V001`, và chỉ public `GET /api/v1/catalog/products`.
+Service sở hữu database `catalog`. Phần nền read-only Sprint 1 chạy Flyway `V001`;
+CAT-01a đang bổ sung `V002` (category/brand, product fields, variant identity trigger,
+outbox/idempotency/audit), chưa có endpoint admin ở checkpoint schema.
+Public API hiện có `GET /api/v1/catalog/products`.
 Endpoint trả các product `ACTIVE` theo `created_at DESC, id DESC`; `limit` mặc định
 `20`, tối đa `100`. Response thành công theo [contract 03 §1.2](../../docs/design/03_interfaces.md):
 `code: "OK"`, `data`, `metadata.request_id`, và `metadata.trace_id`.

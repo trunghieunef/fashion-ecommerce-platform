@@ -123,7 +123,15 @@ erDiagram
 | `reviews` (T, Phase 2) | `id`, `eligibility_id uuid FK review_eligibilities`, `rating smallint`, `title text`, `content text`, `images text[] = '{}'`, `status varchar(32) = 'PENDING'`, `moderated_by uuid?`, `moderated_at timestamptz?`, `moderation_reason text?` | UNIQUE eligibility_id; rating 1–5, cardinality(images) <= 5; PENDING/APPROVED/REJECTED; index `(status, created_at, id)` |
 | `wishlist_items` (C, Phase 2) | `user_id uuid`, `product_id uuid FK products` | PK `(user_id, product_id)`; index `(user_id, created_at, product_id)` |
 
-`TASK:PLT-01` hiện có `V001` làm read sample tối thiểu: `products` chỉ gồm `id`,
+`TASK:CAT-01` phần 1a bổ sung `V002__catalog_admin.sql`: categories/brands có `version`,
+product có category/brand, description, base_price, tags, published_at và sold_quantity;
+variant có constraint SKU/product-size-color và trigger giữ bất biến sku/size/color/product_id.
+Migration gán sản phẩm sample vào category seed `uncategorized`
+(`00000000-0000-4000-8000-000000000001`), base_price 0, giữ trạng thái cũ.
+Outbox/idempotency/audit thuộc catalog-db; audit runtime chỉ INSERT/SELECT. Collection,
+size-guide và media chưa có; đây chưa phải acceptance toàn bộ CAT-01.
+
+`TASK:PLT-01` có `V001` làm read sample tối thiểu: `products` chỉ gồm `id`,
 `slug`, `status`, tên VI/EN, `version` và timestamps, cùng index public ACTIVE.
 Đây không phải toàn bộ schema/acceptance `CAT-01` ở bảng trên. Các cột, relation và
 constraint còn thiếu phải được thêm bằng migration tương thích, append-only trước
