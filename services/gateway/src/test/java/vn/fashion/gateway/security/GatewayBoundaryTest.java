@@ -85,6 +85,20 @@ class GatewayBoundaryTest {
   }
 
   @Test
+  void replacesForgedClientIpAndForwardingHeadersWithTheSocketPeer() {
+    client.post().uri("/api/v1/auth/login")
+        .header("X-Client-IP", "198.51.100.7")
+        .header("X-Forwarded-For", "198.51.100.8")
+        .header("Forwarded", "for=198.51.100.9")
+        .header("X-Real-IP", "198.51.100.10")
+        .bodyValue("{}").exchange().expectStatus().isOk();
+
+    assertThat(CATALOG.headers().get("x-client-ip")).singleElement().asString()
+        .isIn("127.0.0.1", "0:0:0:0:0:0:0:1");
+    assertThat(CATALOG.headers()).doesNotContainKeys("x-forwarded-for", "forwarded", "x-real-ip");
+  }
+
+  @Test
   void routesAuthRequestsToUserService() {
     client.post().uri("/api/v1/auth/login").header("Content-Type", "application/json")
         .bodyValue("{}").exchange().expectStatus().isOk();

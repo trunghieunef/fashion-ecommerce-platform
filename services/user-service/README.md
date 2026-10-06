@@ -1,7 +1,7 @@
 # User service
 
-`TASK:USR-01` phần 1a + 1b-i, `TASK:USR-02` phần 2a + 2b · REQ: USR-01, USR-03, USR-05, USR-06, USR-07,
-USR-08, ADM-06 · dependency: PLT-02, PLT-03, SEC-01.
+`TASK:USR-01` phần 1a + 1b-i + 1b-ii, `TASK:USR-02` phần 2a + 2b · REQ: USR-01, USR-03,
+USR-05, USR-06, USR-07, USR-08, ADM-06, XCT-02 · dependency: PLT-02, PLT-03, SEC-01.
 
 Service sở hữu database `users`: tài khoản member và refresh-token family. Phạm vi 1a:
 đăng ký, đăng nhập (khóa tài khoản 15 phút sau 5 lần sai), refresh xoay vòng và đăng xuất.
@@ -15,7 +15,7 @@ Contract: [`contracts/openapi/user.yaml`](../../contracts/openapi/user.yaml); th
 | `POST /api/v1/auth/refresh` | Cookie `refresh_token` dùng một lần: xoay sang token mới cùng family; response chỉ có `access_token`, `token_type`, `expires_in`. Dùng lại token đã xoay → thu hồi cả family, trả 401 và xóa cookie. Refresh, logout và thu hồi khi replay cùng lấy khóa `pg_advisory_xact_lock` theo family, nên việc thu hồi không bỏ sót token đang được tạo song song |
 | `POST /api/v1/auth/logout` | Thu hồi family, xóa cookie, 204 (idempotent) |
 | `POST /api/v1/auth/password/change` | Bearer + `current_password`, `new_password`. Sai mật khẩu hiện tại → 400 (field `current_password`) và tính vào ngưỡng khóa 5 lần. Thành công: tăng `auth_version`, thu hồi mọi refresh token (kể cả phiên này), xóa cookie, 204 |
-| `POST /api/v1/auth/password/forgot` | Luôn 202 cùng body. Tài khoản `ACTIVE`: tạo token 32 byte ngẫu nhiên, hạn 30 phút, DB chỉ lưu SHA-256 (`user_action_tokens`); vô hiệu token reset cũ chưa dùng; ghi `NOTIFY_RESET_PASSWORD` (chỉ `challenge_id`) vào outbox và token mã hóa vào Redis trong cùng transaction. Redis được PING trước khi tra email, nên khi Redis lỗi (mất kết nối hoặc timeout) mọi email đều nhận cùng 503 và không ghi gì; dọn secret cũ sau commit là best effort |
+| `POST /api/v1/auth/password/forgot` | 202 cùng body cho email có/không có tài khoản khi request được chấp nhận; quota → 429, Redis lỗi → 503. Tài khoản `ACTIVE`: tạo token 32 byte ngẫu nhiên, hạn 30 phút, DB chỉ lưu SHA-256 (`user_action_tokens`); vô hiệu token reset cũ chưa dùng; ghi `NOTIFY_RESET_PASSWORD` (chỉ `challenge_id`) vào outbox và token mã hóa vào Redis trong cùng transaction. Redis được PING trước khi tra email, nên khi Redis lỗi (mất kết nối hoặc timeout) mọi email đều nhận cùng 503 và không ghi gì; dọn secret cũ sau commit là best effort |
 | `POST /api/v1/auth/password/reset` | `token`, `new_password`. Dùng một lần, còn hạn tại lúc tiêu thụ (`clock_timestamp()`, kể cả khi phải chờ khóa), email hiện tại phải khớp `target_email`; đổi mật khẩu, tăng `auth_version`, thu hồi mọi refresh token, xóa khóa đăng nhập sai; xóa secret trong Redis là best effort sau commit (Redis lỗi lúc đó vẫn trả 204; DB đã chặn dùng lại, entry tự hết hạn); token sai/đã dùng/hết hạn → 400 field `token` |
 | `GET /internal/api/v1/users/notification-secrets/{challenge_id}` | Không qua Gateway. Service token ADR-19 (`Authorization: Bearer`, `aud=user-service`); chỉ caller `notification-service` (403 với caller hợp lệ khác). Trả token reset khi còn chưa dùng và còn hạn, `Cache-Control: no-store`; ngược lại 404 |
 | `GET, PUT /api/v1/users/me` | Cần Bearer access token. PUT chỉ đổi `full_name` và `locale`; `email`, role, `auth_version` trong body bị bỏ qua |
@@ -45,9 +45,35 @@ refresh sẽ đợi rồi thu hồi luôn token vừa xoay (test race tất đ�
 
 ## Chạy và test
 
+Rate limit 1b-ii: login 20 request/300 giây/IP; forgot 20/3600 giây/IP và 5/3600 giây/email
+trim + lowercase, kể cả email không tồn tại. Redis Lua kiểm/increment/expiry atomic; cửa sổ
+bắt đầu ở request đầu, request bị chặn không kéo dài TTL. IP quota chạy trước kiểm field;
+email quota sau validation và trước lookup account. Keys có dạng
+`<FASHION_ENV>:user:rate:<scope>:<HMAC-SHA256>`; khóa HMAC dẫn xuất từ `USER_SECRET_KEY`
+với domain riêng `fashion:user:rate-limit:v1:<env>`, input gồm scope + identity. Không dùng
+hash công khai có thể dò từ điển, không log key; HMAC là pseudonym, không thay access control
+cho Redis. Mọi replica trong một env phải dùng cùng env/master key. Vượt ngưỡng trả
+`429 RATE_LIMITED`, body chung `RETRY_LATER`, `Retry-After`
+làm tròn lên giây còn lại. Redis lỗi → `503 TEMPORARILY_UNAVAILABLE`, không cấp phiên/token.
+Redis connect/command timeout đều `500ms`, có margin trước Gateway `2s`. Script timeout
+smoke tạm pause Redis local, kiểm public 503 + health + DB không đổi, rồi khôi phục Redis;
+chỉ chạy trên stack local không có traffic người dùng.
+Login thành công cũng tiêu quota. Register/refresh/reset và các tier chung chưa có limiter.
+
+IP được xác minh theo [03 §1.2](../../docs/design/03_interfaces.md): chỉ nhận một IP literal
+trong `X-Client-IP` khi socket peer thuộc `USER_TRUSTED_GATEWAYS` (IP hoặc hostname nội bộ,
+không wildcard/CIDR); trường hợp khác dùng socket peer. Compose tin hostname `gateway`;
+standalone mặc định không tin header. Server không tự rewrite peer theo forwarding headers.
+DNS proxy không resolve được thì không tin header, quota gom theo peer; kiểm allowlist/DNS
+nếu nhiều client bị gom quota. Allowlist hiệu lực rỗng phát WARN lúc khởi động (kể cả standalone
+local/test), không log IP/email. Header không được đưa vào DNS; zone chỉ bị loại trên peer socket.
+Cần cấu hình lại hop khi thêm ingress staging. IPv6 hiện vẫn quota từng địa chỉ; subnet aggregation
+và tác động Redis readiness trên Kubernetes phải được PO/TL chốt trước staging dual-stack.
+
 ```bash
 ./mvnw -pl services/user-service -am test     # cần Docker (Testcontainers postgres:17.11)
 bash scripts/local-up.sh && bash scripts/smoke-local.sh
+bash scripts/smoke-auth-redis-timeout.sh
 ```
 
 `local-up.sh` tạo database `users` và 2 role bằng `infra/local/postgres-init/02-user-db.sh`
@@ -65,8 +91,12 @@ Gateway gọi được.
 | `USER_JWT_KEY_ID` | `user-local` | `kid` trong header JWT |
 | `USER_JWT_PUBLIC_KEYS` | không có mặc định | `kid:base64-X.509`, cách nhau bằng dấu phẩy (2 kid khi xoay khóa); local do `local-up.sh` suy ra từ private key |
 | `USER_REDIS_HOST` / `USER_REDIS_PORT` / `USER_REDIS_PASSWORD` | `localhost` / `6379` / rỗng | Redis 8.2.9 cho secret tạm (Compose: service `redis`, không publish port) |
-| `USER_SECRET_KEY` | không có mặc định: thiếu thì service không khởi động | Base64 32 byte, khóa AES-256-GCM mã hóa token reset trong Redis; local do `local-up.sh` sinh vào `.env` |
+| `FASHION_ENV` | `local` | Namespace quota; 1..32 ký tự chữ thường/số/`-`/`_`, bắt đầu bằng chữ/số. Không thay Redis/credential isolation giữa env |
+| `USER_SECRET_KEY` | không có mặc định: thiếu thì service không khởi động | Base64 32 byte master cho AES-256-GCM reset secret và khóa HMAC auth quota dẫn xuất; local do `local-up.sh` sinh vào `.env` |
 | `USER_INTERNAL_CALLERS` | rỗng (không caller nào) | Allowlist caller `/internal` (ADR-19): `service:base64-X.509`, cách nhau dấu phẩy |
+| `USER_TRUSTED_GATEWAYS` | rỗng; Compose: `gateway` | IP/hostname proxy được phép cung cấp `X-Client-IP`, cách nhau dấu phẩy |
+| `USER_LOGIN_RATE_LIMIT` / `USER_LOGIN_RATE_WINDOW_SECONDS` | `20` / `300` | Quota và cửa sổ login theo IP |
+| `USER_FORGOT_IP_RATE_LIMIT` / `USER_FORGOT_EMAIL_RATE_LIMIT` / `USER_FORGOT_RATE_WINDOW_SECONDS` | `20` / `5` / `3600` | Quota forgot theo IP/email; giá trị phải dương |
 | `USER_BOOTSTRAP_ADMIN_EMAIL` | rỗng (tắt) | Email của tài khoản **đã đăng ký** sẽ thành SUPER_ADMIN đầu tiên lúc khởi động, chỉ khi chưa có SUPER_ADMIN nào; audit actor SYSTEM. Không có mật khẩu admin mặc định. Đăng ký sau khi service chạy thì phải khởi động lại |
 
 Migration: `V001__users.sql` (users, refresh_tokens, outbox_events), `V002__user_addresses.sql`,
@@ -86,11 +116,14 @@ Tạo SUPER_ADMIN đầu tiên trên local: đăng ký tài khoản, đặt `USE
 
 - Login kiểm lại `password_hash` dưới khóa dòng user, nên login đã qua BCrypt với mật khẩu cũ nhưng
   chạy sau một lần đổi/đặt lại mật khẩu vừa commit sẽ bị từ chối.
-- Chưa có rate limit theo IP/email (1b-ii): chỉ khóa theo tài khoản trong PostgreSQL. Readiness
-  chưa gồm Redis; Redis lỗi chỉ làm `forgot` trả 503 (lỗi kết nối hoặc timeout lệnh).
+- Readiness gồm PostgreSQL và Redis; liveness chỉ gồm `livenessState`. Redis loss có thể mất
+  quota ephemeral và secret tạm; PostgreSQL vẫn giữ tài khoản/token, không tự bỏ limiter khi Redis down.
+- Chuyển từ key SHA-256 cũ sang HMAC/env hoặc rotate `USER_SECRET_KEY`/đổi `FASHION_ENV` tạo
+  bucket mới, quota bắt đầu lại; key cũ tự hết TTL, không purge hay thay đổi dữ liệu tài khoản.
+  Rotation master còn ảnh hưởng giải mã secret reset đang chờ, cần runbook riêng trước deploy.
 - Chưa có notification-service (NOT-01) nên chưa ai gọi endpoint internal và chưa gửi e-mail thật.
-  `forgot` với email có và không có tài khoản khác nhau về thời gian xử lý (có ghi DB/Redis); rate
-  limit 1b-ii giới hạn việc dò. License Redis 8 vẫn chờ PO/TL (17).
-- Chưa có mở khóa tài khoản và UI admin (ADM-01). `audit_logs.source_ip` để NULL: chưa có cách tin
-  IP client qua Gateway. Gateway chưa tự kiểm JWT; service đích kiểm (04 §7).
+  `forgot` với email có và không có tài khoản khác nhau về thời gian xử lý (có ghi DB/Redis);
+  rate limit giới hạn việc dò, không chứng minh thời gian constant-time. License Redis 8 vẫn chờ PO/TL (17).
+- Chưa có mở khóa tài khoản và UI admin (ADM-01). `audit_logs.source_ip` để NULL: admin audit chưa
+  tích hợp IP đã được Gateway xác minh. Gateway chưa tự kiểm JWT; service đích kiểm (04 §7).
 - Chưa có manifest staging cho user-service (staging G0 chỉ có service mẫu).

@@ -172,6 +172,23 @@ On-call roster trước launch phải có primary/backup, kênh liên hệ, gi�
 2. Inventory/quota vẫn DB, không rebuild counters tài chính từ Redis.
 3. Warm cache có throttling, version/observed_at; kiểm tra freshness trước mở flash sale.
 
+Hiện thực local USR-01b-ii: login/forgot trả 503 khi Redis không trả lời; readiness
+user-service DOWN, liveness vẫn UP. Không tắt limiter hoặc tăng quota để che outage;
+kiểm Redis connection/auth và health, sau phục hồi kiểm lại 429 + Retry-After.
+Nếu client bị gom quota, đối chiếu socket peer và allowlist ở 03 §1.2/README service;
+không tin wildcard/private CIDR hoặc header client tự gửi để vượt lỗi. Counter ephemeral
+có TTL; Redis loss có thể mở cửa sổ mới, không phải bằng chứng stock/payment đã mất.
+Redis connect/command timeout hiện là 500ms, Gateway response budget 2s. Sau `local-up.sh`,
+`bash scripts/smoke-auth-redis-timeout.sh` pause Redis local, kiểm public login/forgot 503,
+readiness 503/liveness 200, DB không đổi và readiness phục hồi; script unpause khi exit.
+Chỉ chạy trên stack local không có traffic người dùng; không áp dụng script này lên staging/production.
+Quota keys có env + service + HMAC; mọi replica phải đồng bộ `FASHION_ENV`/`USER_SECRET_KEY`.
+Đổi namespace hoặc master tạo quota mới; không purge key cũ để che lỗi, chúng tự hết TTL.
+HMAC giảm dò từ điển nhưng key vẫn là pseudonym; giữ Redis private/auth và env isolation.
+Master cũng mã hóa secret reset: trước rotation phải xét secret đang chờ, không chỉ limiter.
+Readiness Redis hiện được giữ theo thiết kế local đã duyệt. Trước manifest user-service K8s
+phải chốt tác động rút pod tới refresh/profile/admin và phương án health riêng tại 08.
+
 ### RB-05 — Carrier lỗi hoặc hàng hoàn
 
 1. Query shipment theo merchant reference; nếu không xác minh được thì MANUAL, không tự đổi hãng/tạo vận đơn khác.

@@ -65,7 +65,9 @@ jobs:
       - name: Start local stack
         run: bash scripts/local-up.sh
       - name: Local smoke
-        run: bash scripts/smoke-local.sh
+        run: |
+          bash scripts/smoke-local.sh
+          bash scripts/smoke-auth-redis-timeout.sh
       - name: Browser smoke
         run: |
           npx playwright install --with-deps chromium

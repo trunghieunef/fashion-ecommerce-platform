@@ -79,10 +79,10 @@ flowchart TD
 | Luồng | Các bước và ghi dữ liệu | Lỗi / bảo vệ |
 |---|---|---|
 | Đăng ký email | Validate → normalize → hash → insert users + outbox USER_CREATED → tạo refresh token hash | UNIQUE email chặn race; không nhận role từ client; xác minh email trước chức năng đòi email verified |
-| Đăng nhập password | Rate limit IP/account → kiểm tra locked_until/status → verify hash → tạo refresh_tokens | Sai 5 lần khóa 15 phút theo PRD; lỗi chung không tiết lộ email tồn tại; Redis unavailable thì hạn chế/đóng đường login thay vì bỏ rate limit |
+| Đăng nhập password | Redis quota 20/300 giây/IP → kiểm tra locked_until/status → verify hash → tạo refresh_tokens | Sai 5 lần khóa 15 phút theo PRD; vượt quota trả 429 + Retry-After; Redis lỗi trả 503 trước tra tài khoản/cấp phiên |
 | Refresh | Lock token/family → kiểm tra hash, expiry, revoked → revoke token cũ + tạo token mới cùng transaction | Token cũ dùng lại: revoke family, bắt đăng nhập; client chỉ chạy một refresh đồng thời |
 | Logout / đổi mật khẩu | Revoke family khi logout; đổi mật khẩu revoke mọi family và tăng auth_version | Đề xuất access token thường còn tối đa 15 phút; tài khoản khóa/quyền admin bị thu hồi phải được kiểm tra auth_version hiện hành tại đường nhạy cảm, không chỉ đợi JWT hết hạn |
-| Quên mật khẩu | Trả thông báo chung → tạo reset token hash, hạn 30 phút → queue email → consume token dưới row lock, hash password mới, revoke sessions | Token dùng một lần; không log link/token; payload gửi email nhạy cảm dùng giao nhận tạm có hạn như OTP |
+| Quên mật khẩu | Redis quota IP → validate/normalize email → Redis quota email → kiểm store → tạo token hash, hạn 30 phút + outbox → trả thông báo chung 202; reset consume token dưới row lock | Quota 20/giờ/IP và 5/giờ/email kể cả email không tồn tại; 429/503 body chung; không lookup account trước limiter; secret không vào event/log |
 | Địa chỉ mặc định | Verify owner → lock users row → bỏ mặc định cũ và đặt mặc định mới cùng TX | Khi xóa địa chỉ mặc định, chọn địa chỉ còn lại trong cùng TX; partial UNIQUE chống hai mặc định |
 | RBAC admin | SUPER_ADMIN thay đổi role → audit + tăng auth_version | Không tự nâng quyền; OPS/MARKETING/FINANCE chỉ có quyền endpoint được seed |
 

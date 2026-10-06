@@ -129,4 +129,25 @@ Gate task là work package trong [backlog](../delivery/10_backlog.md). Mã task 
   ADR-19 gửi bằng `Authorization: Bearer`; đổi mật khẩu thu hồi cả phiên hiện tại (client đăng nhập
   lại) và sai mật khẩu hiện tại tính vào ngưỡng khóa 5 lần; đặt lại mật khẩu xóa khóa đăng nhập sai.
 
+- USR-01b-ii (2026-10-06, chủ dự án duyệt thiết kế trong phiên): Gateway xác minh IP theo
+  proxy allowlist, xóa header client tự gửi; user-service chỉ tin IP từ Gateway được allowlist.
+  Local nginx ghi đè X-Forwarded-For bằng socket peer; Compose tin hostname `storefront` ở
+  Gateway và `gateway` ở user-service. Standalone mặc định không tin proxy nào. Chọn cửa sổ
+  cố định bắt đầu ở lần thử đầu, Lua Redis atomic, quota đã chốt ngày 2026-10-05;
+  429 + Retry-After, Redis lỗi fail closed 503 và readiness gồm Redis. Không đổi schema/event;
+  chưa triển khai các rate tier còn lại hay staging. USR-01 parent vẫn In progress chờ nghiệm thu.
+
+- Review PR #12 (2026-10-06): sửa parser IP để numeric-looking hostname sai octet không đi DNS,
+  chỉ parse header sau trusted peer; zone chỉ xử lý cho socket, thiếu peer không tạo IP giả.
+  Thêm HMAC/env namespace quota, dùng khóa dẫn xuất từ master hiện có, WARN allowlist rỗng.
+  Không đổi quota/window hoặc chính sách readiness đã được duyệt. Key format/rotation tạo
+  quota window mới (ephemeral); reset secret đang chờ còn cần rotation runbook.
+- **Mở trước staging user-service, owner PO/TL:** Redis trong readiness rút cả pod khỏi
+  Kubernetes Service, làm refresh/register/profile/admin mất route dù không cần Redis.
+  Cần chọn giữ readiness chung hay tách Redis health/alert và chỉ đóng login/forgot; chưa có
+  manifest user-service và chưa chấp thuận đổi cấu hình local đã duyệt.
+- **Mở trước ingress dual-stack, owner PO/TL + QA:** quota IPv6 theo địa chỉ không chặn client
+  luân phiên địa chỉ trong /64. Cần chốt /64, /56 hay giữ per-IP theo NAT/fairness và test
+  topology thực; gom subnet thay đổi actor/quota nên không tự đưa vào bản sửa PR #12.
+
 Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác và lý do; ảnh hưởng PRD/API/schema/test/task; người quyết định; ngày; link bằng chứng. Chưa có chữ ký phê duyệt giả định thương mại.

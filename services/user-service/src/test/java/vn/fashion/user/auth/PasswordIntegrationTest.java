@@ -169,7 +169,7 @@ class PasswordIntegrationTest {
 
     String secret = secret(challengeId);
     assertThat((String) event.get("payload")).doesNotContain(secret);
-    assertThat(redisTemplate.keys("*")).hasSize(1).allSatisfy(key ->
+    assertThat(redisTemplate.keys("user:notification-secret:*")).hasSize(1).allSatisfy(key ->
         assertThat(redisTemplate.opsForValue().get(key)).as("stored encrypted").doesNotContain(secret));
     assertThat(AuthService.sha256(secret)).isEqualTo(token.get("token_hash"));
   }

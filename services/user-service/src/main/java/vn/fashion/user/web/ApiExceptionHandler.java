@@ -10,6 +10,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import vn.fashion.user.auth.AuthRateLimiter;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
@@ -22,6 +23,13 @@ public class ApiExceptionHandler {
   @ExceptionHandler(Api.Problem.class)
   ResponseEntity<Api.Error> problem(Api.Problem problem) {
     return Api.error(problem.status(), problem.code(), problem.getMessage(), problem.errors(), tracer);
+  }
+
+  @ExceptionHandler(AuthRateLimiter.Limited.class)
+  ResponseEntity<Api.Error> rateLimited(AuthRateLimiter.Limited e) {
+    var response = Api.error(HttpStatus.TOO_MANY_REQUESTS, "RATE_LIMITED", e.getMessage(), List.of(), tracer);
+    return ResponseEntity.status(response.getStatusCode()).headers(response.getHeaders())
+        .header("Retry-After", Long.toString(e.retryAfter())).body(response.getBody());
   }
 
   /**

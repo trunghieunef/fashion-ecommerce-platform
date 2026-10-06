@@ -1,11 +1,15 @@
 package vn.fashion.user.auth;
 
 import io.micrometer.tracing.Tracer;
+import jakarta.servlet.http.HttpServletRequest;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.regex.Pattern;
+import org.springframework.beans.factory.annotation.Value;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
@@ -19,12 +23,14 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import vn.fashion.user.web.Api;
 import vn.fashion.user.web.MemberAuth;
+import vn.fashion.platform.security.ProxyClientIp;
 
 /** Public auth API (03 section 2.1). The refresh token only travels in an HttpOnly cookie. */
 @RestController
 @RequestMapping("/api/v1/auth")
 public class AuthController {
   static final String REFRESH_COOKIE = "refresh_token";
+  private static final Logger LOG = LoggerFactory.getLogger(AuthController.class);
   private static final Pattern EMAIL = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
   private static final Set<String> LOCALES = Set.of("vi", "en");
 
@@ -32,12 +38,20 @@ public class AuthController {
   private final PasswordService passwords;
   private final MemberAuth members;
   private final Tracer tracer;
+  private final AuthRateLimiter limits;
+  private final ProxyClientIp clientIp;
 
-  public AuthController(AuthService auth, PasswordService passwords, MemberAuth members, Tracer tracer) {
+  public AuthController(AuthService auth, PasswordService passwords, MemberAuth members, Tracer tracer,
+                        AuthRateLimiter limits, @Value("${fashion.user.trusted-gateways:}") String gateways) {
     this.auth = auth;
     this.passwords = passwords;
     this.members = members;
     this.tracer = tracer;
+    this.limits = limits;
+    this.clientIp = new ProxyClientIp(gateways);
+    if (gateways.replace(",", "").isBlank()) {
+      LOG.warn("USER_TRUSTED_GATEWAYS is empty; auth IP quotas use socket peers. Configure trusted Gateway peers before exposing behind a proxy.");
+    }
   }
 
   public record RegisterRequest(String email, String password, String fullName, String locale) {
@@ -88,7 +102,8 @@ public class AuthController {
   }
 
   @PostMapping("/login")
-  public ResponseEntity<Api.Response<SessionData>> login(@RequestBody LoginRequest request) {
+  public ResponseEntity<Api.Response<SessionData>> login(@RequestBody LoginRequest request, HttpServletRequest http) {
+    limits.login(clientIp(http));
     String email = normalize(request.email());
     if (email == null || request.password() == null) {
       throw new AuthService.InvalidCredentialsException();
@@ -130,11 +145,14 @@ public class AuthController {
   }
 
   @PostMapping("/password/forgot")
-  public ResponseEntity<Api.Response<ForgotAccepted>> forgotPassword(@RequestBody ForgotRequest request) {
+  public ResponseEntity<Api.Response<ForgotAccepted>> forgotPassword(@RequestBody ForgotRequest request,
+                                                                   HttpServletRequest http) {
+    limits.forgotIp(clientIp(http));
     String email = normalize(request.email());
     if (email == null || email.length() > 254 || !EMAIL.matcher(email).matches()) {
       requireValid(List.of(new Api.FieldError("email", "must be a valid e-mail address")), "INVALID_EMAIL");
     }
+    limits.forgotEmail(email);
     passwords.forgot(email);
     return Api.ok(HttpStatus.ACCEPTED, new ForgotAccepted("RESET_EMAIL_REQUESTED"), tracer);
   }
@@ -184,6 +202,11 @@ public class AuthController {
 
   private static String normalize(String email) {
     return email == null ? null : email.strip().toLowerCase(java.util.Locale.ROOT);
+  }
+
+  private String clientIp(HttpServletRequest request) {
+    var headers = java.util.Collections.list(request.getHeaders(ProxyClientIp.HEADER));
+    return clientIp.resolve(request.getRemoteAddr(), headers.size() == 1 ? headers.getFirst() : null);
   }
 
   private ResponseEntity<Api.Response<SessionData>> session(HttpStatus status, AuthService.Session session) {

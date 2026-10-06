@@ -11,6 +11,16 @@ cùng test) và nền tảng `TASK:PLT-01` đã được tạo: root Maven react
 và giới hạn nằm trong README của từng thành phần; không coi các service/đường dẫn khác
 trong cấu trúc dự kiến là đã tồn tại.
 
+Phase 1A hiện có [user-service](../../services/user-service/README.md),
+[platform-durability](../../services/platform-durability/README.md) và
+[platform-security](../../services/platform-security/README.md). Compose thêm Redis;
+login/forgot cần Redis để rate limit (USR-01b-ii), readiness user-service gồm DB + Redis.
+Proxy allowlist/IP handoff ở 03 §1.2 và README Gateway/user-service; mặc định standalone
+không tin header chuyển tiếp. Chưa có Kafka relay, notification-service hoặc UI auth/admin.
+Quota namespace lấy từ `FASHION_ENV` (local mặc định); HMAC identity dùng khóa dẫn xuất từ
+master sẵn có. Allowlist rỗng phát WARN để tránh quên config khi chạy sau Gateway; header
+không được lookup DNS. Readiness/subnet IPv6 staging còn cần chốt ở 08.
+
 Evidence local hiện có ghi tại [17 §7](17_tech_stack.md): catalog/Gateway, frontend,
 Compose smoke chuỗi thật và Nacos proof ngày 2026-09-28. CI remote **PASS** cho commit
 `d16151d` ngày 2026-09-30. [Lần kiểm tra ngày 2026-10-02](../evidence/s1-local-2026-10-02.md)
@@ -66,7 +76,7 @@ chỉ copy JAR/`dist` vào image runtime pin tag + digest.
 | Frontend | `npm ci && npm run typecheck && npm test && npm run build` |
 | Contract | Cài `python3 -m pip install -r tests/contracts/requirements.txt`; chạy `bash scripts/validate-contracts.sh` (Redocly lint + event envelope tests). Chỉ event: `python3 -B -m unittest discover -s tests/contracts -p 'test_*.py' -v` |
 | Khởi động stack | `bash scripts/local-up.sh` (tạo `infra/local/.env` từ example nếu chưa có) |
-| Smoke | `bash scripts/smoke-local.sh`; browser: `npx playwright install chromium && npx playwright test` |
+| Smoke | `bash scripts/smoke-local.sh`; local Redis timeout qua Gateway: `bash scripts/smoke-auth-redis-timeout.sh` (pause/unpause Redis, không chạy khi có traffic người dùng); browser: `npx playwright install chromium && npx playwright test` |
 | Nacos proof O02 | `bash scripts/nacos-compat-check.sh` sau `local-up.sh`; tự trả stack về profile mặc định. Mật khẩu admin chỉ được khởi tạo lần đầu và lưu trong volume `nacos-data`: đổi `NACOS_PASSWORD` sau đó thì xóa riêng volume này (`docker volume rm local_nacos-data`) |
 | Dừng / reset | `docker compose --env-file infra/local/.env -f infra/local/compose.yaml --profile nacos-compat down`; thêm `-v` chỉ khi chủ động xóa dữ liệu local |
 
@@ -168,7 +178,11 @@ Flyway mỗi service, versioned append-only scripts; sửa migration đã deploy
 
 CI ứng dụng cần hiện thực: formatting/static checks; unit; DB migration/constraint integration khi có schema; OpenAPI/event compatibility; secret/dependency scan; build immutable artifact; staging smoke. Payment/stock PR phải test race/failure path liên quan. Không dùng coverage % thay proof invariant.
 
-CI thực có: Documentation CI (Python stdlib) và Application CI cho phần S1-local (toolchain, Maven/Testcontainers, frontend, contract, Compose smoke, Playwright). Cả hai đã PASS trên `d16151d` ngày 2026-09-30 ([evidence](../evidence/s1-local-2026-10-02.md)); chưa chứng minh patch sau commit này. Chưa có secret/dependency/image scan, image registry, CD hoặc quyền AWS; lộ trình GitHub OIDC → ECR → GitOps ở [16 AWS deployment](16_aws_deployment.md).
+CI thực có: Documentation CI (Python stdlib) và Application CI (toolchain, gitleaks,
+Maven/Testcontainers, frontend, contract, offline infra, Compose smoke/Redis timeout, Playwright).
+Kết quả phải đối chiếu đúng SHA trong evidence; không dùng CI cũ chứng minh patch mới.
+Workflow publish-images/OIDC đã chuẩn bị, chưa publish/deploy AWS; dependency/image scan và
+CD thực vẫn cần triển khai. Lộ trình và approval ở [16 AWS deployment](16_aws_deployment.md).
 
 Rollback ứng dụng bằng image/manifests đã xác nhận; rollback schema chỉ khi có kế hoạch tested. Không drop dữ liệu tiền để quay lại migration cũ. Release cần biết phiên bản code nào đọc được schema mới.
 

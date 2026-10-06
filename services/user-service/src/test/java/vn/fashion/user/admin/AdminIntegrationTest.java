@@ -25,9 +25,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import tools.jackson.databind.JsonNode;
@@ -44,11 +46,17 @@ class AdminIntegrationTest {
       .withPassword("postgres")
       .withInitScript("user-test-init.sql");
 
+  @Container
+  static final GenericContainer<?> redis = new GenericContainer<>("redis:8.2.9").withExposedPorts(6379);
+
   static final KeyPair SIGNING_KEY = ecKeyPair();
   static final String PASSWORD = "Synthetic-pass-1"; // gitleaks:allow synthetic test password
 
   @Autowired
   private JdbcTemplate jdbc;
+
+  @Autowired
+  private StringRedisTemplate counters;
 
   @Autowired
   private ObjectMapper json;
@@ -70,12 +78,17 @@ class AdminIntegrationTest {
     registry.add("USER_JWT_PRIVATE_KEY",
         () -> Base64.getEncoder().encodeToString(SIGNING_KEY.getPrivate().getEncoded()));
     registry.add("USER_JWT_KEY_ID", () -> "user-test");
+    registry.add("USER_REDIS_HOST", redis::getHost);
+    registry.add("USER_REDIS_PORT", () -> redis.getMappedPort(6379));
     registry.add("USER_JWT_PUBLIC_KEYS",
         () -> "user-test:" + Base64.getEncoder().encodeToString(SIGNING_KEY.getPublic().getEncoded()));
   }
 
   @BeforeEach
   void clean() {
+    try (var connection = counters.getConnectionFactory().getConnection()) {
+      connection.serverCommands().flushDb();
+    }
     // audit_logs is append-only for the runtime role; the superuser clears it between tests.
     try (var admin = java.sql.DriverManager.getConnection(postgres.getJdbcUrl(), "postgres", "postgres");
          var statement = admin.createStatement()) {
