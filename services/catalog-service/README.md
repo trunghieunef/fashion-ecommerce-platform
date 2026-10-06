@@ -40,6 +40,11 @@ collection/size-guide/media, filter/search public, cursor thật, cache hoặc K
 
 ## Chạy local
 
+`bash scripts/smoke-local.sh` giữ kiểm tra không token 401 và member thật thiếu quyền 403,
+rồi tạo category → product → variant → publish qua Gateway bằng JWT synthetic ký từ khóa
+local trong `.env` (chỉ memory, quyền `catalog.write`, TTL 300 giây). Smoke này không chứng minh
+chuỗi login → token OPS. Slug/SKU ngẫu nhiên; dữ liệu smoke tích lũy trên volume local vì không có DELETE.
+
 Yêu cầu JDK 21 và Docker daemon mà user hiện tại được phép truy cập. Từ repo root:
 
 ```bash
