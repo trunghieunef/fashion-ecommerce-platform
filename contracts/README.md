@@ -45,6 +45,9 @@ bằng chứng riêng của PLT-03.
   phải là field bắt buộc và `aggregate_id` của envelope phải bằng field đã khai báo. `events/common.schema.json`: UUID, UTC `Z`, business version, tiền VND
   integer 0..bigint (không float/string), `currency` = `VND`, `payment_method`
   COD/VNPAY/MOMO, SKU ≤ 64, stock int ≥ 0, order item quantity 1–99 (05).
+  SKU mới: strip → kiểm ASCII `[A-Za-z0-9._-]` (ký tự đầu chữ/số) → uppercase Locale.ROOT
+  trước hash/lưu DB/audit/outbox; unique không phân biệt hoa/thường. SKU cũ, response replay
+  và event đã lưu giữ identity nguyên gốc; schema response/event vẫn nhận chữ thường.
 - Payload theo 03 §5.3: `user-events` (USER_CREATED, không password/token), `notification-events` (NOTIFY_RESET_PASSWORD, chỉ `challenge_id`, không token), `catalog-events`
   (VARIANT_CREATED, CATALOG_CHANGED), `stock-events` (INVENTORY_UPDATED/RESTOCKED),
   `order-events` (ORDER_CREATED/CONFIRMED/PAID; CANCELLED bắt buộc `reason`). Payload

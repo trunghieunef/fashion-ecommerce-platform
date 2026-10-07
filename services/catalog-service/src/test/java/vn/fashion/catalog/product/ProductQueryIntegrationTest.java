@@ -52,6 +52,7 @@ class ProductQueryIntegrationTest {
 
   @DynamicPropertySource
   static void databaseProperties(DynamicPropertyRegistry registry) {
+    registry.add("fashion.catalog.jwt.public-keys", vn.fashion.catalog.admin.CatalogAdminTestSupport::publicKeys);
     registry.add("spring.datasource.url", postgres::getJdbcUrl);
     registry.add("spring.datasource.username", () -> "catalog_runtime");
     registry.add("spring.datasource.password", () -> "catalog_runtime_test");
@@ -73,14 +74,14 @@ class ProductQueryIntegrationTest {
   @Test
   void returnsOnlyActiveProducts() {
     jdbc.update(
-        "insert into products(id,slug,status,name_vi,name_en,version) values (?,?,?,?,?,0)",
+        "insert into products(id,slug,status,name_vi,name_en,version,category_id,base_price) values (?,?,?,?,?,0,'00000000-0000-4000-8000-000000000001',0)",
         UUID.fromString("00000000-0000-0000-0000-000000000001"),
         "visible",
         "ACTIVE",
         "Hiện",
         "Visible");
     jdbc.update(
-        "insert into products(id,slug,status,name_vi,name_en,version) values (?,?,?,?,?,0)",
+        "insert into products(id,slug,status,name_vi,name_en,version,category_id,base_price) values (?,?,?,?,?,0,'00000000-0000-4000-8000-000000000001',0)",
         UUID.fromString("00000000-0000-0000-0000-000000000002"),
         "hidden",
         "DRAFT",
@@ -122,7 +123,7 @@ class ProductQueryIntegrationTest {
   void usesThePublicDefaultLimitOfTwenty() {
     for (int index = 0; index < 21; index++) {
       jdbc.update(
-          "insert into products(id,slug,status,name_vi,name_en,version) values (?,?,?,?,?,0)",
+          "insert into products(id,slug,status,name_vi,name_en,version,category_id,base_price) values (?,?,?,?,?,0,'00000000-0000-4000-8000-000000000001',0)",
           UUID.nameUUIDFromBytes(("product-" + index).getBytes(StandardCharsets.UTF_8)),
           "product-" + index,
           "ACTIVE",

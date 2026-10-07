@@ -2,8 +2,22 @@
 
 `TASK:PLT-01` · partial `TASK:CAT-01` · `REQ:CAT-01`, `REQ:XCT-06`.
 
-Service này là vertical slice catalog read-only của Sprint 1. Nó sở hữu database
-`catalog`, chạy Flyway migration `V001`, và chỉ public `GET /api/v1/catalog/products`.
+Service sở hữu database `catalog`. Phần nền read-only Sprint 1 chạy Flyway `V001`;
+CAT-01a bổ sung `V002` (category/brand, product fields, variant identity trigger,
+outbox/idempotency/audit) và follow-up `V003` (SKU mới uppercase ASCII, unique không phân biệt casing).
+Admin taxonomy đã có GET/POST categories/brands và PUT theo id
+tại `/admin/api/v1/catalog`. Mọi endpoint kiểm ES256 và `catalog.write` tại service;
+POST cần `Idempotency-Key`, PUT cần `expected_version`; mutation và audit cùng transaction.
+Thu hồi quyền ở catalog trễ tối đa TTL access token 15 phút theo ADR-21.
+Audit dùng `request_id` của metadata response mutation đầu; retry giữ data/status đã lưu,
+metadata mới và không thêm audit. Lỗi nội bộ admin trả 500 `INTERNAL`/`INTERNAL_ERROR`
+với body chỉ code/message/metadata và X-Correlation-Id; exception vẫn log server qua
+logger redact PII hiện có. Handler admin không áp cho ProductQueryController public.
+Lỗi Spring ErrorResponse 4xx đến advice admin giữ status/header gốc (415 Content-Type,
+406 Accept), envelope VALIDATION_ERROR/INVALID_HTTP_REQUEST bằng application/json,
+metadata/X-Correlation-Id và không log ERROR. Lỗi còn lại mới dùng fallback 500;
+không đổi các handler cụ thể hoặc thứ tự auth trong controller.
+Public API hiện có `GET /api/v1/catalog/products`.
 Endpoint trả các product `ACTIVE` theo `created_at DESC, id DESC`; `limit` mặc định
 `20`, tối đa `100`. Response thành công theo [contract 03 §1.2](../../docs/design/03_interfaces.md):
 `code: "OK"`, `data`, `metadata.request_id`, và `metadata.trace_id`.
@@ -13,18 +27,48 @@ Endpoint trả các product `ACTIVE` theo `created_at DESC, id DESC`; `limit` m�
 `rejected_value`) và metadata đầy đủ. Header `X-Correlation-Id` bằng `trace_id` của
 response, kể cả lỗi validation.
 
-Đây chưa phải acceptance đầy đủ của `TASK:CAT-01`: không có CRUD/admin, variant,
-category, filter/search, cursor thật, cache, auth hoặc Kafka. `next_cursor` luôn
-`null`; topics producer/consumer: **none trong S1**.
+Product admin đã có GET list (page/size/status), POST draft, GET/PUT theo id; PUT giữ trạng thái,
+kiểm version. Description VI/EN qua jsoup 1.23.2 Safelist.basic + h2/h3, link chỉ http/https,
+rel nofollow/noopener; giới hạn sau sanitize 20.000 ký tự. Giá VND bigint, từ chối JSON thập phân.
+
+Variant admin đã có POST `/products/{id}/variants` và PUT `/variants/{id}`: SKU/size/color/product
+bất biến, sửa price_override/weight/status với version. Tạo variant tăng product version và ghi
+đúng một `VARIANT_CREATED` PENDING tại `catalog.events`, key product_id, trong cùng transaction
+với variant, audit và kết quả idempotency. Chưa có relay/Kafka local; chưa có inventory consumer.
+SKU mới: strip → kiểm 1–64 ký tự ASCII `[A-Za-z0-9._-]`, đầu chữ/số → uppercase Locale.ROOT
+trước hash/DB/audit/outbox. Retry đổi casing vẫn replay; đổi field khác trả 409.
+V003 thêm unique index `upper(sku COLLATE "C")` và BEFORE INSERT guard; giữ V001/V002.
+SKU cũ giữ identity và vẫn sửa mutable được; audit/outbox/hash/response cũ không backfill.
+Replay key legacy giữ data/status nguyên gốc. Schema response/event vẫn nhận legacy lowercase.
+Trước upgrade kiểm collision bằng `GROUP BY upper(sku COLLATE "C") HAVING count(*) > 1`;
+có collision thì migration dừng, cần quyết định dữ liệu riêng, không tự merge hoặc reset volume.
+
+Publish/unpublish qua POST `/products/{id}/publish|unpublish` cần key + expected_version,
+reason tùy chọn ≤ 500. Publish DRAFT/INACTIVE → ACTIVE kiểm category/brand ACTIVE và có variant
+ACTIVE; thiếu điều kiện trả 400 và rollback. Unpublish ACTIVE → INACTIVE; cạnh khác 409.
+Published_at giữ mốc publish đầu. Điều kiện ảnh được chủ dự án hoãn tới CAT-03.
+Product ACTIVE từ V001 có thể còn `published_at` null: unpublish giữ null, publish lại mới đặt
+timestamp. Quyết định backfill hoặc xử lý null trong sort/index theo `published_at` thuộc CAT-02.
+
+Đây chưa phải acceptance đầy đủ của `TASK:CAT-01`: còn
+collection/size-guide/media, filter/search public, cursor thật, cache hoặc Kafka. `next_cursor` luôn
+`null`; producer intent `catalog.events` trong outbox, chưa publish; consumer: none.
 
 ## Chạy local
+
+`bash scripts/smoke-local.sh` giữ kiểm tra không token 401 và member thật thiếu quyền 403,
+rồi tạo category → product → variant → publish qua Gateway bằng JWT synthetic ký từ khóa
+local trong `.env` (chỉ memory, quyền `catalog.write`, TTL 300 giây). Smoke này không chứng minh
+chuỗi login → token OPS. Slug/SKU ngẫu nhiên; dữ liệu smoke tích lũy trên volume local vì không có DELETE.
+Smoke tạo SKU có whitespace/chữ thường rồi retry cùng key bằng uppercase; kiểm cùng variant id
+và product version không tăng thêm trước publish.
 
 Yêu cầu JDK 21 và Docker daemon mà user hiện tại được phép truy cập. Từ repo root:
 
 ```bash
-cp infra/local/.env.example infra/local/.env
-docker compose --env-file infra/local/.env -f infra/local/compose.yaml up -d postgres
+bash scripts/local-up.sh # sinh khóa local, tạo roles và chạy stack
 set -a; source infra/local/.env; set +a
+export CATALOG_JWT_PUBLIC_KEYS="$USER_JWT_PUBLIC_KEYS"
 ./mvnw -pl services/catalog-service spring-boot:run
 ```
 
@@ -41,6 +85,7 @@ Lệnh này giữ volume local; chỉ dùng `down -v` khi chủ động xóa to�
 | `CATALOG_DB_URL` | `jdbc:postgresql://localhost:5432/catalog` | Runtime datasource |
 | `CATALOG_DB_USERNAME` / `CATALOG_DB_PASSWORD` | `catalog_runtime` / synthetic local value | Runtime datasource |
 | `CATALOG_DB_MAX_POOL_SIZE` | `10` | Hikari runtime pool |
+| `CATALOG_JWT_PUBLIC_KEYS` | bắt buộc, không default | `kid:base64-X.509` để kiểm access token ES256; dùng public keys của user-service |
 | `CATALOG_MIGRATION_DB_URL` | `jdbc:postgresql://localhost:5432/catalog` | Flyway datasource |
 | `CATALOG_MIGRATION_DB_USERNAME` / `CATALOG_MIGRATION_DB_PASSWORD` | `catalog_migration` / synthetic local value | Flyway migration |
 
@@ -64,7 +109,9 @@ Surefire chạy JVM test với `-Duser.timezone=UTC` để pgjdbc không gửi a
 (ví dụ `Asia/Saigon` trên Windows) mà PostgreSQL từ chối.
 Hai lệnh dùng Testcontainers PostgreSQL `17.11`; chúng cần Docker daemon khả dụng,
 không dùng H2 hoặc mock repository thay thế. Test kiểm tra migration, active-only
-query, limit, response envelope, readiness và runtime role không thể tạo table.
+query, limit, response envelope, readiness và runtime role không thể tạo table, cùng admin
+auth, version/SKU races, idempotency, sanitize, publish và rollback outbox/audit. CAT-01a local
+có 71 test catalog sau follow-up SKU PR14; tổng reactor và mutation tại [evidence](../../docs/evidence/cat-01a-local-2026-10-07.md).
 
 Sau khi service chạy:
 

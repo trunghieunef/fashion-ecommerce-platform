@@ -19,6 +19,7 @@ Response thành công gồm code=OK, data, metadata.request_id/trace_id. Lỗi g
 | HTTP | Code | FE / caller xử lý |
 |---|---|---|
 | 400 | VALIDATION_ERROR | Gắn lỗi field, không tự retry |
+| 406 / 415 | VALIDATION_ERROR | Catalog admin: sửa Accept / Content-Type, không tự retry; lỗi Spring 4xx đến advice admin giữ status gốc |
 | 401 | UNAUTHORIZED | Refresh một lần khi phù hợp; guest mất credential không được đoán đơn |
 | 403 | FORBIDDEN | Không đủ quyền/CSRF, không retry |
 | 404 | NOT_FOUND | Không tồn tại hoặc không thuộc actor |
@@ -184,6 +185,32 @@ HTTP 202 kèm Location=status_url và Retry-After. HTTP 201 khi đã WAITING_PAY
 
 Tất cả có Bearer + permission, auth_version hiện hành; mutation có reason/key/version khi áp dụng. Paths CRUD viết {id} là tài nguyên riêng, không có endpoint “...” ngầm.
 
+CAT-01a đã triển khai và kiểm tra local trên `dev`, chờ review: GET/POST categories/brands,
+PUT theo id; GET/POST products, GET/PUT theo id; POST variant, PUT variant; POST publish/unpublish.
+Contract thực thi tại [`catalog.yaml`](../../contracts/openapi/catalog.yaml), Gateway route
+`/admin/api/v1/catalog/**` tới catalog-service. Product POST tạo DRAFT; PUT chỉ sửa nội dung,
+description lưu HTML đã sanitize, tiền là bigint VND (không nhận số thập phân). Các endpoint
+cần `catalog.write` (OPS), mọi POST có `Idempotency-Key`; PUT và publish/unpublish có
+`expected_version`. Publish/unpublish nhận reason tùy chọn ≤ 500, cạnh sai trả 409;
+publish kiểm taxonomy ACTIVE và ≥ 1 variant ACTIVE (điều kiện ảnh thuộc CAT-03).
+Token được kiểm bằng `AccessTokenVerifier`, không gọi user-service; thu hồi quyền trễ tối đa
+15 phút theo ADR-21. Retry key/body chuẩn hóa trả cùng kết quả; đổi body trả 409 IDEMPOTENCY_KEY_REUSED.
+SKU mới: `String.strip` → kiểm 1–64 ký tự ASCII `^[A-Za-z0-9][A-Za-z0-9._-]*$` →
+uppercase `Locale.ROOT` trước hash idempotency/lưu DB/audit/outbox. Trùng SKU không phân biệt
+hoa/thường trả 409 `CONFLICT`, field `sku`; retry cùng key đổi casing vẫn replay. SKU cũ bất biến,
+response/key/event đã lưu không backfill; replay key cũ giữ data/status, đổi field khác vẫn 409.
+Audit của mutation dùng cùng `request_id` với metadata response đầu; retry giữ data/status,
+metadata mới và không thêm audit. Lỗi nội bộ admin trả 500 với đúng code `INTERNAL`, message
+`INTERNAL_ERROR`, metadata và header `X-Correlation-Id`; exception chỉ log phía server qua
+logger redact PII. Handler này không áp cho public ProductQueryController.
+Lỗi Spring `ErrorResponse` 4xx đến advice admin giữ status (gồm 415 Content-Type không hỗ trợ
+và 406 Accept không hỗ trợ), code `VALIDATION_ERROR`, message chung `INVALID_HTTP_REQUEST`,
+metadata/X-Correlation-Id, Content-Type application/json và header lỗi của Spring; không log
+ERROR/stacktrace. Các handler 400/401/403/404/409/503 cụ thể vẫn giữ contract hiện có.
+Chỉ lỗi còn lại mới dùng fallback 500. Binding/content negotiation có thể xảy ra trước auth
+trong method; không đổi thứ tự xác thực hoặc scope advice sang route public/unmapped.
+Chưa nghiệm thu CAT-01; collection/size-guide, CATALOG_CHANGED và relay nằm ngoài phần 1a.
+
 | Methods / path | Quyền | Đầu ra / phase |
 |---|---|---|
 | GET /users; PUT /users/{id}/roles; POST /users/{id}/lock | SUPER_ADMIN (`user.manage`) | Danh sách, phân quyền/khóa audit / 1. Contract: [`user.yaml`](../../contracts/openapi/user.yaml) (`TASK:USR-02` phần 2b); đổi role và khóa cần `reason` + `expected_version` (= `version` của user), khóa cần `Idempotency-Key`; admin không tự đổi/khóa chính mình (403) |
@@ -328,4 +355,4 @@ Method/header/carrier mapping thật phải được xác minh trong sandbox. N�
 
 ## 7. Điều kiện contract-ready
 
-Mỗi endpoint/event khi nhận task phải có: operationId/schema ID, request/response examples hợp lệ, required/nullable/range/enum, permission/ownership, lỗi nghiệp vụ, idempotency/version behavior, producer/consumer và test duplicate/out-of-order nếu liên quan. 03 là danh mục B1; chưa tuyên bố là OpenAPI hoàn chỉnh đã validate. Contract thực thi hiện có: `contracts/openapi/catalog.yaml` chỉ cho `GET /api/v1/catalog/products` của S1 (200/400), kiểm bằng `scripts/validate-contracts.sh`; smoke kiểm envelope và shape từng item của response live theo `ProductSummary`; chưa có validator tự sinh từ OpenAPI. Tên đường dẫn thay đổi phải sửa FE/mock/tests cùng PR.
+Mỗi endpoint/event khi nhận task phải có: operationId/schema ID, request/response examples hợp lệ, required/nullable/range/enum, permission/ownership, lỗi nghiệp vụ, idempotency/version behavior, producer/consumer và test duplicate/out-of-order nếu liên quan. 03 là danh mục B1; chưa tuyên bố là OpenAPI hoàn chỉnh đã validate. Contract thực thi hiện có: [`catalog.yaml`](../../contracts/openapi/catalog.yaml) gồm public `GET /api/v1/catalog/products` của S1 (200/400) và 14 operation admin CAT-01a với bearer/key/version/envelope theo §3, kiểm bằng `scripts/validate-contracts.sh`; smoke kiểm envelope và shape từng item của response live theo `ProductSummary`; chưa có validator tự sinh từ OpenAPI. Tên đường dẫn thay đổi phải sửa FE/mock/tests cùng PR.

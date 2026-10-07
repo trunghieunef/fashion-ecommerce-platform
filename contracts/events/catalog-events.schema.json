@@ -10,7 +10,7 @@
       "properties": {
         "product_id": {"$ref": "common.schema.json#/$defs/uuid"},
         "variant_id": {"$ref": "common.schema.json#/$defs/uuid"},
-        "sku": {"$ref": "common.schema.json#/$defs/sku"},
+        "sku": {"$ref": "common.schema.json#/$defs/sku", "description": "New variants emit canonical uppercase ASCII SKU; stored legacy events keep their original immutable SKU."},
         "version": {"$ref": "common.schema.json#/$defs/business_version"}
       },
       "additionalProperties": false

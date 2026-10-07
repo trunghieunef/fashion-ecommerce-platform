@@ -150,4 +150,39 @@ Gate task là work package trong [backlog](../delivery/10_backlog.md). Mã task 
   luân phiên địa chỉ trong /64. Cần chốt /64, /56 hay giữ per-IP theo NAT/fairness và test
   topology thực; gom subnet thay đổi actor/quota nên không tự đưa vào bản sửa PR #12.
 
+- CAT-01a (2026-10-07, chủ dự án giao thực thi spec/plan đã duyệt): dùng jsoup **1.23.2**
+  (`Safelist.basic` + h2/h3, chỉ http/https, rel nofollow/noopener); JdbcClient và durability
+  primitives hiện có. Các điểm spec §10 được giữ để reviewer đối chiếu: size/color bất biến,
+  taxonomy version và list không phân trang, ngưng category không cascade, publish/unpublish
+  có key + version, seed uncategorized. Không mở rộng collection/size-guide, điều kiện ảnh,
+  CATALOG_CHANGED hoặc Kafka relay trong 1a.
+- Chủ dự án chốt trong phiên CAT-01a: record canonical nhận reason null, thiếu version trả 400;
+  chỉ publish đặt `published_at = coalesce(published_at, now())`, unpublish không sửa timestamp.
+  ACTIVE từ V001 có thể còn null; backfill/xử lý null cho sort/index để CAT-02.
+- Chủ dự án duyệt smoke OPS qua Gateway bằng JWT synthetic chỉ trong script local, ký bằng
+  khóa `.env` trong memory, ADR-21 ES256/kid/iss/aud, sub UUID mới, auth_version 0,
+  permissions chỉ catalog.write và exp ≤ 300 giây. Không sửa user DB; giữ 401/403 member thật.
+  Fixture slug/SKU ngẫu nhiên tích lũy vì không DELETE; smoke không chứng minh login → token OPS.
+  Chi tiết và giới hạn: [evidence CAT-01a](../evidence/cat-01a-local-2026-10-07.md).
+- Review CAT-01a (2026-10-07, chủ dự án duyệt sửa plan Task 2/4): fallback 500 chỉ trong
+  admin trả INTERNAL/INTERNAL_ERROR + metadata và X-Correlation-Id, vẫn log exception
+  server qua logger redact PII hiện có. Audit dùng metadata.request_id do controller tạo
+  một lần theo khuôn user-service; retry metadata mới, không thêm audit hoặc đổi hash.
+  Không áp handler cho public ProductQueryController. Không đổi schema hoặc nghiệp vụ.
+- Review PR #14 (2026-10-07, chủ dự án duyệt): chỉ sửa Important catch-all đổi lỗi HTTP
+  của Spring thành 500. `ErrorResponse` 4xx đến advice admin giữ status/header gốc,
+  trả VALIDATION_ERROR/INVALID_HTTP_REQUEST + metadata/X-Correlation-Id bằng JSON,
+  không log ERROR; fallback 500 cho lỗi còn lại vẫn log exception qua logger redact PII.
+  Giữ scope public và các handler cụ thể. Chủ dự án để các Minor riêng: deadlock mapping,
+  scalar coercion; không kéo interceptor/refactor tags vào đợt sửa này.
+
+- PR14 SKU (2026-10-07, chủ dự án duyệt): SKU mới strip → kiểm ASCII 1–64,
+  ký tự đầu chữ/số, chỉ `[A-Za-z0-9._-]` → uppercase Locale.ROOT trước hash/DB/audit/outbox.
+  SKU unique không phân biệt hoa/thường qua V003, giữ V001/V002 append-only.
+  Chọn chỉ chuẩn hóa SKU mới: identity, audit/outbox và key/response cũ giữ nguyên, không backfill.
+  Replay key legacy dùng SKU từ response đã lưu để kiểm hash cùng các field request còn lại;
+  giữ data/status cũ, đổi field khác vẫn 409. INSERT guard không cản UPDATE trường mutable
+  của variant legacy. Collision theo casing làm migration dừng, cần quyết định dữ liệu riêng.
+  Spec/plan, 03/05/06 và contracts đồng bộ; CAT-01 vẫn chờ review/acceptance.
+
 Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác và lý do; ảnh hưởng PRD/API/schema/test/task; người quyết định; ngày; link bằng chứng. Chưa có chữ ký phê duyệt giả định thương mại.

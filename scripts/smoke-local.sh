@@ -60,6 +60,48 @@ curl --fail --silent --show-error -H "Authorization: Bearer $access" -H 'Content
 test "$(status "$GATEWAY_URL/api/v1/users/me")" = 401
 # TASK:USR-02 part 2b: admin API is routed but a member without user.manage gets 403.
 test "$(status -H "Authorization: Bearer $access" "$GATEWAY_URL/admin/api/v1/users")" = 403
+# TASK:CAT-01a: service authorization through Gateway; this is a real member token.
+test "$(status "$GATEWAY_URL/admin/api/v1/catalog/products")" = 401
+test "$(status -H "Authorization: Bearer $access" "$GATEWAY_URL/admin/api/v1/catalog/products")" = 403
+# Local-only synthetic OPS token; this does not prove login -> OPS token issuance.
+# Node reads the local .env; key and token stay in process memory and are never logged.
+catalog_access="$(node --env-file="${ENV_FILE:-infra/local/.env}" <<'NODE'
+const { createPrivateKey, randomUUID, sign } = require('node:crypto');
+const encode = value => Buffer.from(JSON.stringify(value)).toString('base64url');
+const now = Math.floor(Date.now() / 1000);
+const header = encode({alg: 'ES256', typ: 'JWT', kid: process.env.USER_JWT_KEY_ID});
+const payload = encode({iss: 'user-service', aud: 'fashion-api', sub: randomUUID(),
+  auth_version: 0, permissions: ['catalog.write'], iat: now, exp: now + 300});
+const key = createPrivateKey({key: Buffer.from(process.env.USER_JWT_PRIVATE_KEY, 'base64'), type: 'pkcs8', format: 'der'});
+const input = `${header}.${payload}`;
+process.stdout.write(`${input}.${sign('sha256', Buffer.from(input), {key, dsaEncoding: 'ieee-p1363'}).toString('base64url')}`);
+NODE
+)"
+# No DELETE endpoint: each run leaves uniquely named fixtures on the local volume.
+catalog_suffix="$(node -e 'process.stdout.write(require("node:crypto").randomUUID())')"
+catalog_post() {
+  curl --fail --silent --show-error -H "Authorization: Bearer $catalog_access" \
+    -H 'Content-Type: application/json' -H "Idempotency-Key: smoke-$catalog_suffix-$1" \
+    -d "$3" "$GATEWAY_URL/admin/api/v1/catalog$2"
+}
+category_id="$(catalog_post category /categories \
+  "{\"name_vi\":\"Smoke\",\"name_en\":\"Smoke\",\"slug\":\"smoke-$catalog_suffix\"}" | \
+  python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["code"] == "OK"; print(d["data"]["id"])')"
+product_id="$(catalog_post product /products \
+  "{\"category_id\":\"$category_id\",\"name_vi\":\"Smoke\",\"name_en\":\"Smoke\",\"slug\":\"smoke-$catalog_suffix\",\"base_price\":100000}" | \
+  python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["status"] == "DRAFT" and d["version"] == 0; print(d["id"])')"
+variant_id="$(catalog_post variant "/products/$product_id/variants" \
+  "{\"sku\":\" smoke-$catalog_suffix \",\"size\":\"M\",\"color\":\"black\",\"weight_grams\":100}" | \
+  python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["status"] == "ACTIVE" and d["version"] == 0 and d["sku"] == sys.argv[1].upper(); print(d["id"])' "SMOKE-$catalog_suffix")"
+# Same key after changing casing must replay, so publish still expects product version 1.
+catalog_post variant "/products/$product_id/variants" \
+  "{\"sku\":\"SMOKE-${catalog_suffix^^}\",\"size\":\"M\",\"color\":\"black\",\"weight_grams\":100}" | \
+  python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["id"] == sys.argv[1] and d["sku"] == sys.argv[2].upper()' "$variant_id" "SMOKE-$catalog_suffix"
+catalog_post publish "/products/$product_id/publish" '{"expected_version":1}' | \
+  python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["status"] == "ACTIVE" and d["version"] == 2 and d["published_at"]'
+curl --fail --silent --show-error "$GATEWAY_URL/api/v1/catalog/products?limit=100" | \
+  python3 -c 'import json,sys; assert any(p["id"] == sys.argv[1] for p in json.load(sys.stdin)["data"]["items"])' "$product_id"
+unset catalog_access
 # TASK:USR-01 part 1b-i: forgot answers 202 for known and unknown e-mails (Redis handoff in
 # Compose); change password revokes the current access token.
 for target in "me-$EMAIL" "nobody-$EMAIL"; do

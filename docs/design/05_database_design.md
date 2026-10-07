@@ -110,10 +110,10 @@ erDiagram
 
 | Bảng | Cột | Constraints / index |
 |---|---|---|
-| `categories` (T) | `id`, `parent_id uuid? FK categories`, `name_vi text`, `name_en text`, `slug text`, `sort_order int = 0`, `status varchar(32) = 'ACTIVE'` | UNIQUE slug; CHECK parent_id <> id; service chống chu kỳ và quá 2 cấp; ACTIVE/INACTIVE |
-| `brands` (T) | `id`, `name text`, `logo_url text?`, `status varchar(32) = 'ACTIVE'` | ACTIVE/INACTIVE |
+| `categories` (T) | `id`, `parent_id uuid? FK categories`, `name_vi text`, `name_en text`, `slug text`, `sort_order int = 0`, `status varchar(32) = 'ACTIVE'`, `version bigint = 0` | UNIQUE slug; CHECK parent_id <> id; service chống chu kỳ và quá 2 cấp; ACTIVE/INACTIVE; version guard |
+| `brands` (T) | `id`, `name text`, `logo_url text?`, `status varchar(32) = 'ACTIVE'`, `version bigint = 0` | ACTIVE/INACTIVE; version guard |
 | `products` (T) | `id`, `category_id uuid FK categories`, `brand_id uuid? FK brands`, `name_vi text`, `name_en text`, `slug text`, `description_vi text = ''`, `description_en text = ''`, `base_price bigint`, `tags text[] = '{}'`, `status varchar(32) = 'DRAFT'`, `published_at timestamptz?`, `version bigint = 0`, `sold_quantity bigint = 0` | UNIQUE slug; price/sold_quantity >= 0; DRAFT/ACTIVE/INACTIVE; indexes `(category_id, status, published_at, id)`, `(status, base_price, id)`, `(status, sold_quantity, id)` |
-| `product_variants` (T) | `id`, `product_id uuid FK products`, `sku varchar(64)`, `size text`, `color text`, `price_override bigint?`, `weight_grams int`, `status varchar(32) = 'ACTIVE'`, `version bigint = 0` | UNIQUE sku, `(product_id, size, color)`; price >= 0, weight > 0; ACTIVE/INACTIVE; SKU bất biến |
+| `product_variants` (T) | `id`, `product_id uuid FK products`, `sku varchar(64)`, `size text`, `color text`, `price_override bigint?`, `weight_grams int`, `status varchar(32) = 'ACTIVE'`, `version bigint = 0` | UNIQUE sku không phân biệt casing (V003), `(product_id, size, color)`; SKU mới uppercase ASCII, legacy giữ nguyên; price >= 0, weight > 0; ACTIVE/INACTIVE; SKU bất biến |
 | `product_images` | `id`, `product_id uuid FK products`, `variant_color text?`, `url text`, `thumb_url text`, `alt_vi text`, `alt_en text`, `sort_order int = 0` | Index `(product_id, sort_order)`; kiểm tra màu thuộc sản phẩm tại service |
 | `collections` (T) | `id`, `name_vi text`, `name_en text`, `slug text`, `cover_url text?`, `start_at timestamptz?`, `end_at timestamptz?`, `status varchar(32) = 'DRAFT'` | UNIQUE slug; DRAFT/ACTIVE/INACTIVE; end > start khi cả hai có giá trị |
 | `collection_items` | `collection_id uuid FK collections`, `product_id uuid FK products`, `sort_order int = 0` | PK `(collection_id, product_id)`; index `(collection_id, sort_order, product_id)` |
@@ -123,7 +123,25 @@ erDiagram
 | `reviews` (T, Phase 2) | `id`, `eligibility_id uuid FK review_eligibilities`, `rating smallint`, `title text`, `content text`, `images text[] = '{}'`, `status varchar(32) = 'PENDING'`, `moderated_by uuid?`, `moderated_at timestamptz?`, `moderation_reason text?` | UNIQUE eligibility_id; rating 1–5, cardinality(images) <= 5; PENDING/APPROVED/REJECTED; index `(status, created_at, id)` |
 | `wishlist_items` (C, Phase 2) | `user_id uuid`, `product_id uuid FK products` | PK `(user_id, product_id)`; index `(user_id, created_at, product_id)` |
 
-`TASK:PLT-01` hiện có `V001` làm read sample tối thiểu: `products` chỉ gồm `id`,
+`TASK:CAT-01` phần 1a bổ sung `V002__catalog_admin.sql`: categories/brands có `version`,
+product có category/brand, description, base_price, tags, published_at và sold_quantity;
+variant có constraint SKU/product-size-color và trigger giữ bất biến sku/size/color/product_id.
+Follow-up PR14 dùng `V003__canonical_sku.sql`, không sửa V001/V002: unique index
+`product_variants_sku_key_ci` trên `upper(sku COLLATE "C")`; trigger BEFORE INSERT
+`product_variants_sku_canonical_insert` chỉ nhận `^[A-Z0-9][A-Z0-9._-]*$` (varchar(64)).
+SKU cũ giữ nguyên, vẫn sửa trường mutable được; không dùng CHECK áp vào UPDATE của dòng legacy.
+Nếu có collision theo casing, migration dừng để chủ dự án chốt dữ liệu, không tự merge/backfill.
+Outbox, audit, hash/response idempotency cũ không sửa; consumer giữ đúng SKU identity nhận từ catalog.
+Migration gán sản phẩm sample vào category seed `uncategorized`
+(`00000000-0000-4000-8000-000000000001`), base_price 0, giữ trạng thái cũ.
+Product ACTIVE từ V001 có thể còn `published_at` null. Unpublish giữ giá trị cũ; chỉ publish
+đặt `coalesce(published_at, now())`. Backfill hoặc xử lý null khi sort/index theo published_at
+thuộc CAT-02; các index price/sold_quantity trong bảng là mục tiêu CAT-02, chưa có trong V002.
+Outbox/idempotency/audit thuộc catalog-db; audit runtime chỉ INSERT/SELECT, `request_id`
+khớp metadata của response mutation đầu; retry không ghi thêm audit. Collection,
+size-guide và media chưa có; đây chưa phải acceptance toàn bộ CAT-01.
+
+`TASK:PLT-01` có `V001` làm read sample tối thiểu: `products` chỉ gồm `id`,
 `slug`, `status`, tên VI/EN, `version` và timestamps, cùng index public ACTIVE.
 Đây không phải toàn bộ schema/acceptance `CAT-01` ở bảng trên. Các cột, relation và
 constraint còn thiếu phải được thêm bằng migration tương thích, append-only trước

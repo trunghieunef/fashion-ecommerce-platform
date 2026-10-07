@@ -3,7 +3,7 @@ info:
   title: Catalog API
   version: 0.1.0
   description: >
-    TASK:PLT-02 core — only the operation implemented by the S1 catalog sample.
+    TASK:PLT-02 public sample and TASK:CAT-01a admin (catalog.write; ADR-21 ES256, revocation TTL 15 minutes).
     Full catalog filters/sort/cursor belong to TASK:CAT-02 (docs/design/03_interfaces.md §2.2).
 servers:
   - url: http://localhost:8080
@@ -57,6 +57,361 @@ paths:
                     errors:
                       - {field: limit, message: must be between 1 and 100, rejected_value: 0}
                     metadata: {request_id: 4c8a1f2e-0000-4000-8000-000000000005, trace_id: 4c8a1f2e-0000-4000-8000-000000000006}
+  /admin/api/v1/catalog/categories:
+    get:
+      operationId: listAdminCategories
+      summary: List categories as a flat tree (maximum two levels)
+      security:
+      - bearerAuth: []
+      parameters: []
+      responses:
+        '200': {$ref: '#/components/responses/CategoriesSuccess'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '503': {$ref: '#/components/responses/Error503'}
+        '500': {$ref: '#/components/responses/Error500'}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+    post:
+      operationId: createCategory
+      summary: Create ACTIVE category
+      security:
+      - bearerAuth: []
+      parameters:
+      - {$ref: ./common.yaml#/components/parameters/IdempotencyKey}
+      responses:
+        '201': {$ref: '#/components/responses/CategorySuccess'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '503': {$ref: '#/components/responses/Error503'}
+        '500': {$ref: '#/components/responses/Error500'}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+        '415': {$ref: '#/components/responses/HttpRequestError'}
+        '409': {$ref: '#/components/responses/Error409'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CategoryCreate'}
+            examples:
+              request:
+                value: {parent_id: null, name_vi: Áo, name_en: Shirts, slug: shirts, sort_order: 0}
+  /admin/api/v1/catalog/categories/{id}:
+    put:
+      operationId: updateCategory
+      summary: Update category; status does not cascade to products
+      security:
+      - bearerAuth: []
+      parameters:
+      - {$ref: '#/components/parameters/Id'}
+      responses:
+        '200': {$ref: '#/components/responses/CategorySuccess'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '503': {$ref: '#/components/responses/Error503'}
+        '500': {$ref: '#/components/responses/Error500'}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+        '415': {$ref: '#/components/responses/HttpRequestError'}
+        '404': {$ref: '#/components/responses/Error404'}
+        '409': {$ref: '#/components/responses/Error409'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CategoryUpdate'}
+            examples:
+              request:
+                value: {parent_id: null, name_vi: Áo, name_en: Shirts, slug: shirts, sort_order: 0, status: ACTIVE, expected_version: 0}
+  /admin/api/v1/catalog/brands:
+    get:
+      operationId: listAdminBrands
+      summary: List brands (unpaginated)
+      security:
+      - bearerAuth: []
+      parameters: []
+      responses:
+        '200': {$ref: '#/components/responses/BrandsSuccess'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '503': {$ref: '#/components/responses/Error503'}
+        '500': {$ref: '#/components/responses/Error500'}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+    post:
+      operationId: createBrand
+      summary: Create ACTIVE brand
+      security:
+      - bearerAuth: []
+      parameters:
+      - {$ref: ./common.yaml#/components/parameters/IdempotencyKey}
+      responses:
+        '201': {$ref: '#/components/responses/BrandSuccess'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '503': {$ref: '#/components/responses/Error503'}
+        '500': {$ref: '#/components/responses/Error500'}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+        '415': {$ref: '#/components/responses/HttpRequestError'}
+        '409': {$ref: '#/components/responses/Error409'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/BrandCreate'}
+            examples:
+              request:
+                value: {name: Synthetic, logo_url: null}
+  /admin/api/v1/catalog/brands/{id}:
+    put:
+      operationId: updateBrand
+      summary: Update brand
+      security:
+      - bearerAuth: []
+      parameters:
+      - {$ref: '#/components/parameters/Id'}
+      responses:
+        '200': {$ref: '#/components/responses/BrandSuccess'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '503': {$ref: '#/components/responses/Error503'}
+        '500': {$ref: '#/components/responses/Error500'}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+        '415': {$ref: '#/components/responses/HttpRequestError'}
+        '404': {$ref: '#/components/responses/Error404'}
+        '409': {$ref: '#/components/responses/Error409'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/BrandUpdate'}
+            examples:
+              request:
+                value: {name: Synthetic, logo_url: null, status: ACTIVE, expected_version: 0}
+  /admin/api/v1/catalog/products:
+    get:
+      operationId: listAdminProducts
+      summary: List products, created_at DESC then id DESC; variants are empty in list items
+      security:
+      - bearerAuth: []
+      parameters:
+      - {$ref: ./common.yaml#/components/parameters/Page}
+      - {$ref: ./common.yaml#/components/parameters/Size}
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum: [DRAFT, ACTIVE, INACTIVE]
+      responses:
+        '200': {$ref: '#/components/responses/ProductsSuccess'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '503': {$ref: '#/components/responses/Error503'}
+        '500': {$ref: '#/components/responses/Error500'}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+    post:
+      operationId: createProduct
+      summary: Create DRAFT product; status input is ignored
+      security:
+      - bearerAuth: []
+      parameters:
+      - {$ref: ./common.yaml#/components/parameters/IdempotencyKey}
+      responses:
+        '201': {$ref: '#/components/responses/ProductSuccess'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '503': {$ref: '#/components/responses/Error503'}
+        '500': {$ref: '#/components/responses/Error500'}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+        '415': {$ref: '#/components/responses/HttpRequestError'}
+        '409': {$ref: '#/components/responses/Error409'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ProductCreate'}
+            examples:
+              request:
+                value:
+                  category_id: 11111111-1111-4111-8111-111111111111
+                  brand_id: null
+                  name_vi: Áo mẫu
+                  name_en: Sample shirt
+                  slug: sample-shirt
+                  description_vi: <p>Áo mẫu</p>
+                  description_en: <p>Sample</p>
+                  base_price: 100000
+                  tags: []
+  /admin/api/v1/catalog/products/{id}:
+    get:
+      operationId: getAdminProduct
+      summary: Get product with variants
+      security:
+      - bearerAuth: []
+      parameters:
+      - {$ref: '#/components/parameters/Id'}
+      responses:
+        '200': {$ref: '#/components/responses/ProductSuccess'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '503': {$ref: '#/components/responses/Error503'}
+        '500': {$ref: '#/components/responses/Error500'}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+        '404': {$ref: '#/components/responses/Error404'}
+    put:
+      operationId: updateProduct
+      summary: Update product content; status input is ignored
+      security:
+      - bearerAuth: []
+      parameters:
+      - {$ref: '#/components/parameters/Id'}
+      responses:
+        '200': {$ref: '#/components/responses/ProductSuccess'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '503': {$ref: '#/components/responses/Error503'}
+        '500': {$ref: '#/components/responses/Error500'}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+        '415': {$ref: '#/components/responses/HttpRequestError'}
+        '404': {$ref: '#/components/responses/Error404'}
+        '409': {$ref: '#/components/responses/Error409'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ProductUpdate'}
+            examples:
+              request:
+                value:
+                  category_id: 11111111-1111-4111-8111-111111111111
+                  brand_id: null
+                  name_vi: Áo mẫu
+                  name_en: Sample shirt
+                  slug: sample-shirt
+                  description_vi: <p>Áo mẫu</p>
+                  description_en: <p>Sample</p>
+                  base_price: 100000
+                  tags: []
+                  expected_version: 0
+  /admin/api/v1/catalog/products/{id}/variants:
+    post:
+      operationId: createVariant
+      summary: Create ACTIVE variant and transactional VARIANT_CREATED outbox intent
+      description: New SKUs are stripped, validated as ASCII and uppercased before hashing or persistence. Uniqueness ignores ASCII casing. Legacy SKU identities and completed idempotency responses remain unchanged.
+      security:
+      - bearerAuth: []
+      parameters:
+      - {$ref: '#/components/parameters/Id'}
+      - {$ref: ./common.yaml#/components/parameters/IdempotencyKey}
+      responses:
+        '201': {$ref: '#/components/responses/VariantSuccess'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '503': {$ref: '#/components/responses/Error503'}
+        '500': {$ref: '#/components/responses/Error500'}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+        '415': {$ref: '#/components/responses/HttpRequestError'}
+        '404': {$ref: '#/components/responses/Error404'}
+        '409': {$ref: '#/components/responses/Error409'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/VariantCreate'}
+            examples:
+              request:
+                value: {sku: SHIRT-M, size: M, color: black, price_override: null, weight_grams: 100}
+  /admin/api/v1/catalog/variants/{id}:
+    put:
+      operationId: updateVariant
+      summary: Update price/weight/status; sku/size/color/product_id input is ignored
+      security:
+      - bearerAuth: []
+      parameters:
+      - {$ref: '#/components/parameters/Id'}
+      responses:
+        '200': {$ref: '#/components/responses/VariantSuccess'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '503': {$ref: '#/components/responses/Error503'}
+        '500': {$ref: '#/components/responses/Error500'}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+        '415': {$ref: '#/components/responses/HttpRequestError'}
+        '404': {$ref: '#/components/responses/Error404'}
+        '409': {$ref: '#/components/responses/Error409'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/VariantUpdate'}
+            examples:
+              request:
+                value: {price_override: null, weight_grams: 100, status: ACTIVE, expected_version: 0}
+  /admin/api/v1/catalog/products/{id}/publish:
+    post:
+      operationId: publishProduct
+      summary: Publish DRAFT/INACTIVE after taxonomy and ACTIVE variant checks; image gate is CAT-03
+      security:
+      - bearerAuth: []
+      parameters:
+      - {$ref: '#/components/parameters/Id'}
+      - {$ref: ./common.yaml#/components/parameters/IdempotencyKey}
+      responses:
+        '200': {$ref: '#/components/responses/PublishedProductSuccess'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '503': {$ref: '#/components/responses/Error503'}
+        '500': {$ref: '#/components/responses/Error500'}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+        '415': {$ref: '#/components/responses/HttpRequestError'}
+        '404': {$ref: '#/components/responses/Error404'}
+        '409': {$ref: '#/components/responses/Error409'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ProductStatusChange'}
+            examples:
+              request:
+                value: {expected_version: 1}
+  /admin/api/v1/catalog/products/{id}/unpublish:
+    post:
+      operationId: unpublishProduct
+      summary: Unpublish ACTIVE; published_at is preserved including legacy null
+      security:
+      - bearerAuth: []
+      parameters:
+      - {$ref: '#/components/parameters/Id'}
+      - {$ref: ./common.yaml#/components/parameters/IdempotencyKey}
+      responses:
+        '200': {$ref: '#/components/responses/UnpublishedProductSuccess'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '503': {$ref: '#/components/responses/Error503'}
+        '500': {$ref: '#/components/responses/Error500'}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+        '415': {$ref: '#/components/responses/HttpRequestError'}
+        '404': {$ref: '#/components/responses/Error404'}
+        '409': {$ref: '#/components/responses/Error409'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ProductStatusChange'}
+            examples:
+              request:
+                value: {expected_version: 2, reason: Synthetic smoke}
 components:
   schemas:
     ProductSummary:
@@ -82,3 +437,628 @@ components:
               items: {$ref: '#/components/schemas/ProductSummary'}
             next_cursor: {type: [string, 'null']}
         metadata: {$ref: './common.yaml#/components/schemas/Metadata'}
+    AdminCategory:
+      type: object
+      additionalProperties: false
+      required: [id, parent_id, name_vi, name_en, slug, sort_order, status, version]
+      properties:
+        id: {type: string, format: uuid}
+        parent_id:
+          type: [string, 'null']
+          format: uuid
+        name_vi: {type: string, minLength: 1, maxLength: 255}
+        name_en: {type: string, minLength: 1, maxLength: 255}
+        slug: {type: string, minLength: 1, maxLength: 160, pattern: '^[a-z0-9]+(-[a-z0-9]+)*$'}
+        sort_order: {type: integer, format: int32}
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE]
+        version: {type: integer, format: int64, minimum: 0, maximum: 9223372036854775807}
+    AdminBrand:
+      type: object
+      additionalProperties: false
+      required: [id, name, logo_url, status, version]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string, minLength: 1, maxLength: 255}
+        logo_url:
+          type: [string, 'null']
+          minLength: 0
+          maxLength: 500
+          pattern: ^https?://
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE]
+        version: {type: integer, format: int64, minimum: 0, maximum: 9223372036854775807}
+    AdminVariant:
+      type: object
+      additionalProperties: false
+      required: [id, product_id, sku, size, color, price_override, weight_grams, status, version]
+      properties:
+        id: {type: string, format: uuid}
+        product_id: {type: string, format: uuid}
+        sku: {type: string, minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*$', description: 'New SKU is canonical uppercase ASCII; legacy immutable identities may retain lowercase.'}
+        size: {type: string, minLength: 1, maxLength: 50}
+        color: {type: string, minLength: 1, maxLength: 50}
+        price_override:
+          type: [integer, 'null']
+          format: int64
+          minimum: 0
+          maximum: 9223372036854775807
+        weight_grams: {type: integer, format: int32, minimum: 1, maximum: 2147483647}
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE]
+        version: {type: integer, format: int64, minimum: 0, maximum: 9223372036854775807}
+    AdminProduct:
+      type: object
+      additionalProperties: false
+      required: [id, category_id, brand_id, name_vi, name_en, slug, description_vi, description_en, base_price, tags, status,
+        published_at, version, variants]
+      properties:
+        id: {type: string, format: uuid}
+        category_id: {type: string, format: uuid}
+        brand_id:
+          type: [string, 'null']
+          format: uuid
+        name_vi: {type: string, minLength: 1, maxLength: 255}
+        name_en: {type: string, minLength: 1, maxLength: 255}
+        slug: {type: string, minLength: 1, maxLength: 160, pattern: '^[a-z0-9]+(-[a-z0-9]+)*$'}
+        description_vi: {type: string, minLength: 0, maxLength: 20000}
+        description_en: {type: string, minLength: 0, maxLength: 20000}
+        base_price: {type: integer, format: int64, minimum: 0, maximum: 9223372036854775807}
+        tags:
+          type: array
+          maxItems: 20
+          items: {type: string, minLength: 1, maxLength: 50}
+        status:
+          type: string
+          enum: [DRAFT, ACTIVE, INACTIVE]
+        published_at:
+          type: [string, 'null']
+          format: date-time
+        version: {type: integer, format: int64, minimum: 0, maximum: 9223372036854775807}
+        variants:
+          type: array
+          items: {$ref: '#/components/schemas/AdminVariant'}
+    AdminProductPage:
+      type: object
+      additionalProperties: false
+      required: [items, page, size, total]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/AdminProduct'}
+        page: {type: integer, minimum: 1}
+        size: {type: integer, minimum: 1, maximum: 100}
+        total: {type: integer, format: int64, minimum: 0, maximum: 9223372036854775807}
+    CategoryCreate:
+      type: object
+      required: [name_vi, name_en, slug]
+      properties:
+        parent_id:
+          type: [string, 'null']
+          format: uuid
+        name_vi: {type: string, minLength: 1, maxLength: 255}
+        name_en: {type: string, minLength: 1, maxLength: 255}
+        slug: {type: string, minLength: 1, maxLength: 160, pattern: '^[a-z0-9]+(-[a-z0-9]+)*$'}
+        sort_order: {type: integer, format: int32}
+    CategoryUpdate:
+      allOf:
+      - {$ref: ./common.yaml#/components/schemas/ExpectedVersion}
+      - type: object
+        required: [name_vi, name_en, slug, status]
+        properties:
+          parent_id:
+            type: [string, 'null']
+            format: uuid
+          name_vi: {type: string, minLength: 1, maxLength: 255}
+          name_en: {type: string, minLength: 1, maxLength: 255}
+          slug: {type: string, minLength: 1, maxLength: 160, pattern: '^[a-z0-9]+(-[a-z0-9]+)*$'}
+          sort_order: {type: integer, format: int32}
+          status:
+            type: string
+            enum: [ACTIVE, INACTIVE]
+    BrandCreate:
+      type: object
+      required: [name]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 255}
+        logo_url:
+          type: [string, 'null']
+          minLength: 0
+          maxLength: 500
+          pattern: ^https?://
+    BrandUpdate:
+      allOf:
+      - {$ref: ./common.yaml#/components/schemas/ExpectedVersion}
+      - type: object
+        required: [name, status]
+        properties:
+          name: {type: string, minLength: 1, maxLength: 255}
+          logo_url:
+            type: [string, 'null']
+            minLength: 0
+            maxLength: 500
+            pattern: ^https?://
+          status:
+            type: string
+            enum: [ACTIVE, INACTIVE]
+    ProductCreate:
+      type: object
+      required: [category_id, name_vi, name_en, slug, base_price]
+      properties:
+        category_id: {type: string, format: uuid}
+        brand_id:
+          type: [string, 'null']
+          format: uuid
+        name_vi: {type: string, minLength: 1, maxLength: 255}
+        name_en: {type: string, minLength: 1, maxLength: 255}
+        slug: {type: string, minLength: 1, maxLength: 160, pattern: '^[a-z0-9]+(-[a-z0-9]+)*$'}
+        description_vi:
+          type: [string, 'null']
+          description: Sanitized with jsoup basic + h2/h3; maximum 20000 characters after sanitizing. Null becomes empty string.
+        description_en:
+          type: [string, 'null']
+          description: Sanitized with jsoup basic + h2/h3; maximum 20000 characters after sanitizing. Null becomes empty string.
+        base_price: {type: integer, format: int64, minimum: 0, maximum: 9223372036854775807}
+        tags:
+          type: array
+          maxItems: 20
+          items: {type: string, minLength: 1, maxLength: 50}
+    ProductUpdate:
+      allOf:
+      - {$ref: ./common.yaml#/components/schemas/ExpectedVersion}
+      - type: object
+        required: [category_id, name_vi, name_en, slug, base_price]
+        properties:
+          category_id: {type: string, format: uuid}
+          brand_id:
+            type: [string, 'null']
+            format: uuid
+          name_vi: {type: string, minLength: 1, maxLength: 255}
+          name_en: {type: string, minLength: 1, maxLength: 255}
+          slug: {type: string, minLength: 1, maxLength: 160, pattern: '^[a-z0-9]+(-[a-z0-9]+)*$'}
+          description_vi:
+            type: [string, 'null']
+            description: Sanitized with jsoup basic + h2/h3; maximum 20000 characters after sanitizing. Null becomes empty string.
+          description_en:
+            type: [string, 'null']
+            description: Sanitized with jsoup basic + h2/h3; maximum 20000 characters after sanitizing. Null becomes empty string.
+          base_price: {type: integer, format: int64, minimum: 0, maximum: 9223372036854775807}
+          tags:
+            type: array
+            maxItems: 20
+            items: {type: string, minLength: 1, maxLength: 50}
+    VariantCreate:
+      type: object
+      required: [sku, size, color, weight_grams]
+      properties:
+        sku:
+          type: string
+          minLength: 1
+          description: 'Apply Java String.strip first, then require 1–64 ASCII characters matching ^[A-Za-z0-9][A-Za-z0-9._-]*$, then uppercase with Locale.ROOT. These length and character checks apply after stripping; idempotency uses the canonical value. Legacy completed keys replay their original data/status.'
+          examples: [' shirt-m ', SHIRT-M]
+        size: {type: string, minLength: 1, maxLength: 50}
+        color: {type: string, minLength: 1, maxLength: 50}
+        price_override:
+          type: [integer, 'null']
+          format: int64
+          minimum: 0
+          maximum: 9223372036854775807
+        weight_grams: {type: integer, format: int32, minimum: 1, maximum: 2147483647}
+    VariantUpdate:
+      allOf:
+      - {$ref: ./common.yaml#/components/schemas/ExpectedVersion}
+      - type: object
+        required: [weight_grams, status]
+        properties:
+          price_override:
+            type: [integer, 'null']
+            format: int64
+            minimum: 0
+            maximum: 9223372036854775807
+          weight_grams: {type: integer, format: int32, minimum: 1, maximum: 2147483647}
+          status:
+            type: string
+            enum: [ACTIVE, INACTIVE]
+    ProductStatusChange:
+      allOf:
+      - {$ref: ./common.yaml#/components/schemas/ExpectedVersion}
+      - type: object
+        required: []
+        properties:
+          reason:
+            type: [string, 'null']
+            minLength: 0
+            maxLength: 500
+    CategoryResponse:
+      type: object
+      additionalProperties: false
+      required: [code, data, metadata]
+      properties:
+        code: {const: OK, type: string}
+        data: {$ref: '#/components/schemas/AdminCategory'}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
+    CategoriesResponse:
+      type: object
+      additionalProperties: false
+      required: [code, data, metadata]
+      properties:
+        code: {const: OK, type: string}
+        data:
+          type: array
+          items: {$ref: '#/components/schemas/AdminCategory'}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
+    BrandResponse:
+      type: object
+      additionalProperties: false
+      required: [code, data, metadata]
+      properties:
+        code: {const: OK, type: string}
+        data: {$ref: '#/components/schemas/AdminBrand'}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
+    BrandsResponse:
+      type: object
+      additionalProperties: false
+      required: [code, data, metadata]
+      properties:
+        code: {const: OK, type: string}
+        data:
+          type: array
+          items: {$ref: '#/components/schemas/AdminBrand'}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
+    VariantResponse:
+      type: object
+      additionalProperties: false
+      required: [code, data, metadata]
+      properties:
+        code: {const: OK, type: string}
+        data: {$ref: '#/components/schemas/AdminVariant'}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
+    ProductResponse:
+      type: object
+      additionalProperties: false
+      required: [code, data, metadata]
+      properties:
+        code: {const: OK, type: string}
+        data: {$ref: '#/components/schemas/AdminProduct'}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
+    PublishedProductResponse:
+      type: object
+      additionalProperties: false
+      required: [code, data, metadata]
+      properties:
+        code: {const: OK, type: string}
+        data: {$ref: '#/components/schemas/AdminProduct'}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
+    UnpublishedProductResponse:
+      type: object
+      additionalProperties: false
+      required: [code, data, metadata]
+      properties:
+        code: {const: OK, type: string}
+        data: {$ref: '#/components/schemas/AdminProduct'}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
+    ProductsResponse:
+      type: object
+      additionalProperties: false
+      required: [code, data, metadata]
+      properties:
+        code: {const: OK, type: string}
+        data: {$ref: '#/components/schemas/AdminProductPage'}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
+    AdminInternalError:
+      allOf:
+        - {$ref: ./common.yaml#/components/schemas/ApiError}
+        - maxProperties: 3
+          properties:
+            code: {const: INTERNAL}
+            message: {const: INTERNAL_ERROR}
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT, description: ADR-21 ES256; catalog.write required at catalog-service.}
+  parameters:
+    Id:
+      in: path
+      name: id
+      required: true
+      schema: {type: string, format: uuid}
+      description: Resource UUID
+  responses:
+    CategorySuccess:
+      description: Catalog admin result
+      headers:
+        X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/CategoryResponse'}
+          examples:
+            success:
+              value:
+                code: OK
+                data: {id: 11111111-1111-4111-8111-111111111111, parent_id: null, name_vi: Áo, name_en: Shirts, slug: shirts,
+                  sort_order: 0, status: ACTIVE, version: 0}
+                metadata: {request_id: 11111111-1111-4111-8111-111111111111, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+    CategoriesSuccess:
+      description: Catalog admin result
+      headers:
+        X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/CategoriesResponse'}
+          examples:
+            success:
+              value:
+                code: OK
+                data:
+                - {id: 11111111-1111-4111-8111-111111111111, parent_id: null, name_vi: Áo, name_en: Shirts, slug: shirts, sort_order: 0,
+                  status: ACTIVE, version: 0}
+                metadata: {request_id: 11111111-1111-4111-8111-111111111111, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+    BrandSuccess:
+      description: Catalog admin result
+      headers:
+        X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/BrandResponse'}
+          examples:
+            success:
+              value:
+                code: OK
+                data: {id: 22222222-2222-4222-8222-222222222222, name: Synthetic, logo_url: null, status: ACTIVE, version: 0}
+                metadata: {request_id: 11111111-1111-4111-8111-111111111111, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+    BrandsSuccess:
+      description: Catalog admin result
+      headers:
+        X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/BrandsResponse'}
+          examples:
+            success:
+              value:
+                code: OK
+                data:
+                - {id: 22222222-2222-4222-8222-222222222222, name: Synthetic, logo_url: null, status: ACTIVE, version: 0}
+                metadata: {request_id: 11111111-1111-4111-8111-111111111111, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+    VariantSuccess:
+      description: Catalog admin result
+      headers:
+        X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/VariantResponse'}
+          examples:
+            success:
+              value:
+                code: OK
+                data: {id: 33333333-3333-4333-8333-333333333333, product_id: 44444444-4444-4444-8444-444444444444, sku: SHIRT-M,
+                  size: M, color: black, price_override: null, weight_grams: 100, status: ACTIVE, version: 0}
+                metadata: {request_id: 11111111-1111-4111-8111-111111111111, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+    ProductSuccess:
+      description: Catalog admin result
+      headers:
+        X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ProductResponse'}
+          examples:
+            success:
+              value:
+                code: OK
+                data:
+                  id: 44444444-4444-4444-8444-444444444444
+                  category_id: 11111111-1111-4111-8111-111111111111
+                  brand_id: null
+                  name_vi: Áo mẫu
+                  name_en: Sample shirt
+                  slug: sample-shirt
+                  description_vi: <p>Áo mẫu</p>
+                  description_en: <p>Sample</p>
+                  base_price: 100000
+                  tags: []
+                  status: DRAFT
+                  published_at: null
+                  version: 0
+                  variants: []
+                metadata: {request_id: 11111111-1111-4111-8111-111111111111, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+    PublishedProductSuccess:
+      description: Catalog admin result
+      headers:
+        X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/PublishedProductResponse'}
+          examples:
+            success:
+              value:
+                code: OK
+                data:
+                  id: 44444444-4444-4444-8444-444444444444
+                  category_id: 11111111-1111-4111-8111-111111111111
+                  brand_id: null
+                  name_vi: Áo mẫu
+                  name_en: Sample shirt
+                  slug: sample-shirt
+                  description_vi: <p>Áo mẫu</p>
+                  description_en: <p>Sample</p>
+                  base_price: 100000
+                  tags: []
+                  status: ACTIVE
+                  published_at: '2026-10-07T00:00:00Z'
+                  version: 2
+                  variants:
+                  - {id: 33333333-3333-4333-8333-333333333333, product_id: 44444444-4444-4444-8444-444444444444, sku: SHIRT-M,
+                    size: M, color: black, price_override: null, weight_grams: 100, status: ACTIVE, version: 0}
+                metadata: {request_id: 11111111-1111-4111-8111-111111111111, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+    UnpublishedProductSuccess:
+      description: Catalog admin result
+      headers:
+        X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/UnpublishedProductResponse'}
+          examples:
+            success:
+              value:
+                code: OK
+                data:
+                  id: 44444444-4444-4444-8444-444444444444
+                  category_id: 11111111-1111-4111-8111-111111111111
+                  brand_id: null
+                  name_vi: Áo mẫu
+                  name_en: Sample shirt
+                  slug: sample-shirt
+                  description_vi: <p>Áo mẫu</p>
+                  description_en: <p>Sample</p>
+                  base_price: 100000
+                  tags: []
+                  status: INACTIVE
+                  published_at: '2026-10-07T00:00:00Z'
+                  version: 3
+                  variants:
+                  - {id: 33333333-3333-4333-8333-333333333333, product_id: 44444444-4444-4444-8444-444444444444, sku: SHIRT-M,
+                    size: M, color: black, price_override: null, weight_grams: 100, status: ACTIVE, version: 0}
+                metadata: {request_id: 11111111-1111-4111-8111-111111111111, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+    ProductsSuccess:
+      description: Catalog admin result
+      headers:
+        X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ProductsResponse'}
+          examples:
+            success:
+              value:
+                code: OK
+                data:
+                  items:
+                  - id: 44444444-4444-4444-8444-444444444444
+                    category_id: 11111111-1111-4111-8111-111111111111
+                    brand_id: null
+                    name_vi: Áo mẫu
+                    name_en: Sample shirt
+                    slug: sample-shirt
+                    description_vi: <p>Áo mẫu</p>
+                    description_en: <p>Sample</p>
+                    base_price: 100000
+                    tags: []
+                    status: DRAFT
+                    published_at: null
+                    version: 0
+                    variants: []
+                  page: 1
+                  size: 20
+                  total: 1
+                metadata: {request_id: 11111111-1111-4111-8111-111111111111, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+    Error400:
+      description: Invalid fields, missing key/version or malformed JSON
+      headers:
+        X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+          examples:
+            error:
+              value:
+                code: VALIDATION_ERROR
+                message: INVALID_FIELDS
+                errors: []
+                metadata: {request_id: 11111111-1111-4111-8111-111111111111, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+    Error401:
+      description: Missing, invalid or expired access token
+      headers:
+        X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+          examples:
+            error:
+              value:
+                code: UNAUTHORIZED
+                message: INVALID_ACCESS_TOKEN
+                errors: []
+                metadata: {request_id: 11111111-1111-4111-8111-111111111111, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+    Error403:
+      description: Missing catalog.write
+      headers:
+        X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+          examples:
+            error:
+              value:
+                code: FORBIDDEN
+                message: PERMISSION_REQUIRED
+                errors: []
+                metadata: {request_id: 11111111-1111-4111-8111-111111111111, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+    Error404:
+      description: Resource not found
+      headers:
+        X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+          examples:
+            error:
+              value:
+                code: NOT_FOUND
+                message: PRODUCT_NOT_FOUND
+                errors: []
+                metadata: {request_id: 11111111-1111-4111-8111-111111111111, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+    Error409:
+      description: Duplicate, IDEMPOTENCY_KEY_REUSED, INVALID_TRANSITION or VERSION_CONFLICT
+      headers:
+        X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+          examples:
+            error:
+              value:
+                code: CONFLICT
+                message: DUPLICATE
+                errors: []
+                metadata: {request_id: 11111111-1111-4111-8111-111111111111, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+    Error503:
+      description: Database unavailable
+      headers:
+        X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+          examples:
+            error:
+              value:
+                code: TEMPORARILY_UNAVAILABLE
+                message: DEPENDENCY_UNAVAILABLE
+                errors: []
+                metadata: {request_id: 11111111-1111-4111-8111-111111111111, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+    Error500:
+      description: Unexpected admin failure; details logged only on the server
+      headers:
+        X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/AdminInternalError'}
+          examples:
+            error:
+              value:
+                code: INTERNAL
+                message: INTERNAL_ERROR
+                metadata: {request_id: 11111111-1111-4111-8111-111111111111, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+    HttpRequestError:
+      description: Unsupported Accept (406) or request Content-Type (415); safe JSON envelope, no ERROR log
+      headers:
+        X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+          examples:
+            error:
+              value:
+                code: VALIDATION_ERROR
+                message: INVALID_HTTP_REQUEST
+                errors: []
+                metadata: {request_id: 11111111-1111-4111-8111-111111111111, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}

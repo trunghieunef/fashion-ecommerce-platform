@@ -6,7 +6,7 @@ B1 · 2026-09-19 · Owner TL + DEVOPS.
 
 Repo có docs/CI kiểm tra tài liệu (`.github/workflows/docs-ci.yml`, `scripts/check_docs.py`
 cùng test) và nền tảng `TASK:PLT-01` đã được tạo: root Maven reactor/Wrapper,
-`services/catalog-service` (Flyway `V001`, role migration/runtime riêng),
+`services/catalog-service` (Flyway `V001` sample + `V002` CAT-01a admin, role migration/runtime riêng),
 `services/gateway`, `web/storefront` và Compose PostgreSQL local. Lệnh chạy/test thực tế
 và giới hạn nằm trong README của từng thành phần; không coi các service/đường dẫn khác
 trong cấu trúc dự kiến là đã tồn tại.
@@ -17,6 +17,8 @@ Phase 1A hiện có [user-service](../../services/user-service/README.md),
 login/forgot cần Redis để rate limit (USR-01b-ii), readiness user-service gồm DB + Redis.
 Proxy allowlist/IP handoff ở 03 §1.2 và README Gateway/user-service; mặc định standalone
 không tin header chuyển tiếp. Chưa có Kafka relay, notification-service hoặc UI auth/admin.
+Catalog admin CAT-01a dùng cùng ES256 verifier, JdbcClient và durability, có catalog.write,
+version/key/audit; [evidence local](../evidence/cat-01a-local-2026-10-07.md) ghi số test và mutation.
 Quota namespace lấy từ `FASHION_ENV` (local mặc định); HMAC identity dùng khóa dẫn xuất từ
 master sẵn có. Allowlist rỗng phát WARN để tránh quên config khi chạy sau Gateway; header
 không được lookup DNS. Readiness/subnet IPv6 staging còn cần chốt ở 08.

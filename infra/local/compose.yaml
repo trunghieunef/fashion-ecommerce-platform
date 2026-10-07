@@ -60,6 +60,7 @@ services:
     build: ../../services/catalog-service
     environment:
       CATALOG_DB_URL: jdbc:postgresql://postgres:5432/${CATALOG_POSTGRES_DB:-catalog}
+      CATALOG_JWT_PUBLIC_KEYS: ${USER_JWT_PUBLIC_KEYS:?run scripts/local-up.sh to generate local JWT keys}
       CATALOG_DB_USERNAME: ${CATALOG_DB_USERNAME:-catalog_runtime}
       CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:?set CATALOG_DB_PASSWORD}
       CATALOG_MIGRATION_DB_URL: jdbc:postgresql://postgres:5432/${CATALOG_POSTGRES_DB:-catalog}

@@ -2,6 +2,11 @@ server:
   port: ${SERVER_PORT:8081}
 
 spring:
+  jackson:
+    property-naming-strategy: SNAKE_CASE
+    deserialization:
+      fail-on-unknown-properties: false
+      accept-float-as-int: false
   application:
     name: catalog-service
   datasource:
@@ -32,6 +37,11 @@ logging:
       console: ecs
     json:
       customizer: vn.fashion.platform.security.PiiRedactingJsonCustomizer
+
+fashion:
+  catalog:
+    jwt:
+      public-keys: ${CATALOG_JWT_PUBLIC_KEYS}
 
 management:
   endpoints:

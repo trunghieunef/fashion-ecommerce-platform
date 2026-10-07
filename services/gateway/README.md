@@ -2,10 +2,11 @@
 
 `TASK:SEC-01` · `REQ:USR-07`, `REQ:XCT-02`, `REQ:XCT-03`.
 
-Gateway route `/api/v1/catalog/**` sang `CATALOG_BASE_URL`, `/api/v1/auth/**`,
+Gateway route `/api/v1/catalog/**` và `/admin/api/v1/catalog/**` sang `CATALOG_BASE_URL`, `/api/v1/auth/**`,
 `/api/v1/users/**`, `/admin/api/v1/users/**` sang `USER_BASE_URL`; không có catch-all route và không public
 `/internal/**`. Trước route, filter global với precedence cao nhất bỏ các header do browser
 có thể giả mạo: `X-User-Id`, `X-User-Roles`, `X-Actor-Id`, `X-Service-Name`.
+Catalog-service tự kiểm token ES256 và quyền `catalog.write`; Gateway không cấp quyền qua header.
 
 USR-01b-ii: filter cũng xóa `Forwarded`, `X-Forwarded-For`, `X-Real-IP`, `X-Client-IP`,
 rồi đặt `X-Client-IP` bằng socket peer. Chỉ khi peer thuộc `GATEWAY_TRUSTED_PROXIES` mới

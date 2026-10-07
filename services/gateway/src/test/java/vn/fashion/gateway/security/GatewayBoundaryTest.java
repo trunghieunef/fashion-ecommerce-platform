@@ -134,6 +134,16 @@ class GatewayBoundaryTest {
 
     assertThat(CATALOG.requestCount()).isZero();
   }
+  @Test
+  void routesAdminCatalogRequestsToCatalogService() {
+    client.get().uri("/admin/api/v1/catalog/products?page=1")
+        .header("Authorization", "Bearer synthetic")
+        .header("X-User-Roles", "SUPER_ADMIN")
+        .exchange().expectStatus().isOk();
+    assertThat(CATALOG.requestCount()).isEqualTo(1);
+    assertThat(CATALOG.path()).isEqualTo("/admin/api/v1/catalog/products");
+    assertThat(CATALOG.headers()).doesNotContainKey("x-user-roles");
+  }
 
   @Test
   void crossOriginCookieMutationIsRejectedWithoutForwarding() {
