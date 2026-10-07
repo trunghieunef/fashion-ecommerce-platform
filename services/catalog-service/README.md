@@ -188,6 +188,21 @@ tạo. Runtime role không có `CREATE` schema và không được dùng làm Fl
 tương thích với dữ liệu cũ; không sửa `V001` sau khi nó đã được áp dụng ở bất kỳ môi
 trường nào.
 
+## Xử lý ảnh media (CAT-03)
+
+`vn.fashion.catalog.media.ImageProcessor` là lớp thuần JDK (ImageIO/`java.awt`, không thêm dependency)
+dùng cho luồng upload complete; chưa nối vào endpoint nào ở bước này. Giới hạn (hằng số trong code):
+
+- File gốc 1..5 242 880 byte; chỉ JPEG/PNG, magic bytes phải khớp `Content-Type` khai báo.
+- Width/height 1..8192 và tối đa 25 000 000 pixel; kích thước đọc từ header và kiểm **trước** khi decode.
+- Decode lỗi (file cắt cụt, CMYK/4-band, cảnh báo của reader) -> `IMAGE_DECODE_FAILED`.
+- Re-encode không metadata: JPEG RGB quality 0.85, PNG giữ alpha nếu có; EXIF orientation 1-8 (IFD0) được
+  áp dụng trước khi bỏ EXIF, EXIF hỏng được coi là 1. Cạnh dài tối đa 2560 (thumbnail 800), không upscale.
+- Output vượt 5 MiB -> `IMAGE_OUTPUT_TOO_LARGE`; `verify` kiểm lại object approved (`APPROVED_OBJECT_INVALID`).
+
+Ước lượng heap: buffer ARGB 25 MP khoảng 100 MB (4 byte/pixel), chưa đo thực tế; cần đo trước khi chốt
+giới hạn đồng thời (slot re-encode 1/instance) và heap của container. Test: `ImageProcessorTest` (unit, không Docker).
+
 ## Test và health
 
 ```bash
