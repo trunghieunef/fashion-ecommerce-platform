@@ -107,11 +107,24 @@ Parent chưa Done; NOT-01/relay và reviewer nghiệm thu vẫn còn mở. Kiể
 [evidence USR-01b-ii](../evidence/usr-01b-ii-local-2026-10-06.md).
 
 Update 2026-10-07: `TASK:CAT-01` — **In progress**, phần 1a catalog admin đã code và kiểm tra
-local trên `dev`, chờ review nhánh; REQ CAT-01/02, dependency PLT-02/03 và USR-02. Có taxonomy,
+local, đã merge [PR #14](https://github.com/trunghieunef/fashion-ecommerce-platform/pull/14)
+vào `main` tại `8f27663`; REQ CAT-01/02, dependency PLT-02/03 và USR-02. Có taxonomy,
 product/variant, publish/unpublish, HTML sanitize, SKU immutable, version/idempotency/audit và
 VARIANT_CREATED durable outbox. Acceptance phần 1a và bằng chứng tại
-[evidence CAT-01a](../evidence/cat-01a-local-2026-10-07.md). Chưa Done: còn CAT-01b
-collection/size-guide, ảnh/publish gate CAT-03, reviewer nghiệm thu; relay/Kafka ngoài phạm vi 1a.
+[evidence CAT-01a](../evidence/cat-01a-local-2026-10-07.md). CAT-01b collection/size-guide
+đã commit local Task1–6 trên dev, V004/HTTP Testcontainers/Gateway smoke/full reactor281 PASS;
+Task7 whole-branch review0Critical/0Important, Minor docs đã đồng bộ theo
+[plan](../superpowers/plans/2026-10-07-cat-01b-catalog-admin.md)
+và [evidence](../evidence/cat-01b-local-2026-10-07.md). Chưa push/PR/CI remote CAT-01b.
+Chưa Done: còn review/nghiệm thu parent, ảnh/publish gate CAT-03;
+public read CAT-02 và relay/Kafka ngoài phạm vi 1a/1b. SKU mới canonical uppercase với V003,
+SKU legacy không backfill.
+
+Quyết định CAT-01b ngày 2026-10-07 (chủ dự án): PUT collection sang ACTIVE không yêu cầu
+product ACTIVE. Public visibility là acceptance CAT-02 theo 03/06, không làm public read
+trong CAT-01b; cần test collection rỗng/chỉ product chưa publish không được trả public,
+start_at tương lai, đúng biên start_at/end_at, lọc bỏ product INACTIVE và unpublish product
+ACTIVE cuối cùng sau khi collection đã được kích hoạt.
 
 ## 2. Phase 0 — nền tảng
 
@@ -133,7 +146,7 @@ Subtasks PLT-04.A–F, owner theo vai trò, dependencies và acceptance ở [16 
 | USR-01 | BE / 2–4 | PLT-02, PLT-03, SEC-01 | USR-01/03/05 | User/token migrations, register/login/refresh/logout/password; reset secret handoff + notification contract; concurrent refresh/replay, email race, revoke family pass |
 | USR-02 | BE / 2–3 | USR-01 | USR-06/08, ADM-06 | Profile/address, roles/permissions, bootstrap admin audit; default-address race; OPS không refund, FINANCE không adjust stock; revoked admin bị chặn |
 | CAT-01 | BE / 2–4 | PLT-02, PLT-03, USR-02 | CAT-01/02/03/06 | Catalog migration, CRUD/variant/collection/size-guide/admin; VARIANT_CREATED outbox, SKU immutable; publish validation và sanitize; không hard-delete lịch sử |
-| CAT-02 | BE / 2–3 | CAT-01 | CAT-04/05/09 | Browse/filter/sort/search/cursor, batch quote, durable invalidation; BEST_SELLING consume completed từ MVP; event replay không cộng lại, cursor ổn định cùng giá |
+| CAT-02 | BE / 2–3 | CAT-01 | CAT-03/04/05/09 | Browse/filter/sort/search/cursor, batch quote, durable invalidation; public collection list/detail chỉ ACTIVE, trong [start_at, end_at), có ≥ 1 product ACTIVE; chỉ trả product ACTIVE; test biên thời gian/unpublish product ACTIVE cuối cùng; BEST_SELLING consume completed từ MVP; event replay không cộng lại, cursor ổn định cùng giá |
 | CAT-03 | BE+DEVOPS / 1–3 | CAT-01, SEC-01 | CAT-11 | Scoped upload/attach + object storage config; validate content/type/size/owner; image alt/thumb; object chưa kiểm tra không public |
 | INV-01 | BE / 1–3 | PLT-03, CAT-01, USR-02 | INV-01/08 | Stock schema/register SKU/import/adjust/ledger; duplicate SKU event không reset tồn; CSV lỗi không ghi một phần; adjustment dưới reserved bị từ chối |
 | INV-02 | BE / 3–5 | INV-01, PLT-02 | INV-02/03/06 | Reserve multi-SKU/commit/release/expire/query, tombstones; T01–T05/T09 pass DB thật; lock ordering; original hash mismatch trả 409 |

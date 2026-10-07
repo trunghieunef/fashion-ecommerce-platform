@@ -69,7 +69,7 @@ public abstract class CatalogAdminTestSupport {
   }
   @BeforeEach void clearCatalog() throws Exception {
     try (var c = DriverManager.getConnection(postgres.getJdbcUrl(), "postgres", "postgres"); var s = c.createStatement()) {
-      s.execute("delete from audit_logs; delete from outbox_events; delete from idempotency_requests; delete from product_variants; delete from products; delete from brands; delete from categories where id <> '" + SEED + "'");
+      s.execute("delete from audit_logs; delete from outbox_events; delete from idempotency_requests; delete from collection_items; delete from collections; delete from size_guides; delete from product_variants; delete from products; delete from brands; delete from categories where id <> '" + SEED + "'");
     }
   }
   String token(String... permissions) { return signed(KEY, Instant.now(), permissions); }

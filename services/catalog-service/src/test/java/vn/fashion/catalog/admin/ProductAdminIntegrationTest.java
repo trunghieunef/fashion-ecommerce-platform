@@ -37,7 +37,7 @@ class ProductAdminIntegrationTest extends CatalogAdminTestSupport {
     assertThat(jdbc.queryForObject("select base_price from products where id=?", Long.class, UUID.fromString(p.path("id").asText()))).isEqualTo(9007199254740993L);
   }
   @Test void updateKeepsStatusAndBumpsVersion() {
-    UUID id = createProduct("shirt"); var input = productInput("shirt"); input.put("status", "ACTIVE"); input.put("expected_version", 0);
+    UUID id = createProduct("shirt"); var input = productInput("shirt"); input.put("status", "ACTIVE"); input.put("x_future", null); input.put("expected_version", 0);
     var p = data(call("PUT", "/products/" + id, input), 200);
     assertThat(p.path("status").asText()).isEqualTo("DRAFT");
     assertThat(p.path("version").asLong()).isEqualTo(1);

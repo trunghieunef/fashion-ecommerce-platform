@@ -9,9 +9,11 @@ Thay [handoff đầu phiên](2026-10-07-session-handoff.md) cho phiên tiếp th
 
 Trên nhánh `dev`, implementation Tasks 1–6 tới `8eb467d`, Task 7 `c24a96f` đồng bộ docs/evidence.
 Giai đoạn đầu chỉ commit local. Sau yêu cầu chủ dự án đã push dev/mở
-[PR #14](https://github.com/trunghieunef/fashion-ecommerce-platform/pull/14) vào main; chưa merge.
-`origin/main` là `826e361`,
-local `main` còn ở `3132dc7`; giữ nguyên các branch ref đó. Spec/plan được chủ dự án giao thực thi;
+[PR #14](https://github.com/trunghieunef/fashion-ecommerce-platform/pull/14) vào main;
+chủ dự án đã merge ngày 2026-10-07 lúc 12:33:51 +07:00, merge commit `8f27663`.
+Phiên tiếp theo đã fetch và fast-forward `dev` local lên `origin/main` (`8f27663`);
+`origin/dev` còn `11d4cce`, chưa push phần việc mới. Local `main` giữ nguyên ở `3132dc7`.
+Spec/plan được chủ dự án giao thực thi;
 nghiệm thu CAT-01 còn mở. Review độc lập Superpowers có 2 Important (error envelope và audit
 request_id); chủ dự án đã duyệt sửa plan Task 2/4 cùng code, RED 2 FAIL → GREEN 2 PASS.
 Full suite sau fix PASS 230/230, gồm catalog 63/63; fallback vẫn log exception server.
@@ -29,7 +31,8 @@ Full Maven follow-up PASS 238/238, catalog 71; smoke/runtime upgrade xem evidenc
 Compose rebuild/V003 upgrade trên volume hiện có, 6 healthy; smoke Gateway và Playwright
 2/2 PASS trên image mới. Fingerprint 2 SKU legacy, audit/outbox/key/hash/response liên quan
 giữ nguyên; 1 SKU uppercase mới, 0 collision. Không reset volume hoặc backfill.
-Theo dõi CI commit follow-up trên PR trước nghiệm thu; không suy remote PASS từ local.
+Application CI và Documentation CI trên đúng HEAD SKU `11d4cce` đều PASS trước merge;
+link run ở evidence. Merge phần 1a không thay nghiệm thu parent CAT-01.
 Phase 1A tiếp tục trên local trước G0 theo quyết định chủ dự án; O01 còn mở, G1/G2 chưa nghiệm thu.
 
 ## 2. Đã có
@@ -63,10 +66,45 @@ DELETE. Smoke không chứng minh login → token OPS; không đặt helper vào
 
 ## 4. Việc tiếp theo
 
-1. Chủ dự án review bản cập nhật PR14 và CI; chỉ merge sau review được duyệt.
-2. CAT-01b collection/size-guide cần spec/plan riêng; CAT-03 sở hữu ảnh và điều kiện ảnh publish.
+1. Tiếp tục CAT-01b collection/items và size guide admin trên dev: [spec đã duyệt](../specs/2026-10-07-cat-01b-design.md),
+   gồm §6 mục 1–6 và chốt any-setter/category order/race/headers/one-SQL.
+   [Plan 7 task](2026-10-07-cat-01b-catalog-admin.md) đã duyệt, thực thi Native/TDD trên dev.
+   Commit local và bàn giao sau whole-branch review; chỉ push/mở PR khi chủ dự án yêu cầu riêng.
+2. CAT-03 sở hữu ảnh/upload và điều kiện ảnh publish; CAT-01b không tự nhận URL ảnh hoặc
+   kéo media pipeline vào khi chưa có thiết kế được duyệt.
 3. INV-01/relay/Kafka và CATALOG_CHANGED nằm ngoài 1a; không tự kéo vào bước bàn giao này.
 4. USR-01/02 parent còn chờ nghiệm thu, G0/O01 và các mục mở staging giữ nguyên handoff cũ/08.
+
+CAT-01b đã chốt quyết định collection (chủ dự án, 2026-10-07): PUT collection sang ACTIVE
+không yêu cầu product ACTIVE. Public list/detail thuộc CAT-02, chỉ ACTIVE + đang trong
+[start_at, end_at) + có ≥ 1 product ACTIVE; chỉ trả product ACTIVE. Đã ghi 03/06/08 và
+acceptance CAT-02 trong backlog. Size guide cũng đã chốt shape columns/rows và giới hạn:
+đúng hai key, 1–20 cột/1–100 hàng, số ô khớp số cột, tiêu đề strip 1–100 không trùng,
+ô strip 0–100, serialize ≤ 32 KB, plain text/FE escape; guideline HTML sanitize như product.
+Cột đầu khớp variant.size là quy ước không ép. 03/05/08 đã đồng bộ quyết định chủ dự án
+2026-10-07. PUT size guide đã chốt: expected_version 0 tạo 201/version 1, cập nhật
+200/version +1; thiếu version 400, stale/tạo khi tồn tại 409 VERSION_CONFLICT.
+Key bắt buộc, replay trước version guard, giữ data/status và không thêm audit.
+Locale vi/en (khác 400), category không tồn tại 404 CATEGORY_NOT_FOUND. Race tạo key khác
+nhau dựa UNIQUE(category_id, locale): một 201, còn lại 409; cùng key/body replay.
+GET admin detail collection và size guide đã được chủ dự án duyệt: collection/items thứ tự
+sort_order/product_id + version, guide nội dung/version (chưa có 404, locale sai 400),
+catalog.write tại service, gồm DRAFT/INACTIVE. 03/05/08/catalog.yaml đã đồng bộ contract;
+contract tests/examples đã có, HTTP 401/403/404/GET → PUT chưa chạy vì chưa có endpoint.
+Collection mutation đã được chủ dự án duyệt: POST key DRAFT/version 0; PUT chỉ version,
+thay toàn bộ nội dung/items, tăng version, audit atomic. Tối đa 1.000 items, sort_order
+0..2147483647 được trùng; thiếu product body 400 tại items[i].product_id; timestamp có offset
+lưu UTC, null bound không giới hạn. Không nhận cover/lookbook, cover_url luôn null.
+03/05/06/08 và catalog.yaml đồng bộ, contract tests RED → GREEN; chưa có implementation.
+guideline_html cũng đã được duyệt: không bắt buộc, thiếu/null thành rỗng, sanitize như
+product, giới hạn 20.000 ký tự sau sanitize. PUT guide contract/examples đã có.
+Spec CAT-01b đã được chủ dự án duyệt gồm §6 mục 1–6, đã đổi trạng thái Đã duyệt.
+Chốt bổ sung: request @JsonAnySetter → field key, giữ mapper global; guide auth/validate/category404
+trước idempotency/version; create ON CONFLICT DO NOTHING RETURNING (không bắt unique violation);
+header strip/lowercase ROOT không phân biệt casing, collection detail một SQL json_agg ordered.
+Plan 7 task đã duyệt Native: NullNode như thiếu, không test snapshot timing-based,
+toolchain path dùng placeholder; commit docs trước Task 1. Chỉ push/PR khi yêu cầu riêng.
+Không public read trong 1b.
 
 ## 5. Lệnh kiểm tra (repo root, Git Bash)
 

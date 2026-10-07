@@ -83,7 +83,11 @@ chỉ copy JAR/`dist` vào image runtime pin tag + digest.
 | Dừng / reset | `docker compose --env-file infra/local/.env -f infra/local/compose.yaml --profile nacos-compat down`; thêm `-v` chỉ khi chủ động xóa dữ liệu local |
 
 Ports chỉ bind `127.0.0.1`: storefront 4173, Gateway 8080, PostgreSQL 5432 (cho chạy JVM
-trên host). Catalog và Nacos không publish port. CI tương ứng ở
+trên host). Smoke catalog hiện gồm CAT-01a category/product/variant/publish và CAT-01b
+collection/size guide create/read/update/replay/stale qua Gateway; giữ401/403 với member thật.
+OPS smoke dùng JWT synthetic local; phạm vi, giới hạn và dữ liệu tích lũy ghi tại
+[catalog README](../../services/catalog-service/README.md). Lệnh trong bảng không đổi.
+Catalog và Nacos không publish port. CI tương ứng ở
 `.github/workflows/application-ci.yml`, read-only, không có credential AWS.
 
 Theo ADR-18, Sprint 1 chỉ nhắm checkpoint S1-local: development/deployment trên máy local, không AWS/Kubernetes/GitOps. Local workflow phải chạy được trên clean checkout bằng lệnh đã ghi; một smoke path đi qua frontend shell, Gateway, service mẫu và PostgreSQL. Không scaffold toàn bộ service hoặc gọi kết quả là G0/G1/G2.

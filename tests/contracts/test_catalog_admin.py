@@ -1,4 +1,4 @@
-"""TASK:CAT-01a: admin security, version/key requirements and executable examples."""
+"""TASK:CAT-01a/1b: admin security, version/key requirements and executable examples."""
 from pathlib import Path
 import unittest
 from urllib.parse import urljoin
@@ -36,7 +36,7 @@ class CatalogAdminContractTest(unittest.TestCase):
     def test_admin_operations_require_bearer_and_mutation_guards(self):
         operations = [(method, op) for path, item in self.doc["paths"].items()
                       if path.startswith("/admin/") for method, op in item.items() if method != "parameters"]
-        self.assertEqual(len(operations), 14)
+        self.assertEqual(len(operations), 20)
         for method, op in operations:
             with self.subTest(operation=op["operationId"]):
                 self.assertNotEqual(method, "delete")
@@ -47,6 +47,32 @@ class CatalogAdminContractTest(unittest.TestCase):
                     schema = op["requestBody"]["content"]["application/json"]["schema"]
                     schema = self.resolve(schema)
                     self.assertIn({"$ref": "./common.yaml#/components/schemas/ExpectedVersion"}, schema["allOf"])
+
+    def test_collection_names_and_slug_reject_values_outside_service_limits(self):
+        body = {"name_vi": "Bộ sưu tập", "name_en": "Collection", "slug": "launch-2026", "items": []}
+        for schema in ("CollectionCreate", "CollectionUpdate"):
+            validator = self.validator(schema)
+            valid = body if schema == "CollectionCreate" else {**body, "expected_version": 0, "status": "DRAFT"}
+            with self.subTest(schema=schema, boundary=True):
+                self.assertEqual(list(validator.iter_errors({**valid, "name_vi": "v" * 255, "name_en": "e" * 255, "slug": "s" * 160})), [])
+            for field, value in (("name_vi", "v" * 256), ("name_en", "e" * 256), ("slug", "s" * 161),
+                                 ("slug", "UPPER"), ("slug", "bad_slug"), ("slug", "bad--slug"), ("slug", "-slug")):
+                with self.subTest(schema=schema, field=field, value=value):
+                    self.assertTrue(list(validator.iter_errors({**valid, field: value})))
+
+    def test_collection_list_has_paginated_summary_examples(self):
+        path = "/admin/api/v1/catalog/collections"
+        self.assertIn("get", self.doc["paths"][path])
+        op = self.doc["paths"][path]["get"]
+        self.assertEqual(op["security"], [{"bearerAuth": []}])
+        response = self.resolve(op["responses"]["200"])
+        data = response["content"]["application/json"]["examples"]["success"]["value"]["data"]
+        self.assertEqual(list(self.validator("AdminCollectionPage").iter_errors(data)), [])
+        self.assertEqual(data["page"], 1)
+        self.assertEqual(data["size"], 20)
+        self.assertNotIn("items", data["items"][0])
+        for status in ("400", "401", "403"):
+            self.assertIn(status, op["responses"])
 
     def test_money_is_integer_nonnegative_and_response_fields_are_closed(self):
         for name, field in (("AdminProduct", "base_price"), ("AdminVariant", "price_override")):
@@ -73,6 +99,92 @@ class CatalogAdminContractTest(unittest.TestCase):
         for value in ("SHIRT-M", "legacy-m"):
             self.assertEqual(list(Draft202012Validator(sku).iter_errors(value)), [])
 
+    def test_catalog_01b_admin_reads_expose_edit_versions_and_authorization_errors(self):
+        reads = (
+            ("/admin/api/v1/catalog/collections/{id}", "AdminCollection"),
+            ("/admin/api/v1/catalog/size-guides/{category_id}/{locale}", "AdminSizeGuide"),
+        )
+        for path, name in reads:
+            with self.subTest(path=path):
+                self.assertTrue(path in self.doc["paths"], f"missing admin read: {path}")
+                op = self.doc["paths"][path]["get"]
+                self.assertEqual(op["security"], [{"bearerAuth": []}])
+                for status, code in (("401", "UNAUTHORIZED"), ("403", "FORBIDDEN"), ("404", "NOT_FOUND")):
+                    response = self.resolve(op["responses"][status])
+                    examples = response["content"]["application/json"]["examples"]
+                    self.assertTrue(examples)
+                    for example in examples.values():
+                        self.assertEqual(example["value"]["code"], code)
+                response = self.resolve(op["responses"]["200"])
+                data = response["content"]["application/json"]["examples"]["success"]["value"]["data"]
+                self.assertEqual(list(self.validator(name).iter_errors(data)), [])
+                self.assertIn("version", data)
+                self.assertTrue(list(self.validator(name).iter_errors({k: v for k, v in data.items() if k != "version"})))
+                if name == "AdminCollection":
+                    self.assertEqual(data["items"], sorted(data["items"], key=lambda item: (item["sort_order"], item["product_id"])))
+                    statuses = self.doc["components"]["schemas"][name]["properties"]["status"]["enum"]
+                    self.assertIn("DRAFT", statuses)
+                    self.assertIn("INACTIVE", statuses)
+                else:
+                    self.assertGreaterEqual(data["version"], 1)
+                    locale = next(self.resolve(p) for p in op["parameters"] if self.resolve(p)["name"] == "locale")
+                    self.assertEqual(locale["schema"]["enum"], ["vi", "en"])
+                    self.assertTrue(list(Draft202012Validator(locale["schema"]).iter_errors("fr")))
+                    self.assertIn("400", op["responses"])
+        self.assertNotIn("/api/v1/catalog/collections/{slug}", self.doc["paths"])
+        self.assertNotIn("/api/v1/catalog/size-guides/{category_id}", self.doc["paths"])
+
+    def test_collection_mutations_reject_media_and_bound_order_and_timestamps(self):
+        self.assertTrue("/admin/api/v1/catalog/collections" in self.doc["paths"], "missing collection POST")
+        create = self.doc["paths"]["/admin/api/v1/catalog/collections"]["post"]
+        update = self.doc["paths"]["/admin/api/v1/catalog/collections/{id}"]["put"]
+        key = {"$ref": "./common.yaml#/components/parameters/IdempotencyKey"}
+        self.assertIn(key, create["parameters"])
+        self.assertNotIn(key, update["parameters"])
+        product_id = "33333333-3333-4333-8333-333333333333"
+        body = {"name_vi": "Mẫu", "name_en": "Sample", "slug": "sample",
+                "items": [{"product_id": product_id, "sort_order": 0}],
+                "start_at": "2026-10-07T12:00:00+07:00", "end_at": None}
+        for name, value in (("CollectionCreate", body),
+                            ("CollectionUpdate", {**body, "status": "ACTIVE", "expected_version": 0})):
+            with self.subTest(schema=name):
+                validator = self.validator(name)
+                self.assertEqual(list(validator.iter_errors(value)), [])
+                for forbidden in ("cover_url", "lookbook", "lookbook_images"):
+                    self.assertTrue(list(validator.iter_errors({**value, forbidden: None})), forbidden)
+                for bad_order in (-1, 2147483648, 0.5, "1"):
+                    invalid = {**value, "items": [{"product_id": product_id, "sort_order": bad_order}]}
+                    self.assertTrue(list(validator.iter_errors(invalid)), bad_order)
+                self.assertEqual(list(validator.iter_errors({**value, "items": [
+                    {"product_id": product_id, "sort_order": 2147483647},
+                    {"product_id": "44444444-4444-4444-8444-444444444444", "sort_order": 2147483647}]})), [])
+                self.assertTrue(list(validator.iter_errors({**value, "start_at": "2026-10-07T12:00:00"})))
+                self.assertTrue(list(validator.iter_errors({**value, "items": value["items"] * 1001})))
+        response = self.resolve(create["responses"]["400"])
+        example = response["content"]["application/json"]["examples"]["missingProduct"]["value"]
+        self.assertEqual(example["code"], "VALIDATION_ERROR")
+        self.assertEqual(example["errors"][0]["field"], "items[0].product_id")
+        success = self.resolve(create["responses"]["201"])["content"]["application/json"]["examples"]["success"]["value"]["data"]
+        self.assertEqual((success["status"], success["version"], success["cover_url"]), ("DRAFT", 0, None))
+
+    def test_size_guide_put_requires_key_version_and_allows_optional_guideline(self):
+        path = self.doc["paths"]["/admin/api/v1/catalog/size-guides/{category_id}/{locale}"]
+        self.assertTrue("put" in path, "missing size guide PUT contract")
+        op = path["put"]
+        self.assertIn({"$ref": "./common.yaml#/components/parameters/IdempotencyKey"}, op["parameters"])
+        self.assertIn("201", op["responses"])
+        self.assertIn("200", op["responses"])
+        self.assertIn("409", op["responses"])
+        body = {"expected_version": 0, "table_json": {"columns": ["Size"], "rows": [["M"]]}}
+        validator = self.validator("SizeGuidePut")
+        for guideline in ({}, {"guideline_html": None}, {"guideline_html": ""}, {"guideline_html": "<p>Sample</p>"}):
+            self.assertEqual(list(validator.iter_errors({**body, **guideline})), [])
+        self.assertTrue(list(validator.iter_errors({"table_json": body["table_json"]})))
+        self.assertTrue(list(validator.iter_errors({**body, "table_json": {**body["table_json"], "unknown": 1}})))
+        content = self.doc["components"]["schemas"]["AdminSizeGuide"]["properties"]["guideline_html"]
+        self.assertEqual(content["maxLength"], 20000)
+        self.assertTrue(list(Draft202012Validator(content).iter_errors("x" * 20001)))
+
     def test_every_admin_operation_has_valid_success_and_error_examples(self):
         count = 0
         for path, item in self.doc["paths"].items():
@@ -95,4 +207,4 @@ class CatalogAdminContractTest(unittest.TestCase):
                             examples[status[0]] += 1
                 self.assertGreater(examples["2"], 0)
                 self.assertGreater(examples["4"], 0)
-        self.assertEqual(count, 14)
+        self.assertEqual(count, 20)

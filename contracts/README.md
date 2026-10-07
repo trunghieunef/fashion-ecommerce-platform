@@ -68,6 +68,37 @@ bằng chứng riêng của PLT-03.
 
 ## Kiểm tra
 
+CAT-01b đang thực thi plan đã duyệt: `catalog.yaml` có contract POST/PUT collection, PUT size guide và GET admin
+detail collection/size guide theo quyết định chủ dự án 2026-10-07 (03 §3). POST key tạo
+DRAFT/version 0; PUT chỉ expected_version, thay toàn bộ items/version/audit cùng transaction.
+Items tối đa 1.000; sort_order integer 0..2147483647 được trùng; thiếu product body trả
+400 VALIDATION_ERROR tại items[i].product_id. Timestamp có offset, lưu UTC; cover_url luôn
+null trong response, không nhận cover/lookbook trong request (CAT-03). Collection trả items theo
+`sort_order, product_id` và version; size guide trả nội dung/version, locale vi/en,
+chưa có 404 NOT_FOUND. Size guide PUT bắt buộc key + version (0 tạo 201/version 1,
+cập nhật 200/version +1), replay trước version guard. `guideline_html` không bắt buộc:
+thiếu/null thành chuỗi rỗng, sanitize như product, tối đa 20.000 ký tự sau sanitize.
+Cả hai GET cần `catalog.write`, đọc cả DRAFT/INACTIVE và giữ envelope.
+GET collection list/detail đã hiện thực ở Task 2 (6 HTTP integration tests); list trả summary
+page1/size20/max100/status optional, không product items. Contract có 20 admin operations;
+Collection POST/PUT hiện thực ở Task 3 với closed requests/version/replay/atomic audit;
+GET guide hiện thực ở Task 4 (3 HTTP tests); PUT guide hiện thực ở Task 5 (15 HTTP tests);
+Task 6 đã upgrade V004 trên volume hiện có và smoke collection/guide qua Gateway.
+Spec CAT-01b đã duyệt: request collection/guide từ chối unknown field qua @JsonAnySetter
+với field tên key, giữ mapper global/CAT-01a; header so trùng strip + lowercase Locale.ROOT.
+PUT guide kiểm category404 trước idempotency/version; create ON CONFLICT DO NOTHING RETURNING.
+GET collection detail dùng một SQL json_agg ordered để items/version cùng snapshot.
+Examples 2xx/4xx cùng contract regression kiểm Bearer, errors và version đã có;
+Contract examples không thay bằng chứng runtime. Task 2 đã kiểm HTTP collection GET
+401/403/404/content/version và GET → PUT (Task 3); guide GET/PUT đã kiểm tại Task 4/5; public read
+vẫn thuộc CAT-02. Response size guide table ghi rõ giới hạn shape; số ô khớp số cột,
+strip và tổng serialized bytes cần validation tại service, JSON Schema chưa chứng minh chúng.
+Smoke dùng JWT OPS synthetic local (không chứng minh login → token OPS), giữ401/403 member thật,
+kiểm collection items/version, guide table/version/GET→PUT/replay/stale và metadata/header.
+Giới hạn/dữ liệu tích lũy tại [catalog README](../services/catalog-service/README.md).
+CAT-01b contract hiện có32 test PASS/3 OpenAPI lint; runtime/module/mutation và trạng thái
+review local tại [evidence](../docs/evidence/cat-01b-local-2026-10-07.md).
+
 Python 3.10+; cài tooling vào virtualenv của bạn:
 
 ```bash
