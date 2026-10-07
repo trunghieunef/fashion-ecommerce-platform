@@ -145,7 +145,7 @@ CAT-03 Task 1: `V005__media.sql` đã viết và kiểm bằng Testcontainers (u
 lease cho GC runner) và `collections.cover_asset_id`. FK ghép `(asset_id, product_id)` →
 `media_uploads(id, product_id)` (tương tự collection) ép asset chỉ gắn vào đúng target; UNIQUE `asset_id`
 cho phép gắn một lần; `(id, cover_asset_id)` → `lookbook_images(collection_id, asset_id)` DEFERRABLE
-INITIALLY DEFERRED. Mới là schema: chưa có service/endpoint/runtime media, chưa deploy.
+INITIALLY DEFERRED. V005 thêm nhầm `lookbook_images.alt_vi/alt_en` (spec §5 chỉ có caption); `V006__drop_lookbook_alt.sql` bỏ hai cột (append-only, V005 đã áp dụng trên volume local). Attach images (Task 6) đã chạy; chưa deploy.
 
 CAT-03 attach/GC đã chốt: liên kết dùng asset_id; cover_asset_id nullable phải
 thuộc collection images. Resource row lock/version và asset row locks bảo vệ

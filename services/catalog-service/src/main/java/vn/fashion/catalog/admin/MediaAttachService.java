@@ -188,9 +188,8 @@ public class MediaAttachService {
   }
   private <T> T put(UUID actor, UUID id, Input in, UUID requestId, Target t, java.util.function.Supplier<T> view) {
     return commands.update(() -> {
-      var head = jdbc.sql("select version, " + (t == PRODUCT ? "status, null" : "'', name_vi") + " as name_vi, "
-          + (t == PRODUCT ? "null" : "name_en") + " as name_en from " + t.table() + " where id=:id for update")
-          .param("id", id).query((rs, n) -> new String[] {rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4)}).optional()
+      var head = jdbc.sql("select version, " + (t == PRODUCT ? "status" : "''") + " from " + t.table() + " where id=:id for update")
+          .param("id", id).query((rs, n) -> new String[] {rs.getString(1), rs.getString(2)}).optional()
           .orElseThrow(() -> TaxonomyService.notFound(t.notFound()));
       AdminCommands.requireVersion(in.expectedVersion(), Long.parseLong(head[0]));
       Set<UUID> current = new HashSet<>(jdbc.sql("select asset_id from " + t.images() + " where " + t.idCol() + "=:id").param("id", id).query(UUID.class).list());
@@ -201,9 +200,8 @@ public class MediaAttachService {
       for (var item : in.items()) {
         if (t == PRODUCT) jdbc.sql("insert into product_images(product_id,asset_id,alt_vi,alt_en,variant_color,sort_order) values (:id,:asset,:vi,:en,:color,:sort)")
             .param("id", id).param("asset", item.assetId()).param("vi", item.altVi()).param("en", item.altEn()).param("color", item.color()).param("sort", item.sort()).update();
-        // ponytail: lookbook_images.alt_* is NOT NULL in V005 but the contract has no alt for collections; reuse the collection name.
-        else jdbc.sql("insert into lookbook_images(collection_id,asset_id,alt_vi,alt_en,caption_vi,caption_en,sort_order) values (:id,:asset,:vi,:en,:cvi,:cen,:sort)")
-            .param("id", id).param("asset", item.assetId()).param("vi", head[2]).param("en", head[3]).param("cvi", item.captionVi()).param("cen", item.captionEn()).param("sort", item.sort()).update();
+        else jdbc.sql("insert into lookbook_images(collection_id,asset_id,caption_vi,caption_en,sort_order) values (:id,:asset,:cvi,:cen,:sort)")
+            .param("id", id).param("asset", item.assetId()).param("cvi", item.captionVi()).param("cen", item.captionEn()).param("sort", item.sort()).update();
       }
       var wanted = new HashSet<UUID>(); in.items().forEach(i -> wanted.add(i.assetId()));
       var added = new ArrayList<UUID>(wanted); added.removeAll(current);

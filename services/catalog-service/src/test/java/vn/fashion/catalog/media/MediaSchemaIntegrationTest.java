@@ -75,7 +75,7 @@ class MediaSchemaIntegrationTest {
     return "insert into product_images(product_id,asset_id,alt_vi,alt_en,sort_order) values ('" + product + "','" + asset + "','" + alt + "','a'," + sort + ")";
   }
   String lookbook(UUID collection, UUID asset) {
-    return "insert into lookbook_images(collection_id,asset_id,alt_vi,alt_en,sort_order) values ('" + collection + "','" + asset + "','a','a',0)";
+    return "insert into lookbook_images(collection_id,asset_id,sort_order) values ('" + collection + "','" + asset + "',0)";
   }
 
   @Test void upgradeFromV004KeepsDataAndAddsMediaTables() throws SQLException {
