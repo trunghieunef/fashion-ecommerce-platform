@@ -242,7 +242,7 @@ không mở đường nhận URL chưa được kiểm tra trong CAT-01b. Contra
 đã có POST/PUT/examples và endpoint collection mutation thực thi tại Task 3.
 
 Collection GET list/detail đã hiện thực và kiểm HTTP Testcontainers tại Task 2;
-POST/PUT collection tại Task 3, size guide vẫn chưa hiện thực ở checkpoint này.
+POST/PUT collection tại Task 3, GET size guide tại Task 4; PUT guide còn chờ Task 5.
 
 Spec CAT-01b §6 đã được chủ dự án duyệt ngày 2026-10-07: collection list nhận page
 (mặc định 1, ≥ 1), size (20, 1..100), status tùy chọn DRAFT/ACTIVE/INACTIVE, sort

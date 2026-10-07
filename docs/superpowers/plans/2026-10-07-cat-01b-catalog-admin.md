@@ -258,7 +258,7 @@ Logs task3-*.log local/ignored; không sửa V001–V003 hoặc mapper/handler g
 Controller GET `/size-guides/{category_id}/{locale}` auth → service → Api.ok; read không audit,
 category INACTIVE không bị lọc. Dùng ObjectMapper parse JSONB vào Table record.
 
-- [ ] **Step 1: Viết tests seed SQL guide/category, không import class mới khi RED.**
+- [x] **Step 1: Viết tests seed SQL guide/category, không import class mới khi RED.**
 
 ```java
 @Test void guideReadRequiresWriterAndSupportsViEn() //401/403; vi/en content/version match SQL seed, no audit
@@ -266,12 +266,16 @@ category INACTIVE không bị lọc. Dùng ObjectMapper parse JSONB vào Table r
 @Test void missingGuideIs404AndInvalidLocaleIs400() // NOT_FOUND; fr/VI400 field locale; envelope/header
 ```
 
-- [ ] **Step 2: RED.** Target SizeGuideReadIntegrationTest → route404 instead of expected response.
-- [ ] **Step 3: Implement GET interfaces**, no PUT scaffold or empty normalizer yet.
-- [ ] **Step 4: GREEN.** Target + module + existing contract validate.
-- [ ] **Step 5: Mutation.** Filter category.status='ACTIVE' in read →
+- [x] **Step 2: RED.** Target SizeGuideReadIntegrationTest → route404 instead of expected response.
+- [x] **Step 3: Implement GET interfaces**, no PUT scaffold or empty normalizer yet.
+- [x] **Step 4: GREEN.** Target + module + existing contract validate.
+- [x] **Step 5: Mutation.** Filter category.status='ACTIVE' in read →
   `SizeGuideReadIntegrationTest#inactiveCategoryGuideIsReadable` FAIL; restore/module GREEN.
-- [ ] **Step 6: Docs and commit** `feat(CAT-01): add size guide admin reads`.
+- [x] **Step 6: Docs and commit** `feat(CAT-01): add size guide admin reads`.
+
+Evidence Task 4: RED3/GREEN3; module durability36/security38/catalog99 PASS0skip;
+category ACTIVE-filter mutation FAIL1 (404 vs200), restore/module PASS.
+Contract32/lint3API/docs46 PASS; logs task4-*.log local/ignored.
 
 ### Task 5: Size guide PUT, content validation, replay và create race
 

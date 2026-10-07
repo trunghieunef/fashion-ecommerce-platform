@@ -158,7 +158,7 @@ rỗng trả VERSION_CONFLICT, không bắt unique violation làm abort transact
 Update khóa guide, tăng version; absent guide với version>0 trả VERSION_CONFLICT.
 Table header so trùng strip/lowercase Locale.ROOT, giữ casing hiển thị; byte limit compact UTF-8.
 Collection detail đọc parent/items/version bằng một SQL json_agg ORDER BY sort_order/product_id.
-Collection flow đã hiện thực tại Task 2/3, kiểm Testcontainers; size guide flow còn chờ Task 4/5.
+Collection flow đã hiện thực tại Task 2/3, GET guide Task 4, kiểm Testcontainers; guide PUT còn chờ Task 5.
 Chưa upgrade/smoke CAT-01b trên volume local.
 
 ## 4. `cart-service`

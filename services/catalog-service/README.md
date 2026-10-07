@@ -17,7 +17,10 @@ expected_version, full replacement/items/status/version+1). Request collection t
 lạ qua @JsonAnySetter; NullNode sort/version như thiếu400; header/schema CAT-01a vẫn giữ nguyên.
 Product body thiếu trả400 ở index request gốc; activation không yêu cầu product ACTIVE.
 Date có offset→UTC, null bound; mutation/audit/key atomic, rollback audit giữ cả items/version.
-Size guide chưa hiện thực tại checkpoint Task 3; không public read CAT-02.
+Task 4 có GET `/admin/api/v1/catalog/size-guides/{category_id}/{locale}` (catalog.write,
+locale vi/en; locale sai400, thiếu guide404 NOT_FOUND; category INACTIVE vẫn đọc được).
+Trả guideline_html/table_json/version để edit; không audit GET. PUT guide còn chờ Task 5;
+không public read CAT-02.
 Admin taxonomy đã có GET/POST categories/brands và PUT theo id
 tại `/admin/api/v1/catalog`. Mọi endpoint kiểm ES256 và `catalog.write` tại service;
 POST cần `Idempotency-Key`, PUT cần `expected_version`; mutation và audit cùng transaction.

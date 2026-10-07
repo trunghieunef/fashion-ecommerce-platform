@@ -547,7 +547,7 @@ paths:
       operationId: getAdminSizeGuide
       summary: Read an admin size guide and its edit version
       description: >
-        Approved CAT-01b contract; implementation pending. Requires catalog.write at the service.
+        CAT-01b guide admin read implemented. Requires catalog.write at the service.
         Includes guides for DRAFT/INACTIVE catalog data. Missing guide returns 404 NOT_FOUND;
         locale outside vi/en returns 400. The returned version is the expected_version for PUT.
         Public size guide reads belong to CAT-02.
