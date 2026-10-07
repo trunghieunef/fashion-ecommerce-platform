@@ -34,6 +34,19 @@ services:
       timeout: 3s
       retries: 20
 
+  # TASK:CAT-03: local-only S3-compatible store (Apache-2.0). Loopback port only, console disabled;
+  # never use this image or these credentials in staging/production (16 provisions S3 separately).
+  rustfs:
+    image: rustfs/rustfs:1.0.1@sha256:1803faef57627e2d9c2e7d89d655d712ddded5389040054987163043fecb6a3c
+    environment:
+      RUSTFS_ACCESS_KEY: ${CATALOG_S3_ACCESS_KEY:?run scripts/local-up.sh to generate CATALOG_S3_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${CATALOG_S3_SECRET_KEY:?run scripts/local-up.sh to generate CATALOG_S3_SECRET_KEY}
+      RUSTFS_CONSOLE_ENABLE: "false"
+    ports:
+      - "127.0.0.1:19000:9000"
+    volumes:
+      - catalog-media-data:/data
+
   # Only with --profile nacos-compat (O02 compatibility proof). No published ports.
   nacos:
     image: nacos/nacos-server:v3.2.4@sha256:1c191c30c8cd5ff2a72bf576555dbaa57a616378c55168651a74aefadedf7708
@@ -66,6 +79,14 @@ services:
       CATALOG_MIGRATION_DB_URL: jdbc:postgresql://postgres:5432/${CATALOG_POSTGRES_DB:-catalog}
       CATALOG_MIGRATION_DB_USERNAME: ${CATALOG_MIGRATION_DB_USERNAME:-catalog_migration}
       CATALOG_MIGRATION_DB_PASSWORD: ${CATALOG_MIGRATION_DB_PASSWORD:?set CATALOG_MIGRATION_DB_PASSWORD}
+      CATALOG_S3_ENDPOINT: http://rustfs:9000
+      CATALOG_S3_PUBLIC_ENDPOINT: ${CATALOG_S3_PUBLIC_ENDPOINT:-http://127.0.0.1:19000}
+      CATALOG_S3_REGION: ${CATALOG_S3_REGION:-us-east-1}
+      CATALOG_S3_ACCESS_KEY: ${CATALOG_S3_ACCESS_KEY:?run scripts/local-up.sh to generate CATALOG_S3_ACCESS_KEY}
+      CATALOG_S3_SECRET_KEY: ${CATALOG_S3_SECRET_KEY:?run scripts/local-up.sh to generate CATALOG_S3_SECRET_KEY}
+      CATALOG_S3_QUARANTINE_RETENTION_DAYS: ${CATALOG_S3_QUARANTINE_RETENTION_DAYS:-2}
+      CATALOG_S3_BOOTSTRAP_BUCKET: "true"
+      CATALOG_S3_CORS_ORIGINS: http://localhost:${STOREFRONT_PORT:-4173}
       SPRING_PROFILES_ACTIVE: ${APP_PROFILES:-}
       NACOS_SERVER_ADDR: nacos:8848
       NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
@@ -73,6 +94,9 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      # Readiness of catalog does not depend on S3; bootstrap retries 10 x 1s.
+      rustfs:
+        condition: service_started
       nacos:
         condition: service_healthy
         required: false
@@ -156,4 +180,5 @@ services:
 
 volumes:
   catalog-postgres-data:
+  catalog-media-data:
   nacos-data:

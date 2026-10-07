@@ -42,6 +42,18 @@ fashion:
   catalog:
     jwt:
       public-keys: ${CATALOG_JWT_PUBLIC_KEYS}
+    media:
+      bucket: ${CATALOG_S3_BUCKET:catalog-media-local}
+      endpoint: ${CATALOG_S3_ENDPOINT}
+      public-endpoint: ${CATALOG_S3_PUBLIC_ENDPOINT:${CATALOG_S3_ENDPOINT}}
+      region: ${CATALOG_S3_REGION:us-east-1}
+      access-key: ${CATALOG_S3_ACCESS_KEY}
+      secret-key: ${CATALOG_S3_SECRET_KEY}
+      cors-origins: ${CATALOG_S3_CORS_ORIGINS:http://localhost:4173}
+      quarantine-retention-days: ${CATALOG_S3_QUARANTINE_RETENTION_DAYS:2}
+      bootstrap-bucket: ${CATALOG_S3_BOOTSTRAP_BUCKET:false}
+      jobs-enabled: ${CATALOG_MEDIA_JOBS_ENABLED:true}
+      s3-timeout: 10s
 
 management:
   endpoints:

@@ -120,9 +120,26 @@ chỉ service này). [Spike RustFS local](../../docs/evidence/cat-03-stack-resea
 PASS, chưa có upload/attach/publish image gate trong code service. RustFS local-only,
 không staging/prod; SDK không dùng Apache/Netty/native CRT transport mới.
 local-up.sh sinh CATALOG_S3_ACCESS_KEY/SECRET_KEY vào .env local, giữ qua retry,
-không log/commit. CATALOG_S3_ENDPOINT/REGION hiện dùng cho probe local với
-StaticCredentialsProvider, không đọc AWS profile thật; Compose catalog chưa nối
-storage. Spec/plan media phải được duyệt trước implementation.
+không log/commit.
+
+Storage adapter (TASK:CAT-03, Task 2) đã có: `MediaStorage` (presign PUT ký
+Content-Type/Content-Length, head, read giới hạn, putIfAbsent với If-None-Match,
+delete, open, ensureBucket), mọi lỗi SDK/timeout thành `MediaStorage.Unavailable`
+không chứa key/URL. Chưa có endpoint upload/complete/read/GC (các task sau).
+Config (`fashion.catalog.media.*`, env): `CATALOG_S3_BUCKET` (catalog-media-local),
+`CATALOG_S3_ENDPOINT` (nội bộ, bắt buộc), `CATALOG_S3_PUBLIC_ENDPOINT` (URL browser
+dùng cho presigned PUT, mặc định = endpoint), `CATALOG_S3_REGION`,
+`CATALOG_S3_ACCESS_KEY/SECRET_KEY` (bắt buộc), `CATALOG_S3_CORS_ORIGINS`,
+`CATALOG_S3_QUARANTINE_RETENTION_DAYS` (2), `CATALOG_S3_BOOTSTRAP_BUCKET` (false),
+`CATALOG_MEDIA_JOBS_ENABLED` (true; mới được bind, scheduling ở task sau), timeout S3 10s.
+Compose local chạy `rustfs` (digest ghim, chỉ `127.0.0.1:19000`, không console, volume
+`catalog-media-data`), catalog bật bootstrap bucket (tạo bucket, CORS PUT cho origin
+storefront, lifecycle chỉ prefix `quarantine/` 2 ngày, không bucket policy; retry 10x1s
+rồi fail startup). `depends_on rustfs` chỉ service_started, readiness catalog không
+phụ thuộc S3. `.env` cũ tự nhận `CATALOG_S3_PUBLIC_ENDPOINT` khi chạy local-up.sh;
+`CATALOG_S3_ENDPOINT` trong `.env` không còn dùng (Compose đặt http://rustfs:9000).
+RustFS/credential local chỉ cho local, không staging/prod. Test:
+`MediaStorageIntegrationTest` (RustFS Testcontainers thật, credential ngẫu nhiên mỗi run).
 
 Contract [CAT-03 bản nháp](../../docs/superpowers/specs/2026-10-07-cat-03-media-design.md)
 và OpenAPI gắn planned: PUT300s; complete deadline=put_expires_at+24h (thay TTL

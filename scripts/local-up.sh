@@ -19,7 +19,7 @@ for s3_key in CATALOG_S3_ACCESS_KEY CATALOG_S3_SECRET_KEY; do
   fi
 done
 
-# TASK:CAT-03 approved safety-net policy; consumed by S3 setup/spike, not yet wired to Compose.
+# TASK:CAT-03 approved safety-net policy (quarantine lifecycle days); passed to catalog by Compose.
 sed -i 's/^CATALOG_S3_QUARANTINE_RETENTION_DAYS=.*/CATALOG_S3_QUARANTINE_RETENTION_DAYS=2/' "$ENV_FILE"
 
 # Local-only access-token signing key (TASK:USR-01a); generated once, never committed.
