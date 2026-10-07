@@ -73,10 +73,12 @@ public abstract class CatalogAdminTestSupport {
     }
   }
   protected String token(String... permissions) { return signed(KEY, Instant.now(), permissions); }
-  protected String signed(ECKey key, Instant now, String... permissions) {
+  protected String tokenFor(UUID subject, String... permissions) { return signed(KEY, Instant.now(), subject, permissions); }
+  protected String signed(ECKey key, Instant now, String... permissions) { return signed(key, now, ACTOR, permissions); }
+  protected String signed(ECKey key, Instant now, UUID subject, String... permissions) {
     try {
       var jwt = new SignedJWT(new JWSHeader.Builder(JWSAlgorithm.ES256).keyID("test").build(),
-          new JWTClaimsSet.Builder().issuer("user-service").audience("fashion-api").subject(ACTOR.toString())
+          new JWTClaimsSet.Builder().issuer("user-service").audience("fashion-api").subject(subject.toString())
               .issueTime(Date.from(now)).expirationTime(Date.from(now.plusSeconds(900)))
               .claim("auth_version", 0).claim("permissions", List.of(permissions)).build());
       jwt.sign(new ECDSASigner(key));

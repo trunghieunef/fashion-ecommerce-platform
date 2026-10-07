@@ -125,7 +125,10 @@ không log/commit.
 Storage adapter (TASK:CAT-03, Task 2) đã có: `MediaStorage` (presign PUT ký
 Content-Type/Content-Length, head, read giới hạn, putIfAbsent với If-None-Match,
 delete, open, ensureBucket), mọi lỗi SDK/timeout thành `MediaStorage.Unavailable`
-không chứa key/URL. Chưa có endpoint upload/complete/read/GC (các task sau).
+không chứa key/URL. Đã có `POST /admin/api/v1/catalog/images/uploads` (intent, key bắt buộc, PUT 300s,
+idempotency chỉ lưu descriptor không URL, replay sau hạn PUT -> 409 `UPLOAD_URL_EXPIRED`) và
+`GET .../uploads/{upload_id}` (owner-only, khác owner/thiếu -> 404); test `UploadIntentIntegrationTest`.
+Chưa có endpoint complete/read/GC (các task sau).
 Config (`fashion.catalog.media.*`, env): `CATALOG_S3_BUCKET` (catalog-media-local),
 `CATALOG_S3_ENDPOINT` (nội bộ, bắt buộc), `CATALOG_S3_PUBLIC_ENDPOINT` (URL browser
 dùng cho presigned PUT, mặc định = endpoint), `CATALOG_S3_REGION`,

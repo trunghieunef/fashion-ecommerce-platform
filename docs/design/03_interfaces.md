@@ -397,11 +397,11 @@ reference/lease được GC sau 7 ngày từ terminal, suy ra upload_id, không 
 | GET,POST /catalog/collections; GET,PUT /catalog/collections/{id} | OPS (`catalog.write`) | CAT-01b: POST key → DRAFT/version 0; PUT chỉ expected_version, thay toàn bộ items; GET gồm items thứ tự (sort_order, product_id) + version, kể cả DRAFT/INACTIVE; cover_url luôn null, không nhận media/lookbook / 1 |
 | GET /catalog/size-guides/{category_id}/{locale} | OPS (`catalog.write`) | CAT-01b: nội dung + version; chưa có 404 NOT_FOUND, locale ngoài vi/en 400 / 1 |
 | PUT /catalog/size-guides/{category_id}/{locale} | OPS (`catalog.write`) | CAT-01b: key + expected_version; 0 tạo → 201/version 1, cập nhật → 200/version +1; replay trước version guard / 1 |
-| POST /catalog/images/uploads | OPS (`catalog.write`) | CAT-03 planned: key bắt buộc, URL PUT sống 300 giây; complete deadline = PUT expiry +24h; replay sau hạn PUT trả 409 UPLOAD_URL_EXPIRED, client không còn upload_id thì tạo intent mới với key mới / 1 |
+| POST /catalog/images/uploads | OPS (`catalog.write`) | CAT-03 implemented (Task 4, test PostgreSQL+RustFS): key bắt buộc, URL PUT sống 300 giây, idempotency chỉ lưu descriptor không URL; complete deadline = PUT expiry +24h; replay sau hạn PUT trả 409 UPLOAD_URL_EXPIRED, client không còn upload_id thì tạo intent mới với key mới / 1 |
 | GET,PUT /catalog/products/{id}/images; GET,PUT /catalog/collections/{id}/images | OPS (`catalog.write`) | CAT-03 planned: full replacement/version resource, không key; ownership chỉ mới-gắn, snapshot cùng version / 1 |
 | GET /catalog/images/{asset_id}?kind=image hoặc thumb | OPS (`catalog.write`) | CAT-03 planned: admin preview approved, không raw / 1 |
 | POST /catalog/images/uploads/{upload_id}/complete | OPS (`catalog.write`) | CAT-03 design: complete idempotent theo upload_id, owner actor+target, validate/re-encode; chưa implementation / 1 |
-| GET /catalog/images/uploads/{upload_id} | OPS (`catalog.write`) | CAT-03 design: upload status để phục hồi complete timeout; owner strict, chưa implementation / 1 |
+| GET /catalog/images/uploads/{upload_id} | OPS (`catalog.write`) | CAT-03 implemented (Task 4): upload status để phục hồi complete timeout; owner strict (khác owner/thiếu → 404) / 1 |
 | GET /orders; GET /orders/{order_no} | OPS, FINANCE (PII tối thiểu) | Filter ngày/status/search, page / 1 |
 | POST /orders/{order_no}/confirm-cod | OPS | CONFIRMED → durable commit, PACKING khi xong / 1 |
 | POST /orders/{order_no}/pack | OPS | PAID → PACKING và create shipment step / 1 |
