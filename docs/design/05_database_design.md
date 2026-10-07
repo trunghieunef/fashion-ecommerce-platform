@@ -125,7 +125,7 @@ erDiagram
 
 Schema collections/collection_items/size_guides đã được hiện thực ở V004 (Task 1);
 kiểm upgrade Testcontainers từ V003 giữ legacy SKU/sample và audit append-only.
-Chưa áp volume local; Task 2 bổ sung GET admin collection list/detail, các mutation/guide còn chờ.
+Chưa áp volume local; Task 2/3 bổ sung GET/POST/PUT admin collection; size guide còn chờ.
 
 Collection CAT-01b (chủ dự án, 2026-10-07): POST tạo DRAFT/version 0, cần key;
 PUT thay toàn bộ nội dung/items, chỉ cần expected_version (không cần Idempotency-Key),

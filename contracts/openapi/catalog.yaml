@@ -438,7 +438,7 @@ paths:
       operationId: createCollection
       summary: Create a DRAFT collection at version 0
       description: >
-        Approved CAT-01b contract; implementation pending. Requires catalog.write.
+        CAT-01b collection mutation implemented. Requires catalog.write.
         Idempotency-Key is mandatory. At most 1000 items; empty collections and unpublished
         products are allowed. Unknown item product_id returns 400 VALIDATION_ERROR with
         field items[i].product_id. Duplicate product_id returns 400. sort_order may tie.
@@ -500,7 +500,7 @@ paths:
       operationId: updateCollection
       summary: Replace collection content and items using its expected version
       description: >
-        Approved CAT-01b contract; implementation pending. Requires catalog.write and
+        CAT-01b collection mutation implemented. Requires catalog.write and
         expected_version, without requiring Idempotency-Key, as with CAT-01a PUT.
         Replaces the content and entire item list; increments version by one. Status can
         be DRAFT, ACTIVE or INACTIVE. ACTIVE does not require an ACTIVE product.

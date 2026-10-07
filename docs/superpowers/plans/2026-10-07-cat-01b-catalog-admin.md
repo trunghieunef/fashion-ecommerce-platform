@@ -202,7 +202,7 @@ String status,Long expectedVersion,List<Item> items)` giữ request item order.
 Controller POST dùng commands.create(actor,"catalog.collection.create",key,input,...201);
 PUT dùng update, không yêu cầu key, metadata một lần/audit requestId dùng lại.
 
-- [ ] **Step 1: Viết HTTP tests, body JSON literals để RED không phụ thuộc DTO chưa có.**
+- [x] **Step 1: Viết HTTP tests, body JSON literals để RED không phụ thuộc DTO chưa có.**
 
 ```java
 @Test void createIsDraftVersionZeroAndReplayDoesNotAudit() // 201; same key/body same data/status, metadata differs, audit1
@@ -220,9 +220,9 @@ PUT dùng update, không yêu cầu key, metadata một lần/audit requestId d�
 @Test void auditFailureRollsBackCollectionItemsVersionAndCreateKey() // owner test constraint rejects audit action; 500 safe envelope; before unchanged/no pending key; finally remove constraint
 ```
 
-- [ ] **Step 2: RED.** Target CollectionAdminIntegrationTest → missing POST/PUT assertion failures;
+- [x] **Step 2: RED.** Target CollectionAdminIntegrationTest → missing POST/PUT assertion failures;
   only isolated PG owner may alter audit fixture, never local volume data.
-- [ ] **Step 3: Implement normalize/create/update.** Collect unknown keys → field exact key; public DTO
+- [x] **Step 3: Implement normalize/create/update.** Collect unknown keys → field exact key; public DTO
   any-setter must work despite global fail-on-unknown=false. Item UUID parse/validate with indexed
   errors; sort JsonNode integral/canConvertToInt/nonnegative, no global coercion change. Version
   parse integral/nonnegative/canConvertToLong; Java null/NullNode missing400 cho sort/version.
@@ -233,13 +233,18 @@ PUT dùng update, không yêu cầu key, metadata một lần/audit requestId d�
   POST captures even explicit null as unknown; UpdateRequest knows these fields. Never List.of nullable fields.
   PUT commands.update locks collection row, requireVersion, updates parent and replaces association
   rows, calls Task 2 load inside same transaction, audit before commit. Insert audit failure must rollback.
-- [ ] **Step 4: GREEN.** Target + module. CAT-01a remains permissive: add regression old product PUT
+- [x] **Step 4: GREEN.** Target + module. CAT-01a remains permissive: add regression old product PUT
   unknown status still ignored; no global mapper/advice changes. Dùng support audited để
   xác nhận audit.request_id bằng metadata.request_id của mutation đầu, replay không thêm audit.
-- [ ] **Step 5: Mutations one at a time.** Remove collection requireVersion → twoPutsSameVersion FAIL;
+- [x] **Step 5: Mutations one at a time.** Remove collection requireVersion → twoPutsSameVersion FAIL;
   remove @JsonAnySetter → unknownFieldsIncludingNull FAIL; bỏ wrapper commands.update của
   CollectionAdminService.update, giữ các query → auditFailureRollsBack... FAIL. Each restore/module GREEN before next.
-- [ ] **Step 6: Docs/contract and commit** `feat(CAT-01): add atomic collection admin mutations`.
+- [x] **Step 6: Docs/contract and commit** `feat(CAT-01): add atomic collection admin mutations`.
+
+Evidence Task 3: RED13/GREEN13; explicit NullNode and collector-key regressions PASS.
+Module durability36/security38/catalog96 PASS0skip. Version guard/any-setter/TX wrapper mutations
+each FAIL1, compile OK; mỗi restore module36/38/96 PASS. Contract32/lint3API/docs46 PASS.
+Logs task3-*.log local/ignored; không sửa V001–V003 hoặc mapper/handler global.
 
 ### Task 4: Size guide admin GET và locale
 

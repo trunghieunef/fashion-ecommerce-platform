@@ -11,8 +11,13 @@ audit append-only. Schema đã kiểm bằng PostgreSQL Testcontainers, chưa up
 CAT-01b Task 2 có GET `/admin/api/v1/catalog/collections` (page1/size20/max100/status optional,
 created_at DESC/id DESC, summary không có items) và GET `/collections/{id}` (one SQL json_agg,
 items sort_order/product_id, nội dung/version cùng snapshot, DRAFT/INACTIVE cũng đọc được).
-Cả hai kiểm catalog.write, không audit read. Collection mutation/size guide chưa hiện thực
-tại checkpoint Task 2; không public read CAT-02.
+Cả hai kiểm catalog.write, không audit read. CAT-01b Task 3 thêm POST collections
+(key, DRAFT/version0, replay snapshot/no audit) và PUT collections/{id} (không key,
+expected_version, full replacement/items/status/version+1). Request collection từ chối field
+lạ qua @JsonAnySetter; NullNode sort/version như thiếu400; header/schema CAT-01a vẫn giữ nguyên.
+Product body thiếu trả400 ở index request gốc; activation không yêu cầu product ACTIVE.
+Date có offset→UTC, null bound; mutation/audit/key atomic, rollback audit giữ cả items/version.
+Size guide chưa hiện thực tại checkpoint Task 3; không public read CAT-02.
 Admin taxonomy đã có GET/POST categories/brands và PUT theo id
 tại `/admin/api/v1/catalog`. Mọi endpoint kiểm ES256 và `catalog.write` tại service;
 POST cần `Idempotency-Key`, PUT cần `expected_version`; mutation và audit cùng transaction.
