@@ -109,7 +109,7 @@ flowchart LR
 
 | Luồng | Xử lý | Lỗi / kết quả |
 |---|---|---|
-| Tạo/sửa sản phẩm | OPS auth → sanitize HTML/validate giá, size, màu, weight → TX product/variants/images + version + audit + outbox | SKU và bộ product-size-color unique; conflict trả 409; không xóa hard SKU đã công bố |
+| Tạo/sửa sản phẩm | OPS auth → sanitize HTML/validate giá, size, màu, weight → SKU mới strip/ASCII/uppercase Locale.ROOT trước hash → TX product/variants/images + version + audit + outbox | SKU unique không phân biệt casing, bộ product-size-color unique; conflict trả 409; SKU/event/key cũ giữ nguyên; không xóa hard SKU đã công bố |
 | Khởi tạo SKU kho | Catalog phát VARIANT_CREATED; inventory idempotently tạo stock_items số lượng 0 | Event chưa đến thì SKU được xem chưa sẵn sàng bán; nhập kho đợi đăng ký thành công |
 | Publish/unpublish | Kiểm tra có biến thể, ảnh, nội dung bắt buộc → cập nhật trạng thái/version → invalidate | Ngưng bán không phá snapshot đơn cũ; checkout quote kiểm tra trạng thái ACTIVE |
 | Danh sách/search/detail | Cache-aside → query DB phân trang → ảnh từ object storage/CDN → stock cache ngắn hạn | Cursor gồm sort value + id, không chỉ id; dữ liệu stock hiển thị không giữ hàng |

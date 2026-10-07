@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Chạy từ Git Bash, repo root: `export JAVA_HOME=/c/Users/<user>/.local/toolchains/jdk-21.0.12.1+1 PATH="$JAVA_HOME/bin:$PATH"`; Docker Desktop chạy.
-- Không sửa `V001__catalog_baseline.sql`; mọi schema mới ở `V002__catalog_admin.sql`.
+- Không sửa V001/V002 đã áp dụng; schema ban đầu ở `V002__catalog_admin.sql`, follow-up SKU đã duyệt thêm `V003__canonical_sku.sql` (Task 4).
 - JDBC (`JdbcClient`), không JPA; JSON snake_case; tiền `long`/`bigint` VND, không float/double.
 - Mọi endpoint admin cần permission `catalog.write` trong claim `permissions`; không gọi user-service.
 - Mọi POST cần header `Idempotency-Key` (1–128); mọi PUT và publish/unpublish cần `expected_version` (thiếu → 400 `VALIDATION_ERROR`, lệch → 409 `VERSION_CONFLICT`).
@@ -188,8 +188,29 @@ Lưu ý: `ProductQueryIntegrationTest` insert product không có `category_id`/`
 
 ### Task 4: Variant + outbox `VARIANT_CREATED`
 
+**Follow-up PR14 đã được chủ dự án duyệt (2026-10-07):** SKU mới strip → kiểm ASCII
+1–64 với ký tự đầu chữ/số → uppercase Locale.ROOT trước hash/DB/audit/outbox. SKU cũ,
+outbox/audit và hash/response cũ bất biến, không backfill. Thêm V003 (không sửa V001/V002):
+unique index `product_variants_sku_key_ci` trên `upper(sku COLLATE "C")`, BEFORE INSERT
+guard canonical uppercase ASCII; không dùng CHECK cản UPDATE mutable của dòng legacy.
+Collision casing dừng migration, không tự sửa dữ liệu. Kiểm key legacy trong cùng transaction:
+lấy SKU từ response COMPLETED đúng actor/operation/key, chỉ thay SKU của request dùng hash;
+field khác vẫn so hash, replay giữ data/status và không thêm audit/outbox.
+
+TDD follow-up: thêm `newSkuIsCanonicalInResponseDatabaseAuditAndOutbox`
+(Locale tr-TR + ký tự Unicode ß/ı bị từ chối), `retryWithDifferentSkuCasingReplaysCanonicalResponse`,
+`legacySkuAndCompletedKeyRemainUnchanged`; duplicate/race dùng casing khác nhau.
+Schema regression: V002→V003 giữ identity/mutable UPDATE, insert guard, collision khiến
+migration fail mà dữ liệu còn nguyên. Contract regression nhận SKU có whitespace đầu/cuối,
+response/event giữ legacy casing. Module xanh → mutation thật bỏ uppercase, bỏ CI index,
+bỏ INSERT trigger; từng test phải FAIL có Tests run:, không COMPILATION ERROR; khôi phục
+rồi full Maven. Đồng bộ 03/05/06/08, spec, contracts, README/evidence/handoff trong cùng commit.
+Commit follow-up: `fix(CAT-01): canonicalize new SKUs and preserve legacy identities`.
+
 **Files:**
 - Create: `services/catalog-service/src/main/java/vn/fashion/catalog/admin/{VariantAdminController.java,VariantAdminService.java}`
+- Create (follow-up SKU): `services/catalog-service/src/main/resources/db/migration/V003__canonical_sku.sql`
+- Modify (follow-up SKU): `services/catalog-service/src/test/java/vn/fashion/catalog/admin/CatalogSchemaIntegrationTest.java`, `scripts/smoke-local.sh`, `tests/contracts/test_catalog_admin.py`
 - Test: `services/catalog-service/src/test/java/vn/fashion/catalog/admin/VariantAdminIntegrationTest.java`
 
 **Interfaces:**
@@ -214,7 +235,7 @@ Lưu ý: `ProductQueryIntegrationTest` insert product không có `category_id`/`
 
 - [ ] **Step 2: Chạy, đỏ.**
 
-- [ ] **Step 3: Implement.** Trong `AdminCommands.create`: `lockForUpdate(productId)` → insert variant (id mới, version 0) → `update products set version = version + 1, updated_at = now()` returning version → `outbox.append(...)` → `audit.record(...)` → `Result(variantId, 201, variant)`. SKU `^[A-Za-z0-9][A-Za-z0-9._-]*$` 1–64; size/color 1–50 sau strip; `weight_grams` 1..`Integer.MAX_VALUE`; `price_override` null hoặc ≥ 0. PUT: `select ... for update` variant, `requireVersion`, update ba field mutable + `version+1`.
+- [ ] **Step 3: Implement.** SKU mới strip/kiểm ASCII `^[A-Za-z0-9][A-Za-z0-9._-]*$` 1–64 trước uppercase Locale.ROOT và hash; legacy replay theo follow-up ở trên. Trong `AdminCommands.create`: `lockForUpdate(productId)` → insert variant (id mới, version 0) → `update products set version = version + 1, updated_at = now()` returning version → `outbox.append(...)` → `audit.record(...)` → `Result(variantId, 201, variant)`. Size/color 1–50 sau strip; `weight_grams` 1..`Integer.MAX_VALUE`; `price_override` null hoặc ≥ 0. PUT: `select ... for update` variant, `requireVersion`, update ba field mutable + `version+1`.
 
 - [ ] **Step 4: Xanh module.**
 

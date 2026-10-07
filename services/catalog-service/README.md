@@ -4,7 +4,8 @@
 
 Service sở hữu database `catalog`. Phần nền read-only Sprint 1 chạy Flyway `V001`;
 CAT-01a bổ sung `V002` (category/brand, product fields, variant identity trigger,
-outbox/idempotency/audit). Admin taxonomy đã có GET/POST categories/brands và PUT theo id
+outbox/idempotency/audit) và follow-up `V003` (SKU mới uppercase ASCII, unique không phân biệt casing).
+Admin taxonomy đã có GET/POST categories/brands và PUT theo id
 tại `/admin/api/v1/catalog`. Mọi endpoint kiểm ES256 và `catalog.write` tại service;
 POST cần `Idempotency-Key`, PUT cần `expected_version`; mutation và audit cùng transaction.
 Thu hồi quyền ở catalog trễ tối đa TTL access token 15 phút theo ADR-21.
@@ -34,6 +35,13 @@ Variant admin đã có POST `/products/{id}/variants` và PUT `/variants/{id}`: 
 bất biến, sửa price_override/weight/status với version. Tạo variant tăng product version và ghi
 đúng một `VARIANT_CREATED` PENDING tại `catalog.events`, key product_id, trong cùng transaction
 với variant, audit và kết quả idempotency. Chưa có relay/Kafka local; chưa có inventory consumer.
+SKU mới: strip → kiểm 1–64 ký tự ASCII `[A-Za-z0-9._-]`, đầu chữ/số → uppercase Locale.ROOT
+trước hash/DB/audit/outbox. Retry đổi casing vẫn replay; đổi field khác trả 409.
+V003 thêm unique index `upper(sku COLLATE "C")` và BEFORE INSERT guard; giữ V001/V002.
+SKU cũ giữ identity và vẫn sửa mutable được; audit/outbox/hash/response cũ không backfill.
+Replay key legacy giữ data/status nguyên gốc. Schema response/event vẫn nhận legacy lowercase.
+Trước upgrade kiểm collision bằng `GROUP BY upper(sku COLLATE "C") HAVING count(*) > 1`;
+có collision thì migration dừng, cần quyết định dữ liệu riêng, không tự merge hoặc reset volume.
 
 Publish/unpublish qua POST `/products/{id}/publish|unpublish` cần key + expected_version,
 reason tùy chọn ≤ 500. Publish DRAFT/INACTIVE → ACTIVE kiểm category/brand ACTIVE và có variant
@@ -52,6 +60,8 @@ collection/size-guide/media, filter/search public, cursor thật, cache hoặc K
 rồi tạo category → product → variant → publish qua Gateway bằng JWT synthetic ký từ khóa
 local trong `.env` (chỉ memory, quyền `catalog.write`, TTL 300 giây). Smoke này không chứng minh
 chuỗi login → token OPS. Slug/SKU ngẫu nhiên; dữ liệu smoke tích lũy trên volume local vì không có DELETE.
+Smoke tạo SKU có whitespace/chữ thường rồi retry cùng key bằng uppercase; kiểm cùng variant id
+và product version không tăng thêm trước publish.
 
 Yêu cầu JDK 21 và Docker daemon mà user hiện tại được phép truy cập. Từ repo root:
 
@@ -101,7 +111,7 @@ Hai lệnh dùng Testcontainers PostgreSQL `17.11`; chúng cần Docker daemon k
 không dùng H2 hoặc mock repository thay thế. Test kiểm tra migration, active-only
 query, limit, response envelope, readiness và runtime role không thể tạo table, cùng admin
 auth, version/SKU races, idempotency, sanitize, publish và rollback outbox/audit. CAT-01a local
-có 65 test catalog sau review PR14; tổng reactor và mutation tại [evidence](../../docs/evidence/cat-01a-local-2026-10-07.md).
+có 71 test catalog sau follow-up SKU PR14; tổng reactor và mutation tại [evidence](../../docs/evidence/cat-01a-local-2026-10-07.md).
 
 Sau khi service chạy:
 

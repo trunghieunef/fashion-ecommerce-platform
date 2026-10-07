@@ -90,9 +90,13 @@ category_id="$(catalog_post category /categories \
 product_id="$(catalog_post product /products \
   "{\"category_id\":\"$category_id\",\"name_vi\":\"Smoke\",\"name_en\":\"Smoke\",\"slug\":\"smoke-$catalog_suffix\",\"base_price\":100000}" | \
   python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["status"] == "DRAFT" and d["version"] == 0; print(d["id"])')"
+variant_id="$(catalog_post variant "/products/$product_id/variants" \
+  "{\"sku\":\" smoke-$catalog_suffix \",\"size\":\"M\",\"color\":\"black\",\"weight_grams\":100}" | \
+  python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["status"] == "ACTIVE" and d["version"] == 0 and d["sku"] == sys.argv[1].upper(); print(d["id"])' "SMOKE-$catalog_suffix")"
+# Same key after changing casing must replay, so publish still expects product version 1.
 catalog_post variant "/products/$product_id/variants" \
-  "{\"sku\":\"SMOKE-$catalog_suffix\",\"size\":\"M\",\"color\":\"black\",\"weight_grams\":100}" | \
-  python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["status"] == "ACTIVE" and d["version"] == 0'
+  "{\"sku\":\"SMOKE-${catalog_suffix^^}\",\"size\":\"M\",\"color\":\"black\",\"weight_grams\":100}" | \
+  python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["id"] == sys.argv[1] and d["sku"] == sys.argv[2].upper()' "$variant_id" "SMOKE-$catalog_suffix"
 catalog_post publish "/products/$product_id/publish" '{"expected_version":1}' | \
   python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["status"] == "ACTIVE" and d["version"] == 2 and d["published_at"]'
 curl --fail --silent --show-error "$GATEWAY_URL/api/v1/catalog/products?limit=100" | \

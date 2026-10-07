@@ -66,6 +66,13 @@ class CatalogAdminContractTest(unittest.TestCase):
         self.assertNotIn("USER_JWT_PRIVATE_KEY", env)
         self.assertNotIn("CATALOG_JWT_PUBLIC_KEYS", compose["services"]["postgres"]["environment"])
 
+    def test_sku_request_accepts_trimmed_input_and_response_keeps_legacy_identity(self):
+        self.assertEqual(list(self.validator("VariantCreate").iter_errors(
+            {"sku": " shirt-m ", "size": "M", "color": "Blue", "weight_grams": 100})), [])
+        sku = self.doc["components"]["schemas"]["AdminVariant"]["properties"]["sku"]
+        for value in ("SHIRT-M", "legacy-m"):
+            self.assertEqual(list(Draft202012Validator(sku).iter_errors(value)), [])
+
     def test_every_admin_operation_has_valid_success_and_error_examples(self):
         count = 0
         for path, item in self.doc["paths"].items():

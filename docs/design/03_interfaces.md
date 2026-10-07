@@ -195,6 +195,10 @@ cần `catalog.write` (OPS), mọi POST có `Idempotency-Key`; PUT và publish/u
 publish kiểm taxonomy ACTIVE và ≥ 1 variant ACTIVE (điều kiện ảnh thuộc CAT-03).
 Token được kiểm bằng `AccessTokenVerifier`, không gọi user-service; thu hồi quyền trễ tối đa
 15 phút theo ADR-21. Retry key/body chuẩn hóa trả cùng kết quả; đổi body trả 409 IDEMPOTENCY_KEY_REUSED.
+SKU mới: `String.strip` → kiểm 1–64 ký tự ASCII `^[A-Za-z0-9][A-Za-z0-9._-]*$` →
+uppercase `Locale.ROOT` trước hash idempotency/lưu DB/audit/outbox. Trùng SKU không phân biệt
+hoa/thường trả 409 `CONFLICT`, field `sku`; retry cùng key đổi casing vẫn replay. SKU cũ bất biến,
+response/key/event đã lưu không backfill; replay key cũ giữ data/status, đổi field khác vẫn 409.
 Audit của mutation dùng cùng `request_id` với metadata response đầu; retry giữ data/status,
 metadata mới và không thêm audit. Lỗi nội bộ admin trả 500 với đúng code `INTERNAL`, message
 `INTERNAL_ERROR`, metadata và header `X-Correlation-Id`; exception chỉ log phía server qua

@@ -19,6 +19,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class CatalogSchemaIntegrationTest {
   static final String SEED = "00000000-0000-4000-8000-000000000001";
   static final UUID SAMPLE = UUID.randomUUID();
+  static final UUID LEGACY = UUID.randomUUID();
   @Container static final PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:17.11")
       .withDatabaseName("catalog").withUsername("postgres").withPassword("postgres")
       .withInitScript("catalog-test-init.sql");
@@ -28,11 +29,13 @@ class CatalogSchemaIntegrationTest {
         .target("1").load().migrate();
     sql("insert into products(id,slug,status,name_vi,name_en) values ('" + SAMPLE + "','sample','ACTIVE','Mẫu','Sample')");
     Flyway.configure().dataSource(postgres.getJdbcUrl(), "catalog_migration", "catalog_migration_test")
-        .load().migrate();
+        .target("2").load().migrate();
+    sql("insert into product_variants(id,product_id,sku,size,color,weight_grams) values ('" + LEGACY + "','" + SAMPLE + "','legacy-m','M','Blue',100)");
+    Flyway.configure().dataSource(postgres.getJdbcUrl(), "catalog_migration", "catalog_migration_test").load().migrate();
   }
 
   @BeforeEach void clearVariants() throws SQLException {
-    sql("delete from product_variants");
+    sql("delete from product_variants where id <> '" + LEGACY + "'");
   }
 
   static Connection connection() throws SQLException {
@@ -76,6 +79,33 @@ class CatalogSchemaIntegrationTest {
     variant(product(), "DUPLICATE", "M");
     assertThatThrownBy(() -> variant(product(), "DUPLICATE", "L"))
         .hasMessageContaining("product_variants_sku_key");
+  }
+  @Test void legacySkuSurvivesUpgradeAndBlocksCaseInsensitiveDuplicate() throws SQLException {
+    sql("update product_variants set price_override=100 where id='" + LEGACY + "'");
+    try (var c = connection(); var s = c.createStatement(); var r = s.executeQuery("select sku from product_variants where id='" + LEGACY + "'")) {
+      assertThat(r.next()).isTrue(); assertThat(r.getString(1)).isEqualTo("legacy-m");
+    }
+    assertThatThrownBy(() -> variant(product(), "LEGACY-M", "L")).hasMessageContaining("product_variants_sku_key_ci");
+  }
+  @Test void directInsertRequiresCanonicalUppercaseAsciiSku() throws SQLException {
+    UUID p = product();
+    for (String invalid : new String[]{"lower", " MIXED ", "", "A B", "ß", "ı", "İ", "Å", ".A"})
+      assertThatThrownBy(() -> variant(p, invalid, "M")).hasMessageContaining("canonical uppercase ASCII");
+    variant(p, "SKU-I._1", "M");
+  }
+  @Test void caseCollisionStopsMigrationWithoutChangingExistingRows() throws SQLException {
+    sql("create database catalog_collision owner catalog_migration");
+    String url = postgres.getJdbcUrl().replace("/catalog", "/catalog_collision");
+    Flyway.configure().dataSource(url, "catalog_migration", "catalog_migration_test").target("2").load().migrate();
+    try (var c = DriverManager.getConnection(url, "postgres", "postgres"); var s = c.createStatement()) {
+      s.execute("insert into products(id,slug,status,name_vi,name_en,category_id,base_price) values ('" + SAMPLE + "','collision','DRAFT','Test','Test','" + SEED + "',0)");
+      s.execute("insert into product_variants(id,product_id,sku,size,color,weight_grams) values (gen_random_uuid(),'" + SAMPLE + "','case','M','Blue',100),(gen_random_uuid(),'" + SAMPLE + "','CASE','L','Blue',100)");
+      assertThatThrownBy(() -> Flyway.configure().dataSource(url, "catalog_migration", "catalog_migration_test").load().migrate())
+          .hasMessageContaining("product_variants_sku_key_ci");
+      try (var r = s.executeQuery("select count(*),count(*) filter (where sku='case'),count(*) filter (where sku='CASE') from product_variants")) {
+        assertThat(r.next()).isTrue(); assertThat(r.getInt(1)).isEqualTo(2); assertThat(r.getInt(2)).isEqualTo(1); assertThat(r.getInt(3)).isEqualTo(1);
+      }
+    }
   }
   @Test void duplicateSizeColorPerProductViolatesNamedConstraint() throws SQLException {
     UUID p = product();

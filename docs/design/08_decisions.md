@@ -176,4 +176,13 @@ Gate task là work package trong [backlog](../delivery/10_backlog.md). Mã task 
   Giữ scope public và các handler cụ thể. Chủ dự án để các Minor riêng: deadlock mapping,
   scalar coercion; không kéo interceptor/refactor tags vào đợt sửa này.
 
+- PR14 SKU (2026-10-07, chủ dự án duyệt): SKU mới strip → kiểm ASCII 1–64,
+  ký tự đầu chữ/số, chỉ `[A-Za-z0-9._-]` → uppercase Locale.ROOT trước hash/DB/audit/outbox.
+  SKU unique không phân biệt hoa/thường qua V003, giữ V001/V002 append-only.
+  Chọn chỉ chuẩn hóa SKU mới: identity, audit/outbox và key/response cũ giữ nguyên, không backfill.
+  Replay key legacy dùng SKU từ response đã lưu để kiểm hash cùng các field request còn lại;
+  giữ data/status cũ, đổi field khác vẫn 409. INSERT guard không cản UPDATE trường mutable
+  của variant legacy. Collision theo casing làm migration dừng, cần quyết định dữ liệu riêng.
+  Spec/plan, 03/05/06 và contracts đồng bộ; CAT-01 vẫn chờ review/acceptance.
+
 Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác và lý do; ảnh hưởng PRD/API/schema/test/task; người quyết định; ngày; link bằng chứng. Chưa có chữ ký phê duyệt giả định thương mại.

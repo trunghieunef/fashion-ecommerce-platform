@@ -304,6 +304,7 @@ paths:
     post:
       operationId: createVariant
       summary: Create ACTIVE variant and transactional VARIANT_CREATED outbox intent
+      description: New SKUs are stripped, validated as ASCII and uppercased before hashing or persistence. Uniqueness ignores ASCII casing. Legacy SKU identities and completed idempotency responses remain unchanged.
       security:
       - bearerAuth: []
       parameters:
@@ -476,7 +477,7 @@ components:
       properties:
         id: {type: string, format: uuid}
         product_id: {type: string, format: uuid}
-        sku: {type: string, minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*$'}
+        sku: {type: string, minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*$', description: 'New SKU is canonical uppercase ASCII; legacy immutable identities may retain lowercase.'}
         size: {type: string, minLength: 1, maxLength: 50}
         color: {type: string, minLength: 1, maxLength: 50}
         price_override:
@@ -633,7 +634,11 @@ components:
       type: object
       required: [sku, size, color, weight_grams]
       properties:
-        sku: {type: string, minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*$'}
+        sku:
+          type: string
+          minLength: 1
+          description: 'Apply Java String.strip first, then require 1–64 ASCII characters matching ^[A-Za-z0-9][A-Za-z0-9._-]*$, then uppercase with Locale.ROOT. These length and character checks apply after stripping; idempotency uses the canonical value. Legacy completed keys replay their original data/status.'
+          examples: [' shirt-m ', SHIRT-M]
         size: {type: string, minLength: 1, maxLength: 50}
         color: {type: string, minLength: 1, maxLength: 50}
         price_override:

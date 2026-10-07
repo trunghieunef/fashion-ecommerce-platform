@@ -1,7 +1,11 @@
 package vn.fashion.catalog.admin;
 
 import java.sql.DriverManager;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.HexFormat;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -45,9 +49,70 @@ class VariantAdminIntegrationTest extends CatalogAdminTestSupport {
     assertThat(data(b, 201)).isEqualTo(data(a, 201)); assertThat(events()).isEqualTo(1);
     assertThat(jdbc.queryForObject("select count(*) from product_variants", Integer.class)).isEqualTo(1);
   }
+  @Test void newSkuIsCanonicalInResponseDatabaseAuditAndOutbox() {
+    UUID p = createProduct("canonical"); var previous = Locale.getDefault();
+    try {
+      Locale.setDefault(Locale.forLanguageTag("tr-TR"));
+      var variant = createVariant(p, " mini-i._1 ");
+      assertThat(variant.path("sku").asText()).isEqualTo("MINI-I._1");
+      assertThat(jdbc.queryForObject("select sku from product_variants", String.class)).isEqualTo("MINI-I._1");
+      assertThat(jdbc.queryForObject("select after_data->>'sku' from audit_logs where action='catalog.variant.create'", String.class)).isEqualTo("MINI-I._1");
+      assertThat(jdbc.queryForObject("select payload->>'sku' from outbox_events", String.class)).isEqualTo("MINI-I._1");
+      for (String invalid : List.of("ß", "ı"))
+        assertThat(call("POST", "/products/" + p + "/variants", variantInput(invalid)).statusCode()).isEqualTo(400);
+      assertThat(events()).isEqualTo(1);
+    } finally { Locale.setDefault(previous); }
+  }
+  @Test void retryWithDifferentSkuCasingReplaysCanonicalResponse() {
+    UUID p = createProduct("canonical-retry"); String key = UUID.randomUUID().toString();
+    String path = "/admin/api/v1/catalog/products/" + p + "/variants";
+    var first = send("POST", path, token("catalog.write"), key, mapper.writeValueAsString(variantInput(" shirt-m ")));
+    var replay = send("POST", path, token("catalog.write"), key, mapper.writeValueAsString(variantInput("SHIRT-M")));
+    assertThat(data(replay, 201)).isEqualTo(data(first, 201));
+    assertThat(data(first, 201).path("sku").asText()).isEqualTo("SHIRT-M");
+    var changed = variantInput("shirt-m"); changed.put("weight_grams", 200);
+    assertThat(send("POST", path, token("catalog.write"), key, mapper.writeValueAsString(changed)).statusCode()).isEqualTo(409);
+    assertThat(events()).isEqualTo(1);
+    assertThat(jdbc.queryForObject("select count(*) from audit_logs where action='catalog.variant.create'", Integer.class)).isEqualTo(1);
+  }
+  @Test void legacySkuAndCompletedKeyRemainUnchanged() throws Exception {
+    UUID p = createProduct("legacy"), id = UUID.randomUUID(); String key = UUID.randomUUID().toString();
+    // Snapshot of a V002 request/response, before canonical SKU normalization existed.
+    String oldRequest = "{\"sku\":\"legacy-m\",\"size\":\"M\",\"color\":\"Blue\",\"price_override\":null,\"weight_grams\":100}";
+    String hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(oldRequest.getBytes(StandardCharsets.UTF_8)));
+    String cached = "{\"id\":\"" + id + "\",\"product_id\":\"" + p + "\",\"sku\":\"legacy-m\",\"size\":\"M\",\"color\":\"Blue\",\"price_override\":null,\"weight_grams\":100,\"status\":\"ACTIVE\",\"version\":0}";
+    try (var c = DriverManager.getConnection(postgres.getJdbcUrl(), "postgres", "postgres"); var s = c.createStatement()) {
+      c.setAutoCommit(false);
+      s.execute("set local session_replication_role=replica"); // Test-only V002 snapshot; V002→V003 upgrade is tested separately.
+      try (var insert = c.prepareStatement("insert into product_variants(id,product_id,sku,size,color,weight_grams) values (?,?,'legacy-m','M','Blue',100)")) {
+        insert.setObject(1, id); insert.setObject(2, p); insert.executeUpdate();
+      }
+      c.commit();
+    }
+    jdbc.update("insert into idempotency_requests(actor_key,operation,key,request_hash,resource_id,status,response_code,response_body) values (?,?,?,?,?,'COMPLETED',201,?::jsonb)",
+        "user:" + ACTOR, "catalog.variant.create:" + p, key, hash, id, cached);
+    String path = "/admin/api/v1/catalog/products/" + p + "/variants";
+    for (String sku : List.of("legacy-m", "LEGACY-M")) {
+      var replay = send("POST", path, token("catalog.write"), key, mapper.writeValueAsString(variantInput(sku)));
+      assertThat(data(replay, 201)).isEqualTo(mapper.readTree(cached));
+    }
+    var changed = variantInput("LEGACY-M"); changed.put("weight_grams", 200);
+    assertThat(send("POST", path, token("catalog.write"), key, mapper.writeValueAsString(changed)).statusCode()).isEqualTo(409);
+    assertThat(jdbc.queryForObject("select request_hash from idempotency_requests where key=?", String.class, key)).isEqualTo(hash);
+    assertThat(events()).isZero();
+    assertThat(jdbc.queryForObject("select count(*) from audit_logs where action='catalog.variant.create'", Integer.class)).isZero();
+    var update = data(call("PUT", "/variants/" + id, Map.of("weight_grams", 200, "status", "INACTIVE", "expected_version", 0)), 200);
+    assertThat(update.path("sku").asText()).isEqualTo("legacy-m");
+    assertThat(update.path("version").asLong()).isEqualTo(1);
+    var duplicate = call("POST", "/products/" + createProduct("legacy-duplicate") + "/variants", variantInput("LEGACY-M"));
+    assertThat(duplicate.statusCode()).isEqualTo(409);
+    assertThat(json(duplicate).path("errors").get(0).path("field").asText()).isEqualTo("sku");
+    assertThat(jdbc.queryForObject("select sku from product_variants", String.class)).isEqualTo("legacy-m");
+    assertThat(events()).isZero();
+  }
   @Test void duplicateSkuIs409AndLeavesNoEvent() {
-    createVariant(createProduct("a"), "SAME"); UUID p = createProduct("b");
-    var response = call("POST", "/products/" + p + "/variants", variantInput("SAME"));
+    createVariant(createProduct("a"), "same"); UUID p = createProduct("b");
+    var response = call("POST", "/products/" + p + "/variants", variantInput("SaMe"));
     assertThat(response.statusCode()).isEqualTo(409);
     assertThat(json(response).path("errors").get(0).path("field").asText()).isEqualTo("sku"); assertThat(events()).isEqualTo(1);
   }
@@ -60,11 +125,12 @@ class VariantAdminIntegrationTest extends CatalogAdminTestSupport {
   @Test void concurrentSameSkuOnTwoProducts() throws Exception {
     UUID a = createProduct("a"), b = createProduct("b"); var gate = new CountDownLatch(1);
     try (var pool = Executors.newFixedThreadPool(2)) {
-      var first = pool.submit(() -> { gate.await(); return call("POST", "/products/" + a + "/variants", variantInput("RACE")).statusCode(); });
-      var second = pool.submit(() -> { gate.await(); return call("POST", "/products/" + b + "/variants", variantInput("RACE")).statusCode(); });
+      var first = pool.submit(() -> { gate.await(); return call("POST", "/products/" + a + "/variants", variantInput("race")).statusCode(); });
+      var second = pool.submit(() -> { gate.await(); return call("POST", "/products/" + b + "/variants", variantInput("RaCe")).statusCode(); });
       gate.countDown(); assertThat(List.of(first.get(), second.get())).containsExactlyInAnyOrder(201, 409);
     }
     assertThat(events()).isEqualTo(1);
+    assertThat(jdbc.queryForObject("select sku from product_variants", String.class)).isEqualTo("RACE");
   }
   @Test void failureAfterInsertRollsBackVariantAndEvent(CapturedOutput output) throws Exception {
     UUID p = createProduct("shirt");

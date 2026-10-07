@@ -1,6 +1,7 @@
 package vn.fashion.catalog.admin;
 
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -32,23 +33,36 @@ public class VariantAdminService {
     var errors = new ArrayList<Api.FieldError>();
     if (r.sku() == null || r.sku().length() > 64 || !r.sku().matches("^[A-Za-z0-9][A-Za-z0-9._-]*$")) errors.add(new Api.FieldError("sku", "must be 1..64 SKU characters"));
     TaxonomyService.text(errors, "size", r.size(), 50); TaxonomyService.text(errors, "color", r.color(), 50);
-    priceWeight(errors, r.priceOverride(), r.weightGrams()); TaxonomyService.valid(errors); return r;
+    priceWeight(errors, r.priceOverride(), r.weightGrams()); TaxonomyService.valid(errors);
+    return new Input(r.sku().toUpperCase(Locale.ROOT), r.size(), r.color(), r.priceOverride(), r.weightGrams());
   }
   AdminCommands.Replay create(UUID actor, UUID productId, String key, Input r, String traceId, UUID requestId) {
-    return commands.create(actor, "catalog.variant.create:" + productId, key, r, () -> {
-      products.lockForUpdate(productId); UUID id = UUID.randomUUID();
-      var v = jdbc.sql("""
-          insert into product_variants(id,product_id,sku,size,color,price_override,weight_grams)
-          values (:id,:product,:sku,:size,:color,:price,:weight) returning *
-          """).param("id", id).param("product", productId).param("sku", r.sku()).param("size", r.size()).param("color", r.color())
-          .param("price", r.priceOverride()).param("weight", r.weightGrams()).query(Variant.class).single();
-      long version = jdbc.sql("update products set version=version+1,updated_at=now() where id=:id returning version")
-          .param("id", productId).query(Long.class).single();
-      var intent = new OutboxEvent(UUID.randomUUID(), "product", productId.toString(), version, "VARIANT_CREATED", 1,
-          "catalog.events", productId.toString(), traceId, json.writeValueAsString(Map.of("product_id", productId, "variant_id", id, "sku", v.sku(), "version", 0)));
-      outbox.append(intent);
-      audit.record(actor, "catalog.variant.create", "variant", id, null, null, v, requestId);
-      return new AdminCommands.Result(id, 201, v);
+    String operation = "catalog.variant.create:" + productId;
+    return commands.update(() -> {
+      // Legacy completed keys retain their original SKU, hash and cached response.
+      var legacySku = jdbc.sql("""
+          select response_body->>'sku' from idempotency_requests
+          where actor_key=:actor and operation=:operation and key=:key and status='COMPLETED'
+            and response_body->>'sku' <> upper((response_body->>'sku') collate "C")
+            and upper((response_body->>'sku') collate "C")=:sku
+          """).param("actor", "user:" + actor).param("operation", operation).param("key", key).param("sku", r.sku())
+          .query(String.class).optional();
+      var hashRequest = legacySku.map(sku -> new Input(sku, r.size(), r.color(), r.priceOverride(), r.weightGrams())).orElse(r);
+      return commands.create(actor, operation, key, hashRequest, () -> {
+        products.lockForUpdate(productId); UUID id = UUID.randomUUID();
+        var v = jdbc.sql("""
+            insert into product_variants(id,product_id,sku,size,color,price_override,weight_grams)
+            values (:id,:product,:sku,:size,:color,:price,:weight) returning *
+            """).param("id", id).param("product", productId).param("sku", r.sku()).param("size", r.size()).param("color", r.color())
+            .param("price", r.priceOverride()).param("weight", r.weightGrams()).query(Variant.class).single();
+        long version = jdbc.sql("update products set version=version+1,updated_at=now() where id=:id returning version")
+            .param("id", productId).query(Long.class).single();
+        var intent = new OutboxEvent(UUID.randomUUID(), "product", productId.toString(), version, "VARIANT_CREATED", 1,
+            "catalog.events", productId.toString(), traceId, json.writeValueAsString(Map.of("product_id", productId, "variant_id", id, "sku", v.sku(), "version", 0)));
+        outbox.append(intent);
+        audit.record(actor, "catalog.variant.create", "variant", id, null, null, v, requestId);
+        return new AdminCommands.Result(id, 201, v);
+      });
     });
   }
   Variant update(UUID actor, UUID id, Update r, UUID requestId) {

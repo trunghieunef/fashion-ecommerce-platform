@@ -34,7 +34,7 @@
       "pattern": "Z$"
     },
     "sku": {
-      "description": "Immutable SKU, varchar(64) in 05",
+      "description": "Immutable SKU, varchar(64) in 05. New catalog identities use uppercase ASCII; legacy identities retain their original casing throughout events and consumers.",
       "type": "string",
       "minLength": 1,
       "maxLength": 64
