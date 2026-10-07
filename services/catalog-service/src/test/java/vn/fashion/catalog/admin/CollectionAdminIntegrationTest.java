@@ -113,7 +113,9 @@ class CollectionAdminIntegrationTest extends CatalogAdminTestSupport {
       var body = update("put-unknown", 0); body.put(key, null); invalid(put(id, body), key);
     }
     UUID p = createProduct("unknown-item"); var item = item(p, 0); item.put("item_extra", null);
-    var body = input("unknown-item"); body.put("items", List.of(item)); invalid(post("unknown-item", body), "item_extra");
+    var body = input("unknown-item"); body.put("items", List.of(item(createProduct("known-item"), 0), item));
+    invalid(post("unknown-item", body), "items[1].item_extra");
+    body.put("status", "ACTIVE"); body.put("expected_version", 0); invalid(put(id, body), "items[1].item_extra");
     assertThat(audits("catalog.collection.create")).isEqualTo(1); assertThat(audits("catalog.collection.update")).isZero();
     assertThat(jdbc.queryForObject("select count(*) from idempotency_requests where operation='catalog.collection.create'", Integer.class)).isEqualTo(1);
   }
@@ -147,6 +149,56 @@ class CollectionAdminIntegrationTest extends CatalogAdminTestSupport {
     body.put("start_at", null); body.put("end_at", null); body.put("slug", "unbounded");
     UUID id = UUID.fromString(data(post("unbounded", body), 201).path("id").asText());
     var changed = data(put(id, update("unbounded", 0)), 200); assertThat(changed.path("start_at").isNull()).isTrue(); assertThat(changed.path("end_at").isNull()).isTrue();
+  }
+  @Test void subMicrosecondBoundsAreRejectedBeforeCreateOrUpdate() {
+    UUID id = create("micro-bounds"); var before = data(call("GET", "/collections/" + id, null), 200);
+    var body = input("micro-bounds"); body.put("start_at", "2026-10-08T09:00:00.0000001Z"); body.put("end_at", "2026-10-08T09:00:00.0000004Z");
+    invalid(post("invalid-micro", body), "end_at");
+    body.put("status", "ACTIVE"); body.put("expected_version", 0); invalid(put(id, body), "end_at");
+    assertThat(data(call("GET", "/collections/" + id, null), 200)).isEqualTo(before);
+    assertThat(audits("catalog.collection.update")).isZero();
+    assertThat(jdbc.queryForObject("select count(*) from idempotency_requests where key='invalid-micro'", Integer.class)).isZero();
+  }
+  @Test void timestampsTruncateBeforeStorageAndIdempotencyHash() {
+    var body = input("micro-storage"); body.put("start_at", "2026-10-08T09:00:00.1234569+07:00"); body.put("end_at", "2026-10-08T09:00:00.1234579+07:00");
+    var first = audited(post("micro-key", body), 201, "catalog.collection.create");
+    assertThat(first.path("start_at").asText()).isEqualTo("2026-10-08T02:00:00.123456Z");
+    assertThat(first.path("end_at").asText()).isEqualTo("2026-10-08T02:00:00.123457Z");
+    body.put("start_at", "2026-10-08T02:00:00.1234561Z"); body.put("end_at", "2026-10-08T02:00:00.1234571Z");
+    assertThat(data(post("micro-key", body), 201)).isEqualTo(first); assertThat(audits("catalog.collection.create")).isEqualTo(1);
+    UUID id = UUID.fromString(first.path("id").asText()); body.put("status", "ACTIVE"); body.put("expected_version", 0);
+    body.put("start_at", "2026-10-09T09:00:00.1234569Z"); body.put("end_at", "2026-10-09T09:00:00.1234579Z");
+    var updated = audited(put(id, body), 200, "catalog.collection.update");
+    assertThat(updated.path("start_at").asText()).isEqualTo("2026-10-09T09:00:00.123456Z");
+    assertThat(updated.path("end_at").asText()).isEqualTo("2026-10-09T09:00:00.123457Z");
+    assertThat(data(call("GET", "/collections/" + id, null), 200)).isEqualTo(updated);
+  }
+  @Test void timestampsOutsideUtcYearRangeAre400WithoutSideEffects() {
+    UUID id = create("year-range"); var before = data(call("GET", "/collections/" + id, null), 200);
+    for (String value : List.of("0000-01-01T00:00:00Z", "+10000-01-01T00:00:00Z", "+300000-01-01T00:00:00Z",
+        "0001-01-01T00:00:00+00:01", "9999-12-31T23:59:59-00:01", "+999999999-12-31T23:59:59-18:00")) {
+      for (String field : List.of("start_at", "end_at")) {
+        var body = input("invalid-year-range"); body.put(field, value); invalid(post("year-invalid", body), field);
+        body.put("status", "ACTIVE"); body.put("expected_version", 0); invalid(put(id, body), field);
+      }
+    }
+    assertThat(data(call("GET", "/collections/" + id, null), 200)).isEqualTo(before);
+    assertThat(audits("catalog.collection.update")).isZero();
+    assertThat(jdbc.queryForObject("select count(*) from idempotency_requests where key='year-invalid'", Integer.class)).isZero();
+  }
+  @Test void utcYearBoundaryValuesRoundTripWithoutCalendarShift() {
+    var body = input("year-boundaries"); body.put("start_at", "0001-01-01T00:00:00Z"); body.put("end_at", "9999-12-31T23:59:59.999999Z");
+    var created = data(post("year-boundaries", body), 201);
+    assertThat(jdbc.queryForObject("select to_char(start_at at time zone 'UTC','YYYY-MM-DD HH24:MI:SS') from collections where slug='year-boundaries'", String.class))
+        .isEqualTo("0001-01-01 00:00:00");
+    assertThat(created.path("start_at").asText()).isEqualTo("0001-01-01T00:00:00Z");
+    assertThat(created.path("end_at").asText()).isEqualTo("9999-12-31T23:59:59.999999Z");
+    UUID id = UUID.fromString(created.path("id").asText()); body.put("status", "ACTIVE"); body.put("expected_version", 0);
+    var changed = data(put(id, body), 200);
+    assertThat(changed.path("start_at")).isEqualTo(created.path("start_at")); assertThat(changed.path("end_at")).isEqualTo(created.path("end_at"));
+    assertThat(data(call("GET", "/collections/" + id, null), 200)).isEqualTo(changed);
+    var summary = data(call("GET", "/collections", null), 200).path("items").get(0);
+    assertThat(summary.path("start_at")).isEqualTo(created.path("start_at")); assertThat(summary.path("end_at")).isEqualTo(created.path("end_at"));
   }
   @Test void activateEmptyUnpublishedOrFutureCollections() {
     for (int scenario = 0; scenario < 3; scenario++) {

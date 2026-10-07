@@ -135,8 +135,11 @@ Tối đa 1.000 items, rỗng/product chưa publish được phép, không trùn
 sort_order integer 0..2147483647, được trùng; đọc theo `(sort_order, product_id)`.
 FK bảo vệ referential integrity; service phải trả 400 VALIDATION_ERROR với field
 `items[i].product_id` khi product tham chiếu không tồn tại, không trả 404 cho field body.
-Timestamp request ISO-8601 có offset → UTC/timestamptz; null là không giới hạn phía
-tương ứng, end > start khi có cả hai. CAT-01b không nhận cover_url/lookbook trong request,
+Timestamp request ISO-8601 có offset → UTC/timestamptz; service chỉ nhận năm UTC1..9999
+và truncate xuống microsecond trước so sánh/hash/lưu, end > start sau truncate khi có cả hai.
+JDBC đọc/ghi OffsetDateTime để giữ đúng năm biên, không chuyển qua lịch legacy Timestamp.
+Không thêm CHECK năm vào V004 đã deploy; validation tại service theo chốt PR15.
+Null là không giới hạn phía tương ứng. CAT-01b không nhận cover_url/lookbook trong request,
 cover_url lưu/trả null; lookbook_images chưa tạo/nhận dữ liệu trong CAT-01b, thuộc CAT-03
 sau upload được kiểm tra. Bảng media trên là mục tiêu CAT-03, không phải schema đã triển khai.
 

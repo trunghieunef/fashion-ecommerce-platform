@@ -271,4 +271,14 @@ Gate task là work package trong [backlog](../delivery/10_backlog.md). Mã task 
   Chốt bổ sung runbook: không tạo infra/local/README.md; dùng 12 §1 và catalog README,
   ghi smoke/synthetic JWT ở catalog README; không đổi README gốc khi lệnh không đổi.
 
+- CAT-01b sửa Minor PR15 — **chủ dự án, 2026-10-07**: duyệt start_at/end_at chuyển UTC,
+  truncate microsecond trước so sánh/hash/lưu và chỉ nhận năm UTC 1..9999; ngoài phạm vi
+  hoặc end <= start sau truncate trả 400 đúng field. Cùng key với date offset tương đương
+  hoặc chỉ khác phần dưới microsecond replay, không thêm audit. Duyệt field key lạ lồng nhau
+  `items[i].<key>` / `table_json.<key>`; top-level giữ tên key. Đồng bộ 03/spec/plan/OpenAPI
+  và HTTP/PostgreSQL regression POST/PUT/retry; không đổi schema hoặc CAT-01a.
+  Minor 3 sửa OpenAPI giới hạn tên/slug theo service đã duyệt; Minor 4 chỉ so trùng header
+  hợp lệ, tránh lỗi duplicate giả. [Review PR15](https://github.com/trunghieunef/fashion-ecommerce-platform/pull/15),
+  `TASK:CAT-01` phần 1b, `REQ:CAT-03/06`; không nghiệm thu parent hoặc tự merge.
+
 Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác và lý do; ảnh hưởng PRD/API/schema/test/task; người quyết định; ngày; link bằng chứng. Chưa có chữ ký phê duyệt giả định thương mại.

@@ -140,6 +140,14 @@ class SizeGuideAdminIntegrationTest extends CatalogAdminTestSupport {
     var body = input(0); body.put("table_json", Map.of("columns", List.of("Size"), "rows", List.of(List.of("M", "L"))));
     invalid(put("width", body), "table_json.rows[0]"); assertThat(audits()).isZero();
   }
+  @Test void invalidHeadersReportOnlyTheirOwnValidationErrors() {
+    var body = input(0);
+    body.put("table_json", mapper.readTree("{\"columns\":[1,null,\"\",\" \"],\"rows\":[[\"\",\"\",\"\",\"\"]]}"));
+    var response = put("invalid-headers", body); invalid(response, "table_json.columns[0]");
+    var fields = new ArrayList<String>(); json(response).path("errors").forEach(e -> fields.add(e.path("field").asText()));
+    assertThat(fields).containsExactly("table_json.columns[0]", "table_json.columns[1]", "table_json.columns[2]", "table_json.columns[3]");
+    assertThat(audits()).isZero(); assertThat(jdbc.queryForObject("select count(*) from idempotency_requests", Integer.class)).isZero();
+  }
   @Test void headersAreUniqueIgnoringCaseWithRootLocale() {
     Locale original = Locale.getDefault();
     try {
@@ -173,6 +181,8 @@ class SizeGuideAdminIntegrationTest extends CatalogAdminTestSupport {
     for (String key : List.of("x_future", "unknown_fields", "category_id")) {
       var body = input(0); body.put(key, null); invalid(put(UUID.randomUUID().toString(), body), key);
     }
+    var nested = input(0); nested.put("table_json", mapper.readTree("{\"columns\":[\"Size\"],\"rows\":[[\"M\"]],\"extra\":null}"));
+    invalid(put("nested-unknown", nested), "table_json.extra");
     assertThat(audits()).isZero(); assertThat(jdbc.queryForObject("select count(*) from size_guides", Integer.class)).isZero();
     assertThat(jdbc.queryForObject("select count(*) from idempotency_requests", Integer.class)).isZero();
   }

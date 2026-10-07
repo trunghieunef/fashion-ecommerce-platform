@@ -56,13 +56,14 @@ public class SizeGuideAdminService {
     if (value == null || value.isNull() || !value.isObject()) {
       errors.add(new Api.FieldError("table_json", "required table object")); return null;
     }
-    for (String key : value.propertyNames()) if (!List.of("columns", "rows").contains(key)) errors.add(new Api.FieldError(key, "unknown field"));
+    for (String key : value.propertyNames()) if (!List.of("columns", "rows").contains(key)) errors.add(new Api.FieldError("table_json." + key, "unknown field"));
     var columns = value.path("columns"); var rows = value.path("rows");
     var headers = new ArrayList<String>(); var cells = new ArrayList<List<String>>(); var seen = new HashSet<String>();
     if (!columns.isArray() || columns.size() < 1 || columns.size() > 20) errors.add(new Api.FieldError("table_json.columns", "must have 1..20 columns"));
     else for (int i = 0; i < columns.size(); i++) {
       String header = text(columns.get(i), "table_json.columns[" + i + "]", false, errors);
-      if (!seen.add(header.toLowerCase(Locale.ROOT))) errors.add(new Api.FieldError("table_json.columns[" + i + "]", "duplicate header"));
+      if (columns.get(i).isTextual() && !header.isEmpty() && header.length() <= 100 && !seen.add(header.toLowerCase(Locale.ROOT)))
+        errors.add(new Api.FieldError("table_json.columns[" + i + "]", "duplicate header"));
       headers.add(header);
     }
     if (!rows.isArray() || rows.size() < 1 || rows.size() > 100) errors.add(new Api.FieldError("table_json.rows", "must have 1..100 rows"));

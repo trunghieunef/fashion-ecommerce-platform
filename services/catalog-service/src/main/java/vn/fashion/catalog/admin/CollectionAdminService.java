@@ -4,10 +4,11 @@ import com.fasterxml.jackson.annotation.JsonAnySetter;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.DateTimeException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -68,7 +69,7 @@ public class CollectionAdminService {
     else for (int i = 0; i < request.items.size(); i++) {
       String field = "items[" + i + "]"; var row = request.items.get(i);
       if (row == null) { errors.add(new Api.FieldError(field, "must be an item object")); continue; }
-      row.unknownFields.forEach(key -> errors.add(new Api.FieldError(key, "unknown field")));
+      row.unknownFields.forEach(key -> errors.add(new Api.FieldError(field + "." + key, "unknown field")));
       UUID id = null;
       try {
         if (row.productId == null) throw new IllegalArgumentException();
@@ -90,8 +91,15 @@ public class CollectionAdminService {
   }
   private static Instant date(String value, String field, List<Api.FieldError> errors) {
     if (value == null) return null;
-    try { return OffsetDateTime.parse(value).toInstant(); }
-    catch (DateTimeParseException e) { errors.add(new Api.FieldError(field, "must be an ISO-8601 timestamp with offset")); return null; }
+    try {
+      var utc = OffsetDateTime.parse(value).withOffsetSameInstant(ZoneOffset.UTC);
+      if (utc.getYear() < 1 || utc.getYear() > 9999) {
+        errors.add(new Api.FieldError(field, "UTC year must be 1..9999")); return null;
+      }
+      return utc.toInstant().truncatedTo(ChronoUnit.MICROS);
+    } catch (DateTimeException e) {
+      errors.add(new Api.FieldError(field, "must be an ISO-8601 timestamp with offset and UTC year 1..9999")); return null;
+    }
   }
   private void requireProducts(Input input) {
     if (input.items().isEmpty()) return;
@@ -144,7 +152,7 @@ public class CollectionAdminService {
     return new Page(query.query(this::summary).list(), page, size, count.query(Long.class).single());
   }
   private Summary summary(ResultSet rs, int row) throws SQLException {
-    var start = rs.getTimestamp("start_at"); var end = rs.getTimestamp("end_at");
+    var start = rs.getObject("start_at", OffsetDateTime.class); var end = rs.getObject("end_at", OffsetDateTime.class);
     return new Summary(rs.getObject("id", UUID.class), rs.getString("name_vi"), rs.getString("name_en"), rs.getString("slug"), null,
         start == null ? null : start.toInstant(), end == null ? null : end.toInstant(), rs.getString("status"), rs.getLong("version"));
   }

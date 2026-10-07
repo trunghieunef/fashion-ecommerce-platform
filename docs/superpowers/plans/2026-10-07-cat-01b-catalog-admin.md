@@ -225,12 +225,14 @@ PUT dùng update, không yêu cầu key, metadata một lần/audit requestId d�
 
 - [x] **Step 2: RED.** Target CollectionAdminIntegrationTest → missing POST/PUT assertion failures;
   only isolated PG owner may alter audit fixture, never local volume data.
-- [x] **Step 3: Implement normalize/create/update.** Collect unknown keys → field exact key; public DTO
+- [x] **Step 3: Implement normalize/create/update.** Collect unknown keys → field top-level exact key,
+  nested item `items[i].<key>` (chủ dự án chốt Minor 2 PR15); public DTO
   any-setter must work despite global fail-on-unknown=false. Item UUID parse/validate with indexed
   errors; sort JsonNode integral/canConvertToInt/nonnegative, no global coercion change. Version
   parse integral/nonnegative/canConvertToLong; Java null/NullNode missing400 cho sort/version.
   Names/slug validators reuse taxonomy,
-  dates OffsetDateTime.parse → Instant, compare normalized instants; bind JDBC OffsetDateTime UTC
+  dates OffsetDateTime.parse → UTC year1..9999 → Instant truncate MICROS, compare normalized instants
+  trước hash/lưu (chủ dự án chốt Minor 1 PR15); bind JDBC OffsetDateTime UTC
   cho timestamptz, không đưa Instant không được driver hỗ trợ trực tiếp vào param. Duplicate IDs and referenced
   products validate before insert at original index. Mutable CreateRequest lacks status/version so
   POST captures even explicit null as unknown; UpdateRequest knows these fields. Never List.of nullable fields.
@@ -321,7 +323,8 @@ Operation `catalog.size-guide.put`; audit action create/update with guide UUID a
 - [x] **Step 3: Implement input/content.** Strip strings, case-insensitive duplicate via Locale.ROOT,
   preserve display text; validate before immutable lists to avoid null NPE. Normalize Table record,
   count ObjectMapper compact JSON bytes with StandardCharsets.UTF_8; measure HTML after existing
-  HtmlSanitizer.clean. Unknown root any-setter/JSON table keys return400, do not drop field or log value.
+  HtmlSanitizer.clean. Unknown root any-setter/JSON table keys return400; nested table key field
+  `table_json.<key>` theo chốt PR15, không drop field/log value. Chỉ header hợp lệ tham gia so trùng.
 - [x] **Step 4: Implement PUT transaction and approved order.** Validate key before category,
   category lookup even replay, commands.create handles normalized hash/replay. Inside work: version0
   INSERT ON CONFLICT(category_id,locale) DO NOTHING RETURNING, empty→VERSION_CONFLICT; version>0
@@ -425,6 +428,13 @@ cho docs), kiểm lại contract/docs/diff; không production/runtime changes ha
 Rulings giữ scope và chi phí được ghi trong evidence/handoff; không có Minor mới hoãn.
 
 ## Self-review và execution gate
+
+Follow-up PR15 được chủ dự án duyệt ngày 2026-10-07: sửa Minor1–4 trên cùng dev/PR,
+RED→GREEN cho timestamp microsecond/year range, nested unknown paths, header validation
+và contract name/slug limits. Dùng JDBC OffsetDateTime khi đọc collection timestamps để
+round-trip đúng cả UTC year1/9999; regression DB literal + POST/PUT/list/detail.
+Giữ V004 append-only, không đổi schema/CAT-01a; full Maven, contract/docs/scripts/diff và
+secret scan trước cập nhật PR; không merge/nghiệm thu parent.
 
 Coverage: spec schema §5 → Task1; collection/read/§6.1 → Task2/3; guide §4/§6.4–5 → Task4/5;
 closed requests/headers/order/one SQL → Task2/3/5; Gateway/syntheticJWT → Task6; evidence/docs/branch → Task7.

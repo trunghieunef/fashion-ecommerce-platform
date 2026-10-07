@@ -234,8 +234,10 @@ thứ tự đọc `(sort_order, product_id)`. Product không tồn tại trong i
 404 chỉ cho resource trên path (collection id), không dùng cho tham chiếu trong body.
 Collection row lock, thay items, tăng version và audit cùng transaction.
 
-`start_at`/`end_at` là ISO-8601 có offset, lưu UTC; null nghĩa không giới hạn phía
-tương ứng, có cả hai thì `end_at > start_at`. CAT-01b không nhận `cover_url`,
+`start_at`/`end_at` là ISO-8601 có offset, chuyển UTC và truncate xuống microsecond
+trước so sánh/hash/lưu; năm UTC phải trong 1..9999, ngoài phạm vi trả 400 đúng field.
+Null nghĩa không giới hạn phía tương ứng; có cả hai thì `end_at > start_at` sau truncate.
+CAT-01b không nhận `cover_url`,
 `lookbook` hoặc `lookbook_images` trong request, kể cả null; response `cover_url`
 luôn null. Cover/lookbook thuộc CAT-03, chỉ attach sau upload được kiểm tra;
 không mở đường nhận URL chưa được kiểm tra trong CAT-01b. Contract tại `catalog.yaml`
@@ -253,7 +255,8 @@ Collection POST hash giữ thứ tự items request; đổi thứ tự cùng key
 date offset tương đương chuẩn hóa cùng Instant; response vẫn sort_order/product_id.
 
 Request collection/size-guide từ chối field lạ có chủ đích, khác CAT-01a: DTO dùng
-`@JsonAnySetter` gom key lạ, validate trả 400 `VALIDATION_ERROR`, field bằng tên key.
+`@JsonAnySetter` gom key lạ, validate trả 400 `VALIDATION_ERROR`; field top-level bằng
+tên key, key lạ lồng nhau dùng `items[i].<key>` hoặc `table_json.<key>`.
 Giữ global `fail-on-unknown-properties=false`; `ignoreUnknown=false` không đủ override
 global nên không dùng thay any-setter. Không đưa unknown field vào hash/audit hoặc đổi
 binding của endpoint CAT-01a. GET collection detail dùng một SQL `json_agg` items
@@ -264,7 +267,8 @@ Expected_version, sort_order và table_json bị bỏ qua hoặc gửi JSON null
 CAT-01b size guide (quyết định chủ dự án ngày 2026-10-07): `table_json` là object có đúng
 hai key `columns` và `rows`, không nhận field lạ. `columns` có 1–20 tiêu đề string,
 mỗi tiêu đề 1–100 ký tự sau `strip`, so trùng không phân biệt hoa/thường bằng
-`strip + toLowerCase(Locale.ROOT)`, giữ casing hiển thị sau strip. `rows` có 1–100 hàng; mỗi hàng
+`strip + toLowerCase(Locale.ROOT)`, giữ casing hiển thị sau strip. Chỉ header hợp lệ được
+kiểm tra trùng; header sai type/rỗng/quá dài chỉ báo lỗi của chính giá trị đó. `rows` có 1–100 hàng; mỗi hàng
 là array có đúng số ô bằng số cột; mỗi ô là string 0–100 ký tự sau `strip`.
 Toàn bộ `table_json` chuẩn hóa sau serialize compact không vượt 32.768 byte UTF-8 (32 KB).
 Giới hạn chuỗi dùng cách đếm hiện có của service. Tiêu đề và ô là plain text,

@@ -48,6 +48,18 @@ class CatalogAdminContractTest(unittest.TestCase):
                     schema = self.resolve(schema)
                     self.assertIn({"$ref": "./common.yaml#/components/schemas/ExpectedVersion"}, schema["allOf"])
 
+    def test_collection_names_and_slug_reject_values_outside_service_limits(self):
+        body = {"name_vi": "Bộ sưu tập", "name_en": "Collection", "slug": "launch-2026", "items": []}
+        for schema in ("CollectionCreate", "CollectionUpdate"):
+            validator = self.validator(schema)
+            valid = body if schema == "CollectionCreate" else {**body, "expected_version": 0, "status": "DRAFT"}
+            with self.subTest(schema=schema, boundary=True):
+                self.assertEqual(list(validator.iter_errors({**valid, "name_vi": "v" * 255, "name_en": "e" * 255, "slug": "s" * 160})), [])
+            for field, value in (("name_vi", "v" * 256), ("name_en", "e" * 256), ("slug", "s" * 161),
+                                 ("slug", "UPPER"), ("slug", "bad_slug"), ("slug", "bad--slug"), ("slug", "-slug")):
+                with self.subTest(schema=schema, field=field, value=value):
+                    self.assertTrue(list(validator.iter_errors({**valid, field: value})))
+
     def test_collection_list_has_paginated_summary_examples(self):
         path = "/admin/api/v1/catalog/collections"
         self.assertIn("get", self.doc["paths"][path])

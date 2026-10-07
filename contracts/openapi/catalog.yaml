@@ -442,8 +442,9 @@ paths:
         Idempotency-Key is mandatory. At most 1000 items; empty collections and unpublished
         products are allowed. Unknown item product_id returns 400 VALIDATION_ERROR with
         field items[i].product_id. Duplicate product_id returns 400. sort_order may tie.
-        Timestamps require an ISO-8601 offset and are stored in UTC. Null bounds are unbounded;
-        when both exist, end_at must be greater than start_at. cover_url and lookbook fields
+        Timestamps require an ISO-8601 offset and UTC year 1..9999. Convert to UTC and truncate
+        to microseconds before comparison, idempotency hash and storage. Null bounds are unbounded;
+        when both exist, end_at must be greater than start_at after truncation. cover_url and lookbook fields
         are not accepted; cover_url remains null and validated media belongs to CAT-03.
       security:
       - bearerAuth: []
@@ -588,7 +589,8 @@ paths:
         strip headers/cells, enforce equal row width, case-insensitive distinct headers using
         toLowerCase(Locale.ROOT) after strip, and at most 32768 UTF-8 bytes of compact normalized JSON.
         Unknown request fields are collected by JsonAnySetter and return 400 with field equal
-        to the key name; global Jackson fail-on-unknown=false and CAT-01a remain unchanged.
+        to the top-level key name or table_json.<key> for nested table keys;
+        global Jackson fail-on-unknown=false and CAT-01a remain unchanged.
         Mutation, audit and idempotency result share one transaction.
       security:
       - bearerAuth: []
@@ -1015,11 +1017,11 @@ components:
       type: object
       required: [name_vi, name_en, slug, items]
       properties:
-        name_vi: {type: string, minLength: 1}
-        name_en: {type: string, minLength: 1}
-        slug: {type: string, minLength: 1}
-        start_at: {type: [string, 'null'], format: date-time, description: ISO-8601 timestamp with offset; stored in UTC. Null is an unbounded start.}
-        end_at: {type: [string, 'null'], format: date-time, description: ISO-8601 timestamp with offset; stored in UTC. Null is an unbounded end; must exceed start_at when both exist.}
+        name_vi: {type: string, minLength: 1, maxLength: 255}
+        name_en: {type: string, minLength: 1, maxLength: 255}
+        slug: {type: string, minLength: 1, maxLength: 160, pattern: '^[a-z0-9]+(-[a-z0-9]+)*$'}
+        start_at: {type: [string, 'null'], format: date-time, description: 'ISO-8601 with offset and UTC year 1..9999. Convert to UTC and truncate to microseconds before comparison/hash/storage. Null is an unbounded start; invalid range returns 400 at start_at.'}
+        end_at: {type: [string, 'null'], format: date-time, description: 'ISO-8601 with offset and UTC year 1..9999. Convert to UTC and truncate to microseconds before comparison/hash/storage. Null is an unbounded end; must exceed start_at after truncation. Invalid range returns 400 at end_at.'}
         items:
           type: array
           maxItems: 1000
@@ -1029,7 +1031,7 @@ components:
       allOf:
       - {$ref: '#/components/schemas/CollectionContent'}
       unevaluatedProperties: false
-      description: Creates DRAFT/version 0. cover_url/lookbook and all unknown keys are rejected via JsonAnySetter with field equal to the key name; global fail-on-unknown=false and CAT-01a remain unchanged.
+      description: Creates DRAFT/version 0. cover_url/lookbook and all unknown keys are rejected via JsonAnySetter with field equal to the top-level key name or items[i].<key> for nested item keys; global fail-on-unknown=false and CAT-01a remain unchanged.
     CollectionUpdate:
       allOf:
       - {$ref: ./common.yaml#/components/schemas/ExpectedVersion}
@@ -1039,7 +1041,7 @@ components:
         properties:
           status: {type: string, enum: [DRAFT, ACTIVE, INACTIVE]}
       unevaluatedProperties: false
-      description: Full replacement using expected_version only; no Idempotency-Key required. Unknown keys including cover_url/lookbook are collected by JsonAnySetter and rejected with field equal to the key name, without changing global Jackson behavior.
+      description: Full replacement using expected_version only; no Idempotency-Key required. Unknown keys including cover_url/lookbook are rejected with field equal to the top-level key name or items[i].<key> for nested item keys, without changing global Jackson behavior. Timestamps follow CollectionContent normalization before comparison and storage.
     SizeGuideTable:
       type: object
       additionalProperties: false

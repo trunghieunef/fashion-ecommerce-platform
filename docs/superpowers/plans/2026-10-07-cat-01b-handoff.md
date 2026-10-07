@@ -10,7 +10,14 @@ Trên `dev`, Native tuần tự theo [plan đã duyệt](2026-10-07-cat-01b-cata
 và [spec](../specs/2026-10-07-cat-01b-design.md). Task1–6 đã commit/test/mutation,
 Task1–7 đã thực hiện; full verification/evidence PASS, whole-branch review0Critical/0Important,
 1Minor stale docs đã đồng bộ; verdict Ready to merge, không thay nghiệm thu của chủ dự án.
-Chỉ local: **không push/PR/merge**.
+Chủ dự án đã yêu cầu push dev/mở [PR15 vào main](https://github.com/trunghieunef/fashion-ecommerce-platform/pull/15).
+CI s1-local/docs-check SUCCESS trên1251ea3; review PR15 không Critical/Important, có4Minor.
+Follow-up sửa cả4 theo hai chốt bổ sung của chủ dự án: timestamp UTC year1..9999/truncate
+microsecond trước so sánh/hash/lưu; key lạ nested có path đầy đủ. Đọc timestamp bằng
+OffsetDateTime giữ đúng year1/9999. OpenAPI name/slug limits và header valid-only dedupe đồng bộ.
+Full reactor286 PASS (36/38/65/119/28), contracts33/scripts14/docs48/diff PASS;
+chi tiết RED/GREEN/mutation và giới hạn tại evidence. CI follow-up xem đúng head PR15.
+**Không merge/nghiệm thu parent.**
 Base để review/PR sau này là `origin/main`/`8f27663` (PR14 đã merge), không dùng local main cũ.
 Chỉ push dev/mở PR main khi chủ dự án yêu cầu riêng. Parent CAT-01 **In progress**.
 
@@ -84,8 +91,8 @@ Windows curl argv ANSI/Python CP1252 làm sai ô Unicode; assertion `96–100` k
 Runbook local đã ở12 §1; Task6/7 không tạo infra README hoặc sửa README gốc.
 README gốc giữ link CAT-01a từ checkpoint trước Task1; docs index/plans index dẫn handoff CAT-01b mới.
 
-Đọc verdict whole-branch review và evidence trước khi yêu cầu push/PR. Chưa chạy remote CI,
-staging, AWS/provider/Kafka relay hoặc nghiệm thu parent. Public read CAT-02 chỉ collection
+Task7 ban đầu chỉ local; PR15 có CI PASS trên1251ea3, patch follow-up phải xem đúng head mới.
+Chưa staging, AWS/provider/Kafka relay hoặc nghiệm thu parent. Public read CAT-02 chỉ collection
 ACTIVE/trong[start,end)/có ACTIVE product và chỉ trả ACTIVE items; CAT-03 quản lý media/upload/publish gate.
 Legacy ACTIVE từ V001 vẫn có thể published_at null; CAT-02 quyết định sort/backfill, không sửa ở đây.
 Hai Minor PR14 deadlock409/numeric coercion CAT-01a còn để riêng; không refactor interceptor/tags.
