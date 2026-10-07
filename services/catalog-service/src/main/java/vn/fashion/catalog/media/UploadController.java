@@ -28,4 +28,8 @@ public class UploadController {
     UUID actor = auth.requireCatalogWriter(authorization);
     return Api.ok(HttpStatus.OK, service.status(actor, uploadId), tracer);
   }
+  @PostMapping("/{uploadId}/complete") public ResponseEntity<?> complete(
+      @RequestHeader(value = "Authorization", required = false) String authorization, @PathVariable UUID uploadId) {
+    return service.complete(auth.requireCatalogWriter(authorization), uploadId);
+  }
 }

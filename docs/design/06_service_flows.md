@@ -200,7 +200,32 @@ không expire PROCESSING còn lease. Terminal dọn ngay; pending quá deadline 
 và ghi EXPIRED. Lifecycle quarantine 2 ngày làm lưới an toàn.
 Policy tại 13, contract tại 03/OpenAPI và
 [spec](../superpowers/specs/2026-10-07-cat-03-media-design.md).
-Chưa chạy các job/integration media hoặc nghiệm thu CAT-03.
+
+**Complete đã hiện thực (Task 5, `UploadService.complete`).** Thứ tự: đọc row
+theo id + actor (thiếu/khác owner 404); terminal trả ngay (APPROVED 200 asset,
+REJECTED 400 IMAGE_REJECTED với reason đã lưu, EXPIRED 409) không gọi S3/audit;
+quá deadline theo DB clock thì chuyển EXPIRED (PENDING hoặc PROCESSING hết lease)
+và trả 409 UPLOAD_EXPIRED; PROCESSING còn lease trả 409 UPLOAD_PROCESSING. Sau
+preflight mới lấy slot (Semaphore 1/instance); không có slot trả 429
+RATE_LIMITED/IMAGE_PROCESSING_CAPACITY, Retry-After: 1, không đổi state. Claim
+một statement: PROCESSING, attempt+1, lease_token mới, lease 120 giây, chỉ khi
+chưa quá deadline và PENDING hoặc lease cũ đã hết. Ngoài transaction: đọc
+approved primary trước; có thì verify và không đọc raw. Chưa có thì HEAD raw
+(thiếu → release CAS về PENDING, 409 UPLOAD_NOT_UPLOADED), so size HEAD và bytes
+đọc với size_bytes (khác → IMAGE_SIZE_MISMATCH), re-encode, putIfAbsent rồi đọc
+lại primary thực tế (first writer wins). Thumb luôn sinh từ primary thực tế
+đã verify; thumb có sẵn được verify ≤ 800. Transaction kết quả CAS id +
+lease_token + lease còn hạn + deadline: APPROVED + media_assets (metadata/sha256
+từ bytes thực tế) + audit `catalog.media.upload.approve`, hoặc REJECTED +
+reason_code + audit `catalog.media.upload.reject`; mỗi kết quả audit đúng một
+lần. CAS 0 dòng không ghi gì, đọc lại row một lần và trả theo state hiện tại
+(row còn claim được thì 409 UPLOAD_PROCESSING). Storage lỗi tạm → release CAS,
+503; lỗi DB không tự reject/expire, lease hết hạn sẽ được claim lại. Sau commit
+xóa raw best-effort và đặt quarantine_cleaned_at; lỗi cleanup chỉ log class lỗi,
+để sweep xử lý. Kiểm bằng `UploadCompleteIntegrationTest` (PostgreSQL + RustFS
+Testcontainers, spy MediaStorage tiêm lỗi; mutation bỏ điều kiện lease_token
+làm `staleLeaseCannotCommit` FAIL). Sweep/GC, PUT images và public read chưa
+hiện thực; chưa nghiệm thu CAT-03.
 
 ## 4. `cart-service`
 

@@ -10,10 +10,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Semaphore;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import vn.fashion.catalog.admin.AdminCommands;
@@ -24,6 +28,8 @@ import vn.fashion.catalog.web.Api;
 public class UploadService {
   static final int PUT_TTL_SECONDS = 300;
   static final long MAX_BYTES = 5_242_880L;
+  static final int LEASE_SECONDS = 120;
+  private static final Logger LOG = LoggerFactory.getLogger(UploadService.class);
   public static class CreateRequest {
     public String filename, contentType, targetType, targetId;
     public JsonNode sizeBytes;
@@ -46,8 +52,12 @@ public class UploadService {
   private final AuditLog audit;
   private final MediaStorage storage;
   private final Tracer tracer;
-  public UploadService(JdbcClient jdbc, ObjectMapper json, AdminCommands commands, AuditLog audit, MediaStorage storage, Tracer tracer) {
-    this.jdbc = jdbc; this.json = json; this.commands = commands; this.audit = audit; this.storage = storage; this.tracer = tracer;
+  private final TransactionTemplate tx;
+  private final Semaphore slot = new Semaphore(1); // one re-encode per instance
+  public UploadService(JdbcClient jdbc, ObjectMapper json, AdminCommands commands, AuditLog audit, MediaStorage storage,
+      Tracer tracer, TransactionTemplate tx) {
+    this.jdbc = jdbc; this.json = json; this.commands = commands; this.audit = audit; this.storage = storage;
+    this.tracer = tracer; this.tx = tx;
   }
 
   Input normalize(CreateRequest r) {
@@ -126,6 +136,154 @@ public class UploadService {
     if (!"APPROVED".equals(view.state())) return view;
     return new StatusView(view.uploadId(), view.targetType(), view.targetId(), view.state(), view.putExpiresAt(),
         view.completeDeadline(), view.leaseUntil(), view.reasonCode(), toAsset(uploadId), view.assetAvailability());
+  }
+
+  /** Steps 1-4 input; time comparisons use the DB clock. */
+  private record Row(String state, String reasonCode, boolean pastDeadline, boolean leased) { }
+  private record Claim(UUID token, String contentType, long sizeBytes) { }
+
+  Semaphore slot() { return slot; }
+
+  /** Fenced completion: preflight, slot, claim, S3 outside any transaction, CAS result. See spec section 3. */
+  public ResponseEntity<?> complete(UUID actor, UUID id) {
+    var early = preflight(actor, id);
+    if (early != null) return early;
+    if (!slot.tryAcquire()) {
+      var e = Api.error(HttpStatus.TOO_MANY_REQUESTS, "RATE_LIMITED", "IMAGE_PROCESSING_CAPACITY", List.of(), tracer);
+      return ResponseEntity.status(e.getStatusCode()).headers(e.getHeaders()).header("Retry-After", "1").body(e.getBody());
+    }
+    try { return process(actor, id); } finally { slot.release(); }
+  }
+
+  /** Answers from the current row without S3 or audit, or null when the upload may be claimed. */
+  private ResponseEntity<?> preflight(UUID actor, UUID id) {
+    var r = jdbc.sql("""
+        select state, reason_code, now() > complete_deadline, coalesce(lease_until > now(), false)
+        from media_uploads where id=:id and actor_id=:actor
+        """).param("id", id).param("actor", actor)
+        .query((rs, i) -> new Row(rs.getString(1), rs.getString(2), rs.getBoolean(3), rs.getBoolean(4))).optional()
+        .orElseThrow(() -> new Api.Problem(HttpStatus.NOT_FOUND, "NOT_FOUND", "UPLOAD_NOT_FOUND", List.of()));
+    switch (r.state()) {
+      case "APPROVED" -> { return Api.ok(HttpStatus.OK, toAsset(id), tracer); }
+      case "REJECTED" -> throw rejected(r.reasonCode());
+      case "EXPIRED" -> throw conflict("UPLOAD_EXPIRED");
+      default -> { }
+    }
+    if (r.pastDeadline()) {
+      jdbc.sql("""
+          update media_uploads set state='EXPIRED', terminal_at=now(), lease_token=null, lease_until=null
+          where id=:id and now() > complete_deadline and (state='PENDING' or (state='PROCESSING' and lease_until <= now()))
+          """).param("id", id).update();
+      throw conflict("UPLOAD_EXPIRED");
+    }
+    if ("PROCESSING".equals(r.state()) && r.leased()) throw conflict("UPLOAD_PROCESSING");
+    return null;
+  }
+
+  /** After a lost claim/CAS: answer from the current state once; still claimable means another attempt is racing. */
+  private ResponseEntity<?> settle(UUID actor, UUID id) {
+    var answer = preflight(actor, id);
+    if (answer != null) return answer;
+    throw conflict("UPLOAD_PROCESSING");
+  }
+
+  private ResponseEntity<?> process(UUID actor, UUID id) {
+    var c = jdbc.sql("""
+        update media_uploads set state='PROCESSING', attempt=attempt+1, lease_token=gen_random_uuid(),
+               lease_until=now() + make_interval(secs => :lease)
+        where id=:id and now() <= complete_deadline and (state='PENDING' or (state='PROCESSING' and lease_until <= now()))
+        returning lease_token, content_type, size_bytes
+        """).param("id", id).param("lease", (double) LEASE_SECONDS)
+        .query((rs, i) -> new Claim(rs.getObject(1, UUID.class), rs.getString(2), rs.getLong(3))).optional().orElse(null);
+    if (c == null) return settle(actor, id);
+    String raw = "quarantine/" + id + "/raw", imageKey = "approved/" + id + "/image", thumbKey = "approved/" + id + "/thumb";
+    ImageProcessor.Rendition image, thumb;
+    try {
+      // Recovery first: an existing primary wins and the raw object is never read again.
+      var primary = storage.read(imageKey, MAX_BYTES);
+      if (primary.isEmpty()) {
+        var head = storage.head(raw);
+        if (head.isEmpty()) { release(id, c.token()); throw conflict("UPLOAD_NOT_UPLOADED"); }
+        if (head.get() != c.sizeBytes()) throw new ImageProcessor.Rejected("IMAGE_SIZE_MISMATCH");
+        var bytes = storage.read(raw, c.sizeBytes());
+        if (bytes.isEmpty()) { release(id, c.token()); throw conflict("UPLOAD_NOT_UPLOADED"); }
+        if (bytes.get().length != c.sizeBytes()) throw new ImageProcessor.Rejected("IMAGE_SIZE_MISMATCH");
+        storage.putIfAbsent(imageKey, ImageProcessor.approve(bytes.get(), c.contentType()).bytes(), c.contentType());
+        primary = storage.read(imageKey, MAX_BYTES); // first writer wins: continue with what is actually stored
+        if (primary.isEmpty()) throw new MediaStorage.Unavailable();
+      }
+      image = ImageProcessor.verify(primary.get(), c.contentType(), ImageProcessor.APPROVED_EDGE);
+      var stored = storage.read(thumbKey, MAX_BYTES);
+      if (stored.isEmpty()) {
+        storage.putIfAbsent(thumbKey, ImageProcessor.thumbnail(image).bytes(), c.contentType());
+        stored = storage.read(thumbKey, MAX_BYTES);
+        if (stored.isEmpty()) throw new MediaStorage.Unavailable();
+      }
+      thumb = ImageProcessor.verify(stored.get(), c.contentType(), ImageProcessor.THUMB_EDGE);
+    } catch (MediaStorage.Unavailable e) {
+      release(id, c.token());
+      throw e;
+    } catch (ImageProcessor.Rejected e) {
+      return finish(actor, id, c.token(), null, null, e.reasonCode());
+    }
+    return finish(actor, id, c.token(), image, thumb, null);
+  }
+
+  /** Result CAS fenced by lease token, live lease and DB deadline; writes nothing when the lease was lost. */
+  private ResponseEntity<?> finish(UUID actor, UUID id, UUID token, ImageProcessor.Rendition image,
+      ImageProcessor.Rendition thumb, String reason) {
+    var meta = Api.metadata(tracer);
+    boolean won = Boolean.TRUE.equals(tx.execute(s -> {
+      int n = jdbc.sql("""
+          update media_uploads set state=:state, reason_code=:reason, terminal_at=now(), lease_token=null, lease_until=null
+          where id=:id and lease_token=:token and lease_until > now() and now() <= complete_deadline
+          """).param("state", reason == null ? "APPROVED" : "REJECTED").param("reason", reason)
+          .param("id", id).param("token", token).update();
+      if (n == 0) return false;
+      Map<String, Object> after;
+      if (reason == null) {
+        jdbc.sql("""
+            insert into media_assets(id,image_key,thumb_key,image_content_type,image_size_bytes,image_width,image_height,image_sha256,
+                                     thumb_content_type,thumb_size_bytes,thumb_width,thumb_height,thumb_sha256)
+            values (:id,:ik,:tk,:ict,:isz,:iw,:ih,:ish,:tct,:tsz,:tw,:th,:tsh) on conflict do nothing
+            """).param("id", id).param("ik", "approved/" + id + "/image").param("tk", "approved/" + id + "/thumb")
+            .param("ict", image.contentType()).param("isz", image.bytes().length).param("iw", image.width())
+            .param("ih", image.height()).param("ish", image.sha256())
+            .param("tct", thumb.contentType()).param("tsz", thumb.bytes().length).param("tw", thumb.width())
+            .param("th", thumb.height()).param("tsh", thumb.sha256()).update();
+        after = Map.of("state", "APPROVED", "image_sha256", image.sha256(), "thumb_sha256", thumb.sha256());
+      } else after = Map.of("state", "REJECTED", "reason_code", reason);
+      audit.record(actor, reason == null ? "catalog.media.upload.approve" : "catalog.media.upload.reject", "media_upload",
+          id, reason, null, after, UUID.fromString(meta.requestId()));
+      return true;
+    }));
+    if (!won) return settle(actor, id);
+    cleanQuarantine(id);
+    if (reason != null) throw rejected(reason);
+    return Api.ok(HttpStatus.OK, toAsset(id), meta);
+  }
+
+  /** Best effort after commit; the quarantine sweep retries anything left. */
+  private void cleanQuarantine(UUID id) {
+    try {
+      storage.delete("quarantine/" + id + "/raw");
+      jdbc.sql("update media_uploads set quarantine_cleaned_at=now() where id=:id").param("id", id).update();
+    } catch (RuntimeException e) {
+      LOG.warn("Quarantine cleanup deferred to sweep: {}", e.getClass().getSimpleName()); // no key or upload id (13)
+    }
+  }
+
+  /** CAS release keeps the row PENDING for retry and never overwrites another attempt's lease. */
+  private void release(UUID id, UUID token) {
+    jdbc.sql("update media_uploads set state='PENDING', lease_token=null, lease_until=null where id=:id and lease_token=:token")
+        .param("id", id).param("token", token).update();
+  }
+
+  private static Api.Problem conflict(String message) {
+    return new Api.Problem(HttpStatus.CONFLICT, "CONFLICT", message, List.of());
+  }
+  private static Api.Problem rejected(String reason) {
+    return new Api.Problem(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "IMAGE_REJECTED", List.of(new Api.FieldError("upload_id", reason)));
   }
 
   /** Shared with complete (Task 5). Null when no asset row exists. */

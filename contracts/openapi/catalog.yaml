@@ -679,8 +679,8 @@ paths:
     post:
       operationId: "completeImageUpload"
       summary: "Validate and re-encode; idempotent by upload_id"
-      x-implementation-status: "planned"
-      description: "TASK:CAT-03 draft; pending written-spec/plan approval. catalog.write checked at service."
+      x-implementation-status: "implemented"
+      description: "TASK:CAT-03 implemented and tested with PostgreSQL and RustFS Testcontainers. catalog.write checked at service. No body or Idempotency-Key; terminal replay returns the stored result without storage access or audit. A lost lease or result CAS answers from the current state (409 UPLOAD_PROCESSING while another attempt may still own it)."
       security: [{"bearerAuth":[]}]
       parameters: [{"$ref":"#/components/parameters/UploadId"}]
       responses:
