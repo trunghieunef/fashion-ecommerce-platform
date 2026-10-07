@@ -101,6 +101,62 @@ catalog_post publish "/products/$product_id/publish" '{"expected_version":1}' | 
   python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["status"] == "ACTIVE" and d["version"] == 2 and d["published_at"]'
 curl --fail --silent --show-error "$GATEWAY_URL/api/v1/catalog/products?limit=100" | \
   python3 -c 'import json,sys; assert any(p["id"] == sys.argv[1] for p in json.load(sys.stdin)["data"]["items"])' "$product_id"
+# TASK:CAT-01b: retain 401 and real-member 403 before the synthetic OPS flow.
+for route in /collections "/size-guides/$category_id/vi"; do
+  for bearer in '' "$access"; do
+    expected=401; [[ -z "$bearer" ]] || expected=403
+    actual="$(status -H "Authorization: Bearer $bearer" "$GATEWAY_URL/admin/api/v1/catalog$route")"
+    if [[ "$actual" != "$expected" ]]; then
+      echo "CAT-01b $route: expected $expected, got $actual" >&2; exit 1
+    fi
+  done
+done
+# Capture headers/body in process memory, checking status and metadata on every call.
+catalog_request() {
+  local expected="$1" method="$2" route="$3" body="${4-}" key="${5-}"
+  local args=(-sS -i -X "$method" -H "Authorization: Bearer $catalog_access")
+  # Windows native curl argv uses the ANSI codepage; stdin preserves UTF-8 table text.
+  [[ -z "$body" ]] || args+=(-H 'Content-Type: application/json' --data-binary @-)
+  [[ -z "$key" ]] || args+=(-H "Idempotency-Key: $key")
+  printf '%s' "$body" | curl "${args[@]}" "$GATEWAY_URL/admin/api/v1/catalog$route" | MSYS_NO_PATHCONV=1 python3 -c '
+import json,re,sys,uuid
+head,body=sys.stdin.buffer.read().decode("utf-8").replace("\r\n","\n").split("\n\n",1)
+code=int(head.splitlines()[0].split()[1]); d=json.loads(body)
+assert code == int(sys.argv[1]), (sys.argv[2],code,sys.argv[1],d.get("code"),d.get("message"),d.get("errors"))
+headers=dict(line.lower().split(":",1) for line in head.splitlines()[1:] if ":" in line)
+m=d["metadata"]; uuid.UUID(m["request_id"])
+assert re.fullmatch("[0-9a-f]{32}",m["trace_id"])
+assert headers["x-correlation-id"].strip() == m["trace_id"]
+assert d["code"] == ("OK" if code < 400 else "VERSION_CONFLICT")
+print(json.dumps(d))' "$expected" "$route"
+}
+collection_body="{\"name_vi\":\"Smoke\",\"name_en\":\"Smoke\",\"slug\":\"smoke-$catalog_suffix\",\"items\":[{\"product_id\":\"$product_id\",\"sort_order\":0}]}"
+collection="$(catalog_request 201 POST /collections "$collection_body" "smoke-$catalog_suffix-collection")"
+collection_id="$(python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["status"] == "DRAFT" and d["version"] == 0 and d["cover_url"] is None and d["items"] == [{"product_id":sys.argv[1],"sort_order":0}]; print(d["id"])' "$product_id" <<<"$collection")"
+collection_read="$(catalog_request 200 GET "/collections/$collection_id")"
+python3 -c 'import json,sys; assert json.loads(sys.argv[1])["data"] == json.load(sys.stdin)["data"]' "$collection" <<<"$collection_read"
+collection_version="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["version"])' <<<"$collection_read")"
+collection_update="{\"name_vi\":\"Smoke\",\"name_en\":\"Smoke\",\"slug\":\"smoke-$catalog_suffix\",\"status\":\"ACTIVE\",\"expected_version\":$collection_version,\"items\":[{\"product_id\":\"$product_id\",\"sort_order\":7}]}"
+# PUT collection intentionally has no Idempotency-Key.
+catalog_request 200 PUT "/collections/$collection_id" "$collection_update" | \
+  python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["status"] == "ACTIVE" and d["version"] == 1 and d["items"] == [{"product_id":sys.argv[1],"sort_order":7}]' "$product_id"
+catalog_request 409 PUT "/collections/$collection_id" "$collection_update" >/dev/null
+echo 'CAT-01b collection create/read/update/stale PASS'
+guide_path="/size-guides/$category_id/vi"
+guide_body='{"expected_version":0,"table_json":{"columns":["Size","Chest (cm)"],"rows":[["M","96–100"]]}}'
+guide="$(catalog_request 201 PUT "$guide_path" "$guide_body" "smoke-$catalog_suffix-guide")"
+python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["version"] == 1 and d["guideline_html"] == "" and d["category_id"] == sys.argv[1] and d["locale"] == "vi" and d["table_json"] == {"columns":["Size","Chest (cm)"],"rows":[["M","96–100"]]}, ("guide create",d)' "$category_id" <<<"$guide"
+guide_read="$(catalog_request 200 GET "$guide_path")"
+python3 -c 'import json,sys; assert json.loads(sys.argv[1])["data"] == json.load(sys.stdin)["data"]' "$guide" <<<"$guide_read"
+echo 'CAT-01b size guide create/read PASS'
+guide_version="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["version"])' <<<"$guide_read")"
+guide_update="{\"expected_version\":$guide_version,\"guideline_html\":\"<p>Smoke size guide</p>\",\"table_json\":{\"columns\":[\"Size\",\"Chest (cm)\"],\"rows\":[[\"M\",\"96–100\"]]}}"
+catalog_request 200 PUT "$guide_path" "$guide_update" "smoke-$catalog_suffix-guide-update" | \
+  python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["version"] == 2 and d["guideline_html"] == "<p>Smoke size guide</p>", ("guide update",d)'
+catalog_request 409 PUT "$guide_path" "$guide_update" "smoke-$catalog_suffix-guide-stale" >/dev/null
+guide_replay="$(catalog_request 201 PUT "$guide_path" "$guide_body" "smoke-$catalog_suffix-guide")"
+python3 -c 'import json,sys; a=json.loads(sys.argv[1]); b=json.load(sys.stdin); assert a["data"] == b["data"] and a["metadata"]["request_id"] != b["metadata"]["request_id"]' "$guide" <<<"$guide_replay"
+echo 'CAT-01b size guide update/stale/replay PASS'
 unset catalog_access
 # TASK:USR-01 part 1b-i: forgot answers 202 for known and unknown e-mails (Redis handoff in
 # Compose); change password revokes the current access token.

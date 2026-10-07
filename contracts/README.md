@@ -82,7 +82,8 @@ Cả hai GET cần `catalog.write`, đọc cả DRAFT/INACTIVE và giữ envelop
 GET collection list/detail đã hiện thực ở Task 2 (6 HTTP integration tests); list trả summary
 page1/size20/max100/status optional, không product items. Contract có 20 admin operations;
 Collection POST/PUT hiện thực ở Task 3 với closed requests/version/replay/atomic audit;
-GET guide hiện thực ở Task 4 (3 HTTP tests); PUT guide hiện thực ở Task 5 (15 HTTP tests), chưa chạy smoke volume local.
+GET guide hiện thực ở Task 4 (3 HTTP tests); PUT guide hiện thực ở Task 5 (15 HTTP tests);
+Task 6 đã upgrade V004 trên volume hiện có và smoke collection/guide qua Gateway.
 Spec CAT-01b đã duyệt: request collection/guide từ chối unknown field qua @JsonAnySetter
 với field tên key, giữ mapper global/CAT-01a; header so trùng strip + lowercase Locale.ROOT.
 PUT guide kiểm category404 trước idempotency/version; create ON CONFLICT DO NOTHING RETURNING.
@@ -92,6 +93,9 @@ Contract examples không thay bằng chứng runtime. Task 2 đã kiểm HTTP co
 401/403/404/content/version và GET → PUT (Task 3); guide GET/PUT đã kiểm tại Task 4/5; public read
 vẫn thuộc CAT-02. Response size guide table ghi rõ giới hạn shape; số ô khớp số cột,
 strip và tổng serialized bytes cần validation tại service, JSON Schema chưa chứng minh chúng.
+Smoke dùng JWT OPS synthetic local (không chứng minh login → token OPS), giữ401/403 member thật,
+kiểm collection items/version, guide table/version/GET→PUT/replay/stale và metadata/header.
+Giới hạn/dữ liệu tích lũy tại [catalog README](../services/catalog-service/README.md).
 
 Python 3.10+; cài tooling vào virtualenv của bạn:
 

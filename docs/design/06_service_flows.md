@@ -160,7 +160,7 @@ Table header so trùng strip/lowercase Locale.ROOT, giữ casing hiển thị; b
 Collection detail đọc parent/items/version bằng một SQL json_agg ORDER BY sort_order/product_id.
 Collection flow đã hiện thực tại Task 2/3, GET/PUT guide Task 4/5, kiểm HTTP Testcontainers;
 guide PUT có replay/category order, create/update race và rollback audit/key.
-Chưa upgrade/smoke CAT-01b trên volume local.
+Task 6 đã upgrade V004 trên volume local và smoke CAT-01b qua Gateway PASS (OPS synthetic).
 
 ## 4. `cart-service`
 

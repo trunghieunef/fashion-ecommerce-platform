@@ -7,7 +7,8 @@ CAT-01a bổ sung `V002` (category/brand, product fields, variant identity trigg
 outbox/idempotency/audit) và follow-up `V003` (SKU mới uppercase ASCII, unique không phân biệt casing).
 CAT-01b Task 1 thêm `V004__collections_and_size_guides.sql`: collections/items và size_guides,
 FK/unique/version/locale/time/sort constraints; upgrade từ V003 giữ SKU legacy/sample và quyền
-audit append-only. Schema đã kiểm bằng PostgreSQL Testcontainers, chưa upgrade volume local.
+audit append-only. Schema đã kiểm bằng PostgreSQL Testcontainers và áp V004 thành công
+trên volume local V003 tại Task 6, giữ dữ liệu hiện có.
 CAT-01b Task 2 có GET `/admin/api/v1/catalog/collections` (page1/size20/max100/status optional,
 created_at DESC/id DESC, summary không có items) và GET `/collections/{id}` (one SQL json_agg,
 items sort_order/product_id, nội dung/version cùng snapshot, DRAFT/INACTIVE cũng đọc được).
@@ -24,7 +25,7 @@ key bắt buộc + version0 tạo201/version1; update200/version+1. Validation t
 category trước replay, replay trước version guard; create race ON CONFLICT DO NOTHING RETURNING.
 Bảng đóng columns/rows, strip plain text, header unique Locale.ROOT, tối đa32768 UTF-8 bytes;
 guideline optional/sanitize/max20000 sau sanitize. Audit/key/data cùng transaction.
-Không public read CAT-02; smoke/upgrade volume còn chờ Task 6.
+Không public read CAT-02; Task 6 đã smoke đầy đủ qua Gateway với 6 container healthy.
 Admin taxonomy đã có GET/POST categories/brands và PUT theo id
 tại `/admin/api/v1/catalog`. Mọi endpoint kiểm ES256 và `catalog.write` tại service;
 POST cần `Idempotency-Key`, PUT cần `expected_version`; mutation và audit cùng transaction.
@@ -71,7 +72,7 @@ Product ACTIVE từ V001 có thể còn `published_at` null: unpublish giữ nul
 timestamp. Quyết định backfill hoặc xử lý null trong sort/index theo `published_at` thuộc CAT-02.
 
 Đây chưa phải acceptance đầy đủ của `TASK:CAT-01`: còn
-collection/size-guide/media, filter/search public, cursor thật, cache hoặc Kafka. `next_cursor` luôn
+reviewer nghiệm thu, media (CAT-03), filter/search public (CAT-02), cursor thật, cache hoặc Kafka. `next_cursor` luôn
 `null`; producer intent `catalog.events` trong outbox, chưa publish; consumer: none.
 
 ## Chạy local
@@ -82,6 +83,16 @@ local trong `.env` (chỉ memory, quyền `catalog.write`, TTL 300 giây). Smoke
 chuỗi login → token OPS. Slug/SKU ngẫu nhiên; dữ liệu smoke tích lũy trên volume local vì không có DELETE.
 Smoke tạo SKU có whitespace/chữ thường rồi retry cùng key bằng uppercase; kiểm cùng variant id
 và product version không tăng thêm trước publish.
+Smoke CAT-01b tiếp tục bằng cùng JWT/category/product: collection POST201/DRAFT/version0 →
+GET items/version → PUT không key200/version1 → stale409; guide PUT0/key201/version1 →
+GET → PUT1/newkey200/version2 → stale409 và replay key tạo giữ201/data version1, metadata mới.
+Mọi response kiểm envelope/metadata/X-Correlation-Id; collection/guide giữ cả401 và403 member thật.
+Token synthetic dùng ES256/kid, iss=user-service, aud=fashion-api, sub UUID ngẫu nhiên,
+auth_version0, chỉ catalog.write và exp300s; khóa/token không log/ghi file, không tạo helper production
+hoặc sửa user DB để cấp quyền OPS. Không chứng minh login → cấp token OPS.
+Collection slug có hậu tố UUID, guide dùng category mới mỗi lần: dữ liệu smoke tích lũy,
+không DELETE/reset volume. Trên Git Bash Windows, helper gửi JSON qua stdin và giải mã HTTP UTF-8
+để giữ nguyên text bảng Unicode, không phụ thuộc ANSI argv/default Python codepage.
 
 Yêu cầu JDK 21 và Docker daemon mà user hiện tại được phép truy cập. Từ repo root:
 

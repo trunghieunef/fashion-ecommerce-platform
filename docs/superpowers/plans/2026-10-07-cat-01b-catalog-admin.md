@@ -355,20 +355,27 @@ Gateway route hiện có không cần route mới.
 không helper mới trong production hoặc key/token file. Smoke cần record status/body bằng biến process,
 assert envelopes/metadata/versions/replay/stale, không in JWT/private key/member access/refresh cookie.
 
-- [ ] **Step 1: Viết smoke assertions.** GET collection list/guide không token401 và member thật403;
+- [x] **Step 1: Viết smoke assertions.** GET collection list/guide không token401 và member thật403;
   OPS POST collection key→201/version0/cover null, GET detail/items/version, PUT không key→200/version1;
   PUT guide version0/key→201/version1, GET→PUT version1/newkey→200/version2, retry original key→201/data version1;
   stale collection PUT và guide PUT newkey→409 VERSION_CONFLICT. Slug UUID và current smoke product.
-- [ ] **Step 2: RED thực chạy** trước rebuild images local còn CAT-01a: smoke FAIL tại route CAT-01b404.
+- [x] **Step 2: RED thực chạy** trước rebuild images local còn CAT-01a: smoke FAIL tại route CAT-01b404.
   Nếu image đã có code mới, không tạo lỗi giả: ghi trạng thái precondition và dùng mutation bước4
   để chứng minh assertion phân biệt regression. Không coi lỗi Redis quota/toolchain là RED hợp lệ.
-- [ ] **Step 3: Build/upgrade và GREEN.** `bash scripts/local-up.sh`, Docker 6 healthy/V004 áp trên
+- [x] **Step 3: Build/upgrade và GREEN.** `bash scripts/local-up.sh`, Docker 6 healthy/V004 áp trên
   volume V003; `bash scripts/smoke-local.sh` PASS, `npx playwright test` PASS baseline storefront.
   Không down -v/reset dữ liệu/role/quota. Dữ liệu UUID smoke tích lũy; ghi synthetic limitations vào README.
-- [ ] **Step 4: Mutation script thực chạy.** Đổi synthetic permissions thành `["user.manage"]`
+- [x] **Step 4: Mutation script thực chạy.** Đổi synthetic permissions thành `["user.manage"]`
   (không key/claim khác) → smoke FAIL403 trước OPS mutation; restore script và smoke GREEN.
   Đây là HTTP/script mutation, không có Maven Tests run; báo tách biệt với Java mutations.
-- [ ] **Step 5: Commit** `test(CAT-01): smoke collection and size guide admin through Gateway`.
+- [x] **Step 5: Commit** `test(CAT-01): smoke collection and size guide admin through Gateway`.
+
+Evidence Task 6: image cũ RED collection expected401/got404; local-up PASS, 6 containers healthy,
+Flyway001–004 success trên volume hiện có. Smoke đầy đủ Gateway PASS; Playwright desktop/mobile2/2.
+Mutation permissions user.manage nhận403 ở POST category trước mọi OPS side effect; restore smoke PASS.
+Windows wire probe tìm hai lỗi encoding script: curl -d argv phát ANSI0x96 và Python stdin CP1252;
+helper mới dùng stdin --data-binary và decode HTTP UTF-8, giữ nguyên ô `96–100` (smoke regression).
+Không sửa Java/contract nghiệp vụ, không tạo infra README hoặc đổi README gốc; bổ sung mô tả smoke12 §1.
 
 ### Task 7: Full verification, evidence, handoff và review branch
 
