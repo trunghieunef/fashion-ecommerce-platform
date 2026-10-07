@@ -131,6 +131,25 @@ CAT-01. CATALOG_CHANGED/cache invalidation không nằm trong phần 1a.
 Publish đặt `published_at` lần đầu; unpublish không sửa cột này, kể cả ACTIVE legacy từ V001
 còn null. CAT-02 chốt backfill/xử lý null cho sort/index theo published_at.
 
+Collection CAT-01b (chủ dự án chốt ngày 2026-10-07): OPS PUT collection sang ACTIVE
+không kiểm collection có product ACTIVE; cho phép chuẩn bị collection rỗng hoặc với product
+chưa publish, kể cả lịch launch có start_at tương lai. Kiểm ở thời điểm chuyển trạng thái
+không đảm bảo invariant khi product bị unpublish sau đó; không tự cascade đổi status collection.
+Public collection list/detail thuộc CAT-02, không triển khai trong CAT-01b: mỗi lần đọc
+chỉ trả collection ACTIVE, đang trong `[start_at, end_at)` và có ≥ 1 product ACTIVE;
+chỉ trả product ACTIVE trong collection. Acceptance gồm biên start_at (được trả),
+end_at (không được trả) và unpublish product ACTIVE cuối cùng làm collection không còn được trả.
+
+Collection mutation CAT-01b (chủ dự án, 2026-10-07): POST có key tạo DRAFT/version 0;
+PUT chỉ expected_version, không cần key. Khóa collection → kiểm version → kiểm/thay toàn
+bộ items và nội dung → tăng version → audit → commit trong cùng transaction.
+Items tối đa 1.000, không trùng product_id, cho phép rỗng/product chưa publish;
+sort_order integer 0..2147483647 được trùng, đọc theo sort_order/product_id.
+Product trong body không tồn tại trả 400 VALIDATION_ERROR tại items[i].product_id;
+404 dành cho resource trên path. ISO-8601 có offset chuẩn hóa UTC, null bound không
+giới hạn; cả hai có giá trị thì end > start. cover_url luôn null, không nhận request
+cover/lookbook; CAT-03 quản lý media sau upload kiểm tra, CAT-01b không nhận URL tùy ý.
+
 ## 4. `cart-service`
 
 ```mermaid

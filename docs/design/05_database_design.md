@@ -115,13 +115,56 @@ erDiagram
 | `products` (T) | `id`, `category_id uuid FK categories`, `brand_id uuid? FK brands`, `name_vi text`, `name_en text`, `slug text`, `description_vi text = ''`, `description_en text = ''`, `base_price bigint`, `tags text[] = '{}'`, `status varchar(32) = 'DRAFT'`, `published_at timestamptz?`, `version bigint = 0`, `sold_quantity bigint = 0` | UNIQUE slug; price/sold_quantity >= 0; DRAFT/ACTIVE/INACTIVE; indexes `(category_id, status, published_at, id)`, `(status, base_price, id)`, `(status, sold_quantity, id)` |
 | `product_variants` (T) | `id`, `product_id uuid FK products`, `sku varchar(64)`, `size text`, `color text`, `price_override bigint?`, `weight_grams int`, `status varchar(32) = 'ACTIVE'`, `version bigint = 0` | UNIQUE sku không phân biệt casing (V003), `(product_id, size, color)`; SKU mới uppercase ASCII, legacy giữ nguyên; price >= 0, weight > 0; ACTIVE/INACTIVE; SKU bất biến |
 | `product_images` | `id`, `product_id uuid FK products`, `variant_color text?`, `url text`, `thumb_url text`, `alt_vi text`, `alt_en text`, `sort_order int = 0` | Index `(product_id, sort_order)`; kiểm tra màu thuộc sản phẩm tại service |
-| `collections` (T) | `id`, `name_vi text`, `name_en text`, `slug text`, `cover_url text?`, `start_at timestamptz?`, `end_at timestamptz?`, `status varchar(32) = 'DRAFT'` | UNIQUE slug; DRAFT/ACTIVE/INACTIVE; end > start khi cả hai có giá trị |
-| `collection_items` | `collection_id uuid FK collections`, `product_id uuid FK products`, `sort_order int = 0` | PK `(collection_id, product_id)`; index `(collection_id, sort_order, product_id)` |
+| `collections` (T) | `id`, `name_vi text`, `name_en text`, `slug text`, `cover_url text?`, `start_at timestamptz?`, `end_at timestamptz?`, `status varchar(32) = 'DRAFT'`, `version bigint = 0` | UNIQUE slug; DRAFT/ACTIVE/INACTIVE; version >= 0, version guard; end > start khi cả hai có giá trị; cover_url luôn null trong CAT-01b |
+| `collection_items` | `collection_id uuid FK collections`, `product_id uuid FK products`, `sort_order int = 0` | PK `(collection_id, product_id)`; sort_order 0..2147483647, cho phép trùng; index `(collection_id, sort_order, product_id)` |
 | `lookbook_images` | `id`, `collection_id uuid FK collections`, `url text`, `caption_vi text = ''`, `caption_en text = ''`, `sort_order int = 0` | Index `(collection_id, sort_order)` |
-| `size_guides` (T) | `id`, `category_id uuid FK categories`, `locale varchar(2)`, `guideline_html text`, `table_json jsonb` | UNIQUE `(category_id, locale)`; vi/en; validate JSON + sanitize HTML |
+| `size_guides` (T) | `id`, `category_id uuid FK categories`, `locale varchar(2)`, `guideline_html text = ''`, `table_json jsonb`, `version bigint = 1` | UNIQUE `(category_id, locale)`; vi/en; version >= 1, version guard; validate JSON; HTML sanitize, tối đa 20.000 ký tự sau sanitize |
 | `review_eligibilities` (C, Phase 2) | `id`, `order_id uuid`, `user_id uuid`, `variant_id uuid FK product_variants`, `delivered_at timestamptz`, `expires_at timestamptz` | UNIQUE `(order_id, variant_id)`; index `(user_id, expires_at)`; projection từ ORDER_COMPLETED, thời hạn 30 ngày |
 | `reviews` (T, Phase 2) | `id`, `eligibility_id uuid FK review_eligibilities`, `rating smallint`, `title text`, `content text`, `images text[] = '{}'`, `status varchar(32) = 'PENDING'`, `moderated_by uuid?`, `moderated_at timestamptz?`, `moderation_reason text?` | UNIQUE eligibility_id; rating 1–5, cardinality(images) <= 5; PENDING/APPROVED/REJECTED; index `(status, created_at, id)` |
 | `wishlist_items` (C, Phase 2) | `user_id uuid`, `product_id uuid FK products` | PK `(user_id, product_id)`; index `(user_id, created_at, product_id)` |
+
+Collection CAT-01b (chủ dự án, 2026-10-07): POST tạo DRAFT/version 0, cần key;
+PUT thay toàn bộ nội dung/items, chỉ cần expected_version (không cần Idempotency-Key),
+tăng version 1. Khóa collection, thay items, tăng version và audit cùng transaction.
+Tối đa 1.000 items, rỗng/product chưa publish được phép, không trùng product_id.
+sort_order integer 0..2147483647, được trùng; đọc theo `(sort_order, product_id)`.
+FK bảo vệ referential integrity; service phải trả 400 VALIDATION_ERROR với field
+`items[i].product_id` khi product tham chiếu không tồn tại, không trả 404 cho field body.
+Timestamp request ISO-8601 có offset → UTC/timestamptz; null là không giới hạn phía
+tương ứng, end > start khi có cả hai. CAT-01b không nhận cover_url/lookbook trong request,
+cover_url lưu/trả null; lookbook_images chưa tạo/nhận dữ liệu trong CAT-01b, thuộc CAT-03
+sau upload được kiểm tra. Bảng media trên là mục tiêu CAT-03, không phải schema đã triển khai.
+
+Shape `size_guides.table_json` đã chốt cho CAT-01b (chủ dự án, 2026-10-07):
+
+```json
+{
+  "columns": ["Size", "Ngực (cm)"],
+  "rows": [["M", "96–100"]]
+}
+```
+
+Object chỉ có đúng hai key `columns`/`rows`, không field lạ. Có 1–20 cột, 1–100 hàng;
+mỗi hàng phải đủ số ô bằng số cột. Tiêu đề là string 1–100 ký tự sau `strip`, không
+trùng nhau; ô là string 0–100 ký tự sau `strip`. Tổng JSON sau serialize ≤ 32 KB.
+Tiêu đề/ô là plain text, không HTML; FE escape khi render. `guideline_html` sanitize
+bằng jsoup theo cùng quy tắc mô tả sản phẩm; không bắt buộc ở API, thiếu/null thành
+chuỗi rỗng, giới hạn 20.000 ký tự sau sanitize (chủ dự án duyệt ngày 2026-10-07).
+Quy ước (không ép bằng validation/FK):
+cột đầu là nhãn size khớp `variant.size`. Đây là schema mục tiêu; chưa có migration
+size guide hoặc implementation CAT-01b, không sửa migration đã áp dụng.
+
+Size guide create/update (chủ dự án, 2026-10-07): PUT cùng category/locale dùng
+`expected_version=0` cho bản ghi chưa tồn tại → 201/version 1; cập nhật bằng version
+hiện hành → 200/version +1. Version bắt đầu 1 là ngoại lệ so với CAT-01a; 0 là sentinel
+tạo, không lưu vào bản ghi. UNIQUE `(category_id, locale)` chặn hai lệnh tạo độc lập:
+đúng một 201, còn lại 409 `VERSION_CONFLICT`. Thiếu version 400; bản ghi đã tồn tại khi
+gửi 0 hoặc version lệch 409 `VERSION_CONFLICT`. Locale khác vi/en trả 400; category
+không tồn tại trả 404 `NOT_FOUND`/`CATEGORY_NOT_FOUND`.
+PUT này bắt buộc `Idempotency-Key` vì có thể tạo. Lookup trước kiểm version; retry cùng
+key/body giữ data/status, metadata mới, không thêm audit; cùng key khác body 409.
+Mutation/audit/kết quả idempotency cùng transaction; race cùng key/body replay cùng lệnh,
+không áp quy tắc conflict của hai lệnh tạo độc lập. Contract chủ quản tại 03 §3.
 
 `TASK:CAT-01` phần 1a bổ sung `V002__catalog_admin.sql`: categories/brands có `version`,
 product có category/brand, description, base_price, tags, published_at và sold_quantity;

@@ -68,6 +68,23 @@ bằng chứng riêng của PLT-03.
 
 ## Kiểm tra
 
+CAT-01b đang thiết kế: `catalog.yaml` đã có contract POST/PUT collection, PUT size guide và hai GET admin
+detail collection/size guide theo quyết định chủ dự án 2026-10-07 (03 §3). POST key tạo
+DRAFT/version 0; PUT chỉ expected_version, thay toàn bộ items/version/audit cùng transaction.
+Items tối đa 1.000; sort_order integer 0..2147483647 được trùng; thiếu product body trả
+400 VALIDATION_ERROR tại items[i].product_id. Timestamp có offset, lưu UTC; cover_url luôn
+null trong response, không nhận cover/lookbook trong request (CAT-03). Collection trả items theo
+`sort_order, product_id` và version; size guide trả nội dung/version, locale vi/en,
+chưa có 404 NOT_FOUND. Size guide PUT bắt buộc key + version (0 tạo 201/version 1,
+cập nhật 200/version +1), replay trước version guard. `guideline_html` không bắt buộc:
+thiếu/null thành chuỗi rỗng, sanitize như product, tối đa 20.000 ký tự sau sanitize.
+Cả hai GET cần `catalog.write`, đọc cả DRAFT/INACTIVE và giữ envelope.
+Examples 2xx/4xx cùng contract regression kiểm Bearer, errors và version đã có;
+đây chưa phải endpoint chạy được hoặc bằng chứng HTTP 401/403/404/GET → PUT.
+Các integration test đó thuộc implementation CAT-01b sau duyệt spec/plan; public read
+vẫn thuộc CAT-02. Response size guide table ghi rõ giới hạn shape; số ô khớp số cột,
+strip và tổng serialized bytes cần validation tại service, JSON Schema chưa chứng minh chúng.
+
 Python 3.10+; cài tooling vào virtualenv của bạn:
 
 ```bash

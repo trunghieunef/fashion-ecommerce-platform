@@ -6,8 +6,10 @@ Sprint 1 theo ADR-18 chỉ triển khai local và đạt checkpoint S1-local tro
 
 Tiếp tục trên máy mới: đọc [handoff S1-local ngày 2026-10-02](superpowers/plans/2026-10-02-s1-local-machine-handoff.md)
 để biết toolchain, thứ tự kiểm thử, phạm vi và mẫu prompt cho agent.
-Tiến độ mới nhất: [handoff USR-01b-ii ngày 2026-10-06](superpowers/plans/2026-10-06-usr-01b-ii-handoff.md),
-[evidence rate limit](evidence/usr-01b-ii-local-2026-10-06.md); implementation chờ review PR.
+Tiến độ mới nhất: [handoff CAT-01a ngày 2026-10-07](superpowers/plans/2026-10-07-cat-01a-handoff.md),
+[evidence catalog admin](evidence/cat-01a-local-2026-10-07.md); PR #14 đã merge.
+[Spec CAT-01b](superpowers/specs/2026-10-07-cat-01b-design.md) đã viết, chờ review trước plan;
+chưa có implementation collection/size-guide.
 
 Kế hoạch triển khai có thể giao cho agent/engineer được lập tại [docs/superpowers/plans](superpowers/plans/README.md). Reviewer fresh-clone S1-local điền [template evidence](evidence/s1-local-template.md). [Evidence ngày 2026-10-02](evidence/s1-local-2026-10-02.md) ghi blocker mạng công ty; [evidence ngày 2026-10-04](evidence/s1-local-2026-10-04.md) ghi runtime PASS, patch timezone `b62f963` với CI PASS và nghiệm thu bởi Codex (GPT-6) theo chỉ định chủ dự án thay reviewer người/TL. Bộ kế hoạch chia đường tới G2 MVP thành S1-local, G0 platform/staging, commerce core, G1 COD và G2 online payment; S1-local được chấp nhận không thay acceptance các gate sau.
 

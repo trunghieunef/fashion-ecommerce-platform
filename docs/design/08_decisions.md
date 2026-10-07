@@ -185,4 +185,69 @@ Gate task là work package trong [backlog](../delivery/10_backlog.md). Mã task 
   của variant legacy. Collision theo casing làm migration dừng, cần quyết định dữ liệu riêng.
   Spec/plan, 03/05/06 và contracts đồng bộ; CAT-01 vẫn chờ review/acceptance.
 
+- CAT-01b collection activation/visibility — **chủ dự án, 2026-10-07**: chọn PUT collection
+  sang ACTIVE không yêu cầu product ACTIVE, cho phép rỗng hoặc product chưa publish.
+  Cách này giữ lịch launch start_at tương lai; validation lúc chuyển trạng thái cũng không
+  giữ được điều kiện sau khi product bị unpublish, nên không dùng làm invariant liên tục.
+  Public list/detail chỉ trả collection ACTIVE, đang trong `[start_at, end_at)` và có ≥ 1
+  product ACTIVE; product list bên trong chỉ gồm product ACTIVE. Điều kiện kiểm tại thời điểm đọc.
+  Public read thuộc TASK:CAT-02, không triển khai trong CAT-01b; 03 §2.2/§3, 06 §3 và
+  backlog CAT-02 đồng bộ acceptance, gồm biên thời gian và unpublish product ACTIVE cuối cùng.
+  REQ liên quan CAT-03 (collection), CAT-04 (public query); ảnh/upload giữ ở TASK:CAT-03.
+
+- CAT-01b size guide table — **chủ dự án, 2026-10-07**: chọn bảng linh hoạt thay vì field
+  số đo cố định theo category, hỗ trợ khoảng đo và Free size. `table_json` chỉ có đúng
+  hai key `columns`/`rows`, không field lạ; 1–20 cột, 1–100 hàng, mỗi hàng đúng số ô
+  bằng số cột. Tiêu đề string 1–100 ký tự sau strip, không trùng nhau; ô string 0–100
+  ký tự sau strip; JSON sau serialize ≤ 32 KB. Tất cả là plain text, không HTML,
+  FE escape; `guideline_html` sanitize bằng jsoup như mô tả sản phẩm.
+  Quy ước cột đầu là nhãn size khớp `variant.size`, không ép bằng validation/FK.
+  03 §3 và 05 §5 đồng bộ contract/shape; REQ:CAT-06, TASK:CAT-01 phần 1b.
+  Quyết định shape này không thay cho duyệt spec/plan.
+
+- CAT-01b size guide PUT/version — **chủ dự án, 2026-10-07**: giữ PUT
+  `/catalog/size-guides/{category_id}/{locale}`, không thêm POST tạo. `expected_version=0`
+  chỉ tạo khi chưa có bản ghi → 201/version 1; version hiện hành cập nhật → 200/version +1.
+  Thiếu version 400; gửi 0 khi đã tồn tại hoặc version lệch → 409 `VERSION_CONFLICT`.
+  Tạo độc lập song song (key khác nhau): đúng một 201, còn lại 409 `VERSION_CONFLICT`,
+  bảo vệ bởi UNIQUE `(category_id, locale)`. Locale chỉ vi/en (khác 400); category không
+  tồn tại chọn 404 `NOT_FOUND`/`CATEGORY_NOT_FOUND` trong hai lựa chọn chủ dự án cho phép,
+  theo khuôn catalog hiện có.
+  Ngoại lệ CAT-01a: version bắt đầu 1 và PUT bắt buộc `Idempotency-Key` vì có thể tạo.
+  Lookup idempotency trước kiểm version; cùng key/body chuẩn hóa replay data/status,
+  metadata mới, không thêm audit; cùng key khác body 409 `IDEMPOTENCY_KEY_REUSED`.
+  Race cùng key/body tuân theo replay, không coi là hai lệnh tạo độc lập.
+  03 §3/05 §5 đồng bộ contract/schema; REQ:CAT-06, TASK:CAT-01 phần 1b.
+  Chưa có implementation; tiếp tục thiết kế và duyệt spec/plan theo workflow.
+
+- CAT-01b admin detail GET — **chủ dự án, 2026-10-07**: bổ sung GET
+  `/catalog/collections/{id}` (collection + items thứ tự sort_order/product_id + version)
+  và GET `/catalog/size-guides/{category_id}/{locale}` (nội dung + version; chưa có
+  404 NOT_FOUND, locale ngoài vi/en 400). Quyền `catalog.write` kiểm tại service,
+  trả cả dữ liệu DRAFT/INACTIVE, giữ envelope/metadata; version phải khớp nội dung
+  và là expected_version cho PUT. Không thêm public read (TASK:CAT-02).
+  03 §3/05 §5 và `catalog.yaml` đồng bộ; examples 2xx/4xx và contract regression đã có.
+  Test HTTP 401/403/404 và GET → PUT/version conflict phải thực hiện khi triển khai
+  CAT-01b theo spec/plan được duyệt; chưa có endpoint thực thi.
+
+- CAT-01b collection mutation — **chủ dự án, 2026-10-07**: duyệt POST key tạo
+  DRAFT/version 0; PUT thay toàn bộ nội dung/items, expected_version, tăng version 1,
+  status DRAFT/ACTIVE/INACTIVE; không bắt Idempotency-Key cho PUT, theo CAT-01a.
+  Khóa collection/thay items/version/audit cùng transaction. Tối đa 1.000 items, cho phép
+  rỗng/product chưa publish, không trùng product_id. Product body không tồn tại chọn
+  400 VALIDATION_ERROR tại `items[i].product_id`, thay đề xuất 404; 404 chỉ resource path.
+  sort_order integer 0..2147483647, cho phép trùng; đọc sort_order/product_id.
+  start_at/end_at ISO-8601 có offset, lưu UTC; null là không giới hạn phía tương ứng,
+  có cả hai thì end > start. CAT-01b không nhận cover_url/lookbook (kể cả null trong
+  request), cover_url luôn null; cover/lookbook thuộc CAT-03 sau upload kiểm tra.
+  03 §3/05 §5/06 §3/catalog.yaml đồng bộ; REQ:CAT-03, TASK:CAT-01 phần 1b.
+  Chưa có service/controller/migration; spec/plan cần review trước implementation.
+
+- CAT-01b guideline HTML — **chủ dự án, 2026-10-07**: `guideline_html` không bắt buộc,
+  thiếu/null thành chuỗi rỗng; sanitize bằng jsoup như mô tả sản phẩm, tối đa 20.000
+  ký tự sau sanitize. Không áp maxLength 20.000 lên raw input trước sanitize; response
+  và dữ liệu lưu phải thỏa giới hạn sau sanitize. 03 §3/05 §5/catalog.yaml đồng bộ;
+  REQ:CAT-06, TASK:CAT-01 phần 1b. Contract regression đã có; test HTTP/sanitizer của
+  size guide thuộc implementation sau duyệt spec/plan, không xem contract test là runtime proof.
+
 Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác và lý do; ảnh hưởng PRD/API/schema/test/task; người quyết định; ngày; link bằng chứng. Chưa có chữ ký phê duyệt giả định thương mại.

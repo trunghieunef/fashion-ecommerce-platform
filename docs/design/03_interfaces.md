@@ -94,6 +94,12 @@ Contract thực thi của register/login/refresh/logout (`TASK:USR-01` phần 1a
 
 ### 2.2 Catalog, cart và tương tác Phase 2
 
+Collection public list/detail thuộc `TASK:CAT-02`, không triển khai trong CAT-01b.
+Theo quyết định chủ dự án ngày 2026-10-07, chỉ trả collection `ACTIVE`, đang trong khoảng
+hiệu lực `[start_at, end_at)` và có ít nhất một product `ACTIVE`. Danh sách product của
+collection chỉ gồm product `ACTIVE`; điều kiện được kiểm ở thời điểm đọc, kể cả khi product
+đã bị unpublish sau khi collection được kích hoạt. Không lọc collection public chỉ bằng status.
+
 | Method | Path | Auth / phase | Input → output |
 |---|---|---|---|
 | GET | /catalog/products | Public / 1 | `TASK:PLT-01` sample chỉ nhận `limit` (mặc định 20, tối đa 100), trả card ACTIVE `id,slug,name_vi,name_en,next_cursor`; filter/sort/cursor đầy đủ thuộc `CAT-02` |
@@ -101,8 +107,8 @@ Contract thực thi của register/login/refresh/logout (`TASK:USR-01` phần 1a
 | GET | /catalog/search | Public / 1 | q + filters/cursor; bounded query length |
 | GET | /catalog/categories | Public / 1 | Cây tối đa 2 cấp |
 | GET | /catalog/brands | Public / 1 | Active brands |
-| GET | /catalog/collections | Public / 1 | Active collections |
-| GET | /catalog/collections/{slug} | Public / 1 | Lookbook + sản phẩm phân trang |
+| GET | /catalog/collections | Public / 1 | `TASK:CAT-02`: ACTIVE, trong [start_at, end_at), có ≥ 1 product ACTIVE |
+| GET | /catalog/collections/{slug} | Public / 1 | `TASK:CAT-02`: cùng điều kiện list; lookbook + product ACTIVE phân trang |
 | GET | /catalog/size-guides/{category_id} | Public / 1 | Locale và hướng dẫn |
 | POST | /carts | Public/member / 1 | Guest cấp cookie; member trả ACTIVE cart |
 | GET | /carts/mine | Member / 1 | Active cart và version |
@@ -185,7 +191,7 @@ HTTP 202 kèm Location=status_url và Retry-After. HTTP 201 khi đã WAITING_PAY
 
 Tất cả có Bearer + permission, auth_version hiện hành; mutation có reason/key/version khi áp dụng. Paths CRUD viết {id} là tài nguyên riêng, không có endpoint “...” ngầm.
 
-CAT-01a đã triển khai và kiểm tra local trên `dev`, chờ review: GET/POST categories/brands,
+CAT-01a đã triển khai, kiểm tra local/CI và merge PR #14 vào `main`: GET/POST categories/brands,
 PUT theo id; GET/POST products, GET/PUT theo id; POST variant, PUT variant; POST publish/unpublish.
 Contract thực thi tại [`catalog.yaml`](../../contracts/openapi/catalog.yaml), Gateway route
 `/admin/api/v1/catalog/**` tới catalog-service. Product POST tạo DRAFT; PUT chỉ sửa nội dung,
@@ -211,6 +217,70 @@ Chỉ lỗi còn lại mới dùng fallback 500. Binding/content negotiation có
 trong method; không đổi thứ tự xác thực hoặc scope advice sang route public/unmapped.
 Chưa nghiệm thu CAT-01; collection/size-guide, CATALOG_CHANGED và relay nằm ngoài phần 1a.
 
+CAT-01b collection admin (quyết định chủ dự án ngày 2026-10-07): PUT collection sang
+`ACTIVE` không yêu cầu có product `ACTIVE`, cho phép collection rỗng hoặc gồm product chưa
+publish để chuẩn bị lịch launch bằng `start_at` tương lai. Điều kiện hiển thị được kiểm ở
+public read trong CAT-02 theo §2.2; không dùng điều kiện lúc chuyển trạng thái thay thế kiểm lúc đọc.
+
+Collection mutation (chủ dự án, 2026-10-07): POST cần `Idempotency-Key`, tạo DRAFT,
+version 0 và trả 201. PUT chỉ cần `expected_version`, không cần `Idempotency-Key`
+như PUT CAT-01a; thay toàn bộ nội dung và danh sách items, tăng version 1, trả 200.
+Thiếu version trả 400, stale trả 409 `VERSION_CONFLICT`; PUT cho phép status
+DRAFT/ACTIVE/INACTIVE. Nội dung gồm tên VI/EN, slug, start_at/end_at và items.
+Mỗi item là `{product_id, sort_order}`; tối đa 1.000 item, cho phép rỗng/product chưa
+publish; không trùng product_id. `sort_order` là integer 0..2147483647, cho phép trùng;
+thứ tự đọc `(sort_order, product_id)`. Product không tồn tại trong items trả 400
+`VALIDATION_ERROR`, field `items[i].product_id` theo vị trí item trong request;
+404 chỉ cho resource trên path (collection id), không dùng cho tham chiếu trong body.
+Collection row lock, thay items, tăng version và audit cùng transaction.
+
+`start_at`/`end_at` là ISO-8601 có offset, lưu UTC; null nghĩa không giới hạn phía
+tương ứng, có cả hai thì `end_at > start_at`. CAT-01b không nhận `cover_url`,
+`lookbook` hoặc `lookbook_images` trong request, kể cả null; response `cover_url`
+luôn null. Cover/lookbook thuộc CAT-03, chỉ attach sau upload được kiểm tra;
+không mở đường nhận URL chưa được kiểm tra trong CAT-01b. Contract tại `catalog.yaml`
+đã có POST/PUT/examples, chưa có endpoint thực thi.
+
+CAT-01b size guide (quyết định chủ dự án ngày 2026-10-07): `table_json` là object có đúng
+hai key `columns` và `rows`, không nhận field lạ. `columns` có 1–20 tiêu đề string,
+mỗi tiêu đề 1–100 ký tự sau `strip`, không trùng nhau. `rows` có 1–100 hàng; mỗi hàng
+là array có đúng số ô bằng số cột; mỗi ô là string 0–100 ký tự sau `strip`.
+Toàn bộ `table_json` sau serialize không vượt 32 KB. Tiêu đề và ô là plain text,
+không HTML; FE phải escape khi render. `guideline_html` không bắt buộc: thiếu/null thành
+chuỗi rỗng, sanitize bằng jsoup theo cùng quy tắc mô tả sản phẩm, tối đa 20.000 ký tự
+sau sanitize (chủ dự án duyệt ngày 2026-10-07). Quy ước nội dung: cột đầu là nhãn size khớp `variant.size`,
+nhưng không ép quy ước này bằng validation/FK. Shape JSON tại 05 §5.
+
+PUT `/catalog/size-guides/{category_id}/{locale}` giữ route hiện có, cần `catalog.write`,
+`Idempotency-Key` và `expected_version`. Đây là ngoại lệ so với CAT-01a: PUT có thể tạo,
+nên cần key và bản ghi bắt đầu ở version 1. `expected_version=0` chỉ tạo khi chưa có
+bản ghi cho category/locale: trả 201, `version=1`. Cập nhật dùng version hiện hành:
+trả 200, `version` tăng 1. Thiếu version trả 400; gửi 0 khi đã tồn tại hoặc version
+lệch trả 409 `VERSION_CONFLICT`. Hai lệnh tạo song song với key khác nhau: đúng một
+201, lệnh còn lại 409 `VERSION_CONFLICT`, dựa trên UNIQUE `(category_id, locale)`.
+`locale` chỉ nhận `vi`/`en`, giá trị khác trả 400. Category không tồn tại trả 404,
+code `NOT_FOUND`, message `CATEGORY_NOT_FOUND` theo khuôn catalog hiện có.
+
+Sau auth và chuẩn hóa request, lookup idempotency trước kiểm version. Cùng key/body
+chuẩn hóa replay data/status đã lưu (kể cả 201), metadata mới, không thêm audit;
+cùng key khác body trả 409 `CONFLICT`/`IDEMPOTENCY_KEY_REUSED`. Hash phải phân biệt
+category_id/locale, expected_version và nội dung đã chuẩn hóa. Race cùng key/body
+là retry của một lệnh, tuân theo replay; quy tắc một 201/còn lại 409 áp cho các lệnh
+tạo độc lập. Mutation, audit và kết quả idempotency phải commit cùng transaction.
+Đây là contract đã chốt cho thiết kế CAT-01b, chưa có endpoint thực thi.
+
+CAT-01b admin read (chủ dự án, 2026-10-07): bổ sung GET `/catalog/collections/{id}`
+trả collection + `items` gồm `product_id`/`sort_order`, thứ tự `(sort_order, product_id)`,
+và `version` của collection. GET `/catalog/size-guides/{category_id}/{locale}` trả
+nội dung + version; chưa có trả 404 `NOT_FOUND`; locale ngoài vi/en trả 400.
+Cả hai kiểm `catalog.write` tại service như GET admin CAT-01a, trả cả dữ liệu
+DRAFT/INACTIVE, giữ envelope/metadata và X-Correlation-Id hiện có. Nội dung và version
+phải thuộc cùng snapshot; version GET là `expected_version` mà PUT dùng để cập nhật.
+Contract/examples 2xx/4xx tại `catalog.yaml` đã có, endpoint chưa triển khai. Acceptance
+CAT-01b phải có test HTTP 401/403/404, locale sai 400, thứ tự items, đọc DRAFT/INACTIVE,
+GET → PUT dùng version nhận được thành công và version cũ sau cập nhật trả 409.
+Không bổ sung public read; phần đó giữ tại TASK:CAT-02.
+
 | Methods / path | Quyền | Đầu ra / phase |
 |---|---|---|
 | GET /users; PUT /users/{id}/roles; POST /users/{id}/lock | SUPER_ADMIN (`user.manage`) | Danh sách, phân quyền/khóa audit / 1. Contract: [`user.yaml`](../../contracts/openapi/user.yaml) (`TASK:USR-02` phần 2b); đổi role và khóa cần `reason` + `expected_version` (= `version` của user), khóa cần `Idempotency-Key`; admin không tự đổi/khóa chính mình (403) |
@@ -219,8 +289,9 @@ Chưa nghiệm thu CAT-01; collection/size-guide, CATALOG_CHANGED và relay nằ
 | POST /catalog/products/{id}/variants; PUT /catalog/variants/{id} | OPS | SKU immutable, price/weight/version / 1 |
 | GET,POST /catalog/categories; PUT /catalog/categories/{id} | OPS | Hierarchy/sort/status / 1 |
 | GET,POST /catalog/brands; PUT /catalog/brands/{id} | OPS | Brand/status / 1 |
-| GET,POST /catalog/collections; PUT /catalog/collections/{id} | OPS | Collection, items, lookbook / 1 |
-| PUT /catalog/size-guides/{category_id}/{locale} | OPS | Content validation / 1 |
+| GET,POST /catalog/collections; GET,PUT /catalog/collections/{id} | OPS (`catalog.write`) | CAT-01b: POST key → DRAFT/version 0; PUT chỉ expected_version, thay toàn bộ items; GET gồm items thứ tự (sort_order, product_id) + version, kể cả DRAFT/INACTIVE; cover_url luôn null, không nhận media/lookbook / 1 |
+| GET /catalog/size-guides/{category_id}/{locale} | OPS (`catalog.write`) | CAT-01b: nội dung + version; chưa có 404 NOT_FOUND, locale ngoài vi/en 400 / 1 |
+| PUT /catalog/size-guides/{category_id}/{locale} | OPS (`catalog.write`) | CAT-01b: key + expected_version; 0 tạo → 201/version 1, cập nhật → 200/version +1; replay trước version guard / 1 |
 | POST /catalog/images/uploads; PUT /catalog/products/{id}/images | OPS | Scoped upload rồi attach/sort/remove / 1 |
 | GET /orders; GET /orders/{order_no} | OPS, FINANCE (PII tối thiểu) | Filter ngày/status/search, page / 1 |
 | POST /orders/{order_no}/confirm-cod | OPS | CONFIRMED → durable commit, PACKING khi xong / 1 |
@@ -355,4 +426,4 @@ Method/header/carrier mapping thật phải được xác minh trong sandbox. N�
 
 ## 7. Điều kiện contract-ready
 
-Mỗi endpoint/event khi nhận task phải có: operationId/schema ID, request/response examples hợp lệ, required/nullable/range/enum, permission/ownership, lỗi nghiệp vụ, idempotency/version behavior, producer/consumer và test duplicate/out-of-order nếu liên quan. 03 là danh mục B1; chưa tuyên bố là OpenAPI hoàn chỉnh đã validate. Contract thực thi hiện có: [`catalog.yaml`](../../contracts/openapi/catalog.yaml) gồm public `GET /api/v1/catalog/products` của S1 (200/400) và 14 operation admin CAT-01a với bearer/key/version/envelope theo §3, kiểm bằng `scripts/validate-contracts.sh`; smoke kiểm envelope và shape từng item của response live theo `ProductSummary`; chưa có validator tự sinh từ OpenAPI. Tên đường dẫn thay đổi phải sửa FE/mock/tests cùng PR.
+Mỗi endpoint/event khi nhận task phải có: operationId/schema ID, request/response examples hợp lệ, required/nullable/range/enum, permission/ownership, lỗi nghiệp vụ, idempotency/version behavior, producer/consumer và test duplicate/out-of-order nếu liên quan. 03 là danh mục B1; chưa tuyên bố là OpenAPI hoàn chỉnh đã validate. [`catalog.yaml`](../../contracts/openapi/catalog.yaml) gồm public `GET /api/v1/catalog/products` của S1 (200/400), 14 operation admin CAT-01a đã triển khai và 5 operation CAT-01b mới chỉ có contract thiết kế (POST/PUT collection, GET detail collection, GET/PUT size guide). Bearer/key/version/envelope theo §3, kiểm bằng `scripts/validate-contracts.sh`; contract PASS không chứng minh 5 endpoint mới đã chạy. Smoke hiện kiểm response live CAT-01a và shape `ProductSummary`; chưa có validator tự sinh từ OpenAPI. Tên đường dẫn thay đổi phải sửa FE/mock/tests cùng PR.

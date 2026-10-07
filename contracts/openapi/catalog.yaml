@@ -4,6 +4,7 @@ info:
   version: 0.1.0
   description: >
     TASK:PLT-02 public sample and TASK:CAT-01a admin (catalog.write; ADR-21 ES256, revocation TTL 15 minutes).
+    TASK:CAT-01b admin collection/size-guide mutations and detail GET contracts are approved for design; endpoints are not implemented yet.
     Full catalog filters/sort/cursor belong to TASK:CAT-02 (docs/design/03_interfaces.md §2.2).
 servers:
   - url: http://localhost:8080
@@ -412,6 +413,183 @@ paths:
             examples:
               request:
                 value: {expected_version: 2, reason: Synthetic smoke}
+  /admin/api/v1/catalog/collections:
+    post:
+      operationId: createCollection
+      summary: Create a DRAFT collection at version 0
+      description: >
+        Approved CAT-01b contract; implementation pending. Requires catalog.write.
+        Idempotency-Key is mandatory. At most 1000 items; empty collections and unpublished
+        products are allowed. Unknown item product_id returns 400 VALIDATION_ERROR with
+        field items[i].product_id. Duplicate product_id returns 400. sort_order may tie.
+        Timestamps require an ISO-8601 offset and are stored in UTC. Null bounds are unbounded;
+        when both exist, end_at must be greater than start_at. cover_url and lookbook fields
+        are not accepted; cover_url remains null and validated media belongs to CAT-03.
+      security:
+      - bearerAuth: []
+      parameters:
+      - {$ref: ./common.yaml#/components/parameters/IdempotencyKey}
+      responses:
+        '201': {$ref: '#/components/responses/CreatedCollectionSuccess'}
+        '400': {$ref: '#/components/responses/CollectionValidationError'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '409': {$ref: '#/components/responses/Error409'}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+        '415': {$ref: '#/components/responses/HttpRequestError'}
+        '500': {$ref: '#/components/responses/Error500'}
+        '503': {$ref: '#/components/responses/Error503'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CollectionCreate'}
+            examples:
+              request:
+                value:
+                  name_vi: Bộ sưu tập mẫu
+                  name_en: Sample collection
+                  slug: sample-collection
+                  start_at: '2026-10-08T09:00:00+07:00'
+                  end_at: null
+                  items: [{product_id: 33333333-3333-4333-8333-333333333333, sort_order: 0}]
+  /admin/api/v1/catalog/collections/{id}:
+    get:
+      operationId: getAdminCollection
+      summary: Read an admin collection with ordered items and its edit version
+      description: >
+        Approved CAT-01b contract; implementation pending. Requires catalog.write at the service.
+        Includes DRAFT/INACTIVE data without public visibility filtering. Items are ordered by
+        sort_order, then product_id. The collection version is the expected_version for PUT.
+        cover_url is always null; lookbook is deferred to CAT-03. Public collection reads belong to CAT-02.
+      security:
+      - bearerAuth: []
+      parameters:
+      - {$ref: '#/components/parameters/Id'}
+      responses:
+        '200': {$ref: '#/components/responses/CollectionSuccess'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '404': {$ref: '#/components/responses/CollectionNotFound'}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+        '500': {$ref: '#/components/responses/Error500'}
+        '503': {$ref: '#/components/responses/Error503'}
+    put:
+      operationId: updateCollection
+      summary: Replace collection content and items using its expected version
+      description: >
+        Approved CAT-01b contract; implementation pending. Requires catalog.write and
+        expected_version, without requiring Idempotency-Key, as with CAT-01a PUT.
+        Replaces the content and entire item list; increments version by one. Status can
+        be DRAFT, ACTIVE or INACTIVE. ACTIVE does not require an ACTIVE product.
+        Collection row lock, replacement, version increment and audit share one transaction.
+        Unknown item product_id returns 400 VALIDATION_ERROR with field items[i].product_id;
+        only a missing path resource returns 404. At most 1000 items; duplicates are invalid,
+        empty lists and unpublished products are allowed. sort_order may tie, read order is
+        sort_order then product_id. Timestamps require an ISO-8601 offset, stored in UTC;
+        null bounds are unbounded and end_at must exceed start_at when both exist.
+        cover_url and lookbook fields are rejected; cover_url remains null. Media is CAT-03.
+      security:
+      - bearerAuth: []
+      parameters:
+      - {$ref: '#/components/parameters/Id'}
+      responses:
+        '200': {$ref: '#/components/responses/CollectionSuccess'}
+        '400': {$ref: '#/components/responses/CollectionValidationError'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '404': {$ref: '#/components/responses/CollectionNotFound'}
+        '409': {$ref: '#/components/responses/Error409'}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+        '415': {$ref: '#/components/responses/HttpRequestError'}
+        '500': {$ref: '#/components/responses/Error500'}
+        '503': {$ref: '#/components/responses/Error503'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CollectionUpdate'}
+            examples:
+              request:
+                value:
+                  name_vi: Bộ sưu tập mẫu
+                  name_en: Sample collection
+                  slug: sample-collection
+                  start_at: '2026-10-08T09:00:00+07:00'
+                  end_at: null
+                  status: ACTIVE
+                  expected_version: 1
+                  items: []
+  /admin/api/v1/catalog/size-guides/{category_id}/{locale}:
+    get:
+      operationId: getAdminSizeGuide
+      summary: Read an admin size guide and its edit version
+      description: >
+        Approved CAT-01b contract; implementation pending. Requires catalog.write at the service.
+        Includes guides for DRAFT/INACTIVE catalog data. Missing guide returns 404 NOT_FOUND;
+        locale outside vi/en returns 400. The returned version is the expected_version for PUT.
+        Public size guide reads belong to CAT-02.
+      security:
+      - bearerAuth: []
+      parameters:
+      - {$ref: '#/components/parameters/CategoryId'}
+      - {$ref: '#/components/parameters/GuideLocale'}
+      responses:
+        '200': {$ref: '#/components/responses/SizeGuideSuccess'}
+        '400': {$ref: '#/components/responses/InvalidGuideLocale'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '404': {$ref: '#/components/responses/SizeGuideNotFound'}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+        '500': {$ref: '#/components/responses/Error500'}
+        '503': {$ref: '#/components/responses/Error503'}
+    put:
+      operationId: putSizeGuide
+      summary: Create or replace a size guide with idempotency and expected version
+      description: >
+        Approved CAT-01b contract; implementation pending. Requires catalog.write.
+        Unlike CAT-01a PUT, Idempotency-Key is mandatory because this PUT can create.
+        expected_version=0 creates an absent guide with 201 and version=1; updating uses
+        its current version, returns 200 and increments version. Missing version returns
+        400; an existing guide with expected_version=0 or any stale version returns 409
+        VERSION_CONFLICT. Independent concurrent creates use UNIQUE(category_id, locale),
+        yielding one 201 and other requests 409 VERSION_CONFLICT. Same-key/body retries
+        replay stored data/status before the version check, with new metadata and no audit;
+        changed body with the same key returns 409 IDEMPOTENCY_KEY_REUSED.
+        locale is exactly vi/en; invalid locale returns 400, missing category returns 404.
+        guideline_html is optional: omitted/null becomes empty, sanitized with the product
+        jsoup policy, at most 20000 characters after sanitizing. table_json is required;
+        strip headers/cells, enforce equal row width, distinct headers and at most 32 KB
+        serialized JSON. Mutation, audit and idempotency result share one transaction.
+      security:
+      - bearerAuth: []
+      parameters:
+      - {$ref: '#/components/parameters/CategoryId'}
+      - {$ref: '#/components/parameters/GuideLocale'}
+      - {$ref: ./common.yaml#/components/parameters/IdempotencyKey}
+      responses:
+        '201': {$ref: '#/components/responses/CreatedSizeGuideSuccess'}
+        '200': {$ref: '#/components/responses/SizeGuideSuccess'}
+        '400': {$ref: '#/components/responses/InvalidGuideLocale'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '404': {$ref: '#/components/responses/SizeGuideCategoryNotFound'}
+        '409': {$ref: '#/components/responses/SizeGuideConflict'}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+        '415': {$ref: '#/components/responses/HttpRequestError'}
+        '500': {$ref: '#/components/responses/Error500'}
+        '503': {$ref: '#/components/responses/Error503'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SizeGuidePut'}
+            examples:
+              create:
+                value: {expected_version: 0, table_json: {columns: [Size, Ngực (cm)], rows: [[M, '96–100']]}}
+              update:
+                value: {expected_version: 1, guideline_html: '<p>Đo vòng ngực để chọn size.</p>', table_json: {columns: [Size, Ngực (cm)], rows: [[M, '96–100']]}}
 components:
   schemas:
     ProductSummary:
@@ -748,6 +926,142 @@ components:
         code: {const: OK, type: string}
         data: {$ref: '#/components/schemas/AdminProductPage'}
         metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
+    AdminCollectionItem:
+      type: object
+      additionalProperties: false
+      required: [product_id, sort_order]
+      properties:
+        product_id: {type: string, format: uuid}
+        sort_order: {type: integer, format: int32, minimum: 0, maximum: 2147483647}
+    AdminCollection:
+      type: object
+      additionalProperties: false
+      required: [id, name_vi, name_en, slug, cover_url, start_at, end_at, status, version, items]
+      properties:
+        id: {type: string, format: uuid}
+        name_vi: {type: string}
+        name_en: {type: string}
+        slug: {type: string}
+        cover_url: {type: 'null', description: Always null in CAT-01b; safe media attachment belongs to CAT-03.}
+        start_at: {type: [string, 'null'], format: date-time}
+        end_at: {type: [string, 'null'], format: date-time}
+        status: {type: string, enum: [DRAFT, ACTIVE, INACTIVE]}
+        version: {type: integer, format: int64, minimum: 0, maximum: 9223372036854775807}
+        items:
+          type: array
+          maxItems: 1000
+          description: All associated products, ordered by sort_order then product_id, including unpublished products.
+          items: {$ref: '#/components/schemas/AdminCollectionItem'}
+    CollectionContent:
+      type: object
+      required: [name_vi, name_en, slug, items]
+      properties:
+        name_vi: {type: string, minLength: 1}
+        name_en: {type: string, minLength: 1}
+        slug: {type: string, minLength: 1}
+        start_at: {type: [string, 'null'], format: date-time, description: ISO-8601 timestamp with offset; stored in UTC. Null is an unbounded start.}
+        end_at: {type: [string, 'null'], format: date-time, description: ISO-8601 timestamp with offset; stored in UTC. Null is an unbounded end; must exceed start_at when both exist.}
+        items:
+          type: array
+          maxItems: 1000
+          description: Entire replacement list. Unique product_id enforced by the service; unknown IDs return 400 at items[i].product_id. sort_order may tie.
+          items: {$ref: '#/components/schemas/AdminCollectionItem'}
+    CollectionCreate:
+      allOf:
+      - {$ref: '#/components/schemas/CollectionContent'}
+      unevaluatedProperties: false
+      description: Creates DRAFT/version 0. cover_url and lookbook are not accepted.
+    CollectionUpdate:
+      allOf:
+      - {$ref: ./common.yaml#/components/schemas/ExpectedVersion}
+      - {$ref: '#/components/schemas/CollectionContent'}
+      - type: object
+        required: [status]
+        properties:
+          status: {type: string, enum: [DRAFT, ACTIVE, INACTIVE]}
+      unevaluatedProperties: false
+      description: Full replacement using expected_version only; no Idempotency-Key required. cover_url and lookbook are not accepted.
+    SizeGuideTable:
+      type: object
+      additionalProperties: false
+      required: [columns, rows]
+      description: >
+        Plain text only; FE must escape cells and headers. Headers/cells are stripped before storage.
+        Each row must have exactly the column count; serialized JSON must not exceed 32 KB.
+        First column matching variant.size is a content convention, not an enforced constraint.
+      properties:
+        columns:
+          type: array
+          minItems: 1
+          maxItems: 20
+          uniqueItems: true
+          items: {type: string, minLength: 1, maxLength: 100}
+        rows:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            type: array
+            minItems: 1
+            maxItems: 20
+            items: {type: string, minLength: 0, maxLength: 100}
+    AdminSizeGuide:
+      type: object
+      additionalProperties: false
+      required: [id, category_id, locale, guideline_html, table_json, version]
+      properties:
+        id: {type: string, format: uuid}
+        category_id: {type: string, format: uuid}
+        locale: {type: string, enum: [vi, en]}
+        guideline_html: {type: string, maxLength: 20000, description: Sanitized with the product jsoup policy; omitted/null input is stored as empty string.}
+        table_json: {$ref: '#/components/schemas/SizeGuideTable'}
+        version: {type: integer, format: int64, minimum: 1, maximum: 9223372036854775807}
+    SizeGuidePut:
+      allOf:
+      - {$ref: ./common.yaml#/components/schemas/ExpectedVersion}
+      - type: object
+        required: [table_json]
+        properties:
+          guideline_html:
+            type: [string, 'null']
+            description: Optional; omitted/null becomes empty string. Sanitize with the product jsoup policy, then enforce at most 20000 characters.
+          table_json:
+            description: Require columns/rows only. Length limits apply after strip; row width, plain-text handling and serialized 32 KB limit are enforced by the service.
+            type: object
+            additionalProperties: false
+            required: [columns, rows]
+            properties:
+              columns:
+                type: array
+                minItems: 1
+                maxItems: 20
+                items: {type: string, description: Strip then validate 1..100 characters and distinct headers.}
+              rows:
+                type: array
+                minItems: 1
+                maxItems: 100
+                items:
+                  type: array
+                  minItems: 1
+                  maxItems: 20
+                  items: {type: string, description: Strip then validate 0..100 characters.}
+      unevaluatedProperties: false
+    CollectionResponse:
+      type: object
+      additionalProperties: false
+      required: [code, data, metadata]
+      properties:
+        code: {type: string, const: OK}
+        data: {$ref: '#/components/schemas/AdminCollection'}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
+    SizeGuideResponse:
+      type: object
+      additionalProperties: false
+      required: [code, data, metadata]
+      properties:
+        code: {type: string, const: OK}
+        data: {$ref: '#/components/schemas/AdminSizeGuide'}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
     AdminInternalError:
       allOf:
         - {$ref: ./common.yaml#/components/schemas/ApiError}
@@ -764,7 +1078,196 @@ components:
       required: true
       schema: {type: string, format: uuid}
       description: Resource UUID
+    CategoryId:
+      in: path
+      name: category_id
+      required: true
+      schema: {type: string, format: uuid}
+      description: Category UUID
+    GuideLocale:
+      in: path
+      name: locale
+      required: true
+      schema: {type: string, enum: [vi, en]}
+      description: Exact supported locale; other values return 400
   responses:
+    CreatedCollectionSuccess:
+      description: New DRAFT collection with version 0; idempotent retries retain data/status
+      headers:
+        X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/CollectionResponse'}
+          examples:
+            success:
+              value:
+                code: OK
+                data:
+                  id: 55555555-5555-4555-8555-555555555555
+                  name_vi: Bộ sưu tập mẫu
+                  name_en: Sample collection
+                  slug: sample-collection
+                  cover_url: null
+                  start_at: '2026-10-08T02:00:00Z'
+                  end_at: null
+                  status: DRAFT
+                  version: 0
+                  items: [{product_id: 33333333-3333-4333-8333-333333333333, sort_order: 0}]
+                metadata: {request_id: 11111111-1111-4111-8111-111111111111, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+    CollectionValidationError:
+      description: Invalid content, duplicate or missing item products, media fields, time range, or missing key/version
+      headers:
+        X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+          examples:
+            missingProduct:
+              value:
+                code: VALIDATION_ERROR
+                message: INVALID_FIELDS
+                errors: [{field: 'items[0].product_id', message: product does not exist}]
+                metadata: {request_id: 11111111-1111-4111-8111-111111111111, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+    CollectionSuccess:
+      description: Admin collection including unpublished content and version for PUT
+      headers:
+        X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/CollectionResponse'}
+          examples:
+            success:
+              value:
+                code: OK
+                data:
+                  id: 55555555-5555-4555-8555-555555555555
+                  name_vi: Bộ sưu tập mẫu
+                  name_en: Sample collection
+                  slug: sample-collection
+                  cover_url: null
+                  start_at: null
+                  end_at: null
+                  status: DRAFT
+                  version: 2
+                  items:
+                  - {product_id: 33333333-3333-4333-8333-333333333333, sort_order: 0}
+                  - {product_id: 44444444-4444-4444-8444-444444444444, sort_order: 0}
+                  - {product_id: 22222222-2222-4222-8222-222222222222, sort_order: 1}
+                metadata: {request_id: 11111111-1111-4111-8111-111111111111, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+    CreatedSizeGuideSuccess:
+      description: New size guide at version 1; optional guideline_html stored as empty string
+      headers:
+        X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/SizeGuideResponse'}
+          examples:
+            success:
+              value:
+                code: OK
+                data:
+                  id: 66666666-6666-4666-8666-666666666666
+                  category_id: 11111111-1111-4111-8111-111111111111
+                  locale: vi
+                  guideline_html: ''
+                  table_json: {columns: [Size, Ngực (cm)], rows: [[M, '96–100']]}
+                  version: 1
+                metadata: {request_id: 11111111-1111-4111-8111-111111111111, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+    SizeGuideSuccess:
+      description: Admin size guide including version for PUT
+      headers:
+        X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/SizeGuideResponse'}
+          examples:
+            success:
+              value:
+                code: OK
+                data:
+                  id: 66666666-6666-4666-8666-666666666666
+                  category_id: 11111111-1111-4111-8111-111111111111
+                  locale: vi
+                  guideline_html: <p>Đo vòng ngực để chọn size.</p>
+                  table_json: {columns: [Size, Ngực (cm)], rows: [[M, '96–100']]}
+                  version: 2
+                metadata: {request_id: 11111111-1111-4111-8111-111111111111, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+    SizeGuideCategoryNotFound:
+      description: Category on the PUT path does not exist
+      headers:
+        X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+          examples:
+            error:
+              value:
+                code: NOT_FOUND
+                message: CATEGORY_NOT_FOUND
+                errors: []
+                metadata: {request_id: 11111111-1111-4111-8111-111111111111, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+    SizeGuideConflict:
+      description: Existing create target or stale version; or changed body for an idempotency key
+      headers:
+        X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+          examples:
+            stale:
+              value:
+                code: VERSION_CONFLICT
+                message: STALE_VERSION
+                errors: []
+                metadata: {request_id: 11111111-1111-4111-8111-111111111111, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+            changedBody:
+              value:
+                code: CONFLICT
+                message: IDEMPOTENCY_KEY_REUSED
+                errors: []
+                metadata: {request_id: 11111111-1111-4111-8111-111111111111, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+    CollectionNotFound:
+      description: Collection does not exist
+      headers:
+        X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+          examples:
+            error:
+              value:
+                code: NOT_FOUND
+                message: COLLECTION_NOT_FOUND
+                errors: []
+                metadata: {request_id: 11111111-1111-4111-8111-111111111111, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+    SizeGuideNotFound:
+      description: No size guide exists for the category and locale
+      headers:
+        X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+          examples:
+            error:
+              value:
+                code: NOT_FOUND
+                message: SIZE_GUIDE_NOT_FOUND
+                errors: []
+                metadata: {request_id: 11111111-1111-4111-8111-111111111111, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+    InvalidGuideLocale:
+      description: Invalid locale/category UUID, guide content, missing key/version or malformed JSON
+      headers:
+        X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+          examples:
+            invalidLocale:
+              value:
+                code: VALIDATION_ERROR
+                message: INVALID_FIELDS
+                errors: [{field: locale, message: must be vi or en}]
+                metadata: {request_id: 11111111-1111-4111-8111-111111111111, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
     CategorySuccess:
       description: Catalog admin result
       headers:

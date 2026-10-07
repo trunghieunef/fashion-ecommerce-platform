@@ -13,8 +13,9 @@ Bộ kế hoạch này chuyển baseline B1 thành các gói triển khai tuần
 | — | [Handoff Phase 1A — 2026-10-06](2026-10-06-phase-1a-handoff.md) | Đã merge tới PR #11 (USR-01 1a + 1b-i, USR-02 2a + 2b); đã được thay bởi handoff USR-01b-ii bên dưới | Không thay gate |
 | — | [Handoff USR-01b-ii — 2026-10-06](2026-10-06-usr-01b-ii-handoff.md) | Auth rate limit/IP trust, evidence local, PR chờ review và bước tiếp CAT-01 | Không thay gate |
 | — | [Handoff phiên làm việc — 2026-10-07](2026-10-07-session-handoff.md) | Lịch sử đầu phiên sau PR #13; đã được thay bởi handoff CAT-01a bên dưới | Không thay gate |
-| — | [Handoff CAT-01a — 2026-10-07](2026-10-07-cat-01a-handoff.md) | **Mới nhất.** Catalog admin kiểm tra local trên dev, commits/evidence và giới hạn; chờ review trước push/PR | Không thay gate |
+| — | [Handoff CAT-01a — 2026-10-07](2026-10-07-cat-01a-handoff.md) | **Mới nhất.** Catalog admin đã merge PR #14; commits/evidence và giới hạn; tiếp theo spec/plan CAT-01b | Không thay gate |
 | — | [CAT-01a — catalog admin](2026-10-07-cat-01a-catalog-admin.md) | Plan con của Phase 1A theo [spec CAT-01a](../specs/2026-10-07-cat-01a-design.md): category/brand/product/variant admin, publish, `VARIANT_CREATED` outbox | Không thay gate |
+| — | [Spec CAT-01b — collection/size guide admin](../specs/2026-10-07-cat-01b-design.md) | Dự thảo chờ chủ dự án review; chưa có implementation plan hoặc endpoint mới; media thuộc CAT-03, public read CAT-02 | Không thay gate |
 | 2 | [Phase 0 — platform và AWS staging](2026-09-19-phase-0-platform-staging.md) | Contract core, durable primitives, CI ứng dụng, AWS staging một service mẫu, observability và rollback | G0 |
 | 3 | [Phase 1A — commerce core](2026-09-19-phase-1a-commerce-core.md) | Identity, catalog, inventory, cart và UI cơ bản chạy bằng contract thật | Integration checkpoint |
 | 4 | [Phase 1B — COD vertical slice](2026-09-19-phase-1b-cod-vertical-slice.md) | Guest/member checkout COD, SELF fulfillment, notification, admin và settlement | G1 |

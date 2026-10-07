@@ -40,7 +40,9 @@ chủ dự án ngày 2026-10-04, với CI PASS trên patch `b62f963`. Đây khô
 Contract core đã review; [platform-durability](services/platform-durability/README.md) được
 user-service dùng cho outbox/idempotency, nhưng chưa có relay Kafka/notification-service.
 Chi tiết phần auth đang review ở [User service](services/user-service/README.md).
-Tiến độ mới nhất và bước tiếp ở [handoff USR-01b-ii](docs/superpowers/plans/2026-10-06-usr-01b-ii-handoff.md).
+Tiến độ mới nhất và bước tiếp ở [handoff CAT-01a](docs/superpowers/plans/2026-10-07-cat-01a-handoff.md):
+PR #14 đã merge; [spec CAT-01b](docs/superpowers/specs/2026-10-07-cat-01b-design.md)
+collection/items và size guide admin đã viết, chờ review trước implementation plan.
 
 Chuyển sang máy mới: dùng [handoff S1-local](docs/superpowers/plans/2026-10-02-s1-local-machine-handoff.md)
 để tiếp tục đúng checklist và ghi evidence trên commit được pull từ `origin/dev`.
