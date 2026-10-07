@@ -138,7 +138,14 @@ size/dimensions/checksum/type phải lấy từ object approved thực tế (k�
 đọc quarantine; attach/sort/remove dùng resource version + audit cùng tx và
 không S3 I/O trong row lock. Columns/constraints và asset reference cụ thể ở
 [spec bản nháp](../superpowers/specs/2026-10-07-cat-03-media-design.md) còn cần review;
-V005 là migration tiếp theo, không sửa V001–V004 hoặc coi bảng mục tiêu là đã deploy.
+Không sửa V001–V004.
+
+CAT-03 Task 1: `V005__media.sql` đã viết và kiểm bằng Testcontainers (upgrade từ V004 có dữ liệu):
+`media_uploads`, `media_assets`, `product_images`, `lookbook_images`, `media_job_leases` (seed một dòng
+lease cho GC runner) và `collections.cover_asset_id`. FK ghép `(asset_id, product_id)` →
+`media_uploads(id, product_id)` (tương tự collection) ép asset chỉ gắn vào đúng target; UNIQUE `asset_id`
+cho phép gắn một lần; `(id, cover_asset_id)` → `lookbook_images(collection_id, asset_id)` DEFERRABLE
+INITIALLY DEFERRED. Mới là schema: chưa có service/endpoint/runtime media, chưa deploy.
 
 CAT-03 attach/GC đã chốt: liên kết dùng asset_id; cover_asset_id nullable phải
 thuộc collection images. Resource row lock/version và asset row locks bảo vệ
