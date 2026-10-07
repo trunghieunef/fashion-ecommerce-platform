@@ -123,6 +123,10 @@ erDiagram
 | `reviews` (T, Phase 2) | `id`, `eligibility_id uuid FK review_eligibilities`, `rating smallint`, `title text`, `content text`, `images text[] = '{}'`, `status varchar(32) = 'PENDING'`, `moderated_by uuid?`, `moderated_at timestamptz?`, `moderation_reason text?` | UNIQUE eligibility_id; rating 1–5, cardinality(images) <= 5; PENDING/APPROVED/REJECTED; index `(status, created_at, id)` |
 | `wishlist_items` (C, Phase 2) | `user_id uuid`, `product_id uuid FK products` | PK `(user_id, product_id)`; index `(user_id, created_at, product_id)` |
 
+Schema collections/collection_items/size_guides đã được hiện thực ở V004 (Task 1);
+kiểm upgrade Testcontainers từ V003 giữ legacy SKU/sample và audit append-only.
+Chưa áp volume local hoặc có endpoint collection/guide tại checkpoint schema.
+
 Collection CAT-01b (chủ dự án, 2026-10-07): POST tạo DRAFT/version 0, cần key;
 PUT thay toàn bộ nội dung/items, chỉ cần expected_version (không cần Idempotency-Key),
 tăng version 1. Khóa collection, thay items, tăng version và audit cùng transaction.

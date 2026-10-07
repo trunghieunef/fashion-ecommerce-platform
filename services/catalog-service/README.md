@@ -5,6 +5,10 @@
 Service sở hữu database `catalog`. Phần nền read-only Sprint 1 chạy Flyway `V001`;
 CAT-01a bổ sung `V002` (category/brand, product fields, variant identity trigger,
 outbox/idempotency/audit) và follow-up `V003` (SKU mới uppercase ASCII, unique không phân biệt casing).
+CAT-01b Task 1 thêm `V004__collections_and_size_guides.sql`: collections/items và size_guides,
+FK/unique/version/locale/time/sort constraints; upgrade từ V003 giữ SKU legacy/sample và quyền
+audit append-only. Schema đã kiểm bằng PostgreSQL Testcontainers; endpoint collection/guide
+chưa hiện thực tại checkpoint Task 1, chưa upgrade volume local.
 Admin taxonomy đã có GET/POST categories/brands và PUT theo id
 tại `/admin/api/v1/catalog`. Mọi endpoint kiểm ES256 và `catalog.write` tại service;
 POST cần `Idempotency-Key`, PUT cần `expected_version`; mutation và audit cùng transaction.

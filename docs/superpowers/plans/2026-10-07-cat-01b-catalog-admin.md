@@ -108,7 +108,7 @@ Modify `CatalogAdminTestSupport.java:clearCatalog`, `docs/design/05_database_des
 guide.version 1; T timestamps. Test support thêm cleanup collection_items → collections và
 size_guides trước products/categories, chỉ trong DB Testcontainers bằng owner connection.
 
-- [ ] **Step 1: Viết schema tests trước DDL.** Dùng Flyway/Testcontainers theo schema test hiện có,
+- [x] **Step 1: Viết schema tests trước DDL.** Dùng Flyway/Testcontainers theo schema test hiện có,
   migrate tới V003, giữ một legacy SKU từ V002 rồi migrate mới; test không tham chiếu class production chưa có.
 
 ```java
@@ -120,15 +120,19 @@ size_guides trước products/categories, chỉ trong DB Testcontainers bằng o
 @Test void runtimeAuditRemainsAppendOnly() // runtime cannot UPDATE/DELETE/TRUNCATE audit
 ```
 
-- [ ] **Step 2: RED.** Target `CatalogCollectionsSchemaIntegrationTest`; expected assertion table absent,
+- [x] **Step 2: RED.** Target `CatalogCollectionsSchemaIntegrationTest`; expected assertion table absent,
   log Tests run, no COMPILATION ERROR. Không sửa V001–V003 hoặc reset DB để vượt lỗi.
-- [ ] **Step 3: Implement V004.** Chỉ 3 table spec, FK nội bộ/unique/check/index/time/version,
+- [x] **Step 3: Implement V004.** Chỉ 3 table spec, FK nội bộ/unique/check/index/time/version,
   grant theo default privileges hiện có. Không lookbook/product_images/cache tables. Cập nhật cleanup support.
-- [ ] **Step 4: GREEN.** Target rồi module bằng lệnh chung; public/sample/SKU/audit tests cũ vẫn PASS.
-- [ ] **Step 5: Mutation.** Bỏ CHECK sort_order >= 0 trong **V004 chưa deploy** → target
+- [x] **Step 4: GREEN.** Target rồi module bằng lệnh chung; public/sample/SKU/audit tests cũ vẫn PASS.
+- [x] **Step 5: Mutation.** Bỏ CHECK sort_order >= 0 trong **V004 chưa deploy** → target
   `CatalogCollectionsSchemaIntegrationTest#collectionDefaultsConstraintsAndItemForeignKeys` FAIL khi insert -1;
   restore rồi module GREEN. Mỗi target tạo DB fresh, không đổi schema volume local.
-- [ ] **Step 6: Đồng bộ docs và commit** `feat(CAT-01): add collection and size guide schema V004`.
+- [x] **Step 6: Đồng bộ docs và commit** `feat(CAT-01): add collection and size guide schema V004`.
+
+Evidence Task 1: schema RED 6 failures/0 errors (table absent); GREEN 6/6; module
+durability 36/security 38/catalog 77 PASS0skip. Sort CHECK mutation FAIL1, restored module PASS.
+Logs `.superpowers/sdd/2026-10-07-cat-01b-catalog-admin/task1-*.log` (local/ignored).
 
 ### Task 2: Collection GET list/detail, one-statement snapshot
 
