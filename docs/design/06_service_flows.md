@@ -218,13 +218,19 @@ lại primary thực tế (first writer wins). Thumb luôn sinh từ primary th�
 lease_token + lease còn hạn + deadline: APPROVED + media_assets (metadata/sha256
 từ bytes thực tế) + audit `catalog.media.upload.approve`, hoặc REJECTED +
 reason_code + audit `catalog.media.upload.reject`; mỗi kết quả audit đúng một
-lần. CAS 0 dòng không ghi gì, đọc lại row một lần và trả theo state hiện tại
-(row còn claim được thì 409 UPLOAD_PROCESSING). Storage lỗi tạm → release CAS,
+lần; response 400 IMAGE_REJECTED dùng cùng metadata (request_id) với audit
+reject. Ngay trước mỗi lần ghi S3 (putIfAbsent primary và thumb) worker kiểm lại
+trên row: lease_token của mình, lease_until > now() và now() <= deadline; sai thì
+không ghi. Mất fence hoặc CAS 0 dòng: không ghi kết quả; nếu row vẫn mang token
+của mình thì quá deadline → EXPIRED (xóa lease), chưa quá → release về PENDING;
+sau đó đọc lại row một lần và trả theo state hiện tại (EXPIRED 409
+UPLOAD_EXPIRED; row còn claim được thì 409 UPLOAD_PROCESSING). Storage lỗi tạm → release CAS,
 503; lỗi DB không tự reject/expire, lease hết hạn sẽ được claim lại. Sau commit
 xóa raw best-effort và đặt quarantine_cleaned_at; lỗi cleanup chỉ log class lỗi,
 để sweep xử lý. Kiểm bằng `UploadCompleteIntegrationTest` (PostgreSQL + RustFS
-Testcontainers, spy MediaStorage tiêm lỗi; mutation bỏ điều kiện lease_token
-làm `staleLeaseCannotCommit` FAIL). Sweep/GC, PUT images và public read chưa
+Testcontainers, spy MediaStorage tiêm lỗi; mutation bỏ từng điều kiện của CAS
+kết quả — lease_token, lease_until, deadline — và điều kiện deadline của fence
+trước ghi S3 đều làm test tương ứng FAIL). Sweep/GC, PUT images và public read chưa
 hiện thực; chưa nghiệm thu CAT-03.
 
 ## 4. `cart-service`

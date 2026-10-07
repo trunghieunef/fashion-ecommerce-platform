@@ -37,7 +37,9 @@ public final class Api {
     return ResponseEntity.status(status).header("X-Correlation-Id", meta.traceId()).body(new Response<>("OK", data, meta));
   }
   public static ResponseEntity<Error> error(HttpStatus status, String code, String message, List<FieldError> errors, Tracer tracer) {
-    var meta = metadata(tracer);
+    return error(status, code, message, errors, metadata(tracer));
+  }
+  public static ResponseEntity<Error> error(HttpStatus status, String code, String message, List<FieldError> errors, Metadata meta) {
     return ResponseEntity.status(status).header("X-Correlation-Id", meta.traceId()).body(new Error(code, message, errors, meta));
   }
 }

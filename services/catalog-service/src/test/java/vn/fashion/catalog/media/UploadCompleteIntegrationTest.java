@@ -22,7 +22,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
-import tools.jackson.databind.JsonNode;
 
 class UploadCompleteIntegrationTest extends MediaTestSupport {
   private static final String UPLOADS = "/admin/api/v1/catalog/images/uploads";
@@ -83,13 +82,11 @@ class UploadCompleteIntegrationTest extends MediaTestSupport {
     var d = data(complete(u.id()), 200);
     assertThat(d.path("asset_id").asText()).isEqualTo(u.id()); // 200 data is ApprovedImageAsset (OpenAPI)
     assertThat(row(u.id()).get("state")).isEqualTo("APPROVED");
-    JsonNode asset = d;
-    assertThat(asset.path("asset_id").asText()).isEqualTo(u.id());
     String imageSha = sha(object(u.image()));
-    assertThat(asset.path("image").path("sha256").asText()).isEqualTo(imageSha);
-    assertThat(asset.path("image").path("width").asInt()).isEqualTo(40);
-    assertThat(asset.path("image").path("size_bytes").asLong()).isEqualTo(object(u.image()).length);
-    assertThat(asset.path("thumb").path("sha256").asText()).isEqualTo(sha(object(u.thumb())));
+    assertThat(d.path("image").path("sha256").asText()).isEqualTo(imageSha);
+    assertThat(d.path("image").path("width").asInt()).isEqualTo(40);
+    assertThat(d.path("image").path("size_bytes").asLong()).isEqualTo(object(u.image()).length);
+    assertThat(d.path("thumb").path("sha256").asText()).isEqualTo(sha(object(u.thumb())));
     assertThat(jdbc.queryForObject("select image_sha256 from media_assets where id=?::uuid", String.class, u.id())).isEqualTo(imageSha);
     assertThat(jdbc.queryForObject("select image_key from media_assets where id=?::uuid", String.class, u.id())).isEqualTo(u.image());
     assertThat(exists(u.raw())).isFalse();
@@ -155,6 +152,8 @@ class UploadCompleteIntegrationTest extends MediaTestSupport {
     expectError(res, 400, "VALIDATION_ERROR", "IMAGE_REJECTED");
     assertThat(json(res).path("errors").get(0).path("field").asText()).isEqualTo("upload_id");
     assertThat(json(res).path("errors").get(0).path("message").asText()).isEqualTo("IMAGE_TYPE_NOT_ALLOWED");
+    assertThat(jdbc.queryForObject("select request_id::text from audit_logs where action='catalog.media.upload.reject'", String.class))
+        .isEqualTo(json(res).path("metadata").path("request_id").asText());
     var r = row(u.id());
     assertThat(r.get("state")).isEqualTo("REJECTED");
     assertThat(r.get("reason_code")).isEqualTo("IMAGE_TYPE_NOT_ALLOWED");
@@ -231,14 +230,13 @@ class UploadCompleteIntegrationTest extends MediaTestSupport {
     doAnswer(inv -> { rawPut(u.image(), winner, "image/png"); return inv.callRealMethod(); })
         .when(storage).putIfAbsent(eq(u.image()), any(), anyString());
     var d = data(complete(u.id()), 200);
-    var asset = d;
     assertThat(object(u.image())).isEqualTo(winner);
-    assertThat(asset.path("image").path("sha256").asText()).isEqualTo(sha(winner));
-    assertThat(asset.path("image").path("width").asInt()).isEqualTo(12);
-    assertThat(asset.path("image").path("size_bytes").asLong()).isEqualTo(winner.length);
-    assertThat(asset.path("thumb").path("width").asInt()).isEqualTo(12);
-    assertThat(asset.path("thumb").path("height").asInt()).isEqualTo(6);
-    assertThat(asset.path("thumb").path("sha256").asText()).isEqualTo(sha(object(u.thumb())));
+    assertThat(d.path("image").path("sha256").asText()).isEqualTo(sha(winner));
+    assertThat(d.path("image").path("width").asInt()).isEqualTo(12);
+    assertThat(d.path("image").path("size_bytes").asLong()).isEqualTo(winner.length);
+    assertThat(d.path("thumb").path("width").asInt()).isEqualTo(12);
+    assertThat(d.path("thumb").path("height").asInt()).isEqualTo(6);
+    assertThat(d.path("thumb").path("sha256").asText()).isEqualTo(sha(object(u.thumb())));
   }
 
   @Test void staleLeaseCannotCommit() {
@@ -253,6 +251,53 @@ class UploadCompleteIntegrationTest extends MediaTestSupport {
     assertThat(row(u.id()).get("state")).isEqualTo("PROCESSING");
     assertThat(assets()).isZero();
     assertThat(audits("catalog.media.upload.approve")).isZero();
+  }
+
+  private void pastDeadline(String id) {
+    // Keeps CHECK complete_deadline = put_expires_at + 24h valid.
+    jdbc.update("update media_uploads set put_expires_at = now() - interval '24 hours 1 second', complete_deadline = now() - interval '1 second' where id=?::uuid", id);
+  }
+  private void assertNothingApproved(String id) {
+    assertThat(row(id).get("state")).isNotEqualTo("APPROVED");
+    assertThat(assets()).isZero();
+    assertThat(audits("catalog.media.upload.approve")).isZero();
+  }
+
+  @Test void deadlinePassingAfterRawReadStopsBeforeApprovedWrite() {
+    var u = uploaded("c-15", png(8, 8), "image/png");
+    doAnswer(inv -> { var r = inv.callRealMethod(); pastDeadline(u.id()); return r; })
+        .when(storage).read(eq(u.raw()), anyLong());
+    expectError(complete(u.id()), 409, "CONFLICT", "UPLOAD_EXPIRED");
+    verify(storage, never()).putIfAbsent(eq(u.image()), any(), anyString());
+    verify(storage, never()).putIfAbsent(eq(u.thumb()), any(), anyString());
+    assertThat(row(u.id()).get("state")).isEqualTo("EXPIRED");
+    assertThat(row(u.id()).get("lease_token")).isNull();
+    assertNothingApproved(u.id());
+  }
+
+  // Hook after the thumb write: the last pre-write fence has passed, so only the finish CAS can stop the commit.
+  @Test void expiredLeaseWithoutTakeoverCannotCommit() {
+    var u = uploaded("c-16", png(8, 8), "image/png");
+    doAnswer(inv -> {
+      var r = inv.callRealMethod();
+      jdbc.update("update media_uploads set lease_until = now() - interval '1 second' where id=?::uuid", u.id());
+      return r;
+    }).when(storage).putIfAbsent(eq(u.thumb()), any(), anyString());
+    var res = complete(u.id());
+    assertThat(res.statusCode()).withFailMessage(res.body()).isNotEqualTo(200);
+    assertNothingApproved(u.id());
+  }
+
+  @Test void deadlinePassingBeforeFinishExpiresAndCannotCommit() {
+    var u = uploaded("c-17", png(8, 8), "image/png");
+    doAnswer(inv -> { var r = inv.callRealMethod(); pastDeadline(u.id()); return r; })
+        .when(storage).putIfAbsent(eq(u.thumb()), any(), anyString());
+    expectError(complete(u.id()), 409, "CONFLICT", "UPLOAD_EXPIRED");
+    var r = row(u.id());
+    assertThat(r.get("state")).isEqualTo("EXPIRED");
+    assertThat(r.get("lease_token")).isNull();
+    assertThat(r.get("lease_until")).isNull();
+    assertNothingApproved(u.id());
   }
 
   @Test void storageOutageReleasesClaim() {

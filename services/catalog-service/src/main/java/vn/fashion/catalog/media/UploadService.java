@@ -208,14 +208,18 @@ public class UploadService {
         var bytes = storage.read(raw, c.sizeBytes());
         if (bytes.isEmpty()) { release(id, c.token()); throw conflict("UPLOAD_NOT_UPLOADED"); }
         if (bytes.get().length != c.sizeBytes()) throw new ImageProcessor.Rejected("IMAGE_SIZE_MISMATCH");
-        storage.putIfAbsent(imageKey, ImageProcessor.approve(bytes.get(), c.contentType()).bytes(), c.contentType());
+        var approved = ImageProcessor.approve(bytes.get(), c.contentType()).bytes();
+        if (!fenced(id, c.token())) return abandon(actor, id, c.token());
+        storage.putIfAbsent(imageKey, approved, c.contentType());
         primary = storage.read(imageKey, MAX_BYTES); // first writer wins: continue with what is actually stored
         if (primary.isEmpty()) throw new MediaStorage.Unavailable();
       }
       image = ImageProcessor.verify(primary.get(), c.contentType(), ImageProcessor.APPROVED_EDGE);
       var stored = storage.read(thumbKey, MAX_BYTES);
       if (stored.isEmpty()) {
-        storage.putIfAbsent(thumbKey, ImageProcessor.thumbnail(image).bytes(), c.contentType());
+        var thumbBytes = ImageProcessor.thumbnail(image).bytes();
+        if (!fenced(id, c.token())) return abandon(actor, id, c.token());
+        storage.putIfAbsent(thumbKey, thumbBytes, c.contentType());
         stored = storage.read(thumbKey, MAX_BYTES);
         if (stored.isEmpty()) throw new MediaStorage.Unavailable();
       }
@@ -257,9 +261,12 @@ public class UploadService {
           id, reason, null, after, UUID.fromString(meta.requestId()));
       return true;
     }));
-    if (!won) return settle(actor, id);
+    if (!won) return abandon(actor, id, token);
     cleanQuarantine(id);
-    if (reason != null) throw rejected(reason);
+    if (reason != null) {
+      var p = rejected(reason); // same metadata as the reject audit
+      return Api.error(p.status(), p.code(), p.getMessage(), p.errors(), meta);
+    }
     return Api.ok(HttpStatus.OK, toAsset(id), meta);
   }
 
@@ -271,6 +278,24 @@ public class UploadService {
     } catch (RuntimeException e) {
       LOG.warn("Quarantine cleanup deferred to sweep: {}", e.getClass().getSimpleName()); // no key or upload id (13)
     }
+  }
+
+  /** Spec section 3: re-checked right before each S3 write; true while our lease is live and the deadline holds. */
+  private boolean fenced(UUID id, UUID token) {
+    return jdbc.sql("""
+        select exists(select 1 from media_uploads
+                      where id=:id and lease_token=:token and lease_until > now() and now() <= complete_deadline)
+        """).param("id", id).param("token", token).query(Boolean.class).single();
+  }
+
+  /** Lost fence or CAS: expire (past deadline) or release by our own token so the row matches the answer, then settle. */
+  private ResponseEntity<?> abandon(UUID actor, UUID id, UUID token) {
+    int expired = jdbc.sql("""
+        update media_uploads set state='EXPIRED', terminal_at=now(), lease_token=null, lease_until=null
+        where id=:id and lease_token=:token and now() > complete_deadline
+        """).param("id", id).param("token", token).update();
+    if (expired == 0) release(id, token);
+    return settle(actor, id);
   }
 
   /** CAS release keeps the row PENDING for retry and never overwrites another attempt's lease. */

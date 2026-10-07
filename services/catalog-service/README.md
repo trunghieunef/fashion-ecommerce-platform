@@ -130,8 +130,9 @@ idempotency chỉ lưu descriptor không URL, replay sau hạn PUT -> 409 `UPLOA
 `GET .../uploads/{upload_id}` (owner-only, khác owner/thiếu -> 404); test `UploadIntentIntegrationTest`.
 `POST .../uploads/{upload_id}/complete` (Task 5): không body/key; terminal replay không gọi S3/audit;
 claim lease 120s, 1 slot re-encode/instance (thiếu slot -> 429 + `Retry-After: 1`), primary có sẵn
-được ưu tiên (không đọc raw), thumb sinh từ primary thực tế, CAS lease_token/deadline ghi
-APPROVED/REJECTED + audit một lần, sau commit xóa raw best-effort; test `UploadCompleteIntegrationTest`.
+được ưu tiên (không đọc raw), thumb sinh từ primary thực tế, kiểm lại lease/deadline trước mỗi
+lần ghi S3, CAS lease_token/lease_until/deadline ghi APPROVED/REJECTED + audit một lần (mất fence
+quá deadline -> EXPIRED, còn hạn -> release), sau commit xóa raw best-effort; test `UploadCompleteIntegrationTest`.
 Chưa có endpoint attach/read/GC và quarantine sweep (các task sau).
 Config (`fashion.catalog.media.*`, env): `CATALOG_S3_BUCKET` (catalog-media-local),
 `CATALOG_S3_ENDPOINT` (nội bộ, bắt buộc), `CATALOG_S3_PUBLIC_ENDPOINT` (URL browser
