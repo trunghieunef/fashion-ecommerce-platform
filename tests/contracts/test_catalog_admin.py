@@ -36,7 +36,7 @@ class CatalogAdminContractTest(unittest.TestCase):
     def test_admin_operations_require_bearer_and_mutation_guards(self):
         operations = [(method, op) for path, item in self.doc["paths"].items()
                       if path.startswith("/admin/") for method, op in item.items() if method != "parameters"]
-        self.assertEqual(len(operations), 19)
+        self.assertEqual(len(operations), 20)
         for method, op in operations:
             with self.subTest(operation=op["operationId"]):
                 self.assertNotEqual(method, "delete")
@@ -47,6 +47,20 @@ class CatalogAdminContractTest(unittest.TestCase):
                     schema = op["requestBody"]["content"]["application/json"]["schema"]
                     schema = self.resolve(schema)
                     self.assertIn({"$ref": "./common.yaml#/components/schemas/ExpectedVersion"}, schema["allOf"])
+
+    def test_collection_list_has_paginated_summary_examples(self):
+        path = "/admin/api/v1/catalog/collections"
+        self.assertIn("get", self.doc["paths"][path])
+        op = self.doc["paths"][path]["get"]
+        self.assertEqual(op["security"], [{"bearerAuth": []}])
+        response = self.resolve(op["responses"]["200"])
+        data = response["content"]["application/json"]["examples"]["success"]["value"]["data"]
+        self.assertEqual(list(self.validator("AdminCollectionPage").iter_errors(data)), [])
+        self.assertEqual(data["page"], 1)
+        self.assertEqual(data["size"], 20)
+        self.assertNotIn("items", data["items"][0])
+        for status in ("400", "401", "403"):
+            self.assertIn(status, op["responses"])
 
     def test_money_is_integer_nonnegative_and_response_fields_are_closed(self):
         for name, field in (("AdminProduct", "base_price"), ("AdminVariant", "price_override")):
@@ -181,4 +195,4 @@ class CatalogAdminContractTest(unittest.TestCase):
                             examples[status[0]] += 1
                 self.assertGreater(examples["2"], 0)
                 self.assertGreater(examples["4"], 0)
-        self.assertEqual(count, 19)
+        self.assertEqual(count, 20)

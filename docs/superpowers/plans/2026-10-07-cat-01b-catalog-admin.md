@@ -148,7 +148,7 @@ Methods `Page list(int page,int size,String status)`, `CollectionData load(UUID 
 Controller GET `/collections` (page1/size20/max100/status optional), GET `/collections/{id}`;
 AdminAuth → service → Api.ok. Không audit read. Tests seed bằng SQL/owner trên isolated DB.
 
-- [ ] **Step 1: Viết HTTP tests và failing contract cho collection list.** Dùng support send/data,
+- [x] **Step 1: Viết HTTP tests và failing contract cho collection list.** Dùng support send/data,
   seed collection/items trực tiếp; không import service/record chưa tồn tại trong test RED.
 
 ```java
@@ -160,9 +160,9 @@ AdminAuth → service → Api.ok. Không audit read. Tests seed bằng SQL/owner
 @Test void invalidPageSizeAndStatusAre400() // page0,size0/101,statusUNKNOWN
 ```
 
-- [ ] **Step 2: RED.** Target `CollectionReadIntegrationTest` → 404 instead of expected route response;
+- [x] **Step 2: RED.** Target `CollectionReadIntegrationTest` → 404 instead of expected route response;
   Python contract assertion admin count 20 vs 19/list route missing FAIL, not parsing/tooling failure.
-- [ ] **Step 3: Implement interfaces.** load bắt buộc một statement:
+- [x] **Step 3: Implement interfaces.** load bắt buộc một statement:
 
 ```sql
 SELECT c.*, COALESCE((SELECT json_agg(json_build_object('product_id',i.product_id,'sort_order',i.sort_order)
@@ -173,13 +173,17 @@ FROM collections c WHERE c.id=:id
   Parse items JSON qua ObjectMapper hiện có; không query items lần hai. List chỉ summary, SQL params
   status/page/size, offset dùng long như product admin. Bổ sung list OpenAPI/examples; response name
   max255/slug160 theo normalized values, không áp raw max/pattern trước strip cho request.
-- [ ] **Step 4: GREEN.** Target + module + `bash scripts/validate-contracts.sh`; cập nhật test admin count 20.
-- [ ] **Step 5: Mutation.** Đổi tuple trong json_agg thành product_id/sort_order →
+- [x] **Step 4: GREEN.** Target + module + `bash scripts/validate-contracts.sh`; cập nhật test admin count 20.
+- [x] **Step 5: Mutation.** Đổi tuple trong json_agg thành product_id/sort_order →
   `CollectionReadIntegrationTest#detailIsOrderedAndHasEditVersion` FAIL. Fixture phải có UUID lớn
   ở sort0 và UUID nhỏ ở sort1 để phân biệt cả sort primary và tie-break; thêm tied UUID
   7fff.../8000... theo thứ tự PostgreSQL UUID, không dùng Java UUID.compareTo signed để tự sort response.
   Restore/module GREEN.
-- [ ] **Step 6: Đồng bộ docs và commit** `feat(CAT-01): add collection admin list and detail reads`.
+- [x] **Step 6: Đồng bộ docs và commit** `feat(CAT-01): add collection admin list and detail reads`.
+
+Evidence Task 2: HTTP RED6/GREEN6, contract RED2/GREEN32 và lint3API;
+module durability36/security38/catalog83 PASS0skip; json_agg tuple mutation FAIL1,
+restore/module PASS. Không dùng test snapshot timing-based. Logs task2-*.log local/ignored.
 
 ### Task 3: Collection POST/PUT, strict requests và replacement atomic
 

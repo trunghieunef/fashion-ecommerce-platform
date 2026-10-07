@@ -414,6 +414,26 @@ paths:
               request:
                 value: {expected_version: 2, reason: Synthetic smoke}
   /admin/api/v1/catalog/collections:
+    get:
+      operationId: listAdminCollections
+      summary: List collection summaries ordered by created_at DESC then id DESC
+      description: Requires catalog.write; includes all statuses, no public visibility filtering or product items. CAT-01b admin read implemented.
+      security:
+      - bearerAuth: []
+      parameters:
+      - {$ref: ./common.yaml#/components/parameters/Page}
+      - {$ref: ./common.yaml#/components/parameters/Size}
+      - in: query
+        name: status
+        schema: {type: string, enum: [DRAFT, ACTIVE, INACTIVE]}
+      responses:
+        '200': {$ref: '#/components/responses/CollectionsSuccess'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+        '500': {$ref: '#/components/responses/Error500'}
+        '503': {$ref: '#/components/responses/Error503'}
     post:
       operationId: createCollection
       summary: Create a DRAFT collection at version 0
@@ -458,7 +478,7 @@ paths:
       operationId: getAdminCollection
       summary: Read an admin collection with ordered items and its edit version
       description: >
-        Approved CAT-01b contract; implementation pending. Requires catalog.write at the service.
+        CAT-01b admin read implemented. Requires catalog.write at the service.
         Includes DRAFT/INACTIVE data without public visibility filtering. Items are ordered by
         sort_order, then product_id. The collection version is the expected_version for PUT.
         Detail uses one SQL json_agg ordered by sort_order/product_id, so content and version share a snapshot.
@@ -947,9 +967,9 @@ components:
       required: [id, name_vi, name_en, slug, cover_url, start_at, end_at, status, version, items]
       properties:
         id: {type: string, format: uuid}
-        name_vi: {type: string}
-        name_en: {type: string}
-        slug: {type: string}
+        name_vi: {type: string, minLength: 1, maxLength: 255}
+        name_en: {type: string, minLength: 1, maxLength: 255}
+        slug: {type: string, minLength: 1, maxLength: 160, pattern: '^[a-z0-9]+(-[a-z0-9]+)*$'}
         cover_url: {type: 'null', description: Always null in CAT-01b; safe media attachment belongs to CAT-03.}
         start_at: {type: [string, 'null'], format: date-time}
         end_at: {type: [string, 'null'], format: date-time}
@@ -960,6 +980,37 @@ components:
           maxItems: 1000
           description: All associated products, ordered by sort_order then product_id, including unpublished products.
           items: {$ref: '#/components/schemas/AdminCollectionItem'}
+    AdminCollectionSummary:
+      type: object
+      additionalProperties: false
+      required: [id, name_vi, name_en, slug, cover_url, start_at, end_at, status, version]
+      properties:
+        id: {type: string, format: uuid}
+        name_vi: {type: string, minLength: 1, maxLength: 255}
+        name_en: {type: string, minLength: 1, maxLength: 255}
+        slug: {type: string, minLength: 1, maxLength: 160, pattern: '^[a-z0-9]+(-[a-z0-9]+)*$'}
+        cover_url: {type: 'null'}
+        start_at: {type: [string, 'null'], format: date-time}
+        end_at: {type: [string, 'null'], format: date-time}
+        status: {type: string, enum: [DRAFT, ACTIVE, INACTIVE]}
+        version: {type: integer, format: int64, minimum: 0, maximum: 9223372036854775807}
+    AdminCollectionPage:
+      type: object
+      additionalProperties: false
+      required: [items, page, size, total]
+      properties:
+        items: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/AdminCollectionSummary'}}
+        page: {type: integer, minimum: 1}
+        size: {type: integer, minimum: 1, maximum: 100}
+        total: {type: integer, format: int64, minimum: 0}
+    CollectionsResponse:
+      type: object
+      additionalProperties: false
+      required: [code, data, metadata]
+      properties:
+        code: {type: string, const: OK}
+        data: {$ref: '#/components/schemas/AdminCollectionPage'}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
     CollectionContent:
       type: object
       required: [name_vi, name_en, slug, items]
@@ -1100,6 +1151,24 @@ components:
       schema: {type: string, enum: [vi, en]}
       description: Exact supported locale; other values return 400
   responses:
+    CollectionsSuccess:
+      description: Paginated collection summaries; detail GET returns product items
+      headers:
+        X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/CollectionsResponse'}
+          examples:
+            success:
+              value:
+                code: OK
+                data:
+                  items:
+                  - {id: 55555555-5555-4555-8555-555555555555, name_vi: Bộ sưu tập mẫu, name_en: Sample collection, slug: sample-collection, cover_url: null, start_at: null, end_at: null, status: DRAFT, version: 0}
+                  page: 1
+                  size: 20
+                  total: 1
+                metadata: {request_id: 11111111-1111-4111-8111-111111111111, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
     CreatedCollectionSuccess:
       description: New DRAFT collection with version 0; idempotent retries retain data/status
       headers:

@@ -1,14 +1,18 @@
 # Catalog service
 
-`TASK:PLT-01` · partial `TASK:CAT-01` · `REQ:CAT-01`, `REQ:XCT-06`.
+`TASK:PLT-01` · partial `TASK:CAT-01` · `REQ:CAT-01`, `REQ:CAT-03`, `REQ:CAT-06`, `REQ:XCT-06`.
 
 Service sở hữu database `catalog`. Phần nền read-only Sprint 1 chạy Flyway `V001`;
 CAT-01a bổ sung `V002` (category/brand, product fields, variant identity trigger,
 outbox/idempotency/audit) và follow-up `V003` (SKU mới uppercase ASCII, unique không phân biệt casing).
 CAT-01b Task 1 thêm `V004__collections_and_size_guides.sql`: collections/items và size_guides,
 FK/unique/version/locale/time/sort constraints; upgrade từ V003 giữ SKU legacy/sample và quyền
-audit append-only. Schema đã kiểm bằng PostgreSQL Testcontainers; endpoint collection/guide
-chưa hiện thực tại checkpoint Task 1, chưa upgrade volume local.
+audit append-only. Schema đã kiểm bằng PostgreSQL Testcontainers, chưa upgrade volume local.
+CAT-01b Task 2 có GET `/admin/api/v1/catalog/collections` (page1/size20/max100/status optional,
+created_at DESC/id DESC, summary không có items) và GET `/collections/{id}` (one SQL json_agg,
+items sort_order/product_id, nội dung/version cùng snapshot, DRAFT/INACTIVE cũng đọc được).
+Cả hai kiểm catalog.write, không audit read. Collection mutation/size guide chưa hiện thực
+tại checkpoint Task 2; không public read CAT-02.
 Admin taxonomy đã có GET/POST categories/brands và PUT theo id
 tại `/admin/api/v1/catalog`. Mọi endpoint kiểm ES256 và `catalog.write` tại service;
 POST cần `Idempotency-Key`, PUT cần `expected_version`; mutation và audit cùng transaction.

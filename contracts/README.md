@@ -68,7 +68,7 @@ bằng chứng riêng của PLT-03.
 
 ## Kiểm tra
 
-CAT-01b đang thiết kế: `catalog.yaml` đã có contract POST/PUT collection, PUT size guide và hai GET admin
+CAT-01b đang thực thi plan đã duyệt: `catalog.yaml` có contract POST/PUT collection, PUT size guide và GET admin
 detail collection/size guide theo quyết định chủ dự án 2026-10-07 (03 §3). POST key tạo
 DRAFT/version 0; PUT chỉ expected_version, thay toàn bộ items/version/audit cùng transaction.
 Items tối đa 1.000; sort_order integer 0..2147483647 được trùng; thiếu product body trả
@@ -79,13 +79,16 @@ chưa có 404 NOT_FOUND. Size guide PUT bắt buộc key + version (0 tạo 201/
 cập nhật 200/version +1), replay trước version guard. `guideline_html` không bắt buộc:
 thiếu/null thành chuỗi rỗng, sanitize như product, tối đa 20.000 ký tự sau sanitize.
 Cả hai GET cần `catalog.write`, đọc cả DRAFT/INACTIVE và giữ envelope.
+GET collection list/detail đã hiện thực ở Task 2 (6 HTTP integration tests); list trả summary
+page1/size20/max100/status optional, không product items. Contract có 20 admin operations;
+route mutation collection và guide vẫn chờ task tiếp theo, chưa chạy smoke volume local.
 Spec CAT-01b đã duyệt: request collection/guide từ chối unknown field qua @JsonAnySetter
 với field tên key, giữ mapper global/CAT-01a; header so trùng strip + lowercase Locale.ROOT.
 PUT guide kiểm category404 trước idempotency/version; create ON CONFLICT DO NOTHING RETURNING.
 GET collection detail dùng một SQL json_agg ordered để items/version cùng snapshot.
 Examples 2xx/4xx cùng contract regression kiểm Bearer, errors và version đã có;
-đây chưa phải endpoint chạy được hoặc bằng chứng HTTP 401/403/404/GET → PUT.
-Các integration test đó thuộc implementation CAT-01b sau duyệt spec/plan; public read
+Contract examples không thay bằng chứng runtime. Task 2 đã kiểm HTTP collection GET
+401/403/404/content/version; GET → PUT và size guide còn chờ implementation; public read
 vẫn thuộc CAT-02. Response size guide table ghi rõ giới hạn shape; số ô khớp số cột,
 strip và tổng serialized bytes cần validation tại service, JSON Schema chưa chứng minh chúng.
 

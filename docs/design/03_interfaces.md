@@ -241,6 +241,9 @@ luôn null. Cover/lookbook thuộc CAT-03, chỉ attach sau upload được ki�
 không mở đường nhận URL chưa được kiểm tra trong CAT-01b. Contract tại `catalog.yaml`
 đã có POST/PUT/examples, chưa có endpoint thực thi.
 
+Collection GET list/detail đã hiện thực và kiểm HTTP Testcontainers tại Task 2;
+POST/PUT collection và size guide vẫn chưa hiện thực ở checkpoint này.
+
 Spec CAT-01b §6 đã được chủ dự án duyệt ngày 2026-10-07: collection list nhận page
 (mặc định 1, ≥ 1), size (20, 1..100), status tùy chọn DRAFT/ACTIVE/INACTIVE, sort
 created_at DESC/id DESC; trả `{items, page, size, total}`, summary không kèm product items.
