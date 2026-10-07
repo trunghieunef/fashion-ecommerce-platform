@@ -461,6 +461,7 @@ paths:
         Approved CAT-01b contract; implementation pending. Requires catalog.write at the service.
         Includes DRAFT/INACTIVE data without public visibility filtering. Items are ordered by
         sort_order, then product_id. The collection version is the expected_version for PUT.
+        Detail uses one SQL json_agg ordered by sort_order/product_id, so content and version share a snapshot.
         cover_url is always null; lookbook is deferred to CAT-03. Public collection reads belong to CAT-02.
       security:
       - bearerAuth: []
@@ -558,10 +559,17 @@ paths:
         replay stored data/status before the version check, with new metadata and no audit;
         changed body with the same key returns 409 IDEMPOTENCY_KEY_REUSED.
         locale is exactly vi/en; invalid locale returns 400, missing category returns 404.
+        Processing order is auth, validate, category path check, idempotency, version guard;
+        category is checked before replay lookup as well. Create uses INSERT ON CONFLICT
+        (category_id, locale) DO NOTHING RETURNING; an empty result is VERSION_CONFLICT,
+        without catching a unique violation that would abort the idempotency transaction.
         guideline_html is optional: omitted/null becomes empty, sanitized with the product
         jsoup policy, at most 20000 characters after sanitizing. table_json is required;
-        strip headers/cells, enforce equal row width, distinct headers and at most 32 KB
-        serialized JSON. Mutation, audit and idempotency result share one transaction.
+        strip headers/cells, enforce equal row width, case-insensitive distinct headers using
+        toLowerCase(Locale.ROOT) after strip, and at most 32768 UTF-8 bytes of compact normalized JSON.
+        Unknown request fields are collected by JsonAnySetter and return 400 with field equal
+        to the key name; global Jackson fail-on-unknown=false and CAT-01a remain unchanged.
+        Mutation, audit and idempotency result share one transaction.
       security:
       - bearerAuth: []
       parameters:
@@ -970,7 +978,7 @@ components:
       allOf:
       - {$ref: '#/components/schemas/CollectionContent'}
       unevaluatedProperties: false
-      description: Creates DRAFT/version 0. cover_url and lookbook are not accepted.
+      description: Creates DRAFT/version 0. cover_url/lookbook and all unknown keys are rejected via JsonAnySetter with field equal to the key name; global fail-on-unknown=false and CAT-01a remain unchanged.
     CollectionUpdate:
       allOf:
       - {$ref: ./common.yaml#/components/schemas/ExpectedVersion}
@@ -980,14 +988,15 @@ components:
         properties:
           status: {type: string, enum: [DRAFT, ACTIVE, INACTIVE]}
       unevaluatedProperties: false
-      description: Full replacement using expected_version only; no Idempotency-Key required. cover_url and lookbook are not accepted.
+      description: Full replacement using expected_version only; no Idempotency-Key required. Unknown keys including cover_url/lookbook are collected by JsonAnySetter and rejected with field equal to the key name, without changing global Jackson behavior.
     SizeGuideTable:
       type: object
       additionalProperties: false
       required: [columns, rows]
       description: >
         Plain text only; FE must escape cells and headers. Headers/cells are stripped before storage.
-        Each row must have exactly the column count; serialized JSON must not exceed 32 KB.
+        Each row must have exactly the column count; compact normalized JSON must not exceed 32768 UTF-8 bytes.
+        Distinct headers are checked case-insensitively after strip using Locale.ROOT, retaining display casing.
         First column matching variant.size is a content convention, not an enforced constraint.
       properties:
         columns:
@@ -1026,7 +1035,7 @@ components:
             type: [string, 'null']
             description: Optional; omitted/null becomes empty string. Sanitize with the product jsoup policy, then enforce at most 20000 characters.
           table_json:
-            description: Require columns/rows only. Length limits apply after strip; row width, plain-text handling and serialized 32 KB limit are enforced by the service.
+            description: Require columns/rows only. Length limits apply after strip; row width, case-insensitive headers, plain-text handling and compact normalized 32768 UTF-8 byte limit are enforced by the service.
             type: object
             additionalProperties: false
             required: [columns, rows]
@@ -1035,7 +1044,7 @@ components:
                 type: array
                 minItems: 1
                 maxItems: 20
-                items: {type: string, description: Strip then validate 1..100 characters and distinct headers.}
+                items: {type: string, description: Strip then validate 1..100 characters; compare distinct headers with toLowerCase(Locale.ROOT) and retain display casing.}
               rows:
                 type: array
                 minItems: 1

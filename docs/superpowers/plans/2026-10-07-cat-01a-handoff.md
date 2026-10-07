@@ -66,10 +66,10 @@ DELETE. Smoke không chứng minh login → token OPS; không đặt helper vào
 
 ## 4. Việc tiếp theo
 
-1. Tiếp tục CAT-01b collection/items và size guide admin trên dev: [spec đã viết](../specs/2026-10-07-cat-01b-design.md),
-   chờ chủ dự án review, gồm các chi tiết đề xuất tại §6. Chưa có plan được duyệt hoặc
-   implementation. Sau duyệt spec mới viết plan, sau duyệt plan mới TDD và PR vào main
-   để chủ dự án review trước merge.
+1. Tiếp tục CAT-01b collection/items và size guide admin trên dev: [spec đã duyệt](../specs/2026-10-07-cat-01b-design.md),
+   gồm §6 mục 1–6 và chốt any-setter/category order/race/headers/one-SQL.
+   [Plan 7 task](2026-10-07-cat-01b-catalog-admin.md) đã duyệt, thực thi Native/TDD trên dev.
+   Commit local và bàn giao sau whole-branch review; chỉ push/mở PR khi chủ dự án yêu cầu riêng.
 2. CAT-03 sở hữu ảnh/upload và điều kiện ảnh publish; CAT-01b không tự nhận URL ảnh hoặc
    kéo media pipeline vào khi chưa có thiết kế được duyệt.
 3. INV-01/relay/Kafka và CATALOG_CHANGED nằm ngoài 1a; không tự kéo vào bước bàn giao này.
@@ -98,8 +98,13 @@ lưu UTC, null bound không giới hạn. Không nhận cover/lookbook, cover_ur
 03/05/06/08 và catalog.yaml đồng bộ, contract tests RED → GREEN; chưa có implementation.
 guideline_html cũng đã được duyệt: không bắt buộc, thiếu/null thành rỗng, sanitize như
 product, giới hạn 20.000 ký tự sau sanitize. PUT guide contract/examples đã có.
-Spec CAT-01b đã viết, chưa được duyệt; chưa có implementation plan. Các chi tiết ở spec
-§6 đang đề xuất, không coi là quyết định đã chốt. Không tự triển khai public read trong 1b.
+Spec CAT-01b đã được chủ dự án duyệt gồm §6 mục 1–6, đã đổi trạng thái Đã duyệt.
+Chốt bổ sung: request @JsonAnySetter → field key, giữ mapper global; guide auth/validate/category404
+trước idempotency/version; create ON CONFLICT DO NOTHING RETURNING (không bắt unique violation);
+header strip/lowercase ROOT không phân biệt casing, collection detail một SQL json_agg ordered.
+Plan 7 task đã duyệt Native: NullNode như thiếu, không test snapshot timing-based,
+toolchain path dùng placeholder; commit docs trước Task 1. Chỉ push/PR khi yêu cầu riêng.
+Không public read trong 1b.
 
 ## 5. Lệnh kiểm tra (repo root, Git Bash)
 

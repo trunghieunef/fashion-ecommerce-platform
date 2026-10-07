@@ -250,4 +250,23 @@ Gate task là work package trong [backlog](../delivery/10_backlog.md). Mã task 
   REQ:CAT-06, TASK:CAT-01 phần 1b. Contract regression đã có; test HTTP/sanitizer của
   size guide thuộc implementation sau duyệt spec/plan, không xem contract test là runtime proof.
 
+- Duyệt spec CAT-01b — **chủ dự án, 2026-10-07**: duyệt toàn bộ [spec](../superpowers/specs/2026-10-07-cat-01b-design.md)
+  gồm §6 mục 1–6 (list/pagination/summary, normalize tên/slug/date/items hash, request đóng,
+  32.768 byte UTF-8 compact JSON, guide thiếu với version >0 trả 409, giữ items request order).
+  Chốt bổ sung: DTO request dùng @JsonAnySetter gom key lạ → 400 field tên key; không dùng
+  ignoreUnknown=false hoặc đổi global fail-on-unknown=false, khác CAT-01a có chủ đích.
+  PUT guide auth → validate → category path 404 → idempotency → version guard (kể cả replay).
+  Create race INSERT ON CONFLICT(category_id,locale) DO NOTHING RETURNING, rỗng trả
+  VERSION_CONFLICT, không bắt unique violation vì transaction idempotency sẽ abort.
+  Header trùng strip + toLowerCase(Locale.ROOT), không phân biệt casing; GET collection
+  detail một SQL json_agg ORDER BY sort_order/product_id. 03/05/spec/contract đồng bộ;
+  implementation plan phải review trước thực thi, không coi duyệt spec là parent CAT-01 Done.
+
+- Duyệt plan CAT-01b — **chủ dự án, 2026-10-07**: thực thi Native tuần tự trên dev,
+  commit local từng task; commit spec/plan/docs/contract trước Task 1. NullNode của
+  expected_version/sort_order/table_json như thiếu → 400, có regression null tường minh.
+  Bỏ test snapshot timing-based; giữ one-statement SQL và mutation json_agg. Toolchain
+  trong docs dùng placeholder. Dừng sau whole-branch review và bàn giao; chỉ push dev/
+  mở PR main khi chủ dự án yêu cầu riêng theo AGENTS.md, không tự merge.
+
 Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác và lý do; ảnh hưởng PRD/API/schema/test/task; người quyết định; ngày; link bằng chứng. Chưa có chữ ký phê duyệt giả định thương mại.

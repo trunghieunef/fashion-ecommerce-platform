@@ -42,7 +42,9 @@ user-service dùng cho outbox/idempotency, nhưng chưa có relay Kafka/notifica
 Chi tiết phần auth đang review ở [User service](services/user-service/README.md).
 Tiến độ mới nhất và bước tiếp ở [handoff CAT-01a](docs/superpowers/plans/2026-10-07-cat-01a-handoff.md):
 PR #14 đã merge; [spec CAT-01b](docs/superpowers/specs/2026-10-07-cat-01b-design.md)
-collection/items và size guide admin đã viết, chờ review trước implementation plan.
+collection/items và size guide admin đã được duyệt;
+[implementation plan](docs/superpowers/plans/2026-10-07-cat-01b-catalog-admin.md) đã duyệt Native;
+thực thi tuần tự trên dev, commit local, chỉ push/PR khi chủ dự án yêu cầu riêng.
 
 Chuyển sang máy mới: dùng [handoff S1-local](docs/superpowers/plans/2026-10-02-s1-local-machine-handoff.md)
 để tiếp tục đúng checklist và ghi evidence trên commit được pull từ `origin/dev`.

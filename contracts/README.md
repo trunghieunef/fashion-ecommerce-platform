@@ -79,6 +79,10 @@ chưa có 404 NOT_FOUND. Size guide PUT bắt buộc key + version (0 tạo 201/
 cập nhật 200/version +1), replay trước version guard. `guideline_html` không bắt buộc:
 thiếu/null thành chuỗi rỗng, sanitize như product, tối đa 20.000 ký tự sau sanitize.
 Cả hai GET cần `catalog.write`, đọc cả DRAFT/INACTIVE và giữ envelope.
+Spec CAT-01b đã duyệt: request collection/guide từ chối unknown field qua @JsonAnySetter
+với field tên key, giữ mapper global/CAT-01a; header so trùng strip + lowercase Locale.ROOT.
+PUT guide kiểm category404 trước idempotency/version; create ON CONFLICT DO NOTHING RETURNING.
+GET collection detail dùng một SQL json_agg ordered để items/version cùng snapshot.
 Examples 2xx/4xx cùng contract regression kiểm Bearer, errors và version đã có;
 đây chưa phải endpoint chạy được hoặc bằng chứng HTTP 401/403/404/GET → PUT.
 Các integration test đó thuộc implementation CAT-01b sau duyệt spec/plan; public read

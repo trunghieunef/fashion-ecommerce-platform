@@ -150,6 +150,16 @@ Product trong body không tồn tại trả 400 VALIDATION_ERROR tại items[i].
 giới hạn; cả hai có giá trị thì end > start. cover_url luôn null, không nhận request
 cover/lookbook; CAT-03 quản lý media sau upload kiểm tra, CAT-01b không nhận URL tùy ý.
 
+Size guide PUT CAT-01b (spec đã duyệt, chủ dự án 2026-10-07): auth → validate (gồm key,
+version, locale, HTML/table/unknown fields) → category path (404 nếu thiếu, cả replay) →
+idempotency lookup → version guard/write → audit/finish key → commit cùng transaction.
+Create version0 dùng INSERT ON CONFLICT(category_id,locale) DO NOTHING RETURNING;
+rỗng trả VERSION_CONFLICT, không bắt unique violation làm abort transaction.
+Update khóa guide, tăng version; absent guide với version>0 trả VERSION_CONFLICT.
+Table header so trùng strip/lowercase Locale.ROOT, giữ casing hiển thị; byte limit compact UTF-8.
+Collection detail đọc parent/items/version bằng một SQL json_agg ORDER BY sort_order/product_id.
+Chưa có implementation/runtime của luồng này, thực thi sau review plan CAT-01b.
+
 ## 4. `cart-service`
 
 ```mermaid

@@ -112,7 +112,8 @@ vào `main` tại `8f27663`; REQ CAT-01/02, dependency PLT-02/03 và USR-02. Có
 product/variant, publish/unpublish, HTML sanitize, SKU immutable, version/idempotency/audit và
 VARIANT_CREATED durable outbox. Acceptance phần 1a và bằng chứng tại
 [evidence CAT-01a](../evidence/cat-01a-local-2026-10-07.md). Chưa Done: còn CAT-01b
-collection/size-guide ([spec đang chờ review](../superpowers/specs/2026-10-07-cat-01b-design.md)),
+collection/size-guide ([spec đã duyệt](../superpowers/specs/2026-10-07-cat-01b-design.md),
+[plan đã duyệt, thực thi Native](../superpowers/plans/2026-10-07-cat-01b-catalog-admin.md)),
 ảnh/publish gate CAT-03, reviewer nghiệm thu parent;
 relay/Kafka ngoài phạm vi 1a. SKU mới canonical uppercase với V003, SKU legacy không backfill.
 

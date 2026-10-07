@@ -145,8 +145,9 @@ Shape `size_guides.table_json` đã chốt cho CAT-01b (chủ dự án, 2026-10-
 ```
 
 Object chỉ có đúng hai key `columns`/`rows`, không field lạ. Có 1–20 cột, 1–100 hàng;
-mỗi hàng phải đủ số ô bằng số cột. Tiêu đề là string 1–100 ký tự sau `strip`, không
-trùng nhau; ô là string 0–100 ký tự sau `strip`. Tổng JSON sau serialize ≤ 32 KB.
+mỗi hàng phải đủ số ô bằng số cột. Tiêu đề là string 1–100 ký tự sau `strip`, so trùng
+không phân biệt casing bằng `strip + toLowerCase(Locale.ROOT)`, giữ casing sau strip;
+ô là string 0–100 ký tự sau strip. Tổng JSON chuẩn hóa serialize compact ≤ 32.768 byte UTF-8.
 Tiêu đề/ô là plain text, không HTML; FE escape khi render. `guideline_html` sanitize
 bằng jsoup theo cùng quy tắc mô tả sản phẩm; không bắt buộc ở API, thiếu/null thành
 chuỗi rỗng, giới hạn 20.000 ký tự sau sanitize (chủ dự án duyệt ngày 2026-10-07).
@@ -161,7 +162,11 @@ tạo, không lưu vào bản ghi. UNIQUE `(category_id, locale)` chặn hai l�
 đúng một 201, còn lại 409 `VERSION_CONFLICT`. Thiếu version 400; bản ghi đã tồn tại khi
 gửi 0 hoặc version lệch 409 `VERSION_CONFLICT`. Locale khác vi/en trả 400; category
 không tồn tại trả 404 `NOT_FOUND`/`CATEGORY_NOT_FOUND`.
-PUT này bắt buộc `Idempotency-Key` vì có thể tạo. Lookup trước kiểm version; retry cùng
+PUT này bắt buộc `Idempotency-Key` vì có thể tạo. Thứ tự auth → validate → category path
+(404 nếu thiếu, kể cả replay) → idempotency → version guard; guide thiếu khi gửi version > 0
+trả 409 VERSION_CONFLICT. Create dùng INSERT ON CONFLICT(category_id, locale) DO NOTHING
+RETURNING, rỗng → 409 VERSION_CONFLICT, không bắt unique violation trong transaction.
+Lookup trước kiểm version; retry cùng
 key/body giữ data/status, metadata mới, không thêm audit; cùng key khác body 409.
 Mutation/audit/kết quả idempotency cùng transaction; race cùng key/body replay cùng lệnh,
 không áp quy tắc conflict của hai lệnh tạo độc lập. Contract chủ quản tại 03 §3.
