@@ -9,8 +9,10 @@ import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.dao.QueryTimeoutException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -42,7 +44,12 @@ public class ApiExceptionHandler {
   @ExceptionHandler(MethodArgumentTypeMismatchException.class) ResponseEntity<Api.Error> mismatch(MethodArgumentTypeMismatchException e) {
     return Api.error(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "INVALID_PARAMETER", List.of(new Api.FieldError(e.getName(), "has an invalid format")), tracer);
   }
-  @ExceptionHandler(Exception.class) ResponseEntity<Map<String, Object>> internal(Exception e) {
+  @ExceptionHandler(Exception.class) ResponseEntity<?> internal(Exception e) {
+    if (e instanceof ErrorResponse error && error.getStatusCode().is4xxClientError()) {
+      var response = Api.error(HttpStatus.valueOf(error.getStatusCode().value()), "VALIDATION_ERROR", "INVALID_HTTP_REQUEST", List.of(), tracer);
+      return ResponseEntity.status(error.getStatusCode()).headers(error.getHeaders()).headers(response.getHeaders())
+          .contentType(MediaType.APPLICATION_JSON).body(response.getBody());
+    }
     LOG.error("Catalog admin request failed", e);
     var meta = Api.metadata(tracer);
     return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).header("X-Correlation-Id", meta.traceId())

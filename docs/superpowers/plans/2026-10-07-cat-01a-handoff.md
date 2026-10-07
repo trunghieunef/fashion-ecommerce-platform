@@ -8,12 +8,21 @@ Thay [handoff đầu phiên](2026-10-07-session-handoff.md) cho phiên tiếp th
 ## 1. Trạng thái
 
 Trên nhánh `dev`, implementation Tasks 1–6 tới `8eb467d`, Task 7 `c24a96f` đồng bộ docs/evidence.
-Chỉ commit local theo yêu cầu; không push, tạo PR hoặc merge. `origin/main` là `826e361`,
+Giai đoạn đầu chỉ commit local. Sau yêu cầu chủ dự án đã push dev/mở
+[PR #14](https://github.com/trunghieunef/fashion-ecommerce-platform/pull/14) vào main; chưa merge.
+`origin/main` là `826e361`,
 local `main` còn ở `3132dc7`; giữ nguyên các branch ref đó. Spec/plan được chủ dự án giao thực thi;
 nghiệm thu CAT-01 còn mở. Review độc lập Superpowers có 2 Important (error envelope và audit
 request_id); chủ dự án đã duyệt sửa plan Task 2/4 cùng code, RED 2 FAIL → GREEN 2 PASS.
 Full suite sau fix PASS 230/230, gồm catalog 63/63; fallback vẫn log exception server.
 Minor expected_version âm trả 409 thay vì 400 được giữ để chủ dự án chốt plan; xem evidence.
+Review PR14 có Important catch-all đổi lỗi HTTP Spring thành 500: chủ dự án duyệt sửa,
+RED 2 FAIL → GREEN 2 regression + rollback audit 500 PASS. ErrorResponse 4xx đến admin advice
+giữ status/header, envelope VALIDATION_ERROR/INVALID_HTTP_REQUEST JSON và không log ERROR;
+fallback 500 còn lại vẫn log exception. Các Minor mới để riêng theo yêu cầu chủ dự án.
+Full Maven sau fix PR14 PASS 232/232 (catalog 65); lint/contract 27 PASS. Local Compose vẫn
+là image baseline f2d0b6a: lần sửa này kiểm regression qua HTTP Testcontainers, chưa rebuild
+Compose. Theo dõi CI commit mới trên PR trước nghiệm thu.
 Phase 1A tiếp tục trên local trước G0 theo quyết định chủ dự án; O01 còn mở, G1/G2 chưa nghiệm thu.
 
 ## 2. Đã có
@@ -44,7 +53,7 @@ DELETE. Smoke không chứng minh login → token OPS; không đặt helper vào
 
 ## 4. Việc tiếp theo
 
-1. Chủ dự án review cả nhánh trước khi yêu cầu push/PR; chỉ merge sau review được duyệt.
+1. Chủ dự án review bản cập nhật PR14 và CI; chỉ merge sau review được duyệt.
 2. CAT-01b collection/size-guide cần spec/plan riêng; CAT-03 sở hữu ảnh và điều kiện ảnh publish.
 3. INV-01/relay/Kafka và CATALOG_CHANGED nằm ngoài 1a; không tự kéo vào bước bàn giao này.
 4. USR-01/02 parent còn chờ nghiệm thu, G0/O01 và các mục mở staging giữ nguyên handoff cũ/08.
@@ -63,8 +72,8 @@ git diff --check
 bash scripts/local-up.sh && bash scripts/smoke-local.sh && npx playwright test
 ```
 
-Reactor sau review fix 230/230: durability 36, security 38, user 65, catalog 63, Gateway 28. Contract 27/27,
-script tests 14/14, Playwright 2/2 và docs 44 file PASS. Trạng thái review xem evidence;
+Reactor sau review PR14 232/232: durability 36, security 38, user 65, catalog 65, Gateway 28. Contract 27/27.
+Script tests 14/14, Playwright 2/2 và smoke Docker ở baseline f2d0b6a; docs 44 file PASS. Trạng thái review xem evidence;
 không suy CI remote từ local PASS.
 
 ## 6. Môi trường

@@ -12,6 +12,10 @@ Audit dùng `request_id` của metadata response mutation đầu; retry giữ da
 metadata mới và không thêm audit. Lỗi nội bộ admin trả 500 `INTERNAL`/`INTERNAL_ERROR`
 với body chỉ code/message/metadata và X-Correlation-Id; exception vẫn log server qua
 logger redact PII hiện có. Handler admin không áp cho ProductQueryController public.
+Lỗi Spring ErrorResponse 4xx đến advice admin giữ status/header gốc (415 Content-Type,
+406 Accept), envelope VALIDATION_ERROR/INVALID_HTTP_REQUEST bằng application/json,
+metadata/X-Correlation-Id và không log ERROR. Lỗi còn lại mới dùng fallback 500;
+không đổi các handler cụ thể hoặc thứ tự auth trong controller.
 Public API hiện có `GET /api/v1/catalog/products`.
 Endpoint trả các product `ACTIVE` theo `created_at DESC, id DESC`; `limit` mặc định
 `20`, tối đa `100`. Response thành công theo [contract 03 §1.2](../../docs/design/03_interfaces.md):
@@ -97,7 +101,7 @@ Hai lệnh dùng Testcontainers PostgreSQL `17.11`; chúng cần Docker daemon k
 không dùng H2 hoặc mock repository thay thế. Test kiểm tra migration, active-only
 query, limit, response envelope, readiness và runtime role không thể tạo table, cùng admin
 auth, version/SKU races, idempotency, sanitize, publish và rollback outbox/audit. CAT-01a local
-có 63 test catalog sau review fixes; tổng reactor và mutation tại [evidence](../../docs/evidence/cat-01a-local-2026-10-07.md).
+có 65 test catalog sau review PR14; tổng reactor và mutation tại [evidence](../../docs/evidence/cat-01a-local-2026-10-07.md).
 
 Sau khi service chạy:
 

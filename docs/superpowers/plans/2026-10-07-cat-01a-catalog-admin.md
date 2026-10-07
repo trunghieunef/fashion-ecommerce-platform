@@ -85,12 +85,12 @@ Lưu ý: `ProductQueryIntegrationTest` insert product không có `category_id`/`
 - Modify: `pom.xml` (property `jsoup.version` 1.23.2 + dependencyManagement), `services/catalog-service/pom.xml` (platform-durability, jsoup), `services/catalog-service/src/main/resources/application.yaml`
 - Create: `services/catalog-service/src/main/java/vn/fashion/catalog/web/{Api.java,ApiExceptionHandler.java,AdminAuth.java}`
 - Create: `services/catalog-service/src/main/java/vn/fashion/catalog/admin/{AdminCommands.java,AuditLog.java,CatalogBeans.java,TaxonomyController.java,TaxonomyService.java}`
-- Test: `services/catalog-service/src/test/java/vn/fashion/catalog/admin/{CatalogAdminTestSupport.java,TaxonomyIntegrationTest.java}`
+- Test: `services/catalog-service/src/test/java/vn/fashion/catalog/admin/{CatalogAdminTestSupport.java,TaxonomyIntegrationTest.java,AdminHttpErrorIntegrationTest.java}`
 
 **Interfaces:**
 - Produces:
   - `web.Api` — chép `vn.fashion.user.web.Api` (đổi package); `Api.Problem(HttpStatus, String code, String message, List<FieldError>)`.
-  - `web.ApiExceptionHandler` — như user-service (bỏ phần rate limit) + `DuplicateKeyException` → 409 `CONFLICT`, message `DUPLICATE`, field suy từ tên constraint: `*_slug_key`→`slug`, `product_variants_sku_key`→`sku`, `product_variants_product_size_color_key`→`size`; + `MissingRequestHeaderException` cho `Idempotency-Key` → 400 field `Idempotency-Key`. Phải scope `@RestControllerAdvice(basePackages = "vn.fashion.catalog.admin")` để không đổi lỗi của `ProductQueryController`. Theo review được chủ dự án duyệt: fallback `Exception` → 500 `INTERNAL`, message chung, body chỉ code/message/metadata + X-Correlation-Id; vẫn log exception server bằng SLF4J qua cấu hình redact PII hiện có, không trả exception/SQL cho client; không áp cho ProductQueryController public.
+  - `web.ApiExceptionHandler` — như user-service (bỏ phần rate limit) + `DuplicateKeyException` → 409 `CONFLICT`, message `DUPLICATE`, field suy từ tên constraint: `*_slug_key`→`slug`, `product_variants_sku_key`→`sku`, `product_variants_product_size_color_key`→`size`; + `MissingRequestHeaderException` cho `Idempotency-Key` → 400 field `Idempotency-Key`. Phải scope `@RestControllerAdvice(basePackages = "vn.fashion.catalog.admin")` để không đổi lỗi của `ProductQueryController`. Review PR14 được chủ dự án duyệt: trong fallback, `ErrorResponse` 4xx đến advice giữ status/header gốc, envelope VALIDATION_ERROR/INVALID_HTTP_REQUEST + metadata/X-Correlation-Id, Content-Type application/json, không log ERROR; các handler cụ thể giữ nguyên. Chỉ exception còn lại trả 500 `INTERNAL`, message chung, body chỉ code/message/metadata + X-Correlation-Id; vẫn log exception server bằng SLF4J qua cấu hình redact PII hiện có, không trả exception/SQL cho client; không áp cho ProductQueryController public hoặc đổi thứ tự auth.
   - `web.AdminAuth.requireCatalogWriter(String authorization): UUID` — verify bằng `AccessTokenVerifier(parseKeys(fashion.catalog.jwt.public-keys))`; không token/sai → 401 `UNAUTHORIZED` `INVALID_ACCESS_TOKEN`; thiếu `catalog.write` → 403 `FORBIDDEN` `PERMISSION_REQUIRED`. Không truy vấn DB.
   - `admin.AdminCommands`:
     - `record Result(UUID resourceId, int status, Object data)`
@@ -111,6 +111,9 @@ Lưu ý: `ProductQueryIntegrationTest` insert product không có `category_id`/`
 
 ```java
 @Test void missingOrInvalidTokenIs401()          // no header, "Bearer x", token ký key khác → 401 code UNAUTHORIZED
+// AdminHttpErrorIntegrationTest (review PR14 được chủ dự án duyệt):
+@Test void unsupportedContentTypeKeeps415WithoutInternalErrorLog() // text/plain có/không JWT → 415 envelope + correlation, không log ERROR, không side effect
+@Test void unsupportedAcceptKeeps406WithoutInternalErrorLog() // application/xml → 406 envelope application/json + correlation, không log ERROR
 @Test void tokenWithoutCatalogWriteIs403()       // token("user.manage") → 403 FORBIDDEN
 @Test void createCategoryReturns201AndAudits()   // POST {name_vi,name_en,slug:"ao",sort_order:1} → 201, data.version 0, status ACTIVE; audit_logs có 1 dòng catalog.category.create
 @Test void mutationsShareAuditRequestIdAndReplayDoesNotAuditAgain() // toàn bộ 10 mutation: audit.request_id = response.metadata.request_id; retry có metadata mới, không thêm audit

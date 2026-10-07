@@ -71,6 +71,7 @@ paths:
         '403': {$ref: '#/components/responses/Error403'}
         '503': {$ref: '#/components/responses/Error503'}
         '500': {$ref: '#/components/responses/Error500'}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
     post:
       operationId: createCategory
       summary: Create ACTIVE category
@@ -85,6 +86,8 @@ paths:
         '403': {$ref: '#/components/responses/Error403'}
         '503': {$ref: '#/components/responses/Error503'}
         '500': {$ref: '#/components/responses/Error500'}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+        '415': {$ref: '#/components/responses/HttpRequestError'}
         '409': {$ref: '#/components/responses/Error409'}
       requestBody:
         required: true
@@ -109,6 +112,8 @@ paths:
         '403': {$ref: '#/components/responses/Error403'}
         '503': {$ref: '#/components/responses/Error503'}
         '500': {$ref: '#/components/responses/Error500'}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+        '415': {$ref: '#/components/responses/HttpRequestError'}
         '404': {$ref: '#/components/responses/Error404'}
         '409': {$ref: '#/components/responses/Error409'}
       requestBody:
@@ -133,6 +138,7 @@ paths:
         '403': {$ref: '#/components/responses/Error403'}
         '503': {$ref: '#/components/responses/Error503'}
         '500': {$ref: '#/components/responses/Error500'}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
     post:
       operationId: createBrand
       summary: Create ACTIVE brand
@@ -147,6 +153,8 @@ paths:
         '403': {$ref: '#/components/responses/Error403'}
         '503': {$ref: '#/components/responses/Error503'}
         '500': {$ref: '#/components/responses/Error500'}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+        '415': {$ref: '#/components/responses/HttpRequestError'}
         '409': {$ref: '#/components/responses/Error409'}
       requestBody:
         required: true
@@ -171,6 +179,8 @@ paths:
         '403': {$ref: '#/components/responses/Error403'}
         '503': {$ref: '#/components/responses/Error503'}
         '500': {$ref: '#/components/responses/Error500'}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+        '415': {$ref: '#/components/responses/HttpRequestError'}
         '404': {$ref: '#/components/responses/Error404'}
         '409': {$ref: '#/components/responses/Error409'}
       requestBody:
@@ -202,6 +212,7 @@ paths:
         '403': {$ref: '#/components/responses/Error403'}
         '503': {$ref: '#/components/responses/Error503'}
         '500': {$ref: '#/components/responses/Error500'}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
     post:
       operationId: createProduct
       summary: Create DRAFT product; status input is ignored
@@ -216,6 +227,8 @@ paths:
         '403': {$ref: '#/components/responses/Error403'}
         '503': {$ref: '#/components/responses/Error503'}
         '500': {$ref: '#/components/responses/Error500'}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+        '415': {$ref: '#/components/responses/HttpRequestError'}
         '409': {$ref: '#/components/responses/Error409'}
       requestBody:
         required: true
@@ -249,6 +262,7 @@ paths:
         '403': {$ref: '#/components/responses/Error403'}
         '503': {$ref: '#/components/responses/Error503'}
         '500': {$ref: '#/components/responses/Error500'}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
         '404': {$ref: '#/components/responses/Error404'}
     put:
       operationId: updateProduct
@@ -264,6 +278,8 @@ paths:
         '403': {$ref: '#/components/responses/Error403'}
         '503': {$ref: '#/components/responses/Error503'}
         '500': {$ref: '#/components/responses/Error500'}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+        '415': {$ref: '#/components/responses/HttpRequestError'}
         '404': {$ref: '#/components/responses/Error404'}
         '409': {$ref: '#/components/responses/Error409'}
       requestBody:
@@ -300,6 +316,8 @@ paths:
         '403': {$ref: '#/components/responses/Error403'}
         '503': {$ref: '#/components/responses/Error503'}
         '500': {$ref: '#/components/responses/Error500'}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+        '415': {$ref: '#/components/responses/HttpRequestError'}
         '404': {$ref: '#/components/responses/Error404'}
         '409': {$ref: '#/components/responses/Error409'}
       requestBody:
@@ -325,6 +343,8 @@ paths:
         '403': {$ref: '#/components/responses/Error403'}
         '503': {$ref: '#/components/responses/Error503'}
         '500': {$ref: '#/components/responses/Error500'}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+        '415': {$ref: '#/components/responses/HttpRequestError'}
         '404': {$ref: '#/components/responses/Error404'}
         '409': {$ref: '#/components/responses/Error409'}
       requestBody:
@@ -351,6 +371,8 @@ paths:
         '403': {$ref: '#/components/responses/Error403'}
         '503': {$ref: '#/components/responses/Error503'}
         '500': {$ref: '#/components/responses/Error500'}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+        '415': {$ref: '#/components/responses/HttpRequestError'}
         '404': {$ref: '#/components/responses/Error404'}
         '409': {$ref: '#/components/responses/Error409'}
       requestBody:
@@ -377,6 +399,8 @@ paths:
         '403': {$ref: '#/components/responses/Error403'}
         '503': {$ref: '#/components/responses/Error503'}
         '500': {$ref: '#/components/responses/Error500'}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+        '415': {$ref: '#/components/responses/HttpRequestError'}
         '404': {$ref: '#/components/responses/Error404'}
         '409': {$ref: '#/components/responses/Error409'}
       requestBody:
@@ -1018,4 +1042,18 @@ components:
               value:
                 code: INTERNAL
                 message: INTERNAL_ERROR
+                metadata: {request_id: 11111111-1111-4111-8111-111111111111, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
+    HttpRequestError:
+      description: Unsupported Accept (406) or request Content-Type (415); safe JSON envelope, no ERROR log
+      headers:
+        X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+          examples:
+            error:
+              value:
+                code: VALIDATION_ERROR
+                message: INVALID_HTTP_REQUEST
+                errors: []
                 metadata: {request_id: 11111111-1111-4111-8111-111111111111, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}

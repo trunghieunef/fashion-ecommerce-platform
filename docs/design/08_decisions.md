@@ -169,5 +169,11 @@ Gate task là work package trong [backlog](../delivery/10_backlog.md). Mã task 
   server qua logger redact PII hiện có. Audit dùng metadata.request_id do controller tạo
   một lần theo khuôn user-service; retry metadata mới, không thêm audit hoặc đổi hash.
   Không áp handler cho public ProductQueryController. Không đổi schema hoặc nghiệp vụ.
+- Review PR #14 (2026-10-07, chủ dự án duyệt): chỉ sửa Important catch-all đổi lỗi HTTP
+  của Spring thành 500. `ErrorResponse` 4xx đến advice admin giữ status/header gốc,
+  trả VALIDATION_ERROR/INVALID_HTTP_REQUEST + metadata/X-Correlation-Id bằng JSON,
+  không log ERROR; fallback 500 cho lỗi còn lại vẫn log exception qua logger redact PII.
+  Giữ scope public và các handler cụ thể. Chủ dự án để các Minor riêng: deadlock mapping,
+  scalar coercion; không kéo interceptor/refactor tags vào đợt sửa này.
 
 Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác và lý do; ảnh hưởng PRD/API/schema/test/task; người quyết định; ngày; link bằng chứng. Chưa có chữ ký phê duyệt giả định thương mại.

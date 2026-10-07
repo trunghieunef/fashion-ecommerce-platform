@@ -19,6 +19,7 @@ Response thành công gồm code=OK, data, metadata.request_id/trace_id. Lỗi g
 | HTTP | Code | FE / caller xử lý |
 |---|---|---|
 | 400 | VALIDATION_ERROR | Gắn lỗi field, không tự retry |
+| 406 / 415 | VALIDATION_ERROR | Catalog admin: sửa Accept / Content-Type, không tự retry; lỗi Spring 4xx đến advice admin giữ status gốc |
 | 401 | UNAUTHORIZED | Refresh một lần khi phù hợp; guest mất credential không được đoán đơn |
 | 403 | FORBIDDEN | Không đủ quyền/CSRF, không retry |
 | 404 | NOT_FOUND | Không tồn tại hoặc không thuộc actor |
@@ -198,6 +199,12 @@ Audit của mutation dùng cùng `request_id` với metadata response đầu; re
 metadata mới và không thêm audit. Lỗi nội bộ admin trả 500 với đúng code `INTERNAL`, message
 `INTERNAL_ERROR`, metadata và header `X-Correlation-Id`; exception chỉ log phía server qua
 logger redact PII. Handler này không áp cho public ProductQueryController.
+Lỗi Spring `ErrorResponse` 4xx đến advice admin giữ status (gồm 415 Content-Type không hỗ trợ
+và 406 Accept không hỗ trợ), code `VALIDATION_ERROR`, message chung `INVALID_HTTP_REQUEST`,
+metadata/X-Correlation-Id, Content-Type application/json và header lỗi của Spring; không log
+ERROR/stacktrace. Các handler 400/401/403/404/409/503 cụ thể vẫn giữ contract hiện có.
+Chỉ lỗi còn lại mới dùng fallback 500. Binding/content negotiation có thể xảy ra trước auth
+trong method; không đổi thứ tự xác thực hoặc scope advice sang route public/unmapped.
 Chưa nghiệm thu CAT-01; collection/size-guide, CATALOG_CHANGED và relay nằm ngoài phần 1a.
 
 | Methods / path | Quyền | Đầu ra / phase |
