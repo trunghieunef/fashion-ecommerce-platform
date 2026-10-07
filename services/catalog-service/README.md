@@ -143,6 +143,9 @@ không dùng H2 hoặc mock repository thay thế. Test kiểm tra migration, ac
 query, limit, response envelope, readiness và runtime role không thể tạo table, cùng admin
 auth, version/SKU races, idempotency, sanitize, publish và rollback outbox/audit. CAT-01a local
 có 71 test catalog sau follow-up SKU PR14; tổng reactor và mutation tại [evidence](../../docs/evidence/cat-01a-local-2026-10-07.md).
+CAT-01b có114 test catalog (43 mới), 13 mutation Java và smoke Gateway trên V004;
+full verification/whole-branch review tại [evidence CAT-01b](../../docs/evidence/cat-01b-local-2026-10-07.md)
+và [handoff](../../docs/superpowers/plans/2026-10-07-cat-01b-handoff.md). Parent CAT-01 vẫn In progress.
 
 Sau khi service chạy:
 

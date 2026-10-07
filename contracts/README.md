@@ -96,6 +96,8 @@ strip và tổng serialized bytes cần validation tại service, JSON Schema ch
 Smoke dùng JWT OPS synthetic local (không chứng minh login → token OPS), giữ401/403 member thật,
 kiểm collection items/version, guide table/version/GET→PUT/replay/stale và metadata/header.
 Giới hạn/dữ liệu tích lũy tại [catalog README](../services/catalog-service/README.md).
+CAT-01b contract hiện có32 test PASS/3 OpenAPI lint; runtime/module/mutation và trạng thái
+review local tại [evidence](../docs/evidence/cat-01b-local-2026-10-07.md).
 
 Python 3.10+; cài tooling vào virtualenv của bạn:
 

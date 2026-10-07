@@ -295,7 +295,8 @@ category_id/locale, expected_version và nội dung đã chuẩn hóa. Race cùn
 là retry của một lệnh, tuân theo replay; quy tắc một 201/còn lại 409 áp cho các lệnh
 tạo độc lập. Mutation, audit và kết quả idempotency phải commit cùng transaction.
 PUT guide đã hiện thực tại Task 5 và kiểm bằng HTTP/PostgreSQL Testcontainers;
-Task 6 đã upgrade V004 trên volume local và smoke Gateway PASS, vẫn chờ full verification/review.
+Task 6 đã upgrade V004 trên volume local và smoke Gateway PASS; Task 7 full verification281 PASS,
+[evidence CAT-01b](../evidence/cat-01b-local-2026-10-07.md) ghi trạng thái whole-branch review.
 
 CAT-01b admin read (chủ dự án, 2026-10-07): bổ sung GET `/catalog/collections/{id}`
 trả collection + `items` gồm `product_id`/`sort_order`, thứ tự `(sort_order, product_id)`,

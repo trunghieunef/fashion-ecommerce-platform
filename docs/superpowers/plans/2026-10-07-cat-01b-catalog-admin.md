@@ -17,7 +17,9 @@ Jackson 3 có sẵn, jsoup 1.23.2 có sẵn; Maven wrapper trong Git Bash, Docke
 2026-10-07, gồm §6 mục 1–6 và chốt bổ sung cùng ngày.
 
 **Status:** **Đã duyệt với các sửa đổi ngày 2026-10-07**; Native executing-plans,
-tuần tự trên `dev`, commit local từng task; chưa tuyên bố endpoint chạy.
+tuần tự trên `dev`, commit local từng task; Task1–6 đã code/test/mutation/smoke Gateway,
+Task7 full verification281/evidence PASS, whole-branch review còn chờ sau commit docs.
+Chưa push/PR/remote CI.
 `TASK:CAT-01` phần 1b; `REQ:CAT-03`, `REQ:CAT-06`; dependency CAT-01a/PLT-02/03/USR-02.
 Baseline code `8f27663`; checkpoint docs/contract/spec `6ccbbd3`. Làm tuần tự trên `dev`;
 không dùng plan Phase 1A Task 2 cũ để đổi scope. Chưa Done parent CAT-01.
@@ -388,7 +390,7 @@ nếu còn drift. Không đổi CAT-01 parent Done; giữ spec approved/plan pro
 RED/mutations/restores, schema upgrade, smoke/browser và limits. Handoff có lệnh/toolchain thật,
 file chính, commits, scope còn lại, CI local/remote phân biệt, không token/credential/PII.
 
-- [ ] **Step 1: Chạy checks cuối một lượt sau restore hết mutations.**
+- [x] **Step 1: Chạy checks cuối một lượt sau restore hết mutations.**
 
 ```bash
 ./mvnw -B test
@@ -402,11 +404,11 @@ git diff --check
   Smoke/browser Task 6 chỉ chạy lại nếu thay code/script/runtime sau đó hoặc evidence thiếu.
   Scan staged diff bằng gitleaks pinned như workflow trước commit; synthetic giống secret có
   gitleaks:allow đúng dòng, không dùng allow để bỏ qua secret thật.
-- [ ] **Step 2: Tự review coverage spec/plan.** Mọi constraint/task có bằng chứng; 03/05/06/08/schema/
+- [x] **Step 2: Tự review coverage spec/plan.** Mọi constraint/task có bằng chứng; 03/05/06/08/schema/
   OpenAPI/README nhất quán. Không tính contract31 baseline là số sau implementation; lấy reports thực.
-- [ ] **Step 3: Ghi evidence/handoff**, chạy docs checker/diff check sau edits; không viết test đỏ/mutation
+- [x] **Step 3: Ghi evidence/handoff**, chạy docs checker/diff check sau edits; không viết test đỏ/mutation
   giả cho tài liệu. Task 1–6 log RED/GREEN/mutations là bằng chứng chức năng.
-- [ ] **Step 4: Commit** `docs(CAT-01): record collection and size guide admin evidence and handoff`.
+- [x] **Step 4: Commit** `docs(CAT-01): record collection and size guide admin evidence and handoff`.
 - [ ] **Step 5: Whole-branch review theo superpowers:requesting-code-review**, fixes đúng findings trong scope,
   nếu phải đổi business/contract chưa duyệt hỏi trước; checks lại khi fix yêu cầu. Không tự merge.
 - [ ] **Step 6: Dừng sau whole-branch review và bàn giao.** Chỉ commit local;

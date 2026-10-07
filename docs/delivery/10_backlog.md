@@ -111,11 +111,13 @@ local, đã merge [PR #14](https://github.com/trunghieunef/fashion-ecommerce-pla
 vào `main` tại `8f27663`; REQ CAT-01/02, dependency PLT-02/03 và USR-02. Có taxonomy,
 product/variant, publish/unpublish, HTML sanitize, SKU immutable, version/idempotency/audit và
 VARIANT_CREATED durable outbox. Acceptance phần 1a và bằng chứng tại
-[evidence CAT-01a](../evidence/cat-01a-local-2026-10-07.md). Chưa Done: còn CAT-01b
-collection/size-guide ([spec đã duyệt](../superpowers/specs/2026-10-07-cat-01b-design.md),
-[plan đã duyệt, thực thi Native](../superpowers/plans/2026-10-07-cat-01b-catalog-admin.md)),
-ảnh/publish gate CAT-03, reviewer nghiệm thu parent;
-relay/Kafka ngoài phạm vi 1a. SKU mới canonical uppercase với V003, SKU legacy không backfill.
+[evidence CAT-01a](../evidence/cat-01a-local-2026-10-07.md). CAT-01b collection/size-guide
+đã commit local Task1–6 trên dev, V004/HTTP Testcontainers/Gateway smoke/full reactor281 PASS;
+Task7 còn review/bàn giao theo [plan](../superpowers/plans/2026-10-07-cat-01b-catalog-admin.md)
+và [evidence](../evidence/cat-01b-local-2026-10-07.md). Chưa push/PR/CI remote CAT-01b.
+Chưa Done: còn review/nghiệm thu parent, ảnh/publish gate CAT-03;
+public read CAT-02 và relay/Kafka ngoài phạm vi 1a/1b. SKU mới canonical uppercase với V003,
+SKU legacy không backfill.
 
 Quyết định CAT-01b ngày 2026-10-07 (chủ dự án): PUT collection sang ACTIVE không yêu cầu
 product ACTIVE. Public visibility là acceptance CAT-02 theo 03/06, không làm public read
