@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class PublishIntegrationTest extends CatalogAdminTestSupport {
-  UUID ready() { UUID p = createProduct("shirt"); createVariant(p, "SHIRT-M"); return p; }
+  UUID ready() { UUID p = createProduct("shirt"); createVariant(p, "SHIRT-M"); attachSyntheticImage(p); return p; }
   @Test void publishWithoutActiveVariantIs400AndStaysDraft() {
     UUID p = createProduct("shirt"); var r = call("POST", "/products/" + p + "/publish", Map.of("expected_version", 0));
     assertThat(r.statusCode()).isEqualTo(400); assertThat(json(r).path("errors").toString()).contains("variants");
@@ -33,7 +33,7 @@ class PublishIntegrationTest extends CatalogAdminTestSupport {
     assertThat(data(call("POST", "/products/" + p + "/publish", Map.of("expected_version", 3)), 200).path("published_at")).isEqualTo(published.path("published_at"));
   }
   @Test void publishAfterLastVariantDeactivatedIs400() {
-    UUID p = createProduct("shirt"); var v = createVariant(p, "SHIRT-M");
+    UUID p = createProduct("shirt"); var v = createVariant(p, "SHIRT-M"); attachSyntheticImage(p);
     data(call("PUT", "/variants/" + v.path("id").asText(), Map.of("weight_grams", 100, "status", "INACTIVE", "expected_version", 0)), 200);
     assertThat(call("POST", "/products/" + p + "/publish", Map.of("expected_version", 1)).statusCode()).isEqualTo(400);
   }
@@ -50,7 +50,7 @@ class PublishIntegrationTest extends CatalogAdminTestSupport {
   @Test void invalidTransitionIs409() {
     UUID p = createProduct("shirt"); var r = call("POST", "/products/" + p + "/unpublish", Map.of("expected_version", 0));
     assertThat(r.statusCode()).isEqualTo(409); assertThat(json(r).path("message").asText()).isEqualTo("INVALID_TRANSITION");
-    createVariant(p, "SHIRT-M"); data(call("POST", "/products/" + p + "/publish", Map.of("expected_version", 1)), 200);
+    createVariant(p, "SHIRT-M"); attachSyntheticImage(p); data(call("POST", "/products/" + p + "/publish", Map.of("expected_version", 1)), 200);
     assertThat(call("POST", "/products/" + p + "/publish", Map.of("expected_version", 2)).statusCode()).isEqualTo(409);
   }
   @Test void publishNeedsVersionAndKey() {

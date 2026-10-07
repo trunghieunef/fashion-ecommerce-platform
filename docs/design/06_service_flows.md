@@ -126,8 +126,10 @@ version mới; retry cùng key không tạo event khác. Hiện intent PENDING, 
 
 Publish CAT-01a kiểm category/brand ACTIVE và ít nhất một variant ACTIVE, tên VI/EN bắt buộc,
 dưới khóa product + version guard; key/reason/idempotency và audit theo spec đã duyệt.
-Điều kiện có ảnh hoãn tới CAT-03 theo quyết định chủ dự án ngày 2026-10-07; chưa đủ acceptance
-CAT-01. CATALOG_CHANGED/cache invalidation không nằm trong phần 1a.
+Từ CAT-03 Task 6, publish còn kiểm `exists(product_images)` trong cùng transaction (không HEAD S3):
+thiếu ảnh trả 400 field `images`. PUT images không làm product ACTIVE còn 0 ảnh (400
+ACTIVE_PRODUCT_REQUIRES_IMAGE); ACTIVE legacy V001 giữ status. Đọc ảnh public/admin thuộc Task 7.
+CATALOG_CHANGED/cache invalidation không nằm trong phần 1a.
 Publish đặt `published_at` lần đầu; unpublish không sửa cột này, kể cả ACTIVE legacy từ V001
 còn null. CAT-02 chốt backfill/xử lý null cho sort/index theo published_at.
 

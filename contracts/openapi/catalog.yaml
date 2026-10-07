@@ -5,7 +5,7 @@ info:
   description: >
     TASK:PLT-02 public sample and TASK:CAT-01a admin (catalog.write; ADR-21 ES256, revocation TTL 15 minutes).
     TASK:CAT-01b admin collection list/detail/mutations and size-guide GET/PUT are implemented, tested with PostgreSQL Testcontainers and exercised through the local Gateway with a synthetic OPS token.
-    TASK:CAT-03 media operations marked planned are draft contracts awaiting written-spec/plan approval; no media feature runtime yet.
+    TASK:CAT-03 upload, complete, status and image attach operations are implemented; operations still marked planned (image byte reads) are draft contracts.
     Full catalog filters/sort/cursor belong to TASK:CAT-02 (docs/design/03_interfaces.md §2.2).
 servers:
   - url: http://localhost:8080
@@ -706,8 +706,8 @@ paths:
     get:
       operationId: "getProductImages"
       summary: "Read image snapshot and product version"
-      x-implementation-status: "planned"
-      description: "TASK:CAT-03 draft; pending written-spec/plan approval. catalog.write checked at service."
+      x-implementation-status: "implemented"
+      description: "TASK:CAT-03 implemented and tested with PostgreSQL (MediaAttachIntegrationTest). catalog.write checked at service. Full replacement guarded by expected_version; publish requires at least one image."
       security: [{"bearerAuth":[]}]
       parameters: [{"$ref":"#/components/parameters/Id"}]
       responses:
@@ -728,8 +728,8 @@ paths:
     put:
       operationId: "replaceProductImages"
       summary: "Replace images and increment product version"
-      x-implementation-status: "planned"
-      description: "TASK:CAT-03 draft; pending written-spec/plan approval. catalog.write checked at service."
+      x-implementation-status: "implemented"
+      description: "TASK:CAT-03 implemented and tested with PostgreSQL (MediaAttachIntegrationTest). catalog.write checked at service. Full replacement guarded by expected_version; publish requires at least one image."
       security: [{"bearerAuth":[]}]
       parameters: [{"$ref":"#/components/parameters/Id"}]
       responses:
@@ -759,8 +759,8 @@ paths:
     get:
       operationId: "getCollectionImages"
       summary: "Read cover/images snapshot and collection version"
-      x-implementation-status: "planned"
-      description: "TASK:CAT-03 draft; pending written-spec/plan approval. catalog.write checked at service."
+      x-implementation-status: "implemented"
+      description: "TASK:CAT-03 implemented and tested with PostgreSQL (MediaAttachIntegrationTest). catalog.write checked at service. Full replacement guarded by expected_version; publish requires at least one image."
       security: [{"bearerAuth":[]}]
       parameters: [{"$ref":"#/components/parameters/Id"}]
       responses:
@@ -781,8 +781,8 @@ paths:
     put:
       operationId: "replaceCollectionImages"
       summary: "Replace cover/images and increment collection version"
-      x-implementation-status: "planned"
-      description: "TASK:CAT-03 draft; pending written-spec/plan approval. catalog.write checked at service."
+      x-implementation-status: "implemented"
+      description: "TASK:CAT-03 implemented and tested with PostgreSQL (MediaAttachIntegrationTest). catalog.write checked at service. Full replacement guarded by expected_version; publish requires at least one image."
       security: [{"bearerAuth":[]}]
       parameters: [{"$ref":"#/components/parameters/Id"}]
       responses:

@@ -320,6 +320,9 @@ public class UploadService {
         """).param("id", id).query((rs, i) -> new AssetView(id,
         new RenditionView(rs.getString(1), rs.getLong(2), rs.getInt(3), rs.getInt(4), rs.getString(5).strip()),
         new RenditionView(rs.getString(6), rs.getLong(7), rs.getInt(8), rs.getInt(9), rs.getString(10).strip()),
-        "/api/v1/catalog/images/" + id + "?kind=image", "/api/v1/catalog/images/" + id + "?kind=thumb")).optional().orElse(null);
+        imageUrl(id, "image"), imageUrl(id, "thumb"))).optional().orElse(null);
   }
+
+  /** Gateway path of an approved rendition; kind is image or thumb. */
+  public static String imageUrl(UUID id, String kind) { return "/api/v1/catalog/images/" + id + "?kind=" + kind; }
 }

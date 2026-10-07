@@ -126,6 +126,8 @@ public class ProductAdminService {
           invalid.add(new Api.FieldError("brand_id", "brand must be ACTIVE"));
         if (!jdbc.sql("select exists(select 1 from product_variants where product_id=:id and status='ACTIVE')").param("id", id).query(Boolean.class).single())
           invalid.add(new Api.FieldError("variants", "at least one ACTIVE variant is required"));
+        if (!jdbc.sql("select exists(select 1 from product_images where product_id=:id)").param("id", id).query(Boolean.class).single())
+          invalid.add(new Api.FieldError("images", "at least one image is required"));
         TaxonomyService.valid(invalid);
       }
       jdbc.sql("update products set status=:status,version=version+1,updated_at=now()"

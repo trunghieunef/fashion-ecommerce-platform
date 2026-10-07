@@ -153,7 +153,8 @@ public class CollectionAdminService {
   }
   private Summary summary(ResultSet rs, int row) throws SQLException {
     var start = rs.getObject("start_at", OffsetDateTime.class); var end = rs.getObject("end_at", OffsetDateTime.class);
-    return new Summary(rs.getObject("id", UUID.class), rs.getString("name_vi"), rs.getString("name_en"), rs.getString("slug"), null,
+    return new Summary(rs.getObject("id", UUID.class), rs.getString("name_vi"), rs.getString("name_en"), rs.getString("slug"),
+        rs.getObject("cover_asset_id", UUID.class) == null ? null : vn.fashion.catalog.media.UploadService.imageUrl(rs.getObject("cover_asset_id", UUID.class), "image"),
         start == null ? null : start.toInstant(), end == null ? null : end.toInstant(), rs.getString("status"), rs.getLong("version"));
   }
   public CollectionData load(UUID id) {

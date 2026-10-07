@@ -199,7 +199,7 @@ Contract thực thi tại [`catalog.yaml`](../../contracts/openapi/catalog.yaml)
 description lưu HTML đã sanitize, tiền là bigint VND (không nhận số thập phân). Các endpoint
 cần `catalog.write` (OPS), mọi POST có `Idempotency-Key`; PUT và publish/unpublish có
 `expected_version`. Publish/unpublish nhận reason tùy chọn ≤ 500, cạnh sai trả 409;
-publish kiểm taxonomy ACTIVE và ≥ 1 variant ACTIVE (điều kiện ảnh thuộc CAT-03).
+publish kiểm taxonomy ACTIVE, ≥ 1 variant ACTIVE và ≥ 1 ảnh đã attach (400 field `images`; CAT-03 Task 6 implemented, test PostgreSQL).
 Token được kiểm bằng `AccessTokenVerifier`, không gọi user-service; thu hồi quyền trễ tối đa
 15 phút theo ADR-21. Retry key/body chuẩn hóa trả cùng kết quả; đổi body trả 409 IDEMPOTENCY_KEY_REUSED.
 SKU mới: `String.strip` → kiểm 1–64 ký tự ASCII `^[A-Za-z0-9][A-Za-z0-9._-]*$` →
@@ -240,7 +240,7 @@ trước so sánh/hash/lưu; năm UTC phải trong 1..9999, ngoài phạm vi tr�
 Null nghĩa không giới hạn phía tương ứng; có cả hai thì `end_at > start_at` sau truncate.
 CAT-01b không nhận `cover_url`,
 `lookbook` hoặc `lookbook_images` trong request, kể cả null; response `cover_url`
-luôn null. Cover/lookbook thuộc CAT-03, chỉ attach sau upload được kiểm tra;
+null cho tới khi attach cover; từ CAT-03 Task 6 `cover_url` là path Gateway `/api/v1/catalog/images/{cover_asset_id}?kind=image` khi có cover. Cover/lookbook chỉ attach qua PUT images sau upload được kiểm tra;
 không mở đường nhận URL chưa được kiểm tra trong CAT-01b. Contract tại `catalog.yaml`
 đã có POST/PUT/examples và endpoint collection mutation thực thi tại Task 3.
 
@@ -398,7 +398,7 @@ reference/lease được GC sau 7 ngày từ terminal, suy ra upload_id, không 
 | GET /catalog/size-guides/{category_id}/{locale} | OPS (`catalog.write`) | CAT-01b: nội dung + version; chưa có 404 NOT_FOUND, locale ngoài vi/en 400 / 1 |
 | PUT /catalog/size-guides/{category_id}/{locale} | OPS (`catalog.write`) | CAT-01b: key + expected_version; 0 tạo → 201/version 1, cập nhật → 200/version +1; replay trước version guard / 1 |
 | POST /catalog/images/uploads | OPS (`catalog.write`) | CAT-03 implemented (Task 4, test PostgreSQL+RustFS): key bắt buộc, URL PUT sống 300 giây, idempotency chỉ lưu descriptor không URL; complete deadline = PUT expiry +24h; replay sau hạn PUT trả 409 UPLOAD_URL_EXPIRED, client không còn upload_id thì tạo intent mới với key mới / 1 |
-| GET,PUT /catalog/products/{id}/images; GET,PUT /catalog/collections/{id}/images | OPS (`catalog.write`) | CAT-03 planned: full replacement/version resource, không key; ownership chỉ mới-gắn, snapshot cùng version / 1 |
+| GET,PUT /catalog/products/{id}/images; GET,PUT /catalog/collections/{id}/images | OPS (`catalog.write`) | CAT-03 implemented (Task 6, test PostgreSQL): full replacement/version resource, không key; ownership chỉ mới-gắn (APPROVED, đúng actor/target, trong retention 7 ngày), snapshot cùng version; 400 `images[i].asset_id`/`images[i].variant_color`/`cover_asset_id`, 400 ACTIVE_PRODUCT_REQUIRES_IMAGE, 409 VERSION_CONFLICT; lookbook lưu alt = tên collection (V005 bắt buộc alt, contract chỉ có caption) / 1 |
 | GET /catalog/images/{asset_id}?kind=image hoặc thumb | OPS (`catalog.write`) | CAT-03 planned: admin preview approved, không raw / 1 |
 | POST /catalog/images/uploads/{upload_id}/complete | OPS (`catalog.write`) | CAT-03 implemented (Task 5, test PostgreSQL+RustFS): không body/key, idempotent theo upload_id, owner-only (404); 200 data là approved asset; terminal replay không gọi S3/audit; 400 IMAGE_REJECTED, 409 UPLOAD_PROCESSING/UPLOAD_EXPIRED/UPLOAD_NOT_UPLOADED, 429 Retry-After: 1, 503 storage; luồng tại 06 §3.1 / 1 |
 | GET /catalog/images/uploads/{upload_id} | OPS (`catalog.write`) | CAT-03 implemented (Task 4): upload status để phục hồi complete timeout; owner strict (khác owner/thiếu → 404) / 1 |
