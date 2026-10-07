@@ -305,8 +305,8 @@ nội dung + version; chưa có trả 404 `NOT_FOUND`; locale ngoài vi/en trả
 Cả hai kiểm `catalog.write` tại service như GET admin CAT-01a, trả cả dữ liệu
 DRAFT/INACTIVE, giữ envelope/metadata và X-Correlation-Id hiện có. Nội dung và version
 phải thuộc cùng snapshot; version GET là `expected_version` mà PUT dùng để cập nhật.
-Contract/examples 2xx/4xx tại `catalog.yaml` đã có, endpoint chưa triển khai. Acceptance
-CAT-01b phải có test HTTP 401/403/404, locale sai 400, thứ tự items, đọc DRAFT/INACTIVE,
+Contract/examples 2xx/4xx tại `catalog.yaml` và endpoint GET đã hiện thực ở Task2/4.
+HTTP Testcontainers đã kiểm 401/403/404, locale sai400, thứ tự items, đọc DRAFT/INACTIVE,
 GET → PUT dùng version nhận được thành công và version cũ sau cập nhật trả 409.
 Không bổ sung public read; phần đó giữ tại TASK:CAT-02.
 

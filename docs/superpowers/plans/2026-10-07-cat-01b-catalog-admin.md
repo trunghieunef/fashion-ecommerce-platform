@@ -18,7 +18,8 @@ Jackson 3 có sẵn, jsoup 1.23.2 có sẵn; Maven wrapper trong Git Bash, Docke
 
 **Status:** **Đã duyệt với các sửa đổi ngày 2026-10-07**; Native executing-plans,
 tuần tự trên `dev`, commit local từng task; Task1–6 đã code/test/mutation/smoke Gateway,
-Task7 full verification281/evidence PASS, whole-branch review còn chờ sau commit docs.
+Task1–7 đã thực hiện; full verification281/evidence PASS, whole-branch review0Critical/0Important,
+1Minor stale docs đã đồng bộ. Giữ nhánh local để chủ dự án review/nghiệm thu.
 Chưa push/PR/remote CI.
 `TASK:CAT-01` phần 1b; `REQ:CAT-03`, `REQ:CAT-06`; dependency CAT-01a/PLT-02/03/USR-02.
 Baseline code `8f27663`; checkpoint docs/contract/spec `6ccbbd3`. Làm tuần tự trên `dev`;
@@ -409,12 +410,19 @@ git diff --check
 - [x] **Step 3: Ghi evidence/handoff**, chạy docs checker/diff check sau edits; không viết test đỏ/mutation
   giả cho tài liệu. Task 1–6 log RED/GREEN/mutations là bằng chứng chức năng.
 - [x] **Step 4: Commit** `docs(CAT-01): record collection and size guide admin evidence and handoff`.
-- [ ] **Step 5: Whole-branch review theo superpowers:requesting-code-review**, fixes đúng findings trong scope,
+- [x] **Step 5: Whole-branch review theo superpowers:requesting-code-review**, fixes đúng findings trong scope,
   nếu phải đổi business/contract chưa duyệt hỏi trước; checks lại khi fix yêu cầu. Không tự merge.
-- [ ] **Step 6: Dừng sau whole-branch review và bàn giao.** Chỉ commit local;
+- [x] **Step 6: Dừng sau whole-branch review và bàn giao.** Chỉ commit local;
   push `dev` và mở PR vào `main` chỉ khi chủ dự án yêu cầu riêng (AGENTS.md).
   Chưa chạy remote CI thì không ghi CI PASS. Ghi parent CAT-01 In progress,
   ảnh/publish gate CAT-03/public CAT-02/relay và nghiệm thu còn mở.
+
+Evidence Task7: full reactor281 PASS0fail/error/skip (36/38/65/114/28), contracts32/3API,
+scripts14/docs48/history70commits gitleaks/staged/diff PASS. Commit evidence a0def6e;
+fresh whole-branch review8f27663..a0def6e:0Critical/0Important/1Minor stale status OpenAPI/03/05.
+Đồng bộ3 câu trạng thái theo yêu cầu docs AGENTS.md trong Task7 (không viết RED/mutation giả
+cho docs), kiểm lại contract/docs/diff; không production/runtime changes hay re-review.
+Rulings giữ scope và chi phí được ghi trong evidence/handoff; không có Minor mới hoãn.
 
 ## Self-review và execution gate
 

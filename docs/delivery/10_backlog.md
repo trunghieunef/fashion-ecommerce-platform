@@ -113,7 +113,8 @@ product/variant, publish/unpublish, HTML sanitize, SKU immutable, version/idempo
 VARIANT_CREATED durable outbox. Acceptance phần 1a và bằng chứng tại
 [evidence CAT-01a](../evidence/cat-01a-local-2026-10-07.md). CAT-01b collection/size-guide
 đã commit local Task1–6 trên dev, V004/HTTP Testcontainers/Gateway smoke/full reactor281 PASS;
-Task7 còn review/bàn giao theo [plan](../superpowers/plans/2026-10-07-cat-01b-catalog-admin.md)
+Task7 whole-branch review0Critical/0Important, Minor docs đã đồng bộ theo
+[plan](../superpowers/plans/2026-10-07-cat-01b-catalog-admin.md)
 và [evidence](../evidence/cat-01b-local-2026-10-07.md). Chưa push/PR/CI remote CAT-01b.
 Chưa Done: còn review/nghiệm thu parent, ảnh/publish gate CAT-03;
 public read CAT-02 và relay/Kafka ngoài phạm vi 1a/1b. SKU mới canonical uppercase với V003,

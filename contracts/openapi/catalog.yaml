@@ -569,7 +569,7 @@ paths:
       operationId: putSizeGuide
       summary: Create or replace a size guide with idempotency and expected version
       description: >
-        Approved CAT-01b contract; implementation pending. Requires catalog.write.
+        Implemented CAT-01b contract, verified with PostgreSQL and local Gateway smoke. Requires catalog.write.
         Unlike CAT-01a PUT, Idempotency-Key is mandatory because this PUT can create.
         expected_version=0 creates an absent guide with 201 and version=1; updating uses
         its current version, returns 200 and increments version. Missing version returns

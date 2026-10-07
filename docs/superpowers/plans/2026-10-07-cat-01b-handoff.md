@@ -8,14 +8,17 @@ không thay trạng thái parent/gate trong [backlog](../../delivery/10_backlog.
 
 Trên `dev`, Native tuần tự theo [plan đã duyệt](2026-10-07-cat-01b-catalog-admin.md)
 và [spec](../specs/2026-10-07-cat-01b-design.md). Task1–6 đã commit/test/mutation,
-Task7 full verification/evidence PASS, whole-branch review còn chờ sau commit docs.
+Task1–7 đã thực hiện; full verification/evidence PASS, whole-branch review0Critical/0Important,
+1Minor stale docs đã đồng bộ; verdict Ready to merge, không thay nghiệm thu của chủ dự án.
 Chỉ local: **không push/PR/merge**.
 Base để review/PR sau này là `origin/main`/`8f27663` (PR14 đã merge), không dùng local main cũ.
 Chỉ push dev/mở PR main khi chủ dự án yêu cầu riêng. Parent CAT-01 **In progress**.
 
 Commits: docs checkpoint6ccbbd3; docs-approved7cd95d7; schema d317c03;
 collection read7ab1f98; collection write52de350; guide read18e049a;
-guide PUT93cb85b; smoke9a2395a. Chi tiết commands/results/mutation và docs tại
+guide PUT93cb85b; smoke9a2395a; Task7 evidence a0def6e (review range8f27663..a0def6e).
+Commit docs follow-up ghi kết quả review và sửa trạng thái stale; xem git log dev.
+Chi tiết commands/results/mutation và docs tại
 [evidence CAT-01b](../../evidence/cat-01b-local-2026-10-07.md).
 
 ## Hành vi và file chính

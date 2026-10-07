@@ -157,8 +157,8 @@ Tiêu đề/ô là plain text, không HTML; FE escape khi render. `guideline_htm
 bằng jsoup theo cùng quy tắc mô tả sản phẩm; không bắt buộc ở API, thiếu/null thành
 chuỗi rỗng, giới hạn 20.000 ký tự sau sanitize (chủ dự án duyệt ngày 2026-10-07).
 Quy ước (không ép bằng validation/FK):
-cột đầu là nhãn size khớp `variant.size`. Đây là schema mục tiêu; chưa có migration
-size guide hoặc implementation CAT-01b, không sửa migration đã áp dụng.
+cột đầu là nhãn size khớp `variant.size`. Schema đã có ở V004 và size guide GET/PUT
+đã hiện thực/kiểm HTTP PostgreSQL tại Task4/5; không sửa migration đã áp dụng.
 
 Size guide create/update (chủ dự án, 2026-10-07): PUT cùng category/locale dùng
 `expected_version=0` cho bản ghi chưa tồn tại → 201/version 1; cập nhật bằng version
