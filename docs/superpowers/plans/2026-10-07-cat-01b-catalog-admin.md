@@ -292,7 +292,7 @@ identical CAT-01a errors. New PUT invokes it in validate phase **before requireC
 Controller auth → normalize/key validate → service.put (category → commands.create → version guard).
 Operation `catalog.size-guide.put`; audit action create/update with guide UUID as resource_id.
 
-- [ ] **Step 1: Viết HTTP regression tests.** Dùng raw JSON cho null/unknown/type cases và cùng
+- [x] **Step 1: Viết HTTP regression tests.** Dùng raw JSON cho null/unknown/type cases và cùng
   body/key cho retries; latches start concurrent requests, assertions DB/audit/key bằng PostgreSQL.
 
 ```java
@@ -313,19 +313,20 @@ Operation `catalog.size-guide.put`; audit action create/update with guide UUID a
 @Test void guideAuditFailureRollsBackWriteAndKeyWithSafe500() // create/update abort audit; guide before unchanged/no PENDING; INTERNAL metadata/header/no SQL/HTML; finally restore test constraint
 ```
 
-- [ ] **Step 2: RED.** Target SizeGuideAdminIntegrationTest → PUT404 before implementation.
-- [ ] **Step 3: Implement input/content.** Strip strings, case-insensitive duplicate via Locale.ROOT,
+- [x] **Step 2: RED.** Target SizeGuideAdminIntegrationTest → 15 assertion failures trước implementation.
+  Thực chạy PUT405 vì Task 4 đã đăng ký GET cùng path (dự kiến ban đầu PUT404); compilation OK.
+- [x] **Step 3: Implement input/content.** Strip strings, case-insensitive duplicate via Locale.ROOT,
   preserve display text; validate before immutable lists to avoid null NPE. Normalize Table record,
   count ObjectMapper compact JSON bytes with StandardCharsets.UTF_8; measure HTML after existing
   HtmlSanitizer.clean. Unknown root any-setter/JSON table keys return400, do not drop field or log value.
-- [ ] **Step 4: Implement PUT transaction and approved order.** Validate key before category,
+- [x] **Step 4: Implement PUT transaction and approved order.** Validate key before category,
   category lookup even replay, commands.create handles normalized hash/replay. Inside work: version0
   INSERT ON CONFLICT(category_id,locale) DO NOTHING RETURNING, empty→VERSION_CONFLICT; version>0
   SELECT guide FOR UPDATE, absent→VERSION_CONFLICT, requireVersion, UPDATE version+1. Record audit,
   return Result(id,201|200,guide), finish key same transaction. No unique-exception recovery/advisory lock.
-- [ ] **Step 5: GREEN.** Target + module + contract validate, existing AdminCommands create key behavior PASS.
+- [x] **Step 5: GREEN.** Target + module + contract validate, existing AdminCommands create key behavior PASS.
   Audit request_id phải bằng metadata.request_id lần đầu cho cả create/update; replay không audit.
-- [ ] **Step 6: Mutations one at a time.** Move requireCategory after idempotency → missingCategoryIs404BeforeCompletedReplay FAIL;
+- [x] **Step 6: Mutations one at a time.** Move requireCategory after idempotency → missingCategoryIs404BeforeCompletedReplay FAIL;
   use case-sensitive header set → headersAreUniqueIgnoringCase... FAIL; use JSON string.length instead
   of UTF8 bytes → serializedUtf8Boundary... FAIL; bypass HtmlSanitizer → optionalGuideline... FAIL;
   remove guide requireVersion → concurrentUpdates... FAIL; bỏ row-width guard → rowWidthMustMatchColumns FAIL;
@@ -333,12 +334,22 @@ Operation `catalog.size-guide.put`; audit action create/update with guide UUID a
   → independentConcurrentCreatesYieldOne201AndVersionConflict FAIL (hai 201/audit2).
   Restore/module GREEN after each.
   Create-race test also guards exact code and no aborted idempotency transaction; do not mutate deployed migration.
-- [ ] **Step 7: Docs/contract and commit** `feat(CAT-01): add durable size guide PUT with validated content`.
+- [x] **Step 7: Docs/contract and commit** `feat(CAT-01): add durable size guide PUT with validated content`.
+
+Evidence Task 5: RED15 failures0errors/GREEN15; module durability36/security38/catalog114 PASS0skip.
+7 mutation thực (category order/header case/UTF8 bytes/sanitizer/version guard/row width/create race)
+đều target1 assertion failure0errors, log có Tests run và không COMPILATION ERROR.
+Sau mỗi mutation khôi phục source và module36/38/114 PASS trước mutation tiếp theo.
+Contract32/3 OpenAPI lint, scripts14, docs46 và diff check PASS. 03/05/06/08/spec/README/OpenAPI
+đã cập nhật; smoke Gateway/upgrade volume còn chờ Task 6. Không có dependency mới.
 
 ### Task 6: Gateway smoke đầy đủ cho collection/guide
 
 **Files:** Modify `scripts/smoke-local.sh`, `services/catalog-service/README.md`,
-`infra/local/README.md`, `contracts/README.md`; Gateway route hiện có không cần route mới.
+`contracts/README.md`; cập nhật `docs/engineering/12_engineering_guide.md` §1 chỉ nếu mô tả
+smoke cần nêu collection/size guide. Không tạo infra/local/README.md hoặc sửa README gốc:
+runbook local đã có ở 12 §1, lệnh không đổi (chủ dự án chốt 2026-10-07).
+Gateway route hiện có không cần route mới.
 
 **Interfaces:** Reuse local synthetic OPS token/category_id/product_id từ CAT-01a smoke **trước unset catalog_access**;
 không helper mới trong production hoặc key/token file. Smoke cần record status/body bằng biến process,
@@ -362,8 +373,8 @@ assert envelopes/metadata/versions/replay/stale, không in JWT/private key/membe
 ### Task 7: Full verification, evidence, handoff và review branch
 
 **Files:** Create `docs/evidence/cat-01b-local-2026-10-07.md`,
-`docs/superpowers/plans/2026-10-07-cat-01b-handoff.md`; Modify root/docs README,
-docs delivery backlog, plans index, catalog/contracts/local README và nguồn 03/05/06/08
+`docs/superpowers/plans/2026-10-07-cat-01b-handoff.md`; Modify docs README,
+docs delivery backlog, plans index, catalog/contracts README và nguồn 03/05/06/08
 nếu còn drift. Không đổi CAT-01 parent Done; giữ spec approved/plan progress đúng task đã chạy.
 
 **Interfaces:** Evidence liên kết commit/log đã thực chạy, bảng per-module tests (fail/error/skip),

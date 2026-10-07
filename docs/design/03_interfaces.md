@@ -242,7 +242,7 @@ không mở đường nhận URL chưa được kiểm tra trong CAT-01b. Contra
 đã có POST/PUT/examples và endpoint collection mutation thực thi tại Task 3.
 
 Collection GET list/detail đã hiện thực và kiểm HTTP Testcontainers tại Task 2;
-POST/PUT collection tại Task 3, GET size guide tại Task 4; PUT guide còn chờ Task 5.
+POST/PUT collection tại Task 3, GET size guide tại Task 4 và PUT tại Task 5.
 
 Spec CAT-01b §6 đã được chủ dự án duyệt ngày 2026-10-07: collection list nhận page
 (mặc định 1, ≥ 1), size (20, 1..100), status tùy chọn DRAFT/ACTIVE/INACTIVE, sort
@@ -294,7 +294,8 @@ cùng key khác body trả 409 `CONFLICT`/`IDEMPOTENCY_KEY_REUSED`. Hash phải 
 category_id/locale, expected_version và nội dung đã chuẩn hóa. Race cùng key/body
 là retry của một lệnh, tuân theo replay; quy tắc một 201/còn lại 409 áp cho các lệnh
 tạo độc lập. Mutation, audit và kết quả idempotency phải commit cùng transaction.
-Đây là contract đã chốt cho thiết kế CAT-01b, chưa có endpoint thực thi.
+PUT guide đã hiện thực tại Task 5 và kiểm bằng HTTP/PostgreSQL Testcontainers;
+smoke Gateway/upgrade volume local còn chờ Task 6.
 
 CAT-01b admin read (chủ dự án, 2026-10-07): bổ sung GET `/catalog/collections/{id}`
 trả collection + `items` gồm `product_id`/`sort_order`, thứ tự `(sort_order, product_id)`,
@@ -453,4 +454,4 @@ Method/header/carrier mapping thật phải được xác minh trong sandbox. N�
 
 ## 7. Điều kiện contract-ready
 
-Mỗi endpoint/event khi nhận task phải có: operationId/schema ID, request/response examples hợp lệ, required/nullable/range/enum, permission/ownership, lỗi nghiệp vụ, idempotency/version behavior, producer/consumer và test duplicate/out-of-order nếu liên quan. 03 là danh mục B1; chưa tuyên bố là OpenAPI hoàn chỉnh đã validate. [`catalog.yaml`](../../contracts/openapi/catalog.yaml) gồm public `GET /api/v1/catalog/products` của S1 (200/400), 14 operation admin CAT-01a đã triển khai và 5 operation CAT-01b mới chỉ có contract thiết kế (POST/PUT collection, GET detail collection, GET/PUT size guide). Bearer/key/version/envelope theo §3, kiểm bằng `scripts/validate-contracts.sh`; contract PASS không chứng minh 5 endpoint mới đã chạy. Smoke hiện kiểm response live CAT-01a và shape `ProductSummary`; chưa có validator tự sinh từ OpenAPI. Tên đường dẫn thay đổi phải sửa FE/mock/tests cùng PR.
+Mỗi endpoint/event khi nhận task phải có: operationId/schema ID, request/response examples hợp lệ, required/nullable/range/enum, permission/ownership, lỗi nghiệp vụ, idempotency/version behavior, producer/consumer và test duplicate/out-of-order nếu liên quan. 03 là danh mục B1; chưa tuyên bố là OpenAPI hoàn chỉnh đã validate. [`catalog.yaml`](../../contracts/openapi/catalog.yaml) gồm public `GET /api/v1/catalog/products` của S1 (200/400), 14 operation admin CAT-01a và 6 operation CAT-01b (collection list/detail/POST/PUT, size guide GET/PUT) đã kiểm HTTP Testcontainers. Bearer/key/version/envelope theo §3, kiểm bằng `scripts/validate-contracts.sh`; contract PASS không thay runtime evidence. Smoke hiện kiểm response live CAT-01a và shape `ProductSummary`; CAT-01b smoke chờ Task 6, chưa có validator tự sinh từ OpenAPI. Tên đường dẫn thay đổi phải sửa FE/mock/tests cùng PR.

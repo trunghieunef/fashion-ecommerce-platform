@@ -10,7 +10,7 @@ Tiến độ mới nhất: [handoff CAT-01a ngày 2026-10-07](superpowers/plans/
 [evidence catalog admin](evidence/cat-01a-local-2026-10-07.md); PR #14 đã merge.
 [Spec CAT-01b](superpowers/specs/2026-10-07-cat-01b-design.md) đã duyệt;
 [plan CAT-01b](superpowers/plans/2026-10-07-cat-01b-catalog-admin.md) đã duyệt Native, commit local từng task;
-Task 1–4 đã có schema V004, GET/POST/PUT admin collection và GET size guide; PUT guide còn chờ,
+Task 1–5 đã có schema V004, GET/POST/PUT admin collection và GET/PUT size guide,
 chưa upgrade volume hoặc smoke CAT-01b.
 
 Kế hoạch triển khai có thể giao cho agent/engineer được lập tại [docs/superpowers/plans](superpowers/plans/README.md). Reviewer fresh-clone S1-local điền [template evidence](evidence/s1-local-template.md). [Evidence ngày 2026-10-02](evidence/s1-local-2026-10-02.md) ghi blocker mạng công ty; [evidence ngày 2026-10-04](evidence/s1-local-2026-10-04.md) ghi runtime PASS, patch timezone `b62f963` với CI PASS và nghiệm thu bởi Codex (GPT-6) theo chỉ định chủ dự án thay reviewer người/TL. Bộ kế hoạch chia đường tới G2 MVP thành S1-local, G0 platform/staging, commerce core, G1 COD và G2 online payment; S1-local được chấp nhận không thay acceptance các gate sau.

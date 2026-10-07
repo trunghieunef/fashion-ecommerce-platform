@@ -82,14 +82,14 @@ Cả hai GET cần `catalog.write`, đọc cả DRAFT/INACTIVE và giữ envelop
 GET collection list/detail đã hiện thực ở Task 2 (6 HTTP integration tests); list trả summary
 page1/size20/max100/status optional, không product items. Contract có 20 admin operations;
 Collection POST/PUT hiện thực ở Task 3 với closed requests/version/replay/atomic audit;
-GET guide hiện thực ở Task 4 (3 HTTP tests); PUT guide chờ Task 5, chưa chạy smoke volume local.
+GET guide hiện thực ở Task 4 (3 HTTP tests); PUT guide hiện thực ở Task 5 (15 HTTP tests), chưa chạy smoke volume local.
 Spec CAT-01b đã duyệt: request collection/guide từ chối unknown field qua @JsonAnySetter
 với field tên key, giữ mapper global/CAT-01a; header so trùng strip + lowercase Locale.ROOT.
 PUT guide kiểm category404 trước idempotency/version; create ON CONFLICT DO NOTHING RETURNING.
 GET collection detail dùng một SQL json_agg ordered để items/version cùng snapshot.
 Examples 2xx/4xx cùng contract regression kiểm Bearer, errors và version đã có;
 Contract examples không thay bằng chứng runtime. Task 2 đã kiểm HTTP collection GET
-401/403/404/content/version và GET → PUT (Task 3); guide GET đã kiểm tại Task 4, PUT guide còn chờ; public read
+401/403/404/content/version và GET → PUT (Task 3); guide GET/PUT đã kiểm tại Task 4/5; public read
 vẫn thuộc CAT-02. Response size guide table ghi rõ giới hạn shape; số ô khớp số cột,
 strip và tổng serialized bytes cần validation tại service, JSON Schema chưa chứng minh chúng.
 

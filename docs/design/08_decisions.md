@@ -228,7 +228,7 @@ Gate task là work package trong [backlog](../delivery/10_backlog.md). Mã task 
   và là expected_version cho PUT. Không thêm public read (TASK:CAT-02).
   03 §3/05 §5 và `catalog.yaml` đồng bộ; examples 2xx/4xx và contract regression đã có.
   Test HTTP 401/403/404 và GET → PUT/version conflict phải thực hiện khi triển khai
-  CAT-01b theo spec/plan được duyệt; chưa có endpoint thực thi.
+  CAT-01b theo spec/plan được duyệt; GET đã hiện thực Task 2/4 và kiểm HTTP Testcontainers.
 
 - CAT-01b collection mutation — **chủ dự án, 2026-10-07**: duyệt POST key tạo
   DRAFT/version 0; PUT thay toàn bộ nội dung/items, expected_version, tăng version 1,
@@ -248,7 +248,7 @@ Gate task là work package trong [backlog](../delivery/10_backlog.md). Mã task 
   ký tự sau sanitize. Không áp maxLength 20.000 lên raw input trước sanitize; response
   và dữ liệu lưu phải thỏa giới hạn sau sanitize. 03 §3/05 §5/catalog.yaml đồng bộ;
   REQ:CAT-06, TASK:CAT-01 phần 1b. Contract regression đã có; test HTTP/sanitizer của
-  size guide thuộc implementation sau duyệt spec/plan, không xem contract test là runtime proof.
+  size guide đã hiện thực Task 5 với HTTP/PostgreSQL Testcontainers; không xem contract test là runtime proof.
 
 - Duyệt spec CAT-01b — **chủ dự án, 2026-10-07**: duyệt toàn bộ [spec](../superpowers/specs/2026-10-07-cat-01b-design.md)
   gồm §6 mục 1–6 (list/pagination/summary, normalize tên/slug/date/items hash, request đóng,
@@ -268,5 +268,7 @@ Gate task là work package trong [backlog](../delivery/10_backlog.md). Mã task 
   Bỏ test snapshot timing-based; giữ one-statement SQL và mutation json_agg. Toolchain
   trong docs dùng placeholder. Dừng sau whole-branch review và bàn giao; chỉ push dev/
   mở PR main khi chủ dự án yêu cầu riêng theo AGENTS.md, không tự merge.
+  Chốt bổ sung runbook: không tạo infra/local/README.md; dùng 12 §1 và catalog README,
+  ghi smoke/synthetic JWT ở catalog README; không đổi README gốc khi lệnh không đổi.
 
 Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác và lý do; ảnh hưởng PRD/API/schema/test/task; người quyết định; ngày; link bằng chứng. Chưa có chữ ký phê duyệt giả định thương mại.

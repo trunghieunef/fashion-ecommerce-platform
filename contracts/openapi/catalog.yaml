@@ -4,7 +4,7 @@ info:
   version: 0.1.0
   description: >
     TASK:PLT-02 public sample and TASK:CAT-01a admin (catalog.write; ADR-21 ES256, revocation TTL 15 minutes).
-    TASK:CAT-01b admin collection/size-guide mutations and detail GET contracts are approved for design; endpoints are not implemented yet.
+    TASK:CAT-01b admin collection list/detail/mutations and size-guide GET/PUT are implemented and tested with PostgreSQL Testcontainers; local Gateway smoke is pending Task 6.
     Full catalog filters/sort/cursor belong to TASK:CAT-02 (docs/design/03_interfaces.md §2.2).
 servers:
   - url: http://localhost:8080

@@ -19,8 +19,12 @@ Product body thiếu trả400 ở index request gốc; activation không yêu c�
 Date có offset→UTC, null bound; mutation/audit/key atomic, rollback audit giữ cả items/version.
 Task 4 có GET `/admin/api/v1/catalog/size-guides/{category_id}/{locale}` (catalog.write,
 locale vi/en; locale sai400, thiếu guide404 NOT_FOUND; category INACTIVE vẫn đọc được).
-Trả guideline_html/table_json/version để edit; không audit GET. PUT guide còn chờ Task 5;
-không public read CAT-02.
+Trả guideline_html/table_json/version để edit; không audit GET. Task 5 thêm PUT cùng route:
+key bắt buộc + version0 tạo201/version1; update200/version+1. Validation trước category404,
+category trước replay, replay trước version guard; create race ON CONFLICT DO NOTHING RETURNING.
+Bảng đóng columns/rows, strip plain text, header unique Locale.ROOT, tối đa32768 UTF-8 bytes;
+guideline optional/sanitize/max20000 sau sanitize. Audit/key/data cùng transaction.
+Không public read CAT-02; smoke/upgrade volume còn chờ Task 6.
 Admin taxonomy đã có GET/POST categories/brands và PUT theo id
 tại `/admin/api/v1/catalog`. Mọi endpoint kiểm ES256 và `catalog.write` tại service;
 POST cần `Idempotency-Key`, PUT cần `expected_version`; mutation và audit cùng transaction.

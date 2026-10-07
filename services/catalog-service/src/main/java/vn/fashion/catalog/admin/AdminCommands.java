@@ -25,9 +25,12 @@ public class AdminCommands {
   public AdminCommands(TransactionTemplate tx, IdempotencyStore keys, ObjectMapper json) {
     this.tx = tx; this.keys = keys; this.json = json;
   }
-  public Replay create(UUID actor, String operation, String key, Object request, Supplier<Result> work) {
+  public static void requireKey(String key) {
     if (key == null || key.isBlank() || key.length() > 128)
       throw new Api.Problem(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "INVALID_KEY", List.of(new Api.FieldError("Idempotency-Key", "must be 1..128 characters")));
+  }
+  public Replay create(UUID actor, String operation, String key, Object request, Supplier<Result> work) {
+    requireKey(key);
     String hash;
     try { hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(json.writeValueAsString(request).getBytes(StandardCharsets.UTF_8))); }
     catch (NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
