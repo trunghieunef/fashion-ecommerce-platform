@@ -144,8 +144,8 @@ RustFS/credential local chỉ cho local, không staging/prod. Test:
 Contract [CAT-03 bản nháp](../../docs/superpowers/specs/2026-10-07-cat-03-media-design.md)
 và OpenAPI gắn planned: PUT300s; complete deadline=put_expires_at+24h (thay TTL
 intent15phút); quarantine lifecycle2ngày, sweep60s/batch100, terminal dọn ngay.
-local-up chuẩn bị CATALOG_S3_QUARANTINE_RETENTION_DAYS=2 cho setup/probe; chưa
-apply bucket lifecycle qua Compose hoặc triển khai cleanup. Orphan/detached7ngày,
+Compose truyền CATALOG_S3_QUARANTINE_RETENTION_DAYS=2 và bootstrap bucket đã áp
+lifecycle quarantine; các job cleanup (sweep/GC) chưa triển khai (Task 8). Orphan/detached7ngày,
 GC hourly/batch100/single-runner lease platform; reattach chỉ uploader/target cũ.
 Asset đang attach cho OPS khác giữ/sửa alt/sort; DELETING/DELETED không attach.
 Audit media chỉ asset_id. Policy đã duyệt tại13; các job/endpoint chưa hiện thực.

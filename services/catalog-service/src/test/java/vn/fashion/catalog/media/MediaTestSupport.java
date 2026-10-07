@@ -8,13 +8,15 @@ import java.util.HexFormat;
 import java.util.Map;
 import java.util.UUID;
 import javax.imageio.ImageIO;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.junit.jupiter.Container;
 import vn.fashion.catalog.admin.CatalogAdminTestSupport;
 
-/** Real RustFS (S3) with per-run synthetic credentials; overrides the fake base endpoint/credentials. */
+/** Real RustFS (S3) with per-run synthetic credentials; overrides the fake defaults in test application.properties. */
 @TestPropertySource(properties = {"fashion.catalog.media.bootstrap-bucket=true",
     "fashion.catalog.media.cors-origins=http://localhost:4173"})
 public abstract class MediaTestSupport extends CatalogAdminTestSupport {
@@ -27,16 +29,13 @@ public abstract class MediaTestSupport extends CatalogAdminTestSupport {
 
   private static String random() { return HexFormat.of().formatHex(UUID.randomUUID().toString().replace("-", "").getBytes()).substring(0, 32); }
 
-  // Falls back to a dead address when another test class later builds a context after this container stopped.
-  protected static String rustfsEndpoint() {
-    return rustfs.isRunning() ? "http://" + rustfs.getHost() + ":" + rustfs.getMappedPort(9000) : "http://127.0.0.1:1";
-  }
+  protected static String rustfsEndpoint() { return "http://" + rustfs.getHost() + ":" + rustfs.getMappedPort(9000); }
 
-  static {
-    MEDIA_OVERRIDES.put("endpoint", MediaTestSupport::rustfsEndpoint);
-    MEDIA_OVERRIDES.put("public-endpoint", MediaTestSupport::rustfsEndpoint);
-    MEDIA_OVERRIDES.put("access-key", () -> ACCESS_KEY);
-    MEDIA_OVERRIDES.put("secret-key", () -> SECRET_KEY);
+  @DynamicPropertySource static void mediaProperties(DynamicPropertyRegistry registry) {
+    registry.add("fashion.catalog.media.endpoint", MediaTestSupport::rustfsEndpoint);
+    registry.add("fashion.catalog.media.public-endpoint", MediaTestSupport::rustfsEndpoint);
+    registry.add("fashion.catalog.media.access-key", () -> ACCESS_KEY);
+    registry.add("fashion.catalog.media.secret-key", () -> SECRET_KEY);
   }
 
   protected byte[] png(int w, int h) { return image(w, h, BufferedImage.TYPE_INT_ARGB, "png"); }

@@ -35,7 +35,6 @@ class ReadinessWithoutMigrationIntegrationTest {
   @DynamicPropertySource
   static void databaseProperties(DynamicPropertyRegistry registry) {
     registry.add("fashion.catalog.jwt.public-keys", vn.fashion.catalog.admin.CatalogAdminTestSupport::publicKeys);
-    vn.fashion.catalog.admin.CatalogAdminTestSupport.fakeMedia(registry);
     registry.add("spring.datasource.url", postgres::getJdbcUrl);
     registry.add("spring.datasource.username", () -> "catalog_runtime");
     registry.add("spring.datasource.password", () -> "catalog_runtime_test");

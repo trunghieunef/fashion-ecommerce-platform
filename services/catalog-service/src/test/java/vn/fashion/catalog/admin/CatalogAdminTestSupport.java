@@ -66,16 +66,6 @@ public abstract class CatalogAdminTestSupport {
     registry.add("spring.flyway.user", () -> "catalog_migration");
     registry.add("spring.flyway.password", () -> "catalog_migration_test");
     registry.add("fashion.catalog.jwt.public-keys", CatalogAdminTestSupport::publicKeys);
-    fakeMedia(registry);
-  }
-  /** Subclasses (MediaTestSupport) replace the fake S3 values lazily; later registrations in the same hierarchy do not win. */
-  protected static final Map<String, java.util.function.Supplier<String>> MEDIA_OVERRIDES = new java.util.concurrent.ConcurrentHashMap<>();
-  /** Fake S3 settings so tests that do not touch media need no RustFS. */
-  public static void fakeMedia(DynamicPropertyRegistry registry) {
-    Map.of("endpoint", "http://127.0.0.1:1", "public-endpoint", "http://127.0.0.1:1", "access-key", "test",
-        "secret-key", "test").forEach((k, v) ->
-        registry.add("fashion.catalog.media." + k, () -> MEDIA_OVERRIDES.getOrDefault(k, () -> v).get()));
-    registry.add("fashion.catalog.media.jobs-enabled", () -> "false");
   }
   @BeforeEach void clearCatalog() throws Exception {
     try (var c = DriverManager.getConnection(postgres.getJdbcUrl(), "postgres", "postgres"); var s = c.createStatement()) {
