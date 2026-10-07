@@ -164,5 +164,10 @@ Gate task là work package trong [backlog](../delivery/10_backlog.md). Mã task 
   permissions chỉ catalog.write và exp ≤ 300 giây. Không sửa user DB; giữ 401/403 member thật.
   Fixture slug/SKU ngẫu nhiên tích lũy vì không DELETE; smoke không chứng minh login → token OPS.
   Chi tiết và giới hạn: [evidence CAT-01a](../evidence/cat-01a-local-2026-10-07.md).
+- Review CAT-01a (2026-10-07, chủ dự án duyệt sửa plan Task 2/4): fallback 500 chỉ trong
+  admin trả INTERNAL/INTERNAL_ERROR + metadata và X-Correlation-Id, vẫn log exception
+  server qua logger redact PII hiện có. Audit dùng metadata.request_id do controller tạo
+  một lần theo khuôn user-service; retry metadata mới, không thêm audit hoặc đổi hash.
+  Không áp handler cho public ProductQueryController. Không đổi schema hoặc nghiệp vụ.
 
 Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác và lý do; ảnh hưởng PRD/API/schema/test/task; người quyết định; ngày; link bằng chứng. Chưa có chữ ký phê duyệt giả định thương mại.

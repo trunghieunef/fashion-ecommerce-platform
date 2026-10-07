@@ -34,7 +34,7 @@ public class VariantAdminService {
     TaxonomyService.text(errors, "size", r.size(), 50); TaxonomyService.text(errors, "color", r.color(), 50);
     priceWeight(errors, r.priceOverride(), r.weightGrams()); TaxonomyService.valid(errors); return r;
   }
-  AdminCommands.Replay create(UUID actor, UUID productId, String key, Input r, String traceId) {
+  AdminCommands.Replay create(UUID actor, UUID productId, String key, Input r, String traceId, UUID requestId) {
     return commands.create(actor, "catalog.variant.create:" + productId, key, r, () -> {
       products.lockForUpdate(productId); UUID id = UUID.randomUUID();
       var v = jdbc.sql("""
@@ -47,11 +47,11 @@ public class VariantAdminService {
       var intent = new OutboxEvent(UUID.randomUUID(), "product", productId.toString(), version, "VARIANT_CREATED", 1,
           "catalog.events", productId.toString(), traceId, json.writeValueAsString(Map.of("product_id", productId, "variant_id", id, "sku", v.sku(), "version", 0)));
       outbox.append(intent);
-      audit.record(actor, "catalog.variant.create", "variant", id, null, null, v);
+      audit.record(actor, "catalog.variant.create", "variant", id, null, null, v, requestId);
       return new AdminCommands.Result(id, 201, v);
     });
   }
-  Variant update(UUID actor, UUID id, Update r) {
+  Variant update(UUID actor, UUID id, Update r, UUID requestId) {
     var errors = new ArrayList<Api.FieldError>(); priceWeight(errors, r.priceOverride(), r.weightGrams());
     TaxonomyService.status(errors, r.status()); TaxonomyService.valid(errors);
     return commands.update(() -> {
@@ -60,7 +60,7 @@ public class VariantAdminService {
       AdminCommands.requireVersion(r.expectedVersion(), before.version());
       var result = jdbc.sql("update product_variants set price_override=:price,weight_grams=:weight,status=:status,version=version+1,updated_at=now() where id=:id returning *")
           .param("id", id).param("price", r.priceOverride()).param("weight", r.weightGrams()).param("status", r.status()).query(Variant.class).single();
-      audit.record(actor, "catalog.variant.update", "variant", id, null, before, result); return result;
+      audit.record(actor, "catalog.variant.update", "variant", id, null, before, result, requestId); return result;
     });
   }
 }

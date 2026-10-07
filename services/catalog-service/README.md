@@ -8,6 +8,10 @@ outbox/idempotency/audit). Admin taxonomy đã có GET/POST categories/brands v�
 tại `/admin/api/v1/catalog`. Mọi endpoint kiểm ES256 và `catalog.write` tại service;
 POST cần `Idempotency-Key`, PUT cần `expected_version`; mutation và audit cùng transaction.
 Thu hồi quyền ở catalog trễ tối đa TTL access token 15 phút theo ADR-21.
+Audit dùng `request_id` của metadata response mutation đầu; retry giữ data/status đã lưu,
+metadata mới và không thêm audit. Lỗi nội bộ admin trả 500 `INTERNAL`/`INTERNAL_ERROR`
+với body chỉ code/message/metadata và X-Correlation-Id; exception vẫn log server qua
+logger redact PII hiện có. Handler admin không áp cho ProductQueryController public.
 Public API hiện có `GET /api/v1/catalog/products`.
 Endpoint trả các product `ACTIVE` theo `created_at DESC, id DESC`; `limit` mặc định
 `20`, tối đa `100`. Response thành công theo [contract 03 §1.2](../../docs/design/03_interfaces.md):
@@ -93,7 +97,7 @@ Hai lệnh dùng Testcontainers PostgreSQL `17.11`; chúng cần Docker daemon k
 không dùng H2 hoặc mock repository thay thế. Test kiểm tra migration, active-only
 query, limit, response envelope, readiness và runtime role không thể tạo table, cùng admin
 auth, version/SKU races, idempotency, sanitize, publish và rollback outbox/audit. CAT-01a local
-có 62 test catalog; tổng reactor và mutation tại [evidence](../../docs/evidence/cat-01a-local-2026-10-07.md).
+có 63 test catalog sau review fixes; tổng reactor và mutation tại [evidence](../../docs/evidence/cat-01a-local-2026-10-07.md).
 
 Sau khi service chạy:
 

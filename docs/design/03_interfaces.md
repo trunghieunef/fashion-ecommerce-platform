@@ -193,7 +193,11 @@ cần `catalog.write` (OPS), mọi POST có `Idempotency-Key`; PUT và publish/u
 `expected_version`. Publish/unpublish nhận reason tùy chọn ≤ 500, cạnh sai trả 409;
 publish kiểm taxonomy ACTIVE và ≥ 1 variant ACTIVE (điều kiện ảnh thuộc CAT-03).
 Token được kiểm bằng `AccessTokenVerifier`, không gọi user-service; thu hồi quyền trễ tối đa
-15 phút theo ADR-21. Retry key/body chuẩn hóa trả cùng kết quả; đổi body trả 409 KEY_REUSED.
+15 phút theo ADR-21. Retry key/body chuẩn hóa trả cùng kết quả; đổi body trả 409 IDEMPOTENCY_KEY_REUSED.
+Audit của mutation dùng cùng `request_id` với metadata response đầu; retry giữ data/status,
+metadata mới và không thêm audit. Lỗi nội bộ admin trả 500 với đúng code `INTERNAL`, message
+`INTERNAL_ERROR`, metadata và header `X-Correlation-Id`; exception chỉ log phía server qua
+logger redact PII. Handler này không áp cho public ProductQueryController.
 Chưa nghiệm thu CAT-01; collection/size-guide, CATALOG_CHANGED và relay nằm ngoài phần 1a.
 
 | Methods / path | Quyền | Đầu ra / phase |
@@ -340,4 +344,4 @@ Method/header/carrier mapping thật phải được xác minh trong sandbox. N�
 
 ## 7. Điều kiện contract-ready
 
-Mỗi endpoint/event khi nhận task phải có: operationId/schema ID, request/response examples hợp lệ, required/nullable/range/enum, permission/ownership, lỗi nghiệp vụ, idempotency/version behavior, producer/consumer và test duplicate/out-of-order nếu liên quan. 03 là danh mục B1; chưa tuyên bố là OpenAPI hoàn chỉnh đã validate. Contract thực thi hiện có: `contracts/openapi/catalog.yaml` chỉ cho `GET /api/v1/catalog/products` của S1 (200/400), kiểm bằng `scripts/validate-contracts.sh`; smoke kiểm envelope và shape từng item của response live theo `ProductSummary`; chưa có validator tự sinh từ OpenAPI. Tên đường dẫn thay đổi phải sửa FE/mock/tests cùng PR.
+Mỗi endpoint/event khi nhận task phải có: operationId/schema ID, request/response examples hợp lệ, required/nullable/range/enum, permission/ownership, lỗi nghiệp vụ, idempotency/version behavior, producer/consumer và test duplicate/out-of-order nếu liên quan. 03 là danh mục B1; chưa tuyên bố là OpenAPI hoàn chỉnh đã validate. Contract thực thi hiện có: [`catalog.yaml`](../../contracts/openapi/catalog.yaml) gồm public `GET /api/v1/catalog/products` của S1 (200/400) và 14 operation admin CAT-01a với bearer/key/version/envelope theo §3, kiểm bằng `scripts/validate-contracts.sh`; smoke kiểm envelope và shape từng item của response live theo `ProductSummary`; chưa có validator tự sinh từ OpenAPI. Tên đường dẫn thay đổi phải sửa FE/mock/tests cùng PR.

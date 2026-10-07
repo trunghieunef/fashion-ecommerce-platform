@@ -90,7 +90,7 @@ Lưu ý: `ProductQueryIntegrationTest` insert product không có `category_id`/`
 **Interfaces:**
 - Produces:
   - `web.Api` — chép `vn.fashion.user.web.Api` (đổi package); `Api.Problem(HttpStatus, String code, String message, List<FieldError>)`.
-  - `web.ApiExceptionHandler` — như user-service (bỏ phần rate limit) + `DuplicateKeyException` → 409 `CONFLICT`, message `DUPLICATE`, field suy từ tên constraint: `*_slug_key`→`slug`, `product_variants_sku_key`→`sku`, `product_variants_product_size_color_key`→`size`; + `MissingRequestHeaderException` cho `Idempotency-Key` → 400 field `Idempotency-Key`. Phải scope `@RestControllerAdvice(basePackages = "vn.fashion.catalog.admin")` để không đổi lỗi của `ProductQueryController`.
+  - `web.ApiExceptionHandler` — như user-service (bỏ phần rate limit) + `DuplicateKeyException` → 409 `CONFLICT`, message `DUPLICATE`, field suy từ tên constraint: `*_slug_key`→`slug`, `product_variants_sku_key`→`sku`, `product_variants_product_size_color_key`→`size`; + `MissingRequestHeaderException` cho `Idempotency-Key` → 400 field `Idempotency-Key`. Phải scope `@RestControllerAdvice(basePackages = "vn.fashion.catalog.admin")` để không đổi lỗi của `ProductQueryController`. Theo review được chủ dự án duyệt: fallback `Exception` → 500 `INTERNAL`, message chung, body chỉ code/message/metadata + X-Correlation-Id; vẫn log exception server bằng SLF4J qua cấu hình redact PII hiện có, không trả exception/SQL cho client; không áp cho ProductQueryController public.
   - `web.AdminAuth.requireCatalogWriter(String authorization): UUID` — verify bằng `AccessTokenVerifier(parseKeys(fashion.catalog.jwt.public-keys))`; không token/sai → 401 `UNAUTHORIZED` `INVALID_ACCESS_TOKEN`; thiếu `catalog.write` → 403 `FORBIDDEN` `PERMISSION_REQUIRED`. Không truy vấn DB.
   - `admin.AdminCommands`:
     - `record Result(UUID resourceId, int status, Object data)`
@@ -98,7 +98,7 @@ Lưu ý: `ProductQueryIntegrationTest` insert product không có `category_id`/`
     - `record Replay(int status, JsonNode data)`; controller trả `Api.ok(HttpStatus.valueOf(status), data, meta)`.
     - `<T> T update(Supplier<T> work)` — chỉ bọc transaction.
     - `static void requireVersion(Long expected, long actual)` — null → 400 field `expected_version`; khác → 409 `VERSION_CONFLICT` `STALE_VERSION`.
-  - `admin.AuditLog.record(UUID actor, String action, String resourceType, UUID resourceId, String reason, Object before, Object after)` — insert `audit_logs`, `request_id` = UUID mới, before/after serialize JSON.
+  - `admin.AuditLog.record(UUID actor, String action, String resourceType, UUID resourceId, String reason, Object before, Object after, UUID requestId)` — insert `audit_logs`, `request_id` = metadata.request_id do controller tạo một lần rồi truyền xuống service/audit; response dùng cùng metadata; không đưa requestId vào canonical hash, retry có metadata mới và không thêm audit, before/after serialize JSON.
   - `admin.CatalogBeans` — `@Bean IdempotencyStore`, `@Bean OutboxRepository` từ `JdbcClient`.
   - DTO JSON (snake_case toàn cục qua `spring.jackson.property-naming-strategy: SNAKE_CASE`):
     `Category(UUID id, UUID parentId, String nameVi, String nameEn, String slug, int sortOrder, String status, long version)`,
@@ -113,6 +113,7 @@ Lưu ý: `ProductQueryIntegrationTest` insert product không có `category_id`/`
 @Test void missingOrInvalidTokenIs401()          // no header, "Bearer x", token ký key khác → 401 code UNAUTHORIZED
 @Test void tokenWithoutCatalogWriteIs403()       // token("user.manage") → 403 FORBIDDEN
 @Test void createCategoryReturns201AndAudits()   // POST {name_vi,name_en,slug:"ao",sort_order:1} → 201, data.version 0, status ACTIVE; audit_logs có 1 dòng catalog.category.create
+@Test void mutationsShareAuditRequestIdAndReplayDoesNotAuditAgain() // toàn bộ 10 mutation: audit.request_id = response.metadata.request_id; retry có metadata mới, không thêm audit
 @Test void sameKeySameBodyReplaysWithoutSecondRow()  // 2 lần cùng key → cùng data.id, count(categories where slug='ao') = 1
 @Test void sameKeyDifferentBodyIs409()           // code CONFLICT, message IDEMPOTENCY_KEY_REUSED
 @Test void missingIdempotencyKeyIs400()
@@ -202,7 +203,7 @@ Lưu ý: `ProductQueryIntegrationTest` insert product không có `category_id`/`
 @Test void duplicateSkuIs409AndLeavesNoEvent()          // sku trùng ở product khác → 409 field sku; outbox vẫn 1
 @Test void duplicateSizeColorIs409()                    // field size
 @Test void concurrentSameSkuOnTwoProducts()             // 2 thread → {201, 409}; outbox count 1
-@Test void failureAfterInsertRollsBackVariantAndEvent() // revoke INSERT on audit_logs from catalog_runtime (superuser) → POST trả 5xx; count variants=0, outbox=0; grant lại trong finally
+@Test void failureAfterInsertRollsBackVariantAndEvent() // revoke INSERT on audit_logs from catalog_runtime (superuser) → POST trả 500 INTERNAL với body chỉ code/message chung/metadata, X-Correlation-Id khớp trace_id, không SQL/exception; server log có exception qua logger redact; count variants=0, outbox=0; grant lại trong finally
 @Test void validationOfSkuSizeColorWeightPrice()        // sku "a b", sku 65 ký tự, size "", weight 0, price_override -1 → 400 từng field
 @Test void updateChangesOnlyMutableFields()             // PUT kèm "sku":"NEW","size":"XL" → sku/size giữ nguyên; price_override, weight, status đổi; version 1; outbox vẫn 1
 @Test void variantOfUnknownProductIs404()

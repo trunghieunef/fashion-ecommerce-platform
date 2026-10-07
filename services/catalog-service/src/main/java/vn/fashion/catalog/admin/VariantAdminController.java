@@ -19,11 +19,12 @@ public class VariantAdminController {
   @PostMapping("/products/{id}/variants") public ResponseEntity<Api.Response<JsonNode>> create(@RequestHeader(value="Authorization", required=false) String authorization,
       @RequestHeader(value="Idempotency-Key", required=false) String key, @PathVariable UUID id, @RequestBody VariantAdminService.Input input) {
     UUID actor = auth.requireCatalogWriter(authorization); var meta = Api.metadata(tracer);
-    var result = service.create(actor, id, key, service.normalize(input), meta.traceId());
+    var result = service.create(actor, id, key, service.normalize(input), meta.traceId(), UUID.fromString(meta.requestId()));
     return Api.ok(HttpStatus.valueOf(result.status()), result.data(), meta);
   }
   @PutMapping("/variants/{id}") public ResponseEntity<Api.Response<Variant>> update(@RequestHeader(value="Authorization", required=false) String authorization,
       @PathVariable UUID id, @RequestBody VariantAdminService.Update input) {
-    UUID actor = auth.requireCatalogWriter(authorization); return Api.ok(HttpStatus.OK, service.update(actor, id, input), tracer);
+    UUID actor = auth.requireCatalogWriter(authorization); var meta = Api.metadata(tracer);
+    return Api.ok(HttpStatus.OK, service.update(actor, id, input, UUID.fromString(meta.requestId())), meta);
   }
 }

@@ -7,9 +7,13 @@ Thay [handoff đầu phiên](2026-10-07-session-handoff.md) cho phiên tiếp th
 
 ## 1. Trạng thái
 
-Trên nhánh `dev`, implementation Tasks 1–6 tới `8eb467d`, Task 7 đồng bộ docs/evidence.
-Chỉ commit local theo yêu cầu; không push, tạo PR hoặc merge. `main` vẫn `826e361` tại thời điểm
-thực thi. Spec/plan được chủ dự án giao thực thi; nghiệm thu CAT-01 và review nhánh còn mở.
+Trên nhánh `dev`, implementation Tasks 1–6 tới `8eb467d`, Task 7 `c24a96f` đồng bộ docs/evidence.
+Chỉ commit local theo yêu cầu; không push, tạo PR hoặc merge. `origin/main` là `826e361`,
+local `main` còn ở `3132dc7`; giữ nguyên các branch ref đó. Spec/plan được chủ dự án giao thực thi;
+nghiệm thu CAT-01 còn mở. Review độc lập Superpowers có 2 Important (error envelope và audit
+request_id); chủ dự án đã duyệt sửa plan Task 2/4 cùng code, RED 2 FAIL → GREEN 2 PASS.
+Full suite sau fix PASS 230/230, gồm catalog 63/63; fallback vẫn log exception server.
+Minor expected_version âm trả 409 thay vì 400 được giữ để chủ dự án chốt plan; xem evidence.
 Phase 1A tiếp tục trên local trước G0 theo quyết định chủ dự án; O01 còn mở, G1/G2 chưa nghiệm thu.
 
 ## 2. Đã có
@@ -21,7 +25,7 @@ Gateway admin route, Compose public keys, OpenAPI 14 operation và smoke đầy 
 Docker stack 6 service healthy trên volume hiện có; kết quả từng lệnh và mutation ở evidence.
 
 Commits Tasks 1–6: 707db51, c59d3bc, 7a21e96, 13b9dc4, 19e8c33, 8eb467d;
-Task 7 xem `git log dev`. Commit `9cab06f` do phía người dùng sửa plan null-safe và chứa
+Task 7 `c24a96f`; review fix xem `git log dev`. Commit `9cab06f` do phía người dùng sửa plan null-safe và chứa
 helper insert sample Task 1; đã giữ nguyên.
 
 ## 3. Quyết định giữ nguyên
@@ -29,6 +33,9 @@ helper insert sample Task 1; đã giữ nguyên.
 Publish mới đặt coalesce(published_at, now()); unpublish không sửa timestamp. ACTIVE từ V001
 có thể còn null; CAT-02 chốt backfill/xử lý null khi sort/index. Reason tùy chọn, canonical record
 nhận null; thiếu version 400. Không DELETE, không sửa V001, không JPA; dependency mới chỉ jsoup.
+Audit dùng request_id của response mutation đầu; retry metadata mới, không thêm audit.
+Fallback 500 chỉ scope admin, body INTERNAL/INTERNAL_ERROR/metadata + X-Correlation-Id;
+exception vẫn log server qua logger redact PII hiện có, không lộ exception/SQL cho client.
 
 Smoke JWT synthetic chỉ trong script local, .env key/token trong memory, ADR-21 ES256/kid,
 iss user-service/aud fashion-api, random UUID sub, auth_version 0, chỉ catalog.write, TTL 300 giây.
@@ -56,7 +63,7 @@ git diff --check
 bash scripts/local-up.sh && bash scripts/smoke-local.sh && npx playwright test
 ```
 
-Reactor 229/229: durability 36, security 38, user 65, catalog 62, Gateway 28. Contract 27/27,
+Reactor sau review fix 230/230: durability 36, security 38, user 65, catalog 63, Gateway 28. Contract 27/27,
 script tests 14/14, Playwright 2/2 và docs 44 file PASS. Trạng thái review xem evidence;
 không suy CI remote từ local PASS.
 

@@ -96,17 +96,17 @@ public class ProductAdminService {
     } catch (SQLException e) { throw new IllegalStateException("cannot bind catalog tags", e); }
     finally { DataSourceUtils.releaseConnection(connection, source); }
   }
-  Product create(UUID actor, Input r) {
+  Product create(UUID actor, Input r, UUID requestId) {
     var p = write(UUID.randomUUID(), r, true);
-    audit.record(actor, "catalog.product.create", "product", p.id(), null, null, p); return p;
+    audit.record(actor, "catalog.product.create", "product", p.id(), null, null, p, requestId); return p;
   }
-  Product update(UUID actor, UUID id, Input r) {
+  Product update(UUID actor, UUID id, Input r, UUID requestId) {
     return commands.update(() -> {
       var before = lockForUpdate(id); AdminCommands.requireVersion(r.expectedVersion(), before.version());
-      var p = write(id, r, false); audit.record(actor, "catalog.product.update", "product", id, null, before, p); return p;
+      var p = write(id, r, false); audit.record(actor, "catalog.product.update", "product", id, null, before, p, requestId); return p;
     });
   }
-  AdminCommands.Replay changeStatus(UUID actor, UUID id, String operation, String key, StatusInput input) {
+  AdminCommands.Replay changeStatus(UUID actor, UUID id, String operation, String key, StatusInput input, UUID requestId) {
     var errors = new ArrayList<Api.FieldError>();
     if (input.expectedVersion() == null) errors.add(new Api.FieldError("expected_version", "is required"));
     if (input.reason() != null && input.reason().length() > 500) errors.add(new Api.FieldError("reason", "maximum 500 characters"));
@@ -131,7 +131,7 @@ public class ProductAdminService {
       jdbc.sql("update products set status=:status,version=version+1,updated_at=now()"
           + (publish ? ",published_at=coalesce(published_at,now())" : "") + " where id=:id")
           .param("status", publish ? "ACTIVE" : "INACTIVE").param("id", id).update();
-      var result = load(id); audit.record(actor, "catalog.product." + operation, "product", id, request.reason(), before, result);
+      var result = load(id); audit.record(actor, "catalog.product." + operation, "product", id, request.reason(), before, result, requestId);
       return new AdminCommands.Result(id, 200, result);
     });
   }

@@ -10,6 +10,29 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class TaxonomyIntegrationTest extends CatalogAdminTestSupport {
+  @Test void mutationsShareAuditRequestIdAndReplayDoesNotAuditAgain() {
+    String key = UUID.randomUUID().toString(), body = mapper.writeValueAsString(category("audit"));
+    var first = send("POST", "/admin/api/v1/catalog/categories", token("catalog.write"), key, body);
+    var category = audited(first, 201, "catalog.category.create");
+    var update = new HashMap<String,Object>(category("audit")); update.put("expected_version", 0); update.put("status", "ACTIVE");
+    audited(call("PUT", "/categories/" + category.path("id").asText(), update), 200, "catalog.category.update");
+    var brand = audited(call("POST", "/brands", Map.of("name", "Synthetic")), 201, "catalog.brand.create");
+    audited(call("PUT", "/brands/" + brand.path("id").asText(), Map.of("name", "Synthetic", "status", "ACTIVE", "expected_version", 0)), 200, "catalog.brand.update");
+    var input = productInput("audit"); input.put("category_id", category.path("id").asText()); input.put("brand_id", brand.path("id").asText());
+    var product = audited(call("POST", "/products", input), 201, "catalog.product.create");
+    String productId = product.path("id").asText(); input.put("expected_version", 0);
+    audited(call("PUT", "/products/" + productId, input), 200, "catalog.product.update");
+    var variant = audited(call("POST", "/products/" + productId + "/variants", variantInput("AUDIT")), 201, "catalog.variant.create");
+    audited(call("PUT", "/variants/" + variant.path("id").asText(), Map.of("weight_grams", 150, "status", "ACTIVE", "expected_version", 0)), 200, "catalog.variant.update");
+    audited(call("POST", "/products/" + productId + "/publish", Map.of("expected_version", 2)), 200, "catalog.product.publish");
+    audited(call("POST", "/products/" + productId + "/unpublish", Map.of("expected_version", 3)), 200, "catalog.product.unpublish");
+    var retry = send("POST", "/admin/api/v1/catalog/categories", token("catalog.write"), key, body);
+    assertThat(data(retry, 201)).isEqualTo(data(first, 201));
+    assertThat(json(retry).path("metadata").path("request_id")).isNotEqualTo(json(first).path("metadata").path("request_id"));
+    assertThat(jdbc.queryForObject("select count(*) from audit_logs", Integer.class)).isEqualTo(10);
+    assertThat(jdbc.queryForObject("select count(*) from audit_logs where request_id=?", Integer.class,
+        UUID.fromString(json(retry).path("metadata").path("request_id").asText()))).isZero();
+  }
   @Test void missingOrInvalidTokenIs401() {
     for (String token : new String[]{null, "x", signed(key(), Instant.now(), "catalog.write"), signed(KEY, Instant.now().minusSeconds(1000), "catalog.write")}) {
       var response = send("GET", "/admin/api/v1/catalog/categories", token, null, null);

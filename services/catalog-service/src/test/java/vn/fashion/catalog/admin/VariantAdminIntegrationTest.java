@@ -7,8 +7,12 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import static org.assertj.core.api.Assertions.assertThat;
 
+@ExtendWith(OutputCaptureExtension.class)
 class VariantAdminIntegrationTest extends CatalogAdminTestSupport {
   int events() { return jdbc.queryForObject("select count(*) from outbox_events", Integer.class); }
   @Test void createVariantWritesExactlyOneOutboxEvent() {
@@ -62,12 +66,22 @@ class VariantAdminIntegrationTest extends CatalogAdminTestSupport {
     }
     assertThat(events()).isEqualTo(1);
   }
-  @Test void failureAfterInsertRollsBackVariantAndEvent() throws Exception {
+  @Test void failureAfterInsertRollsBackVariantAndEvent(CapturedOutput output) throws Exception {
     UUID p = createProduct("shirt");
     try (var c = DriverManager.getConnection(postgres.getJdbcUrl(), "postgres", "postgres"); var s = c.createStatement()) {
       s.execute("revoke insert on audit_logs from catalog_runtime");
       try {
-        assertThat(call("POST", "/products/" + p + "/variants", variantInput("ROLLBACK")).statusCode()).isBetween(500, 599);
+        var response = call("POST", "/products/" + p + "/variants", variantInput("ROLLBACK"));
+        assertThat(response.statusCode()).isEqualTo(500);
+        var error = json(response);
+        assertThat(error.size()).isEqualTo(3);
+        assertThat(error.path("code").asText()).isEqualTo("INTERNAL");
+        assertThat(error.path("message").asText()).isEqualTo("INTERNAL_ERROR");
+        UUID.fromString(error.path("metadata").path("request_id").asText());
+        assertThat(error.path("metadata").path("trace_id").asText()).matches("[0-9a-f]{32}");
+        assertThat(response.headers().firstValue("X-Correlation-Id")).contains(error.path("metadata").path("trace_id").asText());
+        assertThat(response.body()).doesNotContain("audit_logs", "permission denied", "BadSqlGrammarException", "insert into");
+        assertThat(output.getAll()).contains("Catalog admin request failed", "BadSqlGrammarException");
         assertThat(jdbc.queryForObject("select count(*) from product_variants", Integer.class)).isZero(); assertThat(events()).isZero();
         assertThat(jdbc.queryForObject("select version from products where id=?", Long.class, p)).isZero();
       } finally { s.execute("grant insert on audit_logs to catalog_runtime"); }

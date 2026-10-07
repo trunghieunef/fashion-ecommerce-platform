@@ -131,7 +131,8 @@ Migration gán sản phẩm sample vào category seed `uncategorized`
 Product ACTIVE từ V001 có thể còn `published_at` null. Unpublish giữ giá trị cũ; chỉ publish
 đặt `coalesce(published_at, now())`. Backfill hoặc xử lý null khi sort/index theo published_at
 thuộc CAT-02; các index price/sold_quantity trong bảng là mục tiêu CAT-02, chưa có trong V002.
-Outbox/idempotency/audit thuộc catalog-db; audit runtime chỉ INSERT/SELECT. Collection,
+Outbox/idempotency/audit thuộc catalog-db; audit runtime chỉ INSERT/SELECT, `request_id`
+khớp metadata của response mutation đầu; retry không ghi thêm audit. Collection,
 size-guide và media chưa có; đây chưa phải acceptance toàn bộ CAT-01.
 
 `TASK:PLT-01` có `V001` làm read sample tối thiểu: `products` chỉ gồm `id`,

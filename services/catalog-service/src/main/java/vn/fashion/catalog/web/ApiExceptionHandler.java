@@ -2,6 +2,9 @@ package vn.fashion.catalog.web;
 
 import io.micrometer.tracing.Tracer;
 import java.util.List;
+import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.dao.QueryTimeoutException;
@@ -15,6 +18,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 
 @RestControllerAdvice(basePackages = "vn.fashion.catalog.admin")
 public class ApiExceptionHandler {
+  private static final Logger LOG = LoggerFactory.getLogger(ApiExceptionHandler.class);
   private final Tracer tracer;
   public ApiExceptionHandler(Tracer tracer) { this.tracer = tracer; }
   @ExceptionHandler(Api.Problem.class) ResponseEntity<Api.Error> problem(Api.Problem e) {
@@ -37,5 +41,11 @@ public class ApiExceptionHandler {
   }
   @ExceptionHandler(MethodArgumentTypeMismatchException.class) ResponseEntity<Api.Error> mismatch(MethodArgumentTypeMismatchException e) {
     return Api.error(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "INVALID_PARAMETER", List.of(new Api.FieldError(e.getName(), "has an invalid format")), tracer);
+  }
+  @ExceptionHandler(Exception.class) ResponseEntity<Map<String, Object>> internal(Exception e) {
+    LOG.error("Catalog admin request failed", e);
+    var meta = Api.metadata(tracer);
+    return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).header("X-Correlation-Id", meta.traceId())
+        .body(Map.of("code", "INTERNAL", "message", "INTERNAL_ERROR", "metadata", meta));
   }
 }

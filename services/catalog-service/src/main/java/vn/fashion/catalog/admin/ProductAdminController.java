@@ -29,25 +29,27 @@ public class ProductAdminController {
   @PostMapping public ResponseEntity<Api.Response<JsonNode>> create(@RequestHeader(value="Authorization", required=false) String authorization,
       @RequestHeader(value="Idempotency-Key", required=false) String key, @RequestBody ProductAdminService.Input input) {
     UUID actor = auth.requireCatalogWriter(authorization); var request = service.normalize(input, true);
+    var meta = Api.metadata(tracer);
     var result = commands.create(actor, "catalog.product.create", key, request, () -> {
-      var p = service.create(actor, request); return new AdminCommands.Result(p.id(), 201, p);
+      var p = service.create(actor, request, UUID.fromString(meta.requestId())); return new AdminCommands.Result(p.id(), 201, p);
     });
-    return Api.ok(HttpStatus.valueOf(result.status()), result.data(), tracer);
+    return Api.ok(HttpStatus.valueOf(result.status()), result.data(), meta);
   }
   @PutMapping("/{id}") public ResponseEntity<Api.Response<ProductAdminService.Product>> update(@RequestHeader(value="Authorization", required=false) String authorization,
       @PathVariable UUID id, @RequestBody ProductAdminService.Input input) {
-    UUID actor = auth.requireCatalogWriter(authorization); return Api.ok(HttpStatus.OK, service.update(actor, id, service.normalize(input, false)), tracer);
+    UUID actor = auth.requireCatalogWriter(authorization); var meta = Api.metadata(tracer);
+    return Api.ok(HttpStatus.OK, service.update(actor, id, service.normalize(input, false), UUID.fromString(meta.requestId())), meta);
   }
   @PostMapping("/{id}/publish") public ResponseEntity<Api.Response<JsonNode>> publish(@RequestHeader(value="Authorization", required=false) String authorization,
       @RequestHeader(value="Idempotency-Key", required=false) String key, @PathVariable UUID id, @RequestBody ProductAdminService.StatusInput input) {
-    UUID actor = auth.requireCatalogWriter(authorization);
-    var result = service.changeStatus(actor, id, "publish", key, input);
-    return Api.ok(HttpStatus.valueOf(result.status()), result.data(), tracer);
+    UUID actor = auth.requireCatalogWriter(authorization); var meta = Api.metadata(tracer);
+    var result = service.changeStatus(actor, id, "publish", key, input, UUID.fromString(meta.requestId()));
+    return Api.ok(HttpStatus.valueOf(result.status()), result.data(), meta);
   }
   @PostMapping("/{id}/unpublish") public ResponseEntity<Api.Response<JsonNode>> unpublish(@RequestHeader(value="Authorization", required=false) String authorization,
       @RequestHeader(value="Idempotency-Key", required=false) String key, @PathVariable UUID id, @RequestBody ProductAdminService.StatusInput input) {
-    UUID actor = auth.requireCatalogWriter(authorization);
-    var result = service.changeStatus(actor, id, "unpublish", key, input);
-    return Api.ok(HttpStatus.valueOf(result.status()), result.data(), tracer);
+    UUID actor = auth.requireCatalogWriter(authorization); var meta = Api.metadata(tracer);
+    var result = service.changeStatus(actor, id, "unpublish", key, input, UUID.fromString(meta.requestId()));
+    return Api.ok(HttpStatus.valueOf(result.status()), result.data(), meta);
   }
 }

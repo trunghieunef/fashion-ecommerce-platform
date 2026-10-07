@@ -108,6 +108,13 @@ public abstract class CatalogAdminTestSupport {
   Map<String,Object> category(String slug) {
     return Map.of("name_vi", "Áo", "name_en", "Shirt", "slug", slug, "sort_order", 1);
   }
+  JsonNode audited(HttpResponse<String> response, int status, String action) {
+    var result = data(response, status);
+    var requestId = UUID.fromString(json(response).path("metadata").path("request_id").asText());
+    assertThat(jdbc.queryForObject("select request_id from audit_logs where resource_id=? and action=?",
+        UUID.class, result.path("id").asText(), action)).isEqualTo(requestId);
+    return result;
+  }
   UUID createCategory(String slug) { return UUID.fromString(data(call("POST", "/categories", category(slug)), 201).path("id").asText()); }
   Map<String,Object> productInput(String slug) {
     return new java.util.HashMap<>(Map.of("category_id", SEED, "name_vi", "Áo", "name_en", "Shirt", "slug", slug,

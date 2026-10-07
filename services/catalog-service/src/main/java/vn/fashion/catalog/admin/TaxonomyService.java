@@ -59,15 +59,15 @@ public class TaxonomyService {
     }
     valid(errors);
   }
-  Category createCategory(UUID actor, CategoryInput r) {
+  Category createCategory(UUID actor, CategoryInput r, UUID requestId) {
     parent(null, r.parentId()); UUID id = UUID.randomUUID();
     var result = jdbc.sql("""
         insert into categories(id,parent_id,name_vi,name_en,slug,sort_order) values (:id,:parent,:vi,:en,:slug,:sort) returning *
         """).param("id", id).param("parent", r.parentId()).param("vi", r.nameVi()).param("en", r.nameEn())
         .param("slug", r.slug()).param("sort", r.sortOrder()).query(Category.class).single();
-    audit.record(actor, "catalog.category.create", "category", id, null, null, result); return result;
+    audit.record(actor, "catalog.category.create", "category", id, null, null, result, requestId); return result;
   }
-  Category updateCategory(UUID actor, UUID id, CategoryInput r) {
+  Category updateCategory(UUID actor, UUID id, CategoryInput r, UUID requestId) {
     return commands.update(() -> {
       var before = jdbc.sql("select * from categories where id=:id for update").param("id", id).query(Category.class).optional()
           .orElseThrow(() -> notFound("CATEGORY_NOT_FOUND"));
@@ -76,22 +76,22 @@ public class TaxonomyService {
           update categories set parent_id=:parent,name_vi=:vi,name_en=:en,slug=:slug,sort_order=:sort,status=:status,version=version+1,updated_at=now() where id=:id returning *
           """).param("id", id).param("parent", r.parentId()).param("vi", r.nameVi()).param("en", r.nameEn())
           .param("slug", r.slug()).param("sort", r.sortOrder()).param("status", r.status()).query(Category.class).single();
-      audit.record(actor, "catalog.category.update", "category", id, null, before, result); return result;
+      audit.record(actor, "catalog.category.update", "category", id, null, before, result, requestId); return result;
     });
   }
-  Brand createBrand(UUID actor, BrandInput r) {
+  Brand createBrand(UUID actor, BrandInput r, UUID requestId) {
     UUID id = UUID.randomUUID();
     var result = jdbc.sql("insert into brands(id,name,logo_url) values (:id,:name,:logo) returning *")
         .param("id", id).param("name", r.name()).param("logo", r.logoUrl()).query(Brand.class).single();
-    audit.record(actor, "catalog.brand.create", "brand", id, null, null, result); return result;
+    audit.record(actor, "catalog.brand.create", "brand", id, null, null, result, requestId); return result;
   }
-  Brand updateBrand(UUID actor, UUID id, BrandInput r) {
+  Brand updateBrand(UUID actor, UUID id, BrandInput r, UUID requestId) {
     return commands.update(() -> {
       var before = jdbc.sql("select * from brands where id=:id for update").param("id", id).query(Brand.class).optional().orElseThrow(() -> notFound("BRAND_NOT_FOUND"));
       AdminCommands.requireVersion(r.expectedVersion(), before.version());
       var result = jdbc.sql("update brands set name=:name,logo_url=:logo,status=:status,version=version+1,updated_at=now() where id=:id returning *")
           .param("id", id).param("name", r.name()).param("logo", r.logoUrl()).param("status", r.status()).query(Brand.class).single();
-      audit.record(actor, "catalog.brand.update", "brand", id, null, before, result); return result;
+      audit.record(actor, "catalog.brand.update", "brand", id, null, before, result, requestId); return result;
     });
   }
   static Api.Problem notFound(String message) { return new Api.Problem(HttpStatus.NOT_FOUND, "NOT_FOUND", message, List.of()); }
