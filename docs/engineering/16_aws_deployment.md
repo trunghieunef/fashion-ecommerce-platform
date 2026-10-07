@@ -43,6 +43,15 @@ Khởi đầu bằng **một EC2 Linux + K3s single-node cho staging**, chỉ ch
 
 K3s yêu cầu tối thiểu server 2 cores / 2 GB RAM **chưa gồm ứng dụng**. 8 GiB không được coi là đủ cho 8 service MVP + gateway + Kafka/Nacos/DB + observability. PLT-04 phải đo cả rollout: requests/limits, JVM heap và native memory, DB pool, disk, pod mới/cũ cùng chạy. Nếu OOM hoặc không còn khoảng dự phòng, giảm phạm vi demo hoặc xin duyệt sizing; không tự mua máy lớn. [K3s requirements](https://docs.k3s.io/installation/requirements).
 
+CAT-03 sizing (chủ dự án, 2026-10-07): ImageIO decode tối đa 25M pixels, một
+re-encode/instance/không queue; riêng buffer RGBA x4 bytes khoảng **100 MB**
+(95 MiB), chưa gồm source/resize/encoder buffers/app heap/native memory.
+Approved output cạnh dài <=2560, thumb <=800, raw/mỗi output <=5 MiB không
+thay giới hạn decoded heap. PLT-04 phải đo peak heap/RSS với ảnh worst-case và
+rollout trước chọn requests/limits; chưa có số đo hoặc quyền tăng máy/chi phí.
+RustFS 1.0.1 chỉ local, **không staging/prod**; staging object storage config/
+bucket/IAM được provision riêng sau approval. [Spec media bản nháp](../superpowers/specs/2026-10-07-cat-03-media-design.md).
+
 Giới hạn có chủ ý: một máy là điểm lỗi duy nhất; phù hợp học/dev/staging synthetic. Khi cần toàn bộ MVP hoặc production, review lại compute, managed DB/PITR, failure domains, bảo mật, khả năng trực vận hành và tổng giá. Sơ đồ DEP-01 trong 07 là topology tham chiếu tương lai, không phải tài nguyên đã mua bằng credit này.
 
 ## 3. Credit và ngân sách

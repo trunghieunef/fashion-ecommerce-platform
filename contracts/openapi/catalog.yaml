@@ -5,6 +5,7 @@ info:
   description: >
     TASK:PLT-02 public sample and TASK:CAT-01a admin (catalog.write; ADR-21 ES256, revocation TTL 15 minutes).
     TASK:CAT-01b admin collection list/detail/mutations and size-guide GET/PUT are implemented, tested with PostgreSQL Testcontainers and exercised through the local Gateway with a synthetic OPS token.
+    TASK:CAT-03 media operations marked planned are draft contracts awaiting written-spec/plan approval; no media feature runtime yet.
     Full catalog filters/sort/cursor belong to TASK:CAT-02 (docs/design/03_interfaces.md §2.2).
 servers:
   - url: http://localhost:8080
@@ -620,8 +621,611 @@ paths:
                 value: {expected_version: 0, table_json: {columns: [Size, Ngực (cm)], rows: [[M, '96–100']]}}
               update:
                 value: {expected_version: 1, guideline_html: '<p>Đo vòng ngực để chọn size.</p>', table_json: {columns: [Size, Ngực (cm)], rows: [[M, '96–100']]}}
+  "/admin/api/v1/catalog/images/uploads":
+    post:
+      operationId: "createImageUpload"
+      summary: "Create scoped private upload intent"
+      x-implementation-status: "planned"
+      description: "TASK:CAT-03 draft; pending written-spec/plan approval. catalog.write checked at service."
+      security: [{"bearerAuth":[]}]
+      parameters: [{"$ref":"./common.yaml#/components/parameters/IdempotencyKey"}]
+      responses:
+        "201":
+          "$ref": "#/components/responses/ImageIntentSuccess"
+        "400":
+          "$ref": "#/components/responses/MediaValidation"
+        "401":
+          "$ref": "#/components/responses/Error401"
+        "403":
+          "$ref": "#/components/responses/Error403"
+        "404":
+          "$ref": "#/components/responses/Error404"
+        "409":
+          "$ref": "#/components/responses/UploadUrlExpired"
+        "500":
+          "$ref": "#/components/responses/Error500"
+        "503":
+          "$ref": "#/components/responses/Error503"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/ImageUploadCreate"
+  "/admin/api/v1/catalog/images/uploads/{upload_id}":
+    get:
+      operationId: "getImageUpload"
+      summary: "Read own upload status"
+      x-implementation-status: "planned"
+      description: "TASK:CAT-03 draft; pending written-spec/plan approval. catalog.write checked at service."
+      security: [{"bearerAuth":[]}]
+      parameters: [{"$ref":"#/components/parameters/UploadId"}]
+      responses:
+        "200":
+          "$ref": "#/components/responses/ImageStatusSuccess"
+        "400":
+          "$ref": "#/components/responses/MediaValidation"
+        "401":
+          "$ref": "#/components/responses/Error401"
+        "403":
+          "$ref": "#/components/responses/Error403"
+        "404":
+          "$ref": "#/components/responses/Error404"
+        "500":
+          "$ref": "#/components/responses/Error500"
+        "503":
+          "$ref": "#/components/responses/Error503"
+  "/admin/api/v1/catalog/images/uploads/{upload_id}/complete":
+    post:
+      operationId: "completeImageUpload"
+      summary: "Validate and re-encode; idempotent by upload_id"
+      x-implementation-status: "planned"
+      description: "TASK:CAT-03 draft; pending written-spec/plan approval. catalog.write checked at service."
+      security: [{"bearerAuth":[]}]
+      parameters: [{"$ref":"#/components/parameters/UploadId"}]
+      responses:
+        "200":
+          "$ref": "#/components/responses/ApprovedImageSuccess"
+        "400":
+          "$ref": "#/components/responses/ImageRejected"
+        "401":
+          "$ref": "#/components/responses/Error401"
+        "403":
+          "$ref": "#/components/responses/Error403"
+        "404":
+          "$ref": "#/components/responses/Error404"
+        "409":
+          "$ref": "#/components/responses/MediaConflict"
+        "429":
+          "$ref": "#/components/responses/MediaRateLimited"
+        "500":
+          "$ref": "#/components/responses/Error500"
+        "503":
+          "$ref": "#/components/responses/Error503"
+  "/admin/api/v1/catalog/products/{id}/images":
+    get:
+      operationId: "getProductImages"
+      summary: "Read image snapshot and product version"
+      x-implementation-status: "planned"
+      description: "TASK:CAT-03 draft; pending written-spec/plan approval. catalog.write checked at service."
+      security: [{"bearerAuth":[]}]
+      parameters: [{"$ref":"#/components/parameters/Id"}]
+      responses:
+        "200":
+          "$ref": "#/components/responses/ProductImagesSuccess"
+        "400":
+          "$ref": "#/components/responses/MediaValidation"
+        "401":
+          "$ref": "#/components/responses/Error401"
+        "403":
+          "$ref": "#/components/responses/Error403"
+        "404":
+          "$ref": "#/components/responses/Error404"
+        "500":
+          "$ref": "#/components/responses/Error500"
+        "503":
+          "$ref": "#/components/responses/Error503"
+    put:
+      operationId: "replaceProductImages"
+      summary: "Replace images and increment product version"
+      x-implementation-status: "planned"
+      description: "TASK:CAT-03 draft; pending written-spec/plan approval. catalog.write checked at service."
+      security: [{"bearerAuth":[]}]
+      parameters: [{"$ref":"#/components/parameters/Id"}]
+      responses:
+        "200":
+          "$ref": "#/components/responses/ProductImagesSuccess"
+        "400":
+          "$ref": "#/components/responses/MediaValidation"
+        "401":
+          "$ref": "#/components/responses/Error401"
+        "403":
+          "$ref": "#/components/responses/Error403"
+        "404":
+          "$ref": "#/components/responses/Error404"
+        "409":
+          "$ref": "#/components/responses/Error409"
+        "500":
+          "$ref": "#/components/responses/Error500"
+        "503":
+          "$ref": "#/components/responses/Error503"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/ProductImagesPut"
+  "/admin/api/v1/catalog/collections/{id}/images":
+    get:
+      operationId: "getCollectionImages"
+      summary: "Read cover/images snapshot and collection version"
+      x-implementation-status: "planned"
+      description: "TASK:CAT-03 draft; pending written-spec/plan approval. catalog.write checked at service."
+      security: [{"bearerAuth":[]}]
+      parameters: [{"$ref":"#/components/parameters/Id"}]
+      responses:
+        "200":
+          "$ref": "#/components/responses/CollectionImagesSuccess"
+        "400":
+          "$ref": "#/components/responses/MediaValidation"
+        "401":
+          "$ref": "#/components/responses/Error401"
+        "403":
+          "$ref": "#/components/responses/Error403"
+        "404":
+          "$ref": "#/components/responses/Error404"
+        "500":
+          "$ref": "#/components/responses/Error500"
+        "503":
+          "$ref": "#/components/responses/Error503"
+    put:
+      operationId: "replaceCollectionImages"
+      summary: "Replace cover/images and increment collection version"
+      x-implementation-status: "planned"
+      description: "TASK:CAT-03 draft; pending written-spec/plan approval. catalog.write checked at service."
+      security: [{"bearerAuth":[]}]
+      parameters: [{"$ref":"#/components/parameters/Id"}]
+      responses:
+        "200":
+          "$ref": "#/components/responses/CollectionImagesSuccess"
+        "400":
+          "$ref": "#/components/responses/MediaValidation"
+        "401":
+          "$ref": "#/components/responses/Error401"
+        "403":
+          "$ref": "#/components/responses/Error403"
+        "404":
+          "$ref": "#/components/responses/Error404"
+        "409":
+          "$ref": "#/components/responses/Error409"
+        "500":
+          "$ref": "#/components/responses/Error500"
+        "503":
+          "$ref": "#/components/responses/Error503"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/CollectionImagesPut"
+  "/admin/api/v1/catalog/images/{asset_id}":
+    get:
+      operationId: "previewCatalogImage"
+      summary: "Preview approved media with catalog.write"
+      x-implementation-status: "planned"
+      description: "TASK:CAT-03 draft; pending written-spec/plan approval. catalog.write checked at service."
+      security: [{"bearerAuth":[]}]
+      parameters: [{"$ref":"#/components/parameters/AssetId"},{"$ref":"#/components/parameters/ImageKind"}]
+      responses:
+        "200":
+          "$ref": "#/components/responses/MediaBytes"
+        "400":
+          "$ref": "#/components/responses/MediaKindError"
+        "401":
+          "$ref": "#/components/responses/Error401"
+        "403":
+          "$ref": "#/components/responses/Error403"
+        "404":
+          "$ref": "#/components/responses/Error404"
+        "500":
+          "$ref": "#/components/responses/Error500"
+        "503":
+          "$ref": "#/components/responses/Error503"
+  "/api/v1/catalog/images/{asset_id}":
+    get:
+      operationId: "readCatalogImage"
+      summary: "Read currently visible attached approved media"
+      x-implementation-status: "planned"
+      description: >
+        Public attached product ACTIVE, or collection ACTIVE/in [start_at,end_at)/with >=1 ACTIVE product.
+        Visibility and object availability are checked before conditional responses. Otherwise 404.
+        Cache-Control is public, max-age=300; an already cached image can remain visible for up to five minutes after unpublish.
+        ETag is the immutable approved representation SHA-256. Matching If-None-Match returns 304 without a body.
+        Invalid kind returns 400 with field kind. Required storage operations failing return 503 DEPENDENCY_UNAVAILABLE.
+        No public browse routes are added.
+      security: []
+      parameters: [{"$ref":"#/components/parameters/AssetId"},{"$ref":"#/components/parameters/ImageKind"},{"$ref":"#/components/parameters/ImageIfNoneMatch"}]
+      responses:
+        "200":
+          "$ref": "#/components/responses/PublicMediaBytes"
+        "304":
+          "$ref": "#/components/responses/PublicMediaNotModified"
+        "400":
+          "$ref": "#/components/responses/MediaKindError"
+        "404":
+          "$ref": "#/components/responses/Error404"
+        "500":
+          "$ref": "#/components/responses/Error500"
+        "503":
+          "$ref": "#/components/responses/Error503"
 components:
   schemas:
+    ImageUploadCreate:
+      type: "object"
+      additionalProperties: false
+      required: ["filename","content_type","size_bytes","target_type","target_id"]
+      properties:
+        filename:
+          type: "string"
+          minLength: 1
+          maxLength: 255
+          description: "Strip; plain text; frontend escapes output."
+        content_type:
+          type: "string"
+          enum: ["image/jpeg","image/png"]
+        size_bytes:
+          type: "integer"
+          minimum: 1
+          maximum: 5242880
+        target_type:
+          type: "string"
+          enum: ["PRODUCT","COLLECTION"]
+        target_id:
+          type: "string"
+          format: "uuid"
+    ImageObjectMetadata:
+      type: "object"
+      additionalProperties: false
+      required: ["content_type","size_bytes","width","height","sha256"]
+      properties:
+        content_type:
+          type: "string"
+          enum: ["image/jpeg","image/png"]
+        size_bytes:
+          type: "integer"
+          minimum: 1
+          maximum: 5242880
+        width:
+          type: "integer"
+          minimum: 1
+          maximum: 2560
+        height:
+          type: "integer"
+          minimum: 1
+          maximum: 2560
+        sha256:
+          type: "string"
+          pattern: "^[0-9a-f]{64}$"
+    ApprovedImageAsset:
+      type: "object"
+      additionalProperties: false
+      required: ["asset_id","image","thumb","url","thumb_url"]
+      properties:
+        asset_id:
+          type: "string"
+          format: "uuid"
+        image:
+          "$ref": "#/components/schemas/ImageObjectMetadata"
+        thumb:
+          "$ref": "#/components/schemas/ImageObjectMetadata"
+          description: "Longest edge <=800, no upscale."
+        url:
+          type: "string"
+          description: "Controlled Gateway path; visibility checked on each read."
+        thumb_url:
+          type: "string"
+    ImageUploadIntent:
+      type: "object"
+      additionalProperties: false
+      required: ["upload_id","put_expires_at","complete_deadline","put_url","put_headers"]
+      properties:
+        upload_id:
+          type: "string"
+          format: "uuid"
+        put_expires_at:
+          type: "string"
+          format: "date-time"
+        complete_deadline:
+          type: "string"
+          format: "date-time"
+        put_url:
+          type: "string"
+          format: "uri"
+          description: "Sensitive presigned capability. Never log, audit or persist in idempotency body. Example is unsigned."
+        put_headers:
+          type: "object"
+          additionalProperties: false
+          required: ["Content-Type","Content-Length"]
+          properties:
+            Content-Type:
+              type: "string"
+              enum: ["image/jpeg","image/png"]
+            Content-Length:
+              type: "integer"
+              minimum: 1
+              maximum: 5242880
+    ImageUploadStatus:
+      type: "object"
+      additionalProperties: false
+      required: ["upload_id","target_type","target_id","state","put_expires_at","complete_deadline","lease_until","reason_code","asset","asset_availability"]
+      properties:
+        upload_id:
+          type: "string"
+          format: "uuid"
+        target_type:
+          type: "string"
+          enum: ["PRODUCT","COLLECTION"]
+        target_id:
+          type: "string"
+          format: "uuid"
+        state:
+          type: "string"
+          enum: ["PENDING","PROCESSING","APPROVED","REJECTED","EXPIRED"]
+        put_expires_at:
+          type: "string"
+          format: "date-time"
+        complete_deadline:
+          type: "string"
+          format: "date-time"
+        lease_until:
+          type: ["string","null"]
+          format: "date-time"
+        reason_code:
+          type: ["string","null"]
+        asset:
+          anyOf: [{"$ref":"#/components/schemas/ApprovedImageAsset"},{"type":"null"}]
+        asset_availability:
+          type: [string, 'null']
+          enum: [AVAILABLE, DELETING, DELETED, null]
+    ProductImageInput:
+      type: "object"
+      additionalProperties: false
+      required: ["asset_id","alt_vi","alt_en","sort_order"]
+      properties:
+        asset_id:
+          type: "string"
+          format: "uuid"
+        alt_vi:
+          type: "string"
+          minLength: 1
+          maxLength: 255
+          description: "Strip; plain text; frontend escapes output."
+        alt_en:
+          type: "string"
+          minLength: 1
+          maxLength: 255
+          description: "Strip; plain text; frontend escapes output."
+        sort_order:
+          type: "integer"
+          minimum: 0
+          maximum: 2147483647
+        variant_color:
+          type: ["string","null"]
+          description: "Exact color of a variant belonging to this product, or null."
+    CollectionImageInput:
+      type: "object"
+      additionalProperties: false
+      required: ["asset_id","sort_order"]
+      properties:
+        asset_id:
+          type: "string"
+          format: "uuid"
+        sort_order:
+          type: "integer"
+          minimum: 0
+          maximum: 2147483647
+        caption_vi:
+          type: "string"
+          minLength: 0
+          maxLength: 500
+          description: "Strip; plain text; frontend escapes output."
+        caption_en:
+          type: "string"
+          minLength: 0
+          maxLength: 500
+          description: "Strip; plain text; frontend escapes output."
+    ProductImagesPut:
+      allOf: [{"$ref":"./common.yaml#/components/schemas/ExpectedVersion"}]
+      type: "object"
+      additionalProperties: false
+      required: ["expected_version","images"]
+      properties:
+        expected_version:
+          type: "integer"
+          minimum: 0
+          maximum: 9223372036854775807
+        images:
+          type: "array"
+          maxItems: 20
+          items:
+            "$ref": "#/components/schemas/ProductImageInput"
+      description: "Full replacement. New/re-attached asset must belong to uploader and target; retained assets may belong to another actor. ACTIVE cannot become empty."
+    CollectionImagesPut:
+      allOf: [{"$ref":"./common.yaml#/components/schemas/ExpectedVersion"}]
+      type: "object"
+      additionalProperties: false
+      required: ["expected_version","images","cover_asset_id"]
+      properties:
+        expected_version:
+          type: "integer"
+          minimum: 0
+          maximum: 9223372036854775807
+        cover_asset_id:
+          type: ["string","null"]
+          format: "uuid"
+        images:
+          type: "array"
+          maxItems: 50
+          items:
+            "$ref": "#/components/schemas/CollectionImageInput"
+      description: "Full replacement. Non-null cover must belong to images in this request. No ACTIVE cover gate."
+    ProductImage:
+      type: "object"
+      additionalProperties: false
+      required: ["asset_id","image","thumb","url","thumb_url","alt_vi","alt_en","sort_order","variant_color"]
+      properties:
+        asset_id:
+          type: "string"
+          format: "uuid"
+        image:
+          "$ref": "#/components/schemas/ImageObjectMetadata"
+        thumb:
+          "$ref": "#/components/schemas/ImageObjectMetadata"
+        url:
+          type: "string"
+        thumb_url:
+          type: "string"
+        alt_vi:
+          type: "string"
+          minLength: 1
+          maxLength: 255
+          description: "Strip; plain text; frontend escapes output."
+        alt_en:
+          type: "string"
+          minLength: 1
+          maxLength: 255
+          description: "Strip; plain text; frontend escapes output."
+        sort_order:
+          type: "integer"
+          minimum: 0
+          maximum: 2147483647
+        variant_color:
+          type: ["string","null"]
+    CollectionImage:
+      type: "object"
+      additionalProperties: false
+      required: ["asset_id","image","thumb","url","thumb_url","caption_vi","caption_en","sort_order"]
+      properties:
+        asset_id:
+          type: "string"
+          format: "uuid"
+        image:
+          "$ref": "#/components/schemas/ImageObjectMetadata"
+        thumb:
+          "$ref": "#/components/schemas/ImageObjectMetadata"
+        url:
+          type: "string"
+        thumb_url:
+          type: "string"
+        caption_vi:
+          type: "string"
+          minLength: 0
+          maxLength: 500
+          description: "Strip; plain text; frontend escapes output."
+        caption_en:
+          type: "string"
+          minLength: 0
+          maxLength: 500
+          description: "Strip; plain text; frontend escapes output."
+        sort_order:
+          type: "integer"
+          minimum: 0
+          maximum: 2147483647
+    ProductImages:
+      type: "object"
+      additionalProperties: false
+      required: ["id","version","images"]
+      properties:
+        id:
+          type: "string"
+          format: "uuid"
+        version:
+          type: "integer"
+          minimum: 0
+        images:
+          type: "array"
+          maxItems: 20
+          items:
+            "$ref": "#/components/schemas/ProductImage"
+    CollectionImages:
+      type: "object"
+      additionalProperties: false
+      required: ["id","version","images","cover_asset_id"]
+      properties:
+        id:
+          type: "string"
+          format: "uuid"
+        version:
+          type: "integer"
+          minimum: 0
+        cover_asset_id:
+          type: ["string","null"]
+          format: "uuid"
+        images:
+          type: "array"
+          maxItems: 50
+          items:
+            "$ref": "#/components/schemas/CollectionImage"
+    ImageIntentResponse:
+      type: "object"
+      additionalProperties: false
+      required: ["code","data","metadata"]
+      properties:
+        code:
+          type: "string"
+          const: "OK"
+        data:
+          "$ref": "#/components/schemas/ImageUploadIntent"
+        metadata:
+          "$ref": "./common.yaml#/components/schemas/Metadata"
+    ImageStatusResponse:
+      type: "object"
+      additionalProperties: false
+      required: ["code","data","metadata"]
+      properties:
+        code:
+          type: "string"
+          const: "OK"
+        data:
+          "$ref": "#/components/schemas/ImageUploadStatus"
+        metadata:
+          "$ref": "./common.yaml#/components/schemas/Metadata"
+    ApprovedImageResponse:
+      type: "object"
+      additionalProperties: false
+      required: ["code","data","metadata"]
+      properties:
+        code:
+          type: "string"
+          const: "OK"
+        data:
+          "$ref": "#/components/schemas/ApprovedImageAsset"
+        metadata:
+          "$ref": "./common.yaml#/components/schemas/Metadata"
+    ProductImagesResponse:
+      type: "object"
+      additionalProperties: false
+      required: ["code","data","metadata"]
+      properties:
+        code:
+          type: "string"
+          const: "OK"
+        data:
+          "$ref": "#/components/schemas/ProductImages"
+        metadata:
+          "$ref": "./common.yaml#/components/schemas/Metadata"
+    CollectionImagesResponse:
+      type: "object"
+      additionalProperties: false
+      required: ["code","data","metadata"]
+      properties:
+        code:
+          type: "string"
+          const: "OK"
+        data:
+          "$ref": "#/components/schemas/CollectionImages"
+        metadata:
+          "$ref": "./common.yaml#/components/schemas/Metadata"
     ProductSummary:
       type: object
       required: [id, slug, name_vi, name_en]
@@ -972,7 +1576,7 @@ components:
         name_vi: {type: string, minLength: 1, maxLength: 255}
         name_en: {type: string, minLength: 1, maxLength: 255}
         slug: {type: string, minLength: 1, maxLength: 160, pattern: '^[a-z0-9]+(-[a-z0-9]+)*$'}
-        cover_url: {type: 'null', description: Always null in CAT-01b; safe media attachment belongs to CAT-03.}
+        cover_url: {type: [string, 'null'], description: Null in CAT-01b runtime; CAT-03 planned computes a controlled Gateway path from cover_asset_id. Never accepted in core collection requests.}
         start_at: {type: [string, 'null'], format: date-time}
         end_at: {type: [string, 'null'], format: date-time}
         status: {type: string, enum: [DRAFT, ACTIVE, INACTIVE]}
@@ -991,7 +1595,7 @@ components:
         name_vi: {type: string, minLength: 1, maxLength: 255}
         name_en: {type: string, minLength: 1, maxLength: 255}
         slug: {type: string, minLength: 1, maxLength: 160, pattern: '^[a-z0-9]+(-[a-z0-9]+)*$'}
-        cover_url: {type: 'null'}
+        cover_url: {type: [string, 'null'], description: Null until CAT-03 media attachment; controlled Gateway path only.}
         start_at: {type: [string, 'null'], format: date-time}
         end_at: {type: [string, 'null'], format: date-time}
         status: {type: string, enum: [DRAFT, ACTIVE, INACTIVE]}
@@ -1134,6 +1738,34 @@ components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT, description: ADR-21 ES256; catalog.write required at catalog-service.}
   parameters:
+    ImageIfNoneMatch:
+      in: header
+      name: If-None-Match
+      required: false
+      description: Public approved image validator; RFC 9110 weak comparison, including lists and wildcard. Visibility checked first.
+      schema: {type: string}
+    UploadId:
+      in: "path"
+      name: "upload_id"
+      required: true
+      schema:
+        type: "string"
+        format: "uuid"
+    AssetId:
+      in: "path"
+      name: "asset_id"
+      required: true
+      schema:
+        type: "string"
+        format: "uuid"
+    ImageKind:
+      in: "query"
+      name: "kind"
+      schema:
+        type: "string"
+        enum: ["image","thumb"]
+        default: "image"
+      description: "Approved original or thumbnail; no raw option."
     Id:
       in: path
       name: id
@@ -1153,6 +1785,292 @@ components:
       schema: {type: string, enum: [vi, en]}
       description: Exact supported locale; other values return 400
   responses:
+    ImageIntentSuccess:
+      description: "CAT-03 planned contract; not implemented."
+      headers:
+        X-Correlation-Id:
+          "$ref": "./common.yaml#/components/headers/CorrelationId"
+      content:
+        "application/json":
+          schema:
+            "$ref": "#/components/schemas/ImageIntentResponse"
+          examples:
+            success:
+              value:
+                code: "OK"
+                data:
+                  upload_id: "66666666-6666-4666-8666-666666666666"
+                  put_expires_at: "2026-10-07T10:05:00Z"
+                  complete_deadline: "2026-10-08T10:05:00Z"
+                  put_url: "http://localhost:19000/example-private/quarantine/example.png"
+                  put_headers:
+                    Content-Type: "image/png"
+                    Content-Length: 100
+                metadata:
+                  request_id: "11111111-1111-4111-8111-111111111111"
+                  trace_id: "4bf92f3577b34da6a3ce929d0e0e4736"
+    ImageStatusSuccess:
+      description: "CAT-03 planned contract; not implemented."
+      headers:
+        X-Correlation-Id:
+          "$ref": "./common.yaml#/components/headers/CorrelationId"
+      content:
+        "application/json":
+          schema:
+            "$ref": "#/components/schemas/ImageStatusResponse"
+          examples:
+            success:
+              value:
+                code: "OK"
+                data:
+                  upload_id: "66666666-6666-4666-8666-666666666666"
+                  target_type: "PRODUCT"
+                  target_id: "33333333-3333-4333-8333-333333333333"
+                  state: "APPROVED"
+                  asset_availability: AVAILABLE
+                  put_expires_at: "2026-10-07T10:05:00Z"
+                  complete_deadline: "2026-10-08T10:05:00Z"
+                  lease_until: null
+                  reason_code: null
+                  asset:
+                    asset_id: "66666666-6666-4666-8666-666666666666"
+                    image:
+                      content_type: "image/png"
+                      size_bytes: 100
+                      width: 2
+                      height: 2
+                      sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+                    thumb:
+                      content_type: "image/png"
+                      size_bytes: 100
+                      width: 2
+                      height: 2
+                      sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+                    url: "/api/v1/catalog/images/66666666-6666-4666-8666-666666666666?kind=image"
+                    thumb_url: "/api/v1/catalog/images/66666666-6666-4666-8666-666666666666?kind=thumb"
+                metadata:
+                  request_id: "11111111-1111-4111-8111-111111111111"
+                  trace_id: "4bf92f3577b34da6a3ce929d0e0e4736"
+    ApprovedImageSuccess:
+      description: "CAT-03 planned contract; not implemented."
+      headers:
+        X-Correlation-Id:
+          "$ref": "./common.yaml#/components/headers/CorrelationId"
+      content:
+        "application/json":
+          schema:
+            "$ref": "#/components/schemas/ApprovedImageResponse"
+          examples:
+            success:
+              value:
+                code: "OK"
+                data:
+                  asset_id: "66666666-6666-4666-8666-666666666666"
+                  image:
+                    content_type: "image/png"
+                    size_bytes: 100
+                    width: 2
+                    height: 2
+                    sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+                  thumb:
+                    content_type: "image/png"
+                    size_bytes: 100
+                    width: 2
+                    height: 2
+                    sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+                  url: "/api/v1/catalog/images/66666666-6666-4666-8666-666666666666?kind=image"
+                  thumb_url: "/api/v1/catalog/images/66666666-6666-4666-8666-666666666666?kind=thumb"
+                metadata:
+                  request_id: "11111111-1111-4111-8111-111111111111"
+                  trace_id: "4bf92f3577b34da6a3ce929d0e0e4736"
+    ProductImagesSuccess:
+      description: "CAT-03 planned contract; not implemented."
+      headers:
+        X-Correlation-Id:
+          "$ref": "./common.yaml#/components/headers/CorrelationId"
+      content:
+        "application/json":
+          schema:
+            "$ref": "#/components/schemas/ProductImagesResponse"
+          examples:
+            success:
+              value:
+                code: "OK"
+                data:
+                  id: "33333333-3333-4333-8333-333333333333"
+                  version: 1
+                  images: [{"asset_id":"66666666-6666-4666-8666-666666666666","image":{"content_type":"image/png","size_bytes":100,"width":2,"height":2,"sha256":"0000000000000000000000000000000000000000000000000000000000000000"},"thumb":{"content_type":"image/png","size_bytes":100,"width":2,"height":2,"sha256":"0000000000000000000000000000000000000000000000000000000000000000"},"url":"/api/v1/catalog/images/66666666-6666-4666-8666-666666666666?kind=image","thumb_url":"/api/v1/catalog/images/66666666-6666-4666-8666-666666666666?kind=thumb","alt_vi":"Áo","alt_en":"Shirt","variant_color":null,"sort_order":0}]
+                metadata:
+                  request_id: "11111111-1111-4111-8111-111111111111"
+                  trace_id: "4bf92f3577b34da6a3ce929d0e0e4736"
+    CollectionImagesSuccess:
+      description: "CAT-03 planned contract; not implemented."
+      headers:
+        X-Correlation-Id:
+          "$ref": "./common.yaml#/components/headers/CorrelationId"
+      content:
+        "application/json":
+          schema:
+            "$ref": "#/components/schemas/CollectionImagesResponse"
+          examples:
+            success:
+              value:
+                code: "OK"
+                data:
+                  id: "33333333-3333-4333-8333-333333333333"
+                  version: 1
+                  cover_asset_id: "66666666-6666-4666-8666-666666666666"
+                  images: [{"asset_id":"66666666-6666-4666-8666-666666666666","image":{"content_type":"image/png","size_bytes":100,"width":2,"height":2,"sha256":"0000000000000000000000000000000000000000000000000000000000000000"},"thumb":{"content_type":"image/png","size_bytes":100,"width":2,"height":2,"sha256":"0000000000000000000000000000000000000000000000000000000000000000"},"url":"/api/v1/catalog/images/66666666-6666-4666-8666-666666666666?kind=image","thumb_url":"/api/v1/catalog/images/66666666-6666-4666-8666-666666666666?kind=thumb","caption_vi":"","caption_en":"","sort_order":0}]
+                metadata:
+                  request_id: "11111111-1111-4111-8111-111111111111"
+                  trace_id: "4bf92f3577b34da6a3ce929d0e0e4736"
+    MediaValidation:
+      description: "INVALID_FIELDS"
+      headers:
+        X-Correlation-Id:
+          "$ref": "./common.yaml#/components/headers/CorrelationId"
+      content:
+        "application/json":
+          schema:
+            "$ref": "./common.yaml#/components/schemas/ApiError"
+          examples:
+            error:
+              value:
+                code: "VALIDATION_ERROR"
+                message: "INVALID_FIELDS"
+                errors: [{"field":"images[0].asset_id","message":"INVALID_FIELDS"}]
+                metadata:
+                  request_id: "11111111-1111-4111-8111-111111111111"
+                  trace_id: "4bf92f3577b34da6a3ce929d0e0e4736"
+    MediaConflict:
+      description: PROCESSING lease active, complete deadline exceeded (no S3 read), or quarantine missing before deadline (PENDING/retry).
+      headers:
+        X-Correlation-Id: {$ref: './common.yaml#/components/headers/CorrelationId'}
+      content:
+        application/json:
+          schema: {$ref: './common.yaml#/components/schemas/ApiError'}
+          examples:
+            processing:
+              value: {code: CONFLICT, message: UPLOAD_PROCESSING, metadata: {request_id: 11111111-1111-4111-8111-111111111111, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}}
+            expired:
+              value: {code: CONFLICT, message: UPLOAD_EXPIRED, metadata: {request_id: 11111111-1111-4111-8111-111111111111, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}}
+            notUploaded:
+              value: {code: CONFLICT, message: UPLOAD_NOT_UPLOADED, metadata: {request_id: 11111111-1111-4111-8111-111111111111, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}}
+    UploadUrlExpired:
+      description: Create replay after PUT URL expiry; body mismatch also409 IDEMPOTENCY_KEY_REUSED. Does not extend expiry.
+      headers:
+        X-Correlation-Id:
+          "$ref": "./common.yaml#/components/headers/CorrelationId"
+      content:
+        "application/json":
+          schema:
+            "$ref": "./common.yaml#/components/schemas/ApiError"
+          examples:
+            error:
+              value:
+                code: "CONFLICT"
+                message: "UPLOAD_URL_EXPIRED"
+                metadata:
+                  request_id: "11111111-1111-4111-8111-111111111111"
+                  trace_id: "4bf92f3577b34da6a3ce929d0e0e4736"
+    ImageRejected:
+      description: IMAGE_REJECTED with persisted reason code; malformed fields also400 INVALID_FIELDS. Commit rejection before returning400.
+      headers:
+        X-Correlation-Id:
+          "$ref": "./common.yaml#/components/headers/CorrelationId"
+      content:
+        "application/json":
+          schema:
+            "$ref": "./common.yaml#/components/schemas/ApiError"
+          examples:
+            error:
+              value:
+                code: "VALIDATION_ERROR"
+                message: "IMAGE_REJECTED"
+                errors: [{"field":"upload_id","message":"IMAGE_DECODE_FAILED"}]
+                metadata:
+                  request_id: "11111111-1111-4111-8111-111111111111"
+                  trace_id: "4bf92f3577b34da6a3ce929d0e0e4736"
+    MediaRateLimited:
+      description: "IMAGE_PROCESSING_CAPACITY"
+      headers:
+        X-Correlation-Id:
+          "$ref": "./common.yaml#/components/headers/CorrelationId"
+        Retry-After:
+          schema:
+            type: "integer"
+            const: 1
+          description: "Retry after one second; upload state unchanged."
+      content:
+        "application/json":
+          schema:
+            "$ref": "./common.yaml#/components/schemas/ApiError"
+          examples:
+            error:
+              value:
+                code: "RATE_LIMITED"
+                message: "IMAGE_PROCESSING_CAPACITY"
+                metadata:
+                  request_id: "11111111-1111-4111-8111-111111111111"
+                  trace_id: "4bf92f3577b34da6a3ce929d0e0e4736"
+    MediaBytes:
+      description: "Admin approved JPEG/PNG preview; authorization rechecked each request. No raw download."
+      headers:
+        X-Correlation-Id:
+          "$ref": "./common.yaml#/components/headers/CorrelationId"
+        Cache-Control:
+          schema:
+            type: "string"
+            const: "private, no-store"
+          description: "Check visibility on every request."
+      content:
+        "image/jpeg":
+          schema:
+            type: "string"
+            format: "binary"
+        "image/png":
+          schema:
+            type: "string"
+            format: "binary"
+    PublicMediaBytes:
+      description: Public approved representation; can remain cached up to 300 seconds after unpublish.
+      headers:
+        X-Correlation-Id: {$ref: './common.yaml#/components/headers/CorrelationId'}
+        Cache-Control:
+          schema: {type: string, const: 'public, max-age=300'}
+        ETag:
+          description: Quoted SHA-256 of the selected immutable image or thumb bytes; not the storage multipart ETag.
+          schema: {type: string, pattern: '^"[0-9a-f]{64}"$'}
+      content:
+        image/jpeg:
+          schema: {type: string, format: binary}
+        image/png:
+          schema: {type: string, format: binary}
+    PublicMediaNotModified:
+      description: Matching If-None-Match after visibility and object availability checks; no body.
+      headers:
+        X-Correlation-Id: {$ref: './common.yaml#/components/headers/CorrelationId'}
+        Cache-Control:
+          schema: {type: string, const: 'public, max-age=300'}
+        ETag:
+          description: Quoted SHA-256 of the selected immutable image or thumb bytes; not the storage multipart ETag.
+          schema: {type: string, pattern: '^"[0-9a-f]{64}"$'}
+    MediaKindError:
+      description: Unknown or empty kind query parameter returns 400 on admin and public reads; default image applies only when omitted.
+      headers:
+        X-Correlation-Id: {$ref: './common.yaml#/components/headers/CorrelationId'}
+        Cache-Control:
+          schema: {type: string, const: no-store}
+      content:
+        application/json:
+          schema: {$ref: './common.yaml#/components/schemas/ApiError'}
+          examples:
+            invalidKind:
+              value:
+                code: VALIDATION_ERROR
+                message: INVALID_FIELDS
+                errors: [{field: kind, message: must be image or thumb}]
+                metadata: {request_id: 11111111-1111-4111-8111-111111111111, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}
     CollectionsSuccess:
       description: Paginated collection summaries; detail GET returns product items
       headers:

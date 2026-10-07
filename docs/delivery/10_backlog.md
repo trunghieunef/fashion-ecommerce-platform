@@ -112,10 +112,16 @@ vào `main` tại `8f27663`; REQ CAT-01/02, dependency PLT-02/03 và USR-02. Có
 product/variant, publish/unpublish, HTML sanitize, SKU immutable, version/idempotency/audit và
 VARIANT_CREATED durable outbox. Acceptance phần 1a và bằng chứng tại
 [evidence CAT-01a](../evidence/cat-01a-local-2026-10-07.md). CAT-01b collection/size-guide
-đã commit local Task1–6 trên dev, V004/HTTP Testcontainers/Gateway smoke/full reactor281 PASS;
+đã thực hiện Task1–7 trên dev, V004/HTTP Testcontainers/Gateway smoke/full reactor281 PASS;
 Task7 whole-branch review0Critical/0Important, Minor docs đã đồng bộ theo
 [plan](../superpowers/plans/2026-10-07-cat-01b-catalog-admin.md)
-và [evidence](../evidence/cat-01b-local-2026-10-07.md). Chưa push/PR/CI remote CAT-01b.
+và [evidence](../evidence/cat-01b-local-2026-10-07.md). Đã merge PR15 tại f5c64d9 ngày2026-10-07;
+4Minor review đã sửa trong45d7610, full reactor286 PASS, Application/Documentation CI
+trên đúng45d7610 đều SUCCESS. Tiếp theo thiết kế CAT-03 safe media theo Phase1A Task2;
+đã chốt S3-compatible Docker local/private/loopback, RustFS 1.0.1/SDK 2.55.12
+đã duyệt và spike PASS; module193 tests PASS, contract media planned/tests36 PASS;
+[spec media bản nháp](../superpowers/specs/2026-10-07-cat-03-media-design.md) và
+[research](../evidence/cat-03-stack-research-2026-10-07.md) đã viết, chưa duyệt spec/plan.
 Chưa Done: còn review/nghiệm thu parent, ảnh/publish gate CAT-03;
 public read CAT-02 và relay/Kafka ngoài phạm vi 1a/1b. SKU mới canonical uppercase với V003,
 SKU legacy không backfill.

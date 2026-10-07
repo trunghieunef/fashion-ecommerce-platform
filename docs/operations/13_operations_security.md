@@ -60,7 +60,90 @@ Một người có thể nhiều role nhưng audit phải ghi actor/action/reaso
 | Marketing preferences | notification-db | Opt-in, consent timestamp và unsubscribe hash | O06 chốt bằng chứng consent/retention |
 | Outbox/inbox | DB service | Application/ops bounded replay | Dự kiến SENT 30 ngày, dedupe 90 ngày; phải đủ replay window |
 | Logs/traces | Observability storage | RBAC, mask phone/email/token, không body webhook secret (Gateway: log JSON ECS qua `PiiRedactingJsonCustomizer`, PLT-05) | PO duyệt khung logs 30–90 ngày tại bảng O06 bên dưới; traces theo budget và O06 |
-| Media | Object storage | Scoped upload, public chỉ approved assets | Dọn orphan sau policy; không xóa ảnh evidence tùy ý |
+| Media | Object storage | Scoped upload, public chỉ approved assets | CAT-03 giữ detached/never-attached và partial terminal 7 ngày; URL PUT 300 giây, complete deadline +24h, lifecycle quarantine 2 ngày; không xóa attached/evidence |
+
+CAT-03 local (chủ dự án chốt ngày 2026-10-07, review bổ sung 2026-10-08):
+S3-compatible Docker bind 127.0.0.1, bucket private và không policy public.
+local-up sinh credential vào .env, không log/commit; không provision AWS.
+RustFS 1.0.1 chỉ local và SDK 2.55.12 đã duyệt; spike S3 API/private bucket PASS
+tại [evidence](../evidence/cat-03-stack-research-2026-10-07.md). Chưa có media runtime,
+compatibility staging hoặc cleanup job feature.
+
+Presigned PUT sống 300 giây, ký Content-Length/Content-Type, scope actor JWT và
+target; key do server sinh, không nhận client URL/key hoặc đổi owner.
+Complete dùng HEAD size, bounded stream, magic bytes và dimensions trước decode;
+re-encode loại EXIF/GPS, chỉ JPEG/PNG, không CopyObject approve. Approved/thumb
+key cố định; conditional PUT không overwrite. Nhánh 412 kiểm actual object và
+metadata thực tế; commit APPROVED dùng CAS token/attempt và lease còn hiệu lực.
+Terminal không đọc quarantine; S3 I/O luôn ngoài transaction/row lock.
+
+Raw và mỗi output tối đa 5 MiB; dimensions 1..8192, tối đa 25 triệu pixel;
+approved cạnh dài tối đa 2560, thumb tối đa 800, giữ tỷ lệ và không upscale.
+Một re-encode/instance, không queue; hết slot trả 429 và Retry-After: 1 trước
+đổi state. Decode/format lỗi hoặc output vượt cap bị reject có kiểm soát, không
+500. Buffer RGBA 25 MP khoảng 100 MB là ước lượng, chưa codec/app heap; sizing
+phải đo theo 16.
+
+Public stream approved qua Gateway với **Cache-Control: public, max-age=300**.
+ETag cố định là quoted SHA-256 của image/thumb tương ứng; If-None-Match trùng
+trả **304 không body** và giữ ETag/cache/correlation headers. Service kiểm
+visibility trước conditional response; chỉ ảnh đang attach product ACTIVE,
+hoặc collection ACTIVE trong [start_at, end_at) có ít nhất một product ACTIVE.
+Visibility DB quyết định 304, không gọi S3; 200 GET object ngoài transaction,
+object thiếu hoặc storage lỗi trả 503.
+Không visible trả 404 dù ETag trùng. Cache còn fresh được tiếp tục hiển thị ảnh
+**tối đa 5 phút sau unpublish**; không kéo dài bằng stale-serving policy.
+
+Admin preview kiểm catalog.write mỗi lần, xem được DRAFT/INACTIVE, dùng
+**Cache-Control: private, no-store**. Không public-cache admin response hoặc đọc raw.
+Query kind lạ/rỗng trả 400 field kind ở cả public/admin; omitted mặc định image.
+
+**S3 không tham gia readiness catalog-service.** Storage operation lỗi/timeout
+làm route ảnh/upload/complete cần S3 trả 503 TEMPORARILY_UNAVAILABLE với message
+DEPENDENCY_UNAVAILABLE. Terminal replay không S3, giữ kết quả đã lưu.
+Readiness giữ readinessState, db, catalogMigration; liveness không đổi.
+S3 báo lỗi/latency qua metric theo operation và health group media riêng với
+catalogObjectStorage, truy cập qua management; không dùng group này làm pod
+readiness/liveness. Metric/log không chứa key, URL ký, credential hoặc actor/upload ID.
+Group/indicator này chưa triển khai runtime.
+
+Complete deadline là put_expires_at + 24h, thay TTL intent 15 phút trước đó;
+PROCESSING lease 120 giây. Quá deadline EXPIRED/409 UPLOAD_EXPIRED, không đọc S3.
+HEAD quarantine 404 trước deadline trả 409 UPLOAD_NOT_UPLOADED/PENDING, không 500.
+Sweep không expire hoặc xóa raw của PROCESSING còn lease; key đã mất coi success.
+Terminal dọn raw ngay sau commit; cleanup lỗi không đảo kết quả complete.
+
+Quarantine sweep chạy mỗi 60 giây, batch 100; dùng **row claim FOR UPDATE
+SKIP LOCKED**, không single-runner lease GC. Transaction ngắn lọc dòng đến hạn/
+không lease PROCESSING hoặc cleanup còn hiệu lực, cấp quarantine_lease_token/
+quarantine_lease_until, chuyển EXPIRED khi cần và commit. DeleteObject ngoài
+transaction; finalize marker dùng CAS token/cleanup lease. Crash hoặc lease hết
+hạn được reclaim; không giữ lock trong I/O. Test multi-instance claim, takeover
+và PROCESSING protection bắt buộc.
+
+Quarantine chưa complete dọn sau put_expires_at + 24h; lifecycle chỉ quarantine/
+expire 2 ngày làm lưới an toàn cho PUT muộn. Config round-trip 2 ngày đã PASS,
+chưa chứng minh object thực sự tự xóa sau đủ thời gian. Không lifecycle approved
+hoặc xóa bucket, volume, attached asset hay evidence.
+
+Orphan/detached giữ 7 ngày từ lúc gỡ; APPROVED chưa từng attach giữ 7 ngày từ
+approve. Reattach trong hạn chỉ uploader và target cũ; retained asset cho OPS
+khác giữ/sửa alt/sort. OPS khác cần re-upload để phục hồi, không chuyển owner.
+PUT chỉ cập nhật DB/version/audit diff asset_id; không xóa object trong request.
+Audit media không chứa URL/key/bytes/alt/caption.
+
+GC mỗi giờ/batch 100, single-runner bằng lease platform-durability. Attach tx
+khóa asset và từ chối DELETING/DELETED với 400 images[i].asset_id. GC dùng cùng
+row lock, chỉ DELETING khi quá hạn/không reference; DeleteObject image/thumb
+ngoài transaction, key thiếu coi success. Finalize CAS/retry có giới hạn; lỗi
+lặp log/metric không chặn batch. Không xóa asset còn attach hoặc evidence.
+
+Partial approved/thumb của upload terminal EXPIRED/REJECTED chưa asset/reference/
+lease được GC sau 7 ngày từ terminal, cùng job; keys suy ra upload_id, không
+list bucket hoặc xóa trong request. Recovery trước terminal ưu tiên approved
+object đã có, tạo thumb thiếu và commit fenced APPROVED; lỗi tạm thumb/DB không
+tự expire/reject. Test commit-fail → retry APPROVED và terminal partial → GC sau
+hạn bắt buộc; chưa chạy các runtime acceptance này.
 
 Các mốc kỹ thuật không thay thời hạn pháp lý. PO/phụ trách pháp lý xác minh nghĩa vụ hiện hành trước G2, ghi nguồn và ngày vào O06. Request xem/xóa dữ liệu phải xác minh actor, kiểm tra nghĩa vụ lưu và xử lý từng DB owner; không cascade xóa order/payment lịch sử vì user yêu cầu xóa account.
 

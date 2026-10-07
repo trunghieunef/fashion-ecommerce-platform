@@ -63,7 +63,7 @@ Partial refund sau DELIVERED không đổi nhãn đơn thành đã hủy. COD: �
 
 | ID / màn | Role | Nội dung và điều kiện | Task |
 |---|---|---|---|
-| AD-01 Catalog/media/collections | OPS | Draft/publish, variants/weight, image validation, size guides; version conflict | ADM-01 |
+| AD-01 Catalog/media/collections | OPS | Draft/publish, variants/weight, image validation, size guides; version conflict; upload 409 UPLOAD_URL_EXPIRED khi mất upload_id thì tạo intent mới với Idempotency-Key mới, complete 429/409 PROCESSING thì retry/poll status (CAT-03) | ADM-01 |
 | AD-02 Stock/ledger/import | OPS | on_hand/reserved/available tách rõ; reason bắt buộc; CSV errors từng dòng | ADM-01 |
 | AD-03 Order work queue | OPS | Filter status/time, COD confirm, online pack, cancel before handover | ADM-02 |
 | AD-04 Shipping/SELF/return | OPS | Evidence handover/delivery, received/restock/damaged, không cộng kho từ webhook | ADM-02 |

@@ -115,6 +115,44 @@ Lệnh này giữ volume local; chỉ dùng `down -v` khi chủ động xóa to�
 
 ## Configuration và database roles
 
+CAT-03 đang thiết kế; chủ dự án đã duyệt S3/URLConnection SDK v2 2.55.12 (BOM
+chỉ service này). [Spike RustFS local](../../docs/evidence/cat-03-stack-research-2026-10-07.md)
+PASS, chưa có upload/attach/publish image gate trong code service. RustFS local-only,
+không staging/prod; SDK không dùng Apache/Netty/native CRT transport mới.
+local-up.sh sinh CATALOG_S3_ACCESS_KEY/SECRET_KEY vào .env local, giữ qua retry,
+không log/commit. CATALOG_S3_ENDPOINT/REGION hiện dùng cho probe local với
+StaticCredentialsProvider, không đọc AWS profile thật; Compose catalog chưa nối
+storage. Spec/plan media phải được duyệt trước implementation.
+
+Contract [CAT-03 bản nháp](../../docs/superpowers/specs/2026-10-07-cat-03-media-design.md)
+và OpenAPI gắn planned: PUT300s; complete deadline=put_expires_at+24h (thay TTL
+intent15phút); quarantine lifecycle2ngày, sweep60s/batch100, terminal dọn ngay.
+local-up chuẩn bị CATALOG_S3_QUARANTINE_RETENTION_DAYS=2 cho setup/probe; chưa
+apply bucket lifecycle qua Compose hoặc triển khai cleanup. Orphan/detached7ngày,
+GC hourly/batch100/single-runner lease platform; reattach chỉ uploader/target cũ.
+Asset đang attach cho OPS khác giữ/sửa alt/sort; DELETING/DELETED không attach.
+Audit media chỉ asset_id. Policy đã duyệt tại13; các job/endpoint chưa hiện thực.
+Partial objects terminal EXPIRED/REJECTED chưa asset/reference/lease GC7ngày từ
+terminal, key suy ra upload_id/không list bucket; retry trước terminal ưu tiên
+approved đã ghi, phục hồi thumb/commit fenced, không reject vì lỗi tạm S3/DB.
+
+Review spec ngày 2026-10-08: public media dùng Cache-Control: public, max-age=300,
+ETag cố định và If-None-Match → 304; cache fresh có thể giữ ảnh tối đa 5 phút sau
+unpublish. Admin preview dùng private, no-store. Kind lạ/rỗng trả 400 field kind
+ở cả public/admin. Quarantine sweep dùng row claim FOR UPDATE SKIP LOCKED,
+cleanup token/lease và CAS; GC approved/partial vẫn single-runner lease platform.
+Composite FK association tới media_uploads sẽ chặn sai target trong V005.
+S3 không tham gia readiness; thao tác media cần S3 lỗi trả 503
+DEPENDENCY_UNAVAILABLE, metric/health group media riêng báo lỗi. Spec chưa duyệt,
+chưa thêm route, constraint, indicator hoặc health group media vào runtime.
+
+Giới hạn media đã duyệt: JPEG/PNG, raw/mỗi output <=5 MiB, dimensions <=8192
+và <=25M pixels; approved cạnh dài <=2560, thumb <=800, không upscale. Một
+re-encode/instance, không queue; hết slot trả 429/Retry-After: 1 trước đổi state.
+Một buffer RGBA 25MP khoảng **100 MB** (95 MiB), chưa gồm decoded source/resize/
+encoder buffers và phần heap của Spring. Đây là ước lượng, chưa là đo peak heap
+hoặc bằng chứng pod sizing; không tự tăng node/heap để nhận ảnh lớn hơn.
+
 | Variable | Default local | Dùng bởi |
 |---|---|---|
 | `CATALOG_DB_URL` | `jdbc:postgresql://localhost:5432/catalog` | Runtime datasource |
