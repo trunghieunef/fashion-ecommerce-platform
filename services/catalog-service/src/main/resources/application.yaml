@@ -2,6 +2,10 @@ server:
   port: ${SERVER_PORT:8081}
 
 spring:
+  task:
+    scheduling:
+      pool:
+        size: 2 # media GC (hourly, slow S3) must not block the 60s quarantine sweep
   jackson:
     property-naming-strategy: SNAKE_CASE
     deserialization:

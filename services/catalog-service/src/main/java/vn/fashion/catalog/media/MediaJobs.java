@@ -49,8 +49,9 @@ public class MediaJobs {
   public int sweepQuarantine() {
     UUID token = UUID.randomUUID();
     // Claim commits before any DeleteObject; expired-lease PROCESSING and stale PENDING become EXPIRED here.
+    // CAS fences on the token only: a re-claim changes it, and an outlived lease must still record its retry/backoff.
     List<UUID> ids = tx.execute(s -> jdbc.sql("""
-        with due as (
+        with due as materialized (
           select id from media_uploads
            where quarantine_cleaned_at is null and quarantine_next_retry_at <= now()
              and (quarantine_lease_until is null or quarantine_lease_until <= now())
@@ -71,7 +72,7 @@ public class MediaJobs {
         storage.delete("quarantine/" + id + "/raw");
         jdbc.sql("""
             update media_uploads set quarantine_cleaned_at = now(), quarantine_lease_token = null, quarantine_lease_until = null
-             where id = :id and quarantine_lease_token = :token and quarantine_lease_until > now()
+             where id = :id and quarantine_lease_token = :token
             """).param("id", id).param("token", token).update();
         count("sweep", "ok");
       } catch (MediaStorage.Unavailable e) {
@@ -79,7 +80,7 @@ public class MediaJobs {
             update media_uploads set quarantine_attempts = quarantine_attempts + 1,
                    quarantine_next_retry_at = now() + make_interval(mins => least(power(2, quarantine_attempts + 1), 60)::int),
                    quarantine_lease_token = null, quarantine_lease_until = null
-             where id = :id and quarantine_lease_token = :token and quarantine_lease_until > now()
+             where id = :id and quarantine_lease_token = :token
             """).param("id", id).param("token", token).update();
         count("sweep", "error");
         LOG.warn("Quarantine sweep delete failed: STORAGE_UNAVAILABLE");

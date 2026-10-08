@@ -144,14 +144,17 @@ trên PostgreSQL/RustFS Testcontainers, chưa deploy): sweep 60s/batch 100/lease
 DeleteObject tăng quarantine_attempts, retry sau min(2^n, 60) phút; GC 1h, lease 30 phút,
 batch 100 gồm asset và partial, asset retry tối đa 10 lần rồi chỉ log/metric. Metric
 `catalog.media.jobs{job=sweep|gc,outcome=ok|error}`; log chỉ mã STORAGE_UNAVAILABLE, không
-key/upload_id. Bật bằng `CATALOG_MEDIA_JOBS_ENABLED` (mặc định true; test tắt).
+key/upload_id. Bật bằng `CATALOG_MEDIA_JOBS_ENABLED` (mặc định true; test tắt). Scheduler pool 2
+thread để GC chậm không chặn sweep. CAS kết quả sweep chỉ fence bằng quarantine_lease_token
+(reclaim đổi token), nên lỗi sau khi lease quá hạn vẫn ghi attempts/backoff.
 
 Partial approved/thumb của upload terminal EXPIRED/REJECTED chưa asset/reference/
 lease được GC sau 7 ngày từ terminal, cùng job; keys suy ra upload_id, không
 list bucket hoặc xóa trong request. Recovery trước terminal ưu tiên approved
 object đã có, tạo thumb thiếu và commit fenced APPROVED; lỗi tạm thumb/DB không
-tự expire/reject. Test commit-fail → retry APPROVED và terminal partial → GC sau
-hạn bắt buộc; chưa chạy các runtime acceptance này.
+tự expire/reject. Test commit-fail → retry APPROVED (`UploadCompleteIntegrationTest`) và terminal
+partial → GC sau hạn (`MediaJobsIntegrationTest`) đã chạy local trên PostgreSQL/RustFS Testcontainers;
+chưa chạy trên staging.
 
 Các mốc kỹ thuật không thay thời hạn pháp lý. PO/phụ trách pháp lý xác minh nghĩa vụ hiện hành trước G2, ghi nguồn và ngày vào O06. Request xem/xóa dữ liệu phải xác minh actor, kiểm tra nghĩa vụ lưu và xử lý từng DB owner; không cascade xóa order/payment lịch sử vì user yêu cầu xóa account.
 

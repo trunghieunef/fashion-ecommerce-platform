@@ -142,7 +142,8 @@ lỗi S3 -> `quarantine_attempts+1`, retry sau min(2^n, 60) phút. `collectGarba
 ngoài tx -> DELETED; lỗi giữ DELETING, `gc_attempts` tối đa 10 rồi chỉ log/metric; partial approved objects của
 upload EXPIRED/REJECTED không asset quá 7 ngày từ `terminal_at` (key suy từ upload_id, không list bucket).
 Metric counter `catalog.media.jobs` tag `job` (sweep|gc), `outcome` (ok|error); không tag/log key hay upload_id.
-Test: `MediaJobsIntegrationTest`.
+CAS kết quả sweep chỉ fence bằng token (reclaim đổi token). `spring.task.scheduling.pool.size: 2` để GC chậm
+không chặn sweep. Test: `MediaJobsIntegrationTest`.
 Config (`fashion.catalog.media.*`, env): `CATALOG_S3_BUCKET` (catalog-media-local),
 `CATALOG_S3_ENDPOINT` (nội bộ, bắt buộc), `CATALOG_S3_PUBLIC_ENDPOINT` (URL browser
 dùng cho presigned PUT, mặc định = endpoint), `CATALOG_S3_REGION`,

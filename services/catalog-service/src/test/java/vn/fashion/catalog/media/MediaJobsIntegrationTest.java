@@ -3,6 +3,7 @@ package vn.fashion.catalog.media;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doCallRealMethod;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mockingDetails;
@@ -136,6 +137,18 @@ class MediaJobsIntegrationTest extends MediaTestSupport {
     jdbc.update("update media_uploads set quarantine_next_retry_at=now() where id=?", id);
     assertThat(jobs.sweepQuarantine()).isEqualTo(1);
     assertThat(row(id).get("quarantine_cleaned_at")).isNotNull();
+  }
+  @Test void sweepErrorAfterLeaseOutlivedStillBacksOff() {
+    UUID p = createProduct("s6");
+    UUID id = upload(p, "REJECTED", "1 hour", "1 hour");
+    doAnswer(inv -> { // slow S3: lease expires before the delete fails
+      jdbc.update("update media_uploads set quarantine_lease_until=now() - interval '1 second' where id=?", id);
+      throw new MediaStorage.Unavailable();
+    }).when(storage).delete(anyString());
+    assertThat(jobs.sweepQuarantine()).isEqualTo(1);
+    assertThat(row(id).get("quarantine_attempts")).isEqualTo(1);
+    assertThat(jdbc.queryForObject("select quarantine_next_retry_at > now() + interval '1 minute' from media_uploads where id=?", Boolean.class, id)).isTrue();
+    assertThat(jobs.sweepQuarantine()).isZero();
   }
   @Test void gcDeletesDetachedAfterSevenDaysOnly() {
     UUID p = createProduct("g1");
