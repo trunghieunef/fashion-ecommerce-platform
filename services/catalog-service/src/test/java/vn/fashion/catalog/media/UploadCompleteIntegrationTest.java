@@ -257,6 +257,26 @@ class UploadCompleteIntegrationTest extends MediaTestSupport {
     // Keeps CHECK complete_deadline = put_expires_at + 24h valid.
     jdbc.update("update media_uploads set put_expires_at = now() - interval '24 hours 1 second', complete_deadline = now() - interval '1 second' where id=?::uuid", id);
   }
+
+  @Test void staleLeaseAfterThumbWriteCannotCommit() {
+    var u = uploaded("c-18", png(8, 8), "image/png");
+    var nextToken = UUID.randomUUID();
+    doAnswer(inv -> {
+      var result = inv.callRealMethod();
+      jdbc.update("update media_uploads set lease_token=?, lease_until=now() + interval '120 seconds' where id=?::uuid", nextToken, u.id());
+      return result;
+    }).when(storage).putIfAbsent(eq(u.thumb()), any(), anyString());
+    expectError(complete(u.id()), 409, "CONFLICT", "UPLOAD_PROCESSING");
+    assertThat(exists(u.image())).isTrue();
+    assertThat(exists(u.thumb())).isTrue();
+    var current = row(u.id());
+    assertThat(current.get("lease_token")).isEqualTo(nextToken);
+    assertThat(current.get("terminal_at")).isNull();
+    assertThat(current.get("quarantine_cleaned_at")).isNull();
+    assertThat(current.get("state")).isEqualTo("PROCESSING");
+    assertNothingApproved(u.id());
+    assertThat(audits("catalog.media.upload.reject")).isZero();
+  }
   private void assertNothingApproved(String id) {
     assertThat(row(id).get("state")).isNotEqualTo("APPROVED");
     assertThat(assets()).isZero();

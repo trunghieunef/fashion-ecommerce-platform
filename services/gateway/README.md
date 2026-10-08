@@ -36,6 +36,11 @@ curl -i http://localhost:8080/internal/api/v1/platform/ping
 Public catalog request phải nhận response từ catalog; upstream không nhận các header identity
 trên. Internal path phải là HTTP 404. Gateway dùng timeout connect 500 ms và response 2 s;
 timeout không được biến mutation thành retry hay thành công giả.
+CAT-03: complete và hai route GET `/api/v1/catalog/images/{asset_id}`,
+`/admin/api/v1/catalog/images/{asset_id}` có response budget 30 s, đặt trước các route catalog chung.
+GET ảnh cần chờ timeout S3 mặc định 10 s để chuyển đúng 503 `DEPENDENCY_UNAVAILABLE` và `no-store`;
+GET catalog khác vẫn giữ 2 s. `GatewayBoundaryTest.imageReadsPreserveSlowStorage503` kiểm upstream
+trả 503 sau 3 s cho cả public/admin; `completeRouteAllowsSlowProcessing` kiểm budget route còn lại.
 
 ## Config và observability
 

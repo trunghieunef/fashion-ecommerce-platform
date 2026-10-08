@@ -90,7 +90,8 @@ và product version không tăng thêm trước publish.
 CAT-03 xen trước publish (publish nay cần ảnh): intent → PUT PNG tới RustFS public endpoint
 (URL ký chỉ trong bộ nhớ, không in) → complete → `PUT /products/{id}/images` → publish → public GET
 200 + ETag, If-None-Match 304 → unpublish → 404. Gateway có route `catalog-admin-media-complete`
-(timeout 30s) cho complete; các route admin khác giữ timeout 2s.
+(timeout 30s) cho complete và hai route GET ảnh public/admin cùng budget 30s;
+các route catalog còn lại giữ timeout 2s.
 Smoke CAT-01b tiếp tục bằng cùng JWT/category/product: collection POST201/DRAFT/version0 →
 GET items/version → PUT không key200/version1 → stale409; guide PUT0/key201/version1 →
 GET → PUT1/newkey200/version2 → stale409 và replay key tạo giữ201/data version1, metadata mới.
@@ -137,6 +138,8 @@ claim lease 120s, 1 slot re-encode/instance (thiếu slot -> 429 + `Retry-After:
 được ưu tiên (không đọc raw), thumb sinh từ primary thực tế, kiểm lại lease/deadline trước mỗi
 lần ghi S3, CAS lease_token/lease_until/deadline ghi APPROVED/REJECTED + audit một lần (mất fence
 quá deadline -> EXPIRED, còn hạn -> release), sau commit xóa raw best-effort; test `UploadCompleteIntegrationTest`.
+Regression `staleLeaseAfterThumbWriteCannotCommit` đổi token sau khi ghi thumb thật để kiểm riêng CAS finish,
+không dựa vào pre-write fence; attempt cũ không ghi asset/audit hoặc giải phóng lease của attempt mới.
 Jobs (Task 8, `MediaJobs`, chỉ chạy định kỳ khi `CATALOG_MEDIA_JOBS_ENABLED=true` qua `@EnableScheduling` có điều kiện):
 `sweepQuarantine` mỗi 60s, batch 100, claim `FOR UPDATE SKIP LOCKED` (nhiều instance an toàn), lease 120s;
 dọn raw của upload terminal hoặc quá `put_expires_at + 24h` (chuyển EXPIRED, không đụng PROCESSING còn lease),
@@ -180,11 +183,16 @@ ETag cố định và If-None-Match → 304; cache fresh có thể giữ ảnh t
 unpublish. Admin preview dùng private, no-store. Kind lạ/rỗng trả 400 field kind
 ở cả public/admin. Quarantine sweep dùng row claim FOR UPDATE SKIP LOCKED,
 cleanup token/lease và CAS; GC approved/partial vẫn single-runner lease platform.
-Composite FK association tới media_uploads sẽ chặn sai target trong V005.
+Composite FK association tới media_uploads chặn sai target trong V005.
 S3 không tham gia readiness; thao tác media cần S3 lỗi trả 503
-DEPENDENCY_UNAVAILABLE, metric/health group media riêng báo lỗi. Spec chưa duyệt,
-chưa thêm route, constraint, indicator hoặc health group media vào runtime.
+DEPENDENCY_UNAVAILABLE. Spec/plan đã duyệt; routes và constraints đã hiện thực local.
+Metric jobs đã có; health group `media` và metric latency/lỗi S3 theo thao tác còn hoãn, chưa có trong runtime.
+Gateway dành response budget 30 giây cho complete và GET ảnh public/admin, lớn hơn timeout S3
+mặc định 10 giây để giữ 503 từ service; các route catalog khác vẫn 2 giây.
 
+PNG kiểm bounds từng chunk, CRC và IEND sau kiểm dimensions, trước full decode;
+ảnh hỏng trả `IMAGE_DECODE_FAILED`, approved object hỏng trả `APPROVED_OBJECT_INVALID`.
+Re-encode vẫn loại payload sau IEND hợp lệ; không thêm dependency ngoài JDK.
 Giới hạn media đã duyệt: JPEG/PNG, raw/mỗi output <=5 MiB, dimensions <=8192
 và <=25M pixels; approved cạnh dài <=2560, thumb <=800, không upscale. Một
 re-encode/instance, không queue; hết slot trả 429/Retry-After: 1 trước đổi state.

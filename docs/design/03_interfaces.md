@@ -368,6 +368,9 @@ Storage outage làm thao tác route ảnh/upload/complete cần S3 trả **503
 TEMPORARILY_UNAVAILABLE / DEPENDENCY_UNAVAILABLE**. Không thêm S3 vào readiness
 catalog-service; metric/health group media riêng báo storage lỗi. Terminal
 complete replay không S3 và vẫn giữ kết quả đã lưu. Policy chi tiết tại 13.
+Gateway response budget 30 giây riêng cho complete và hai route GET ảnh public/admin
+(chủ dự án duyệt 2026-10-08); các route khác giữ 2 giây. Budget ảnh lớn hơn timeout S3
+mặc định 10 giây để lỗi storage 503 từ service đi qua Gateway với envelope và `no-store`.
 
 GET/PUT images dùng full replacement và resource expected_version, không
 Idempotency-Key. GET snapshot cùng version; PUT tăng version và audit diff chỉ

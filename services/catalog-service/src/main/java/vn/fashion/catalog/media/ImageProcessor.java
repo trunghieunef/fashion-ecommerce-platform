@@ -10,6 +10,7 @@ import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.Iterator;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.zip.CRC32;
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
@@ -114,6 +115,7 @@ public final class ImageProcessor {
             if (w < 1 || h < 1 || w > MAX_DIMENSION || h > MAX_DIMENSION || (long) w * h > MAX_PIXELS) {
                 throw new Rejected("IMAGE_DIMENSIONS_INVALID");
             }
+            if ("image/png".equals(type)) validatePngChunks(raw);
             AtomicBoolean warned = new AtomicBoolean();
             reader.addIIOReadWarningListener((src, msg) -> warned.set(true)); // truncated JPEG only warns
             BufferedImage img = reader.read(0);
@@ -129,6 +131,29 @@ public final class ImageProcessor {
         } finally {
             reader.dispose();
         }
+    }
+
+    /** ImageIO can ignore missing IEND and bad CRCs; validate the container before decoding pixels. */
+    private static void validatePngChunks(byte[] raw) {
+        int offset = PNG_SIG.length;
+        while (offset <= raw.length - 12) {
+            long length = u32(raw, offset, true);
+            if (length > raw.length - offset - 12) throw new Rejected("IMAGE_DECODE_FAILED");
+            int size = (int) length;
+            var crc = new CRC32();
+            crc.update(raw, offset + 4, size + 4);
+            if (crc.getValue() != u32(raw, offset + 8 + size, true)) {
+                throw new Rejected("IMAGE_DECODE_FAILED");
+            }
+            boolean end = raw[offset + 4] == 'I' && raw[offset + 5] == 'E'
+                    && raw[offset + 6] == 'N' && raw[offset + 7] == 'D';
+            if (end) {
+                if (size != 0) throw new Rejected("IMAGE_DECODE_FAILED");
+                return; // Re-encode strips any trailing payload after the complete PNG.
+            }
+            offset += size + 12;
+        }
+        throw new Rejected("IMAGE_DECODE_FAILED");
     }
 
     private static Rendition render(BufferedImage src, int orientation, String type, int maxEdge, int cap) {

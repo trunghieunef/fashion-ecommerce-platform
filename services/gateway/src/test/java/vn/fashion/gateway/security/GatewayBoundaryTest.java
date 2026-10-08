@@ -14,6 +14,8 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -208,6 +210,22 @@ class GatewayBoundaryTest {
     // Other admin routes keep the global 2s response timeout.
     slowClient.get().uri("/admin/api/v1/catalog/products").exchange()
         .expectStatus().isEqualTo(504);
+    slowClient.get().uri("/api/v1/catalog/products").exchange()
+        .expectStatus().isEqualTo(504);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"/api/v1/catalog/images/11111111-1111-1111-1111-111111111111",
+      "/admin/api/v1/catalog/images/11111111-1111-1111-1111-111111111111"})
+  void imageReadsPreserveSlowStorage503(String path) {
+    CATALOG.delayMillis = 3000;
+    CATALOG.responseStatus = 503;
+    client.mutate().responseTimeout(java.time.Duration.ofSeconds(10)).build()
+        .get().uri(path + "?kind=thumb").exchange().expectStatus().isEqualTo(503)
+        .expectHeader().valueEquals("Cache-Control", "no-store")
+        .expectBody().jsonPath("$.code").isEqualTo("TEMPORARILY_UNAVAILABLE")
+        .jsonPath("$.message").isEqualTo("DEPENDENCY_UNAVAILABLE");
+    assertThat(CATALOG.path()).isEqualTo(path);
   }
 
   @Test
@@ -295,6 +313,7 @@ class GatewayBoundaryTest {
     private Map<String, List<String>> headers = Map.of();
     private volatile String path;
     private volatile int delayMillis;
+    private volatile int responseStatus = 200;
 
     private RecordingCatalogServer() {
       try {
@@ -319,10 +338,13 @@ class GatewayBoundaryTest {
           Thread.currentThread().interrupt();
         }
       }
-      byte[] response = "{\"code\":\"OK\",\"data\":{\"items\":[],\"next_cursor\":null},\"metadata\":{\"request_id\":\"test\",\"trace_id\":\"test\"}}"
-          .getBytes(StandardCharsets.UTF_8);
+      String body = responseStatus == 503
+          ? "{\"code\":\"TEMPORARILY_UNAVAILABLE\",\"message\":\"DEPENDENCY_UNAVAILABLE\",\"metadata\":{\"request_id\":\"test\",\"trace_id\":\"test\"}}"
+          : "{\"code\":\"OK\",\"data\":{\"items\":[],\"next_cursor\":null},\"metadata\":{\"request_id\":\"test\",\"trace_id\":\"test\"}}";
+      byte[] response = body.getBytes(StandardCharsets.UTF_8);
       exchange.getResponseHeaders().set("Content-Type", "application/json");
-      exchange.sendResponseHeaders(200, response.length);
+      if (responseStatus == 503) exchange.getResponseHeaders().set("Cache-Control", "no-store");
+      exchange.sendResponseHeaders(responseStatus, response.length);
       exchange.getResponseBody().write(response);
       exchange.close();
     }
@@ -342,6 +364,7 @@ class GatewayBoundaryTest {
     private void reset() {
       requestCount.set(0);
       delayMillis = 0;
+      responseStatus = 200;
       headers = Map.of();
     }
 

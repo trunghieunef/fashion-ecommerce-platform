@@ -399,4 +399,12 @@ Gate task là work package trong [backlog](../delivery/10_backlog.md). Mã task 
   lease platform riêng. Đồng bộ spec/03/05/06/13/OpenAPI/tests/README/evidence;
   chưa migration, media runtime hoặc viết implementation plan.
 
+- CAT-03 Gateway image response budget — **chủ dự án, 2026-10-08**: tăng riêng
+  `GET /api/v1/catalog/images/{asset_id}` và `GET /admin/api/v1/catalog/images/{asset_id}`
+  lên 30 giây, như route complete; các route khác giữ 2 giây. S3 mặc định timeout
+  10 giây, nên budget 2 giây cũ có thể biến 503 của service thành 504 tại Gateway.
+  Thêm regression upstream trả chậm 503, giữ envelope và `Cache-Control: no-store`,
+  cùng mutation timeout từng route. Đồng bộ 03/13, spec/plan và README/runbook;
+  không đổi quyền/visibility hoặc readiness. Bằng chứng tại [evidence CAT-03](../evidence/cat-03-local-2026-10-08.md).
+
 Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác và lý do; ảnh hưởng PRD/API/schema/test/task; người quyết định; ngày; link bằng chứng. Chưa có chữ ký phê duyệt giả định thương mại.

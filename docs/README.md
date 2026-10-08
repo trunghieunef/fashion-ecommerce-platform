@@ -11,12 +11,12 @@ Tiến độ mới nhất: [handoff CAT-01b ngày 2026-10-07](superpowers/plans/
 CAT-01b đã merge [PR15 vào main](https://github.com/trunghieunef/fashion-ecommerce-platform/pull/15)
 tại f5c64d9; review không Critical/Important, 4Minor đã sửa theo chốt chủ dự án,
 full reactor286 PASS; Application/Documentation CI trên45d7610 đều SUCCESS.
-CAT-03 đang thiết kế: [spec bản nháp](superpowers/specs/2026-10-07-cat-03-media-design.md),
-[research image/SDK](evidence/cat-03-stack-research-2026-10-07.md). Đã chốt S3-compatible
-Docker local/private/loopback; RustFS 1.0.1/SDK 2.55.12 đã duyệt, spike PASS và
-module193 tests PASS; contract media planned đã viết, tests36 PASS ở evidence;
-Spec đã chỉnh theo review ngày 2026-10-08 nhưng chưa duyệt; contract tests hiện
-có 37 PASS, chưa có plan đã duyệt hoặc feature media runtime.
+CAT-03 đã có [spec đã duyệt](superpowers/specs/2026-10-07-cat-03-media-design.md) và
+[plan đã duyệt](superpowers/plans/2026-10-08-cat-03-media.md), Task 1–9 đã hiện thực local;
+[PR16](https://github.com/trunghieunef/fashion-ecommerce-platform/pull/16) đang review, chưa nghiệm thu.
+RustFS 1.0.1/SDK 2.55.12 đã duyệt và spike PASS; xem [research image/SDK](evidence/cat-03-stack-research-2026-10-07.md).
+Kết quả kiểm thử, mutation và giới hạn còn mở tại [evidence CAT-03](evidence/cat-03-local-2026-10-08.md)
+và [handoff](superpowers/plans/2026-10-08-cat-03-handoff.md).
 Parent CAT-01 còn In progress, chưa nghiệm thu.
 [Spec CAT-01b](superpowers/specs/2026-10-07-cat-01b-design.md) đã duyệt;
 [plan CAT-01b](superpowers/plans/2026-10-07-cat-01b-catalog-admin.md) đã duyệt Native, commit local từng task;

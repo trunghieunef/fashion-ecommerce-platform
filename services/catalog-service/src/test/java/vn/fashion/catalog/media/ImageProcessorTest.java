@@ -20,6 +20,8 @@ import javax.imageio.ImageIO;
 import javax.imageio.ImageWriter;
 import javax.imageio.stream.MemoryCacheImageOutputStream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class ImageProcessorTest {
 
@@ -203,6 +205,32 @@ class ImageProcessorTest {
         String s = new String(r.bytes(), StandardCharsets.ISO_8859_1);
         assertThat(s).doesNotContain("Exif").doesNotContain("GPS").doesNotContain("TRAILING_PAYLOAD_XYZ");
         assertThat(read(r.bytes())).isNotNull();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"missing-IEND", "truncated-CRC", "wrong-CRC", "oversized-chunk"})
+    void rejectsMalformedPngChunks(String corruption) throws Exception {
+        byte[] png = write(canvas(40, 20, BufferedImage.TYPE_INT_RGB), "png");
+        byte[] broken = switch (corruption) {
+            case "missing-IEND" -> Arrays.copyOf(png, png.length - 12);
+            case "truncated-CRC" -> Arrays.copyOf(png, png.length - 1);
+            default -> png.clone();
+        };
+        if (corruption.equals("wrong-CRC")) broken[29] ^= 1;
+        if (corruption.equals("oversized-chunk")) putInt(broken, 33, Integer.MAX_VALUE);
+        assertThat(reason(() -> ImageProcessor.approve(broken, PNG))).isEqualTo("IMAGE_DECODE_FAILED");
+        assertThat(reason(() -> ImageProcessor.verify(broken, PNG, 2560))).isEqualTo("APPROVED_OBJECT_INVALID");
+    }
+
+    @Test
+    void stripsPngTrailingPayload() throws Exception {
+        byte[] png = write(canvas(40, 20, BufferedImage.TYPE_INT_RGB), "png");
+        var input = new ByteArrayOutputStream();
+        input.writeBytes(png);
+        input.writeBytes("TRAILING_PAYLOAD_XYZ".getBytes(StandardCharsets.US_ASCII));
+        var approved = ImageProcessor.approve(input.toByteArray(), PNG);
+        assertThat(new String(approved.bytes(), StandardCharsets.ISO_8859_1)).doesNotContain("TRAILING_PAYLOAD_XYZ");
+        assertThat(read(approved.bytes()).getWidth()).isEqualTo(40);
     }
 
     @Test

@@ -330,6 +330,9 @@ Route ảnh, upload và complete trả 503 TEMPORARILY_UNAVAILABLE với message
 DEPENDENCY_UNAVAILABLE khi thao tác storage cần thiết lỗi/timeout. Terminal
 complete replay không gọi S3 và vẫn giữ kết quả đã lưu. Không biến lỗi đọc ảnh
 thành thay đổi state APPROVED hoặc đưa S3 vào catalogMigration/readiness.
+Gateway response budget 30 giây riêng cho complete và GET ảnh public/admin (chủ dự án duyệt
+2026-10-08); các route khác giữ 2 giây. Timeout S3 mặc định 10 giây, nên regression cần
+upstream trả 503 sau 3 giây vẫn đi qua Gateway với envelope và `Cache-Control: no-store`.
 
 Theo dõi S3 qua metric lỗi/latency theo operation và health group **media** riêng
 với indicator catalogObjectStorage, chỉ qua management access. Không dùng group

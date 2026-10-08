@@ -107,6 +107,10 @@ S3 báo lỗi/latency qua metric theo operation và health group media riêng v�
 catalogObjectStorage, truy cập qua management; không dùng group này làm pod
 readiness/liveness. Metric/log không chứa key, URL ký, credential hoặc actor/upload ID.
 Group/indicator này chưa triển khai runtime.
+Gateway dùng response budget 30 giây riêng cho complete và GET ảnh public/admin;
+các route khác giữ 2 giây. S3 timeout mặc định 10 giây: kiểm 503 storage qua Gateway,
+không để response budget ảnh ngắn hơn timeout S3 khi thay cấu hình. Quyết định chủ dự án
+ngày 2026-10-08; readiness không đổi.
 
 Complete deadline là put_expires_at + 24h, thay TTL intent 15 phút trước đó;
 PROCESSING lease 120 giây. Quá deadline EXPIRED/409 UPLOAD_EXPIRED, không đọc S3.
