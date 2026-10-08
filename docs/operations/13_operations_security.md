@@ -139,6 +139,13 @@ row lock, chỉ DELETING khi quá hạn/không reference; DeleteObject image/thu
 ngoài transaction, key thiếu coi success. Finalize CAS/retry có giới hạn; lỗi
 lặp log/metric không chặn batch. Không xóa asset còn attach hoặc evidence.
 
+Đã hiện thực (TASK:CAT-03 Task 8, `MediaJobs`, kiểm local bằng `MediaJobsIntegrationTest`
+trên PostgreSQL/RustFS Testcontainers, chưa deploy): sweep 60s/batch 100/lease 120s, lỗi
+DeleteObject tăng quarantine_attempts, retry sau min(2^n, 60) phút; GC 1h, lease 30 phút,
+batch 100 gồm asset và partial, asset retry tối đa 10 lần rồi chỉ log/metric. Metric
+`catalog.media.jobs{job=sweep|gc,outcome=ok|error}`; log chỉ mã STORAGE_UNAVAILABLE, không
+key/upload_id. Bật bằng `CATALOG_MEDIA_JOBS_ENABLED` (mặc định true; test tắt).
+
 Partial approved/thumb của upload terminal EXPIRED/REJECTED chưa asset/reference/
 lease được GC sau 7 ngày từ terminal, cùng job; keys suy ra upload_id, không
 list bucket hoặc xóa trong request. Recovery trước terminal ưu tiên approved

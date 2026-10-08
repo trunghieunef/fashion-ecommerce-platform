@@ -133,13 +133,22 @@ claim lease 120s, 1 slot re-encode/instance (thiếu slot -> 429 + `Retry-After:
 được ưu tiên (không đọc raw), thumb sinh từ primary thực tế, kiểm lại lease/deadline trước mỗi
 lần ghi S3, CAS lease_token/lease_until/deadline ghi APPROVED/REJECTED + audit một lần (mất fence
 quá deadline -> EXPIRED, còn hạn -> release), sau commit xóa raw best-effort; test `UploadCompleteIntegrationTest`.
-Chưa có endpoint attach/read/GC và quarantine sweep (các task sau).
+Jobs (Task 8, `MediaJobs`, chỉ chạy định kỳ khi `CATALOG_MEDIA_JOBS_ENABLED=true` qua `@EnableScheduling` có điều kiện):
+`sweepQuarantine` mỗi 60s, batch 100, claim `FOR UPDATE SKIP LOCKED` (nhiều instance an toàn), lease 120s;
+dọn raw của upload terminal hoặc quá `put_expires_at + 24h` (chuyển EXPIRED, không đụng PROCESSING còn lease),
+lỗi S3 -> `quarantine_attempts+1`, retry sau min(2^n, 60) phút. `collectGarbage` mỗi 1h, single-runner bằng
+`LeaseRepository` (`media_job_leases`, lease 30 phút), batch tổng 100: asset AVAILABLE không reference quá
+7 ngày từ `coalesce(detached_at, approved_at)` -> DELETING (khóa row, skip locked, re-check) -> xóa image/thumb
+ngoài tx -> DELETED; lỗi giữ DELETING, `gc_attempts` tối đa 10 rồi chỉ log/metric; partial approved objects của
+upload EXPIRED/REJECTED không asset quá 7 ngày từ `terminal_at` (key suy từ upload_id, không list bucket).
+Metric counter `catalog.media.jobs` tag `job` (sweep|gc), `outcome` (ok|error); không tag/log key hay upload_id.
+Test: `MediaJobsIntegrationTest`.
 Config (`fashion.catalog.media.*`, env): `CATALOG_S3_BUCKET` (catalog-media-local),
 `CATALOG_S3_ENDPOINT` (nội bộ, bắt buộc), `CATALOG_S3_PUBLIC_ENDPOINT` (URL browser
 dùng cho presigned PUT, mặc định = endpoint), `CATALOG_S3_REGION`,
 `CATALOG_S3_ACCESS_KEY/SECRET_KEY` (bắt buộc), `CATALOG_S3_CORS_ORIGINS`,
 `CATALOG_S3_QUARANTINE_RETENTION_DAYS` (2), `CATALOG_S3_BOOTSTRAP_BUCKET` (false),
-`CATALOG_MEDIA_JOBS_ENABLED` (true; mới được bind, scheduling ở task sau), timeout S3 10s.
+`CATALOG_MEDIA_JOBS_ENABLED` (true; bật scheduling sweep/GC, test đặt false), timeout S3 10s.
 Compose local chạy `rustfs` (digest ghim, chỉ `127.0.0.1:19000`, không console, volume
 `catalog-media-data`), catalog bật bootstrap bucket (tạo bucket, CORS PUT cho origin
 storefront, lifecycle chỉ prefix `quarantine/` 2 ngày, không bucket policy; retry 10x1s
@@ -153,10 +162,10 @@ Contract [CAT-03 bản nháp](../../docs/superpowers/specs/2026-10-07-cat-03-med
 và OpenAPI gắn planned: PUT300s; complete deadline=put_expires_at+24h (thay TTL
 intent15phút); quarantine lifecycle2ngày, sweep60s/batch100, terminal dọn ngay.
 Compose truyền CATALOG_S3_QUARANTINE_RETENTION_DAYS=2 và bootstrap bucket đã áp
-lifecycle quarantine; các job cleanup (sweep/GC) chưa triển khai (Task 8). Orphan/detached7ngày,
+lifecycle quarantine; các job cleanup sweep/GC đã có (Task 8, xem mục Jobs). Orphan/detached7ngày,
 GC hourly/batch100/single-runner lease platform; reattach chỉ uploader/target cũ.
 Asset đang attach cho OPS khác giữ/sửa alt/sort; DELETING/DELETED không attach.
-Audit media chỉ asset_id. Policy đã duyệt tại13; các job/endpoint chưa hiện thực.
+Audit media chỉ asset_id. Policy đã duyệt tại13; job sweep/GC đã hiện thực (Task 8).
 Partial objects terminal EXPIRED/REJECTED chưa asset/reference/lease GC7ngày từ
 terminal, key suy ra upload_id/không list bucket; retry trước terminal ưu tiên
 approved đã ghi, phục hồi thumb/commit fenced, không reject vì lỗi tạm S3/DB.

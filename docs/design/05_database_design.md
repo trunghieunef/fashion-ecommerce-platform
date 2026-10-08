@@ -128,7 +128,7 @@ kiểm upgrade Testcontainers từ V003 giữ legacy SKU/sample và audit append
 Task 6 đã áp V004 trên volume local V003, không reset dữ liệu; Task 2/3 có GET/POST/PUT
 admin collection, Task 4/5 GET/PUT guide và smoke Gateway PASS.
 
-CAT-03 media design (chủ dự án, 2026-10-07; **migration V005 đã có và đã kiểm (Task 1), chưa có runtime media**): upload intent
+CAT-03 media design (chủ dự án, 2026-10-07; **migration V005 đã có và đã kiểm (Task 1); runtime upload/complete/attach/read và job sweep/GC (`MediaJobs`, Task 8) đã có, đã kiểm local bằng Testcontainers, chưa deploy**): upload intent
 lưu actor UUID, target product/collection, key quarantine do server sinh, expiry,
 state/PROCESSING lease token/attempt và kết quả complete theo upload_id. Không
 FK sang DB user-service. Approved image/thumb dùng key cố định từ upload_id,
@@ -155,7 +155,10 @@ retention7ngày. GC chỉ claim DELETING quá hạn/không reference trong tx kh
 asset; DeleteObject ngoài tx, finalize CAS. Single-runner tái sử dụng LeaseRepository
 platform-durability với dòng job trong DB catalog, không FK user DB. Audit media
 diff chỉ asset_id, không URL/key/bytes/alt/caption. Schema V005 đã có và đã kiểm
-(Task 1); chưa có runtime media, chưa chạy GC.
+(Task 1); GC/sweep chạy bằng `MediaJobs` (Task 8): GC khóa `for update skip locked` rồi re-check
+reference/retention bằng câu lệnh thứ hai trong cùng tx trước khi chuyển DELETING; retry
+DeleteObject tối đa 10 lần (`gc_attempts`, backoff 2^n phút, trần 60). Partial cleanup chỉ có
+marker `partial_cleaned_at` (V005 không có cột retry riêng): lỗi thì chạy lại ở lượt GC sau.
 
 Upload giữ terminal_at và partial cleanup marker/retry để GC key approved/thumb
 chưa thành asset sau7ngày từ EXPIRED/REJECTED. Không list bucket; no asset/

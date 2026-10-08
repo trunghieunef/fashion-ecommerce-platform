@@ -42,7 +42,7 @@ public abstract class CatalogAdminTestSupport {
   protected static final UUID ACTOR = UUID.randomUUID();
   static final UUID SEED = UUID.fromString("00000000-0000-4000-8000-000000000001");
   protected static final ECKey KEY = key();
-  @Container static final PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:17.11")
+  @Container protected static final PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:17.11")
       .withDatabaseName("catalog").withUsername("postgres").withPassword("postgres")
       .withInitScript("catalog-test-init.sql");
   @Autowired protected JdbcTemplate jdbc;
