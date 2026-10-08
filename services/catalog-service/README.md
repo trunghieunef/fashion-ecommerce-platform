@@ -119,9 +119,9 @@ Lệnh này giữ volume local; chỉ dùng `down -v` khi chủ động xóa to�
 
 ## Configuration và database roles
 
-CAT-03 đang thiết kế; chủ dự án đã duyệt S3/URLConnection SDK v2 2.55.12 (BOM
+CAT-03 đã hiện thực và kiểm thử local; chủ dự án đã duyệt S3/URLConnection SDK v2 2.55.12 (BOM
 chỉ service này). [Spike RustFS local](../../docs/evidence/cat-03-stack-research-2026-10-07.md)
-PASS, chưa có upload/attach/publish image gate trong code service. RustFS local-only,
+PASS, upload/complete/attach/publish image gate và public/admin read đã có trong code service. RustFS local-only,
 không staging/prod; SDK không dùng Apache/Netty/native CRT transport mới.
 local-up.sh sinh CATALOG_S3_ACCESS_KEY/SECRET_KEY vào .env local, giữ qua retry,
 không log/commit.
@@ -163,8 +163,8 @@ phụ thuộc S3. `.env` cũ tự nhận `CATALOG_S3_PUBLIC_ENDPOINT` khi chạy
 RustFS/credential local chỉ cho local, không staging/prod. Test:
 `MediaStorageIntegrationTest` (RustFS Testcontainers thật, credential ngẫu nhiên mỗi run).
 
-Contract [CAT-03 bản nháp](../../docs/superpowers/specs/2026-10-07-cat-03-media-design.md)
-và OpenAPI gắn planned: PUT300s; complete deadline=put_expires_at+24h (thay TTL
+Contract [CAT-03 spec đã duyệt](../../docs/superpowers/specs/2026-10-07-cat-03-media-design.md)
+và OpenAPI đã hiện thực: PUT300s; complete deadline=put_expires_at+24h (thay TTL
 intent15phút); quarantine lifecycle2ngày, sweep60s/batch100, terminal dọn ngay.
 Compose truyền CATALOG_S3_QUARANTINE_RETENTION_DAYS=2 và bootstrap bucket đã áp
 lifecycle quarantine; các job cleanup sweep/GC đã có (Task 8, xem mục Jobs). Orphan/detached7ngày,

@@ -66,8 +66,8 @@ CAT-03 local (chủ dự án chốt ngày 2026-10-07, review bổ sung 2026-10-0
 S3-compatible Docker bind 127.0.0.1, bucket private và không policy public.
 local-up sinh credential vào .env, không log/commit; không provision AWS.
 RustFS 1.0.1 chỉ local và SDK 2.55.12 đã duyệt; spike S3 API/private bucket PASS
-tại [evidence](../evidence/cat-03-stack-research-2026-10-07.md). Chưa có media runtime,
-compatibility staging hoặc cleanup job feature.
+tại [evidence](../evidence/cat-03-stack-research-2026-10-07.md). Media runtime (upload/complete/attach/read, sweep/GC)
+đã hiện thực và kiểm thử local; chưa có compatibility staging.
 
 Presigned PUT sống 300 giây, ký Content-Length/Content-Type, scope actor JWT và
 target; key do server sinh, không nhận client URL/key hoặc đổi owner.

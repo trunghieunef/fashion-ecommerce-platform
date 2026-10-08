@@ -123,7 +123,7 @@ S3/RustFS, re-encode, upload intent/complete/status, attach + publish gate, publ
 sweep/GC, route Gateway complete 30s và smoke Gateway→RustFS; xem
 [evidence](../evidence/cat-03-local-2026-10-08.md) và
 [handoff](../superpowers/plans/2026-10-08-cat-03-handoff.md). Chưa deploy/staging và chưa Done
-tới khi chủ dự án nghiệm thu CAT-03.
+tới khi chủ dự án nghiệm thu CAT-03. Acceptance còn mở (hoãn): health group `media` và metric latency/lỗi S3 theo thao tác.
 Chưa Done: còn review/nghiệm thu parent CAT-01 và CAT-03;
 public read CAT-02 và relay/Kafka ngoài phạm vi 1a/1b. SKU mới canonical uppercase với V003,
 SKU legacy không backfill.

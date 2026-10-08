@@ -50,7 +50,7 @@ Approved output cạnh dài <=2560, thumb <=800, raw/mỗi output <=5 MiB không
 thay giới hạn decoded heap. PLT-04 phải đo peak heap/RSS với ảnh worst-case và
 rollout trước chọn requests/limits; chưa có số đo hoặc quyền tăng máy/chi phí.
 RustFS 1.0.1 chỉ local, **không staging/prod**; staging object storage config/
-bucket/IAM được provision riêng sau approval. [Spec media bản nháp](../superpowers/specs/2026-10-07-cat-03-media-design.md).
+bucket/IAM được provision riêng sau approval. [Spec media đã duyệt 2026-10-08](../superpowers/specs/2026-10-07-cat-03-media-design.md).
 
 Giới hạn có chủ ý: một máy là điểm lỗi duy nhất; phù hợp học/dev/staging synthetic. Khi cần toàn bộ MVP hoặc production, review lại compute, managed DB/PITR, failure domains, bảo mật, khả năng trực vận hành và tổng giá. Sơ đồ DEP-01 trong 07 là topology tham chiếu tương lai, không phải tài nguyên đã mua bằng credit này.
 

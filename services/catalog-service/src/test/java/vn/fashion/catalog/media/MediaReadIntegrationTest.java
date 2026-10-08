@@ -61,6 +61,7 @@ class MediaReadIntegrationTest extends MediaTestSupport {
     assertThat(r.statusCode()).isEqualTo(status);
     assertThat(r.headers().firstValue("Content-Type").orElse("")).startsWith("application/json");
     assertThat(r.headers().firstValue("X-Correlation-Id")).isPresent();
+    assertThat(r.headers().firstValue("Cache-Control")).contains("no-store");
   }
   private String etag(HttpResponse<byte[]> r) { return r.headers().firstValue("ETag").orElseThrow(); }
 
@@ -187,6 +188,13 @@ class MediaReadIntegrationTest extends MediaTestSupport {
     assertThat(r.headers().firstValue("Cache-Control")).contains("private, no-store");
     assertThat(r.headers().firstValue("X-Content-Type-Options")).contains("nosniff");
     assertThat(admin(a, "thumb", UUID.randomUUID()).statusCode()).isEqualTo(200); // attached: any OPS
+    // admin preview never uses the public 304 contract
+    for (String h : List.of("\"" + SHA_IMAGE + "\"", "*")) {
+      var m = get("/admin/api/v1/catalog/images/" + a + "?kind=image", tokenFor(ACTOR, "catalog.write"), "If-None-Match", h);
+      assertThat(m.statusCode()).as(h).isEqualTo(200);
+      assertThat(m.body()).isEqualTo(IMAGE);
+      assertThat(m.headers().firstValue("Cache-Control")).contains("private, no-store");
+    }
     assertThat(get("/admin/api/v1/catalog/images/" + a, null).statusCode()).isEqualTo(401);
     assertThat(get("/admin/api/v1/catalog/images/" + a, token("orders.read")).statusCode()).isEqualTo(403);
   }

@@ -138,6 +138,18 @@ class ProductQueryIntegrationTest {
     assertThat(body.data().items()).hasSize(20);
   }
 
+  @org.springframework.beans.factory.annotation.Value("${fashion.catalog.media.endpoint}")
+  private String s3Endpoint;
+
+  @Test
+  void readinessStaysUpWhileS3EndpointIsDead() {
+    assertThat(s3Endpoint).isEqualTo("http://127.0.0.1:1"); // nothing listens there: S3 is down for this context
+    var response = get("/actuator/health/readiness");
+
+    assertThat(response.statusCode()).isEqualTo(HttpStatus.OK.value());
+    assertThat(response.body()).contains("\"status\":\"UP\"");
+  }
+
   @Test
   void reportsReadinessAfterTheBaselineMigration() {
     var response = get("/actuator/health/readiness");

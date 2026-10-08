@@ -216,6 +216,25 @@ class ImageProcessorTest {
     }
 
     @Test
+    void exifOrientationMovesMarkedCornerToExpectedPlace() throws Exception {
+        BufferedImage marked = canvas(20, 10, BufferedImage.TYPE_INT_RGB);
+        var g = marked.createGraphics();
+        g.setColor(Color.BLUE);
+        g.fillRect(0, 0, 8, 6); // top-left block
+        g.dispose();
+        // orientation -> {width, height, probe x, probe y} of the block centre after correction
+        int[][] cases = {{3, 20, 10, 16, 7}, {6, 10, 20, 6, 3}, {8, 10, 20, 3, 16}};
+        for (int[] c : cases) {
+            var r = ImageProcessor.approve(jpegWithExif(marked, c[0], ""), JPEG);
+            assertThat(r.width()).as("w" + c[0]).isEqualTo(c[1]);
+            assertThat(r.height()).as("h" + c[0]).isEqualTo(c[2]);
+            Color px = new Color(read(r.bytes()).getRGB(c[3], c[4]));
+            assertThat(px.getBlue()).as("blue block orientation " + c[0]).isGreaterThan(150);
+            assertThat(px.getRed()).as("blue block orientation " + c[0]).isLessThan(100);
+        }
+    }
+
+    @Test
     void acceptsAlphaPalette16BitPngAndGrayscaleJpeg() throws Exception {
         BufferedImage alpha = canvas(50, 40, BufferedImage.TYPE_INT_ARGB);
         byte[] lut = {0, (byte) 255};

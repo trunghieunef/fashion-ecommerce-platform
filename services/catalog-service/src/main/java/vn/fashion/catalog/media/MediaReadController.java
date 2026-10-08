@@ -10,7 +10,9 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -40,6 +42,12 @@ public class MediaReadController {
   private static final String COLUMNS = "a.image_key, a.thumb_key, a.image_content_type, a.thumb_content_type, "
       + "a.image_size_bytes, a.thumb_size_bytes, a.image_sha256, a.thumb_sha256";
 
+  /** Runs before argument binding, so every error response (incl. bad UUID) is no-store; success overrides it. */
+  @ControllerAdvice(assignableTypes = MediaReadController.class)
+  static class NoStoreOnErrors {
+    @ModelAttribute void noStore(HttpServletResponse response) { response.setHeader("Cache-Control", "no-store"); }
+  }
+
   private record Blob(String key, String contentType, long size, String sha256) { }
 
   private final JdbcClient jdbc;
@@ -56,7 +64,7 @@ public class MediaReadController {
       HttpServletRequest request, HttpServletResponse response) {
     boolean thumb = thumb(kind);
     var blob = find("select " + COLUMNS + " from media_assets a where a.id = :id and " + VISIBLE, assetId, null, thumb);
-    return serve(blob, "public, max-age=300", request, response);
+    return serve(blob, "public, max-age=300", true, request, response);
   }
 
   @GetMapping("/admin/api/v1/catalog/images/{assetId}")
@@ -67,7 +75,7 @@ public class MediaReadController {
     boolean thumb = thumb(kind);
     var blob = find("select " + COLUMNS + " from media_assets a join media_uploads u on u.id = a.id where a.id = :id and "
         + ADMIN_VISIBLE, assetId, actor, thumb);
-    return serve(blob, "private, no-store", request, response);
+    return serve(blob, "private, no-store", false, request, response);
   }
 
   private static boolean thumb(String kind) {
@@ -87,19 +95,22 @@ public class MediaReadController {
         .orElseThrow(() -> new Api.Problem(HttpStatus.NOT_FOUND, "NOT_FOUND", "IMAGE_NOT_FOUND", List.of()));
   }
 
-  private ResponseEntity<?> serve(Blob blob, String cacheControl, HttpServletRequest request, HttpServletResponse response) {
+  private ResponseEntity<?> serve(Blob blob, String cacheControl, boolean conditional, HttpServletRequest request,
+      HttpServletResponse response) {
     String etag = "\"" + blob.sha256() + "\"";
     String correlation = Api.metadata(tracer).traceId();
-    boolean wildcard = "*".equals(String.valueOf(request.getHeader("If-None-Match")).strip()); // Spring does not match "*"
+    boolean wildcard = conditional && "*".equals(String.valueOf(request.getHeader("If-None-Match")).strip()); // Spring does not match "*"
     if (wildcard) { response.setStatus(HttpStatus.NOT_MODIFIED.value()); response.setHeader("ETag", etag); }
-    if (wildcard || new ServletWebRequest(request, response).checkNotModified(etag)) { // 304 written, S3 untouched
+    if (wildcard || conditional && new ServletWebRequest(request, response).checkNotModified(etag)) { // 304 written, S3 untouched
       response.setHeader("Cache-Control", cacheControl);
       response.setHeader("X-Correlation-Id", correlation);
       return null;
     }
     var stream = storage.open(blob.key()).orElseThrow(MediaStorage.Unavailable::new); // before committing the 200
-    return ResponseEntity.ok().contentType(MediaType.parseMediaType(blob.contentType())).contentLength(blob.size())
-        .eTag(etag).header("Cache-Control", cacheControl).header("X-Correlation-Id", correlation)
+    response.setHeader("Cache-Control", cacheControl);
+    var ok = ResponseEntity.ok().contentType(MediaType.parseMediaType(blob.contentType())).contentLength(blob.size());
+    if (conditional) ok.eTag(etag); // an ETag would make Spring answer 304 itself; admin preview has no validator
+    return ok.header("X-Correlation-Id", correlation)
         .header("X-Content-Type-Options", "nosniff").header("Content-Disposition", "inline")
         .body(new InputStreamResource(stream)); // converter copies then closes the S3 stream
   }

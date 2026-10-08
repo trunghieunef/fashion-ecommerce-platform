@@ -5,7 +5,7 @@ info:
   description: >
     TASK:PLT-02 public sample and TASK:CAT-01a admin (catalog.write; ADR-21 ES256, revocation TTL 15 minutes).
     TASK:CAT-01b admin collection list/detail/mutations and size-guide GET/PUT are implemented, tested with PostgreSQL Testcontainers and exercised through the local Gateway with a synthetic OPS token.
-    TASK:CAT-03 upload, complete, status and image attach operations are including public/admin image reads are implemented and tested locally (PostgreSQL + RustFS Testcontainers, local Gateway smoke).
+    TASK:CAT-03 upload, complete, status and image attach operations and public/admin image reads are implemented and tested locally (PostgreSQL + RustFS Testcontainers, local Gateway smoke).
     Full catalog filters/sort/cursor belong to TASK:CAT-02 (docs/design/03_interfaces.md §2.2).
 servers:
   - url: http://localhost:8080
@@ -760,7 +760,7 @@ paths:
       operationId: "getCollectionImages"
       summary: "Read cover/images snapshot and collection version"
       x-implementation-status: "implemented"
-      description: "TASK:CAT-03 implemented and tested with PostgreSQL (MediaAttachIntegrationTest). catalog.write checked at service. Full replacement guarded by expected_version; publish requires at least one image."
+      description: "TASK:CAT-03 implemented and tested with PostgreSQL (MediaAttachIntegrationTest). catalog.write checked at service. Full replacement guarded by expected_version; collections have no image gate."
       security: [{"bearerAuth":[]}]
       parameters: [{"$ref":"#/components/parameters/Id"}]
       responses:
@@ -782,7 +782,7 @@ paths:
       operationId: "replaceCollectionImages"
       summary: "Replace cover/images and increment collection version"
       x-implementation-status: "implemented"
-      description: "TASK:CAT-03 implemented and tested with PostgreSQL (MediaAttachIntegrationTest). catalog.write checked at service. Full replacement guarded by expected_version; publish requires at least one image."
+      description: "TASK:CAT-03 implemented and tested with PostgreSQL (MediaAttachIntegrationTest). catalog.write checked at service. Full replacement guarded by expected_version; collections have no image gate."
       security: [{"bearerAuth":[]}]
       parameters: [{"$ref":"#/components/parameters/Id"}]
       responses:
@@ -1957,7 +1957,7 @@ components:
             notUploaded:
               value: {code: CONFLICT, message: UPLOAD_NOT_UPLOADED, metadata: {request_id: 11111111-1111-4111-8111-111111111111, trace_id: 4bf92f3577b34da6a3ce929d0e0e4736}}
     UploadUrlExpired:
-      description: Create replay after PUT URL expiry; body mismatch also409 IDEMPOTENCY_KEY_REUSED. Does not extend expiry.
+      description: Create replay after PUT URL expiry; body mismatch also 409 IDEMPOTENCY_KEY_REUSED. Does not extend expiry.
       headers:
         X-Correlation-Id:
           "$ref": "./common.yaml#/components/headers/CorrelationId"
@@ -1974,7 +1974,7 @@ components:
                   request_id: "11111111-1111-4111-8111-111111111111"
                   trace_id: "4bf92f3577b34da6a3ce929d0e0e4736"
     ImageRejected:
-      description: IMAGE_REJECTED with persisted reason code; malformed fields also400 INVALID_FIELDS. Commit rejection before returning400.
+      description: IMAGE_REJECTED with persisted reason code; malformed fields also 400 INVALID_FIELDS. Commit rejection before returning 400.
       headers:
         X-Correlation-Id:
           "$ref": "./common.yaml#/components/headers/CorrelationId"
@@ -2047,7 +2047,7 @@ components:
         image/png:
           schema: {type: string, format: binary}
     PublicMediaNotModified:
-      description: Matching If-None-Match after visibility and object availability checks; no body.
+      description: Matching If-None-Match after the DB visibility check only (no S3 call); no body.
       headers:
         X-Correlation-Id: {$ref: './common.yaml#/components/headers/CorrelationId'}
         Cache-Control:

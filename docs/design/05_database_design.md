@@ -137,7 +137,7 @@ size/dimensions/checksum/type phải lấy từ object approved thực tế (k�
 412), chỉ tx CAS token/lease còn hiệu lực được commit APPROVED. Terminal không
 đọc quarantine; attach/sort/remove dùng resource version + audit cùng tx và
 không S3 I/O trong row lock. Columns/constraints và asset reference cụ thể ở
-[spec bản nháp](../superpowers/specs/2026-10-07-cat-03-media-design.md) còn cần review;
+[spec đã duyệt 2026-10-08](../superpowers/specs/2026-10-07-cat-03-media-design.md), V005 đã hiện thực;
 Không sửa V001–V004.
 
 CAT-03 Task 1: `V005__media.sql` đã viết và kiểm bằng Testcontainers (upgrade từ V004 có dữ liệu):

@@ -164,7 +164,7 @@ Collection flow đã hiện thực tại Task 2/3, GET/PUT guide Task 4/5, kiể
 guide PUT có replay/category order, create/update race và rollback audit/key.
 Task 6 đã upgrade V004 trên volume local và smoke CAT-01b qua Gateway PASS (OPS synthetic).
 
-### 3.1. CAT-03 media — thiết kế để review, chưa runtime
+### 3.1. CAT-03 media — đã hiện thực và kiểm thử local (spec duyệt 2026-10-08)
 
 Chủ dự án chốt ngày 2026-10-07, chỉnh theo review 2026-10-08: URL PUT sống
 300 giây vào quarantine private; complete_deadline = put_expires_at + 24h.
@@ -185,13 +185,14 @@ APPROVED; retained asset cho OPS khác sửa. Composite FK tới media_uploads c
 sai target tại DB. Product ACTIVE không được còn 0 ảnh; collection không cover
 gate; legacy ACTIVE giữ status. GET snapshot và version dùng một statement.
 
-Public GET kiểm visibility/object availability khi request tới service, trước
-If-None-Match. Response 200/304 dùng Cache-Control: public, max-age=300 và ETag
+Public GET kiểm visibility trong DB khi request tới service, trước
+If-None-Match: DB quyết định 304 và 304 không gọi S3; 200 mới mở object, object
+thiếu hoặc lỗi storage trả 503. Response 200/304 dùng Cache-Control: public, max-age=300 và ETag
 cố định theo representation; 304 không body. Cache fresh có thể hiển thị ảnh
 tối đa 5 phút sau unpublish. Admin dùng private, no-store. Kind lạ/rỗng trả 400
 field kind ở cả public/admin. Không thêm public browse CAT-02 hoặc đọc raw.
 S3 outage trả 503 DEPENDENCY_UNAVAILABLE cho thao tác route media cần storage;
-readiness catalog-service không đổi, metric/health group media báo lỗi riêng.
+readiness catalog-service không đổi (test readiness UP khi endpoint S3 chết); health group media và metric latency/lỗi S3 theo thao tác còn là acceptance mở (hoãn).
 
 Gỡ không xóa object trong request; retention 7 ngày từ detach hoặc approve nếu
 chưa từng attach. Reattach chỉ uploader/target cũ. GC mỗi giờ/batch 100 dùng
@@ -232,8 +233,9 @@ xóa raw best-effort và đặt quarantine_cleaned_at; lỗi cleanup chỉ log c
 để sweep xử lý. Kiểm bằng `UploadCompleteIntegrationTest` (PostgreSQL + RustFS
 Testcontainers, spy MediaStorage tiêm lỗi; mutation bỏ từng điều kiện của CAS
 kết quả — lease_token, lease_until, deadline — và điều kiện deadline của fence
-trước ghi S3 đều làm test tương ứng FAIL). Sweep/GC, PUT images và public read chưa
-hiện thực; chưa nghiệm thu CAT-03.
+trước ghi S3 đều làm test tương ứng FAIL). Sweep/GC, PUT images và public/admin
+read đã hiện thực và kiểm thử local (PostgreSQL + RustFS Testcontainers); chưa
+nghiệm thu CAT-03.
 
 ## 4. `cart-service`
 
