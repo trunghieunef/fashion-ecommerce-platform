@@ -349,7 +349,7 @@ Không đọc raw hoặc thêm public browse CAT-02.
 
 Query kind chỉ nhận image hoặc thumb, omitted mặc định image. Giá trị lạ hoặc
 rỗng trả **400 VALIDATION_ERROR / INVALID_FIELDS, field kind** ở cả public/admin.
-Route public planned là GET /api/v1/catalog/images/{asset_id}; thành công là
+Route public implemented (CAT-03 Task 7, test PostgreSQL+RustFS) là GET /api/v1/catalog/images/{asset_id}; thành công là
 binary, lỗi dùng JSON envelope.
 
 Publish product cần ít nhất một APPROVED image đã attach và alt VI/EN hợp lệ,
@@ -399,7 +399,7 @@ reference/lease được GC sau 7 ngày từ terminal, suy ra upload_id, không 
 | PUT /catalog/size-guides/{category_id}/{locale} | OPS (`catalog.write`) | CAT-01b: key + expected_version; 0 tạo → 201/version 1, cập nhật → 200/version +1; replay trước version guard / 1 |
 | POST /catalog/images/uploads | OPS (`catalog.write`) | CAT-03 implemented (Task 4, test PostgreSQL+RustFS): key bắt buộc, URL PUT sống 300 giây, idempotency chỉ lưu descriptor không URL; complete deadline = PUT expiry +24h; replay sau hạn PUT trả 409 UPLOAD_URL_EXPIRED, client không còn upload_id thì tạo intent mới với key mới / 1 |
 | GET,PUT /catalog/products/{id}/images; GET,PUT /catalog/collections/{id}/images | OPS (`catalog.write`) | CAT-03 implemented (Task 6, test PostgreSQL): full replacement/version resource, không key; ownership chỉ mới-gắn (APPROVED, đúng actor/target, trong retention 7 ngày), snapshot cùng version; 400 `images[i].asset_id`/`images[i].variant_color`/`cover_asset_id`, 400 ACTIVE_PRODUCT_REQUIRES_IMAGE, 409 VERSION_CONFLICT; lookbook chỉ có caption (V006 bỏ alt_vi/alt_en) / 1 |
-| GET /catalog/images/{asset_id}?kind=image hoặc thumb | OPS (`catalog.write`) | CAT-03 planned: admin preview approved, không raw / 1 |
+| GET /catalog/images/{asset_id}?kind=image hoặc thumb | OPS (`catalog.write`) | CAT-03 implemented (Task 7, test PostgreSQL+RustFS): admin preview approved, không raw; `Cache-Control: private, no-store`; attached → mọi OPS, detached/chưa attach → chỉ uploader, else 404 / 1 |
 | POST /catalog/images/uploads/{upload_id}/complete | OPS (`catalog.write`) | CAT-03 implemented (Task 5, test PostgreSQL+RustFS): không body/key, idempotent theo upload_id, owner-only (404); 200 data là approved asset; terminal replay không gọi S3/audit; 400 IMAGE_REJECTED, 409 UPLOAD_PROCESSING/UPLOAD_EXPIRED/UPLOAD_NOT_UPLOADED, 429 Retry-After: 1, 503 storage; luồng tại 06 §3.1 / 1 |
 | GET /catalog/images/uploads/{upload_id} | OPS (`catalog.write`) | CAT-03 implemented (Task 4): upload status để phục hồi complete timeout; owner strict (khác owner/thiếu → 404) / 1 |
 | GET /orders; GET /orders/{order_no} | OPS, FINANCE (PII tối thiểu) | Filter ngày/status/search, page / 1 |

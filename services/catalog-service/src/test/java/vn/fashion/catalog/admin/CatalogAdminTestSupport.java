@@ -47,7 +47,7 @@ public abstract class CatalogAdminTestSupport {
       .withInitScript("catalog-test-init.sql");
   @Autowired protected JdbcTemplate jdbc;
   @Autowired protected ObjectMapper mapper;
-  @LocalServerPort int port;
+  @LocalServerPort protected int port;
   private final HttpClient http = HttpClient.newHttpClient();
 
   static ECKey key() {

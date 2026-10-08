@@ -93,6 +93,7 @@ Visibility DB quyết định 304, không gọi S3; 200 GET object ngoài transa
 object thiếu hoặc storage lỗi trả 503.
 Không visible trả 404 dù ETag trùng. Cache còn fresh được tiếp tục hiển thị ảnh
 **tối đa 5 phút sau unpublish**; không kéo dài bằng stale-serving policy.
+Đã xác nhận ở code (CAT-03 Task 7): public trả đúng `public, max-age=300`, admin `private, no-store`; lỗi 400/404/503 luôn là JSON envelope kể cả khi trình duyệt gửi `Accept: image/*`.
 
 Admin preview kiểm catalog.write mỗi lần, xem được DRAFT/INACTIVE, dùng
 **Cache-Control: private, no-store**. Không public-cache admin response hoặc đọc raw.

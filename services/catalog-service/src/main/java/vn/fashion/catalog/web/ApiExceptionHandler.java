@@ -23,8 +23,12 @@ public class ApiExceptionHandler {
   private static final Logger LOG = LoggerFactory.getLogger(ApiExceptionHandler.class);
   private final Tracer tracer;
   public ApiExceptionHandler(Tracer tracer) { this.tracer = tracer; }
+  /** Explicit JSON type so a browser's Accept: image/* cannot turn an error into 406. */
+  private static ResponseEntity<Api.Error> json(ResponseEntity<Api.Error> r) {
+    return ResponseEntity.status(r.getStatusCode()).headers(r.getHeaders()).contentType(MediaType.APPLICATION_JSON).body(r.getBody());
+  }
   @ExceptionHandler(Api.Problem.class) ResponseEntity<Api.Error> problem(Api.Problem e) {
-    return Api.error(e.status(), e.code(), e.getMessage(), e.errors(), tracer);
+    return json(Api.error(e.status(), e.code(), e.getMessage(), e.errors(), tracer));
   }
   @ExceptionHandler(DuplicateKeyException.class) ResponseEntity<Api.Error> duplicate(DuplicateKeyException e) {
     String constraint = e.getMostSpecificCause().getMessage();
@@ -36,10 +40,10 @@ public class ApiExceptionHandler {
     return Api.error(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "MISSING_HEADER", List.of(new Api.FieldError(e.getHeaderName(), "is required")), tracer);
   }
   @ExceptionHandler({DataAccessResourceFailureException.class, QueryTimeoutException.class}) ResponseEntity<Api.Error> unavailable() {
-    return Api.error(HttpStatus.SERVICE_UNAVAILABLE, "TEMPORARILY_UNAVAILABLE", "DEPENDENCY_UNAVAILABLE", List.of(), tracer);
+    return json(Api.error(HttpStatus.SERVICE_UNAVAILABLE, "TEMPORARILY_UNAVAILABLE", "DEPENDENCY_UNAVAILABLE", List.of(), tracer));
   }
   @ExceptionHandler(vn.fashion.catalog.media.MediaStorage.Unavailable.class) ResponseEntity<Api.Error> storageUnavailable() {
-    return Api.error(HttpStatus.SERVICE_UNAVAILABLE, "TEMPORARILY_UNAVAILABLE", "DEPENDENCY_UNAVAILABLE", List.of(), tracer);
+    return json(Api.error(HttpStatus.SERVICE_UNAVAILABLE, "TEMPORARILY_UNAVAILABLE", "DEPENDENCY_UNAVAILABLE", List.of(), tracer));
   }
   @ExceptionHandler(HttpMessageNotReadableException.class) ResponseEntity<Api.Error> unreadable() {
     return Api.error(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "MALFORMED_JSON", List.of(), tracer);

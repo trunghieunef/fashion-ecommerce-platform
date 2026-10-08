@@ -812,8 +812,8 @@ paths:
     get:
       operationId: "previewCatalogImage"
       summary: "Preview approved media with catalog.write"
-      x-implementation-status: "planned"
-      description: "TASK:CAT-03 draft; pending written-spec/plan approval. catalog.write checked at service."
+      x-implementation-status: "implemented"
+      description: "TASK:CAT-03 Task 7 implemented. catalog.write checked at service; attached assets visible to every OPS, detached or unattached ones only to the uploader (else 404)."
       security: [{"bearerAuth":[]}]
       parameters: [{"$ref":"#/components/parameters/AssetId"},{"$ref":"#/components/parameters/ImageKind"}]
       responses:
@@ -835,7 +835,7 @@ paths:
     get:
       operationId: "readCatalogImage"
       summary: "Read currently visible attached approved media"
-      x-implementation-status: "planned"
+      x-implementation-status: "implemented"
       description: >
         Public attached product ACTIVE, or collection ACTIVE/in [start_at,end_at)/with >=1 ACTIVE product.
         Visibility and object availability are checked before conditional responses. Otherwise 404.
