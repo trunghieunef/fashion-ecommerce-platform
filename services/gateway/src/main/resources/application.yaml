@@ -21,6 +21,13 @@ spring:
               uri: ${CATALOG_BASE_URL:http://localhost:8081}
               predicates:
                 - Path=/api/v1/catalog/**
+            # CAT-03: complete downloads and re-encodes the image; 30s instead of the global 2s.
+            - id: catalog-admin-media-complete
+              uri: ${CATALOG_BASE_URL:http://localhost:8081}
+              predicates:
+                - Path=/admin/api/v1/catalog/images/uploads/*/complete
+              metadata:
+                response-timeout: 30000
             - id: catalog-admin
               uri: ${CATALOG_BASE_URL:http://localhost:8081}
               predicates:

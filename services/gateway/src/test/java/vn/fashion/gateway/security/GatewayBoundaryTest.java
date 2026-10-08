@@ -200,6 +200,17 @@ class GatewayBoundaryTest {
   }
 
   @Test
+  void completeRouteAllowsSlowProcessing() {
+    CATALOG.delayMillis = 3000;
+    var slowClient = client.mutate().responseTimeout(java.time.Duration.ofSeconds(10)).build();
+    slowClient.post().uri("/admin/api/v1/catalog/images/uploads/11111111-1111-1111-1111-111111111111/complete")
+        .exchange().expectStatus().isOk();
+    // Other admin routes keep the global 2s response timeout.
+    slowClient.get().uri("/admin/api/v1/catalog/products").exchange()
+        .expectStatus().isEqualTo(504);
+  }
+
+  @Test
   void startsAW3cTraceAndPropagatesItToTheUpstream() {
     client.get().uri("/api/v1/catalog/products?limit=1").exchange().expectStatus().isOk();
 
@@ -283,6 +294,7 @@ class GatewayBoundaryTest {
     private final AtomicInteger requestCount = new AtomicInteger();
     private Map<String, List<String>> headers = Map.of();
     private volatile String path;
+    private volatile int delayMillis;
 
     private RecordingCatalogServer() {
       try {
@@ -300,6 +312,13 @@ class GatewayBoundaryTest {
           headers.put(name.toLowerCase(), List.copyOf(values)));
       path = exchange.getRequestURI().getPath();
       requestCount.incrementAndGet();
+      if (delayMillis > 0) {
+        try {
+          Thread.sleep(delayMillis);
+        } catch (InterruptedException interrupted) {
+          Thread.currentThread().interrupt();
+        }
+      }
       byte[] response = "{\"code\":\"OK\",\"data\":{\"items\":[],\"next_cursor\":null},\"metadata\":{\"request_id\":\"test\",\"trace_id\":\"test\"}}"
           .getBytes(StandardCharsets.UTF_8);
       exchange.getResponseHeaders().set("Content-Type", "application/json");
@@ -322,6 +341,7 @@ class GatewayBoundaryTest {
 
     private void reset() {
       requestCount.set(0);
+      delayMillis = 0;
       headers = Map.of();
     }
 

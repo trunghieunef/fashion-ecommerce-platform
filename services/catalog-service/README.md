@@ -87,6 +87,10 @@ local trong `.env` (chỉ memory, quyền `catalog.write`, TTL 300 giây). Smoke
 chuỗi login → token OPS. Slug/SKU ngẫu nhiên; dữ liệu smoke tích lũy trên volume local vì không có DELETE.
 Smoke tạo SKU có whitespace/chữ thường rồi retry cùng key bằng uppercase; kiểm cùng variant id
 và product version không tăng thêm trước publish.
+CAT-03 xen trước publish (publish nay cần ảnh): intent → PUT PNG tới RustFS public endpoint
+(URL ký chỉ trong bộ nhớ, không in) → complete → `PUT /products/{id}/images` → publish → public GET
+200 + ETag, If-None-Match 304 → unpublish → 404. Gateway có route `catalog-admin-media-complete`
+(timeout 30s) cho complete; các route admin khác giữ timeout 2s.
 Smoke CAT-01b tiếp tục bằng cùng JWT/category/product: collection POST201/DRAFT/version0 →
 GET items/version → PUT không key200/version1 → stale409; guide PUT0/key201/version1 →
 GET → PUT1/newkey200/version2 → stale409 và replay key tạo giữ201/data version1, metadata mới.

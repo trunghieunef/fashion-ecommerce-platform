@@ -5,7 +5,7 @@ info:
   description: >
     TASK:PLT-02 public sample and TASK:CAT-01a admin (catalog.write; ADR-21 ES256, revocation TTL 15 minutes).
     TASK:CAT-01b admin collection list/detail/mutations and size-guide GET/PUT are implemented, tested with PostgreSQL Testcontainers and exercised through the local Gateway with a synthetic OPS token.
-    TASK:CAT-03 upload, complete, status and image attach operations are implemented; operations still marked planned (image byte reads) are draft contracts.
+    TASK:CAT-03 upload, complete, status and image attach operations are including public/admin image reads are implemented and tested locally (PostgreSQL + RustFS Testcontainers, local Gateway smoke).
     Full catalog filters/sort/cursor belong to TASK:CAT-02 (docs/design/03_interfaces.md §2.2).
 servers:
   - url: http://localhost:8080
@@ -838,7 +838,7 @@ paths:
       x-implementation-status: "implemented"
       description: >
         Public attached product ACTIVE, or collection ACTIVE/in [start_at,end_at)/with >=1 ACTIVE product.
-        Visibility and object availability are checked before conditional responses. Otherwise 404.
+        DB visibility decides first (otherwise 404, even with a matching ETag); a matching If-None-Match on a visible image returns 304 without any storage call. A 200 opens the object; a missing object or storage error returns 503.
         Cache-Control is public, max-age=300; an already cached image can remain visible for up to five minutes after unpublish.
         ETag is the immutable approved representation SHA-256. Matching If-None-Match returns 304 without a body.
         Invalid kind returns 400 with field kind. Required storage operations failing return 503 DEPENDENCY_UNAVAILABLE.
@@ -1576,7 +1576,7 @@ components:
         name_vi: {type: string, minLength: 1, maxLength: 255}
         name_en: {type: string, minLength: 1, maxLength: 255}
         slug: {type: string, minLength: 1, maxLength: 160, pattern: '^[a-z0-9]+(-[a-z0-9]+)*$'}
-        cover_url: {type: [string, 'null'], description: Null in CAT-01b runtime; CAT-03 planned computes a controlled Gateway path from cover_asset_id. Never accepted in core collection requests.}
+        cover_url: {type: [string, 'null'], description: Controlled Gateway path computed from cover_asset_id (null without a cover). Never accepted in core collection requests.}
         start_at: {type: [string, 'null'], format: date-time}
         end_at: {type: [string, 'null'], format: date-time}
         status: {type: string, enum: [DRAFT, ACTIVE, INACTIVE]}
@@ -1852,7 +1852,7 @@ components:
                   request_id: "11111111-1111-4111-8111-111111111111"
                   trace_id: "4bf92f3577b34da6a3ce929d0e0e4736"
     ApprovedImageSuccess:
-      description: "CAT-03 planned contract; not implemented."
+      description: "CAT-03 implemented response."
       headers:
         X-Correlation-Id:
           "$ref": "./common.yaml#/components/headers/CorrelationId"
@@ -1884,7 +1884,7 @@ components:
                   request_id: "11111111-1111-4111-8111-111111111111"
                   trace_id: "4bf92f3577b34da6a3ce929d0e0e4736"
     ProductImagesSuccess:
-      description: "CAT-03 planned contract; not implemented."
+      description: "CAT-03 implemented response."
       headers:
         X-Correlation-Id:
           "$ref": "./common.yaml#/components/headers/CorrelationId"
@@ -1904,7 +1904,7 @@ components:
                   request_id: "11111111-1111-4111-8111-111111111111"
                   trace_id: "4bf92f3577b34da6a3ce929d0e0e4736"
     CollectionImagesSuccess:
-      description: "CAT-03 planned contract; not implemented."
+      description: "CAT-03 implemented response."
       headers:
         X-Correlation-Id:
           "$ref": "./common.yaml#/components/headers/CorrelationId"

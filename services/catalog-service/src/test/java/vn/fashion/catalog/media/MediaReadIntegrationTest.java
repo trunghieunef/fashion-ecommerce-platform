@@ -173,6 +173,12 @@ class MediaReadIntegrationTest extends MediaTestSupport {
     assertThat(pub(a, "thumb", "Accept", "image/*").statusCode()).isEqualTo(200);
   }
 
+  @Test void invalidUuidWithImageAcceptIs400Json() {
+    var r = get("/api/v1/catalog/images/not-a-uuid", null, "Accept", "image/*");
+    problem(r, 400);
+    assertThat(new String(r.body())).contains("INVALID_PARAMETER");
+  }
+
   @Test void adminPreviewDraftNoStore() {
     UUID a = asset(ACTOR, createProduct("draft"), true);
     var r = admin(a, "image", ACTOR);

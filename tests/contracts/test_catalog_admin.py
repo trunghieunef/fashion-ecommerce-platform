@@ -1,4 +1,4 @@
-"""TASK:CAT-01a/1b and planned CAT-03: security, mutation guards, examples."""
+"""TASK:CAT-01a/1b and CAT-03: security, mutation guards, examples."""
 from pathlib import Path
 import unittest
 from urllib.parse import urljoin
@@ -215,6 +215,14 @@ class CatalogAdminContractTest(unittest.TestCase):
                 self.assertGreater(examples["2"], 0)
                 self.assertGreater(examples["4"], 0)
         self.assertEqual(count, 28)
+
+    def test_every_media_operation_is_implemented(self):
+        media = [(path, method, op) for path, item in self.doc["paths"].items() if "/images" in path
+                 for method, op in item.items() if method in ("get", "post", "put")]
+        self.assertGreaterEqual(len(media), 9)
+        for path, method, op in media:
+            self.assertEqual(op.get("x-implementation-status"), "implemented", (path, method))
+        self.assertNotIn("planned contract", (ROOT / "contracts/openapi/catalog.yaml").read_text(encoding="utf-8"))
 
     def test_media_replacement_is_closed_and_requires_resource_version(self):
         asset = "66666666-6666-4666-8666-666666666666"

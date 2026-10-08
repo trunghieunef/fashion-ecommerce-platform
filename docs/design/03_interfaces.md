@@ -329,7 +329,7 @@ không lộ 412 ra client. Metadata durable lấy từ bytes thực tế. Comple
 theo upload_id; terminal không đọc quarantine hoặc thêm audit. Recovery ưu tiên
 approved primary đã có và tạo thumb thiếu; lỗi tạm thumb/DB không tự expire/reject.
 Shape/error/schema tại [spec để review](../superpowers/specs/2026-10-07-cat-03-media-design.md)
-và [catalog.yaml](../../contracts/openapi/catalog.yaml); operations mới gắn planned.
+và [catalog.yaml](../../contracts/openapi/catalog.yaml); mọi operation media đã `implemented` trong catalog.yaml (đã kiểm local, chưa deploy).
 
 Validation chỉ JPEG/PNG, raw và mỗi output tối đa 5 MiB, width/height 1..8192 và
 tối đa 25 triệu pixel. Approved cạnh dài tối đa 2560, thumb tối đa 800, không
@@ -339,10 +339,11 @@ WebP/format mới cần duyệt riêng.
 
 Public image GET dùng **Cache-Control: public, max-age=300** và ETag cố định là
 quoted SHA-256 của representation approved. If-None-Match trùng trả **304 không
-body**, vẫn có ETag/cache/correlation headers. Khi request tới service, kiểm
-visibility và object availability trước conditional response: public chỉ ảnh
-đang attach product ACTIVE hoặc collection ACTIVE trong [start_at, end_at) có ít
-nhất một product ACTIVE; không visible trả 404 kể cả ETag trùng. Cache fresh có
+body**, vẫn có ETag/cache/correlation headers. Khi request tới service, visibility
+trong DB quyết định trước: public chỉ ảnh đang attach product ACTIVE hoặc collection
+ACTIVE trong [start_at, end_at) có ít nhất một product ACTIVE; không visible trả 404
+kể cả ETag trùng. If-None-Match trùng và visible trả 304 mà không gọi S3; 200 mới mở
+object, object thiếu hoặc lỗi storage trả 503 DEPENDENCY_UNAVAILABLE. Cache fresh có
 thể tiếp tục hiển thị ảnh tối đa 5 phút sau unpublish. Admin preview kiểm
 catalog.write và dùng **Cache-Control: private, no-store**, được xem DRAFT/INACTIVE.
 Không đọc raw hoặc thêm public browse CAT-02.

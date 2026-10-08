@@ -117,12 +117,14 @@ Task7 whole-branch review0Critical/0Important, Minor docs đã đồng bộ theo
 [plan](../superpowers/plans/2026-10-07-cat-01b-catalog-admin.md)
 và [evidence](../evidence/cat-01b-local-2026-10-07.md). Đã merge PR15 tại f5c64d9 ngày2026-10-07;
 4Minor review đã sửa trong45d7610, full reactor286 PASS, Application/Documentation CI
-trên đúng45d7610 đều SUCCESS. Tiếp theo thiết kế CAT-03 safe media theo Phase1A Task2;
-đã chốt S3-compatible Docker local/private/loopback, RustFS 1.0.1/SDK 2.55.12
-đã duyệt và spike PASS; module193 tests PASS, contract media planned/tests36 PASS;
-[spec media bản nháp](../superpowers/specs/2026-10-07-cat-03-media-design.md) và
-[research](../evidence/cat-03-stack-research-2026-10-07.md) đã viết, chưa duyệt spec/plan.
-Chưa Done: còn review/nghiệm thu parent, ảnh/publish gate CAT-03;
+trên đúng45d7610 đều SUCCESS. **CAT-03 safe media: In progress, đã hiện thực local** theo
+[plan](../superpowers/plans/2026-10-08-cat-03-media.md) (spec đã duyệt 2026-10-08): V005/V006,
+S3/RustFS, re-encode, upload intent/complete/status, attach + publish gate, public/admin read,
+sweep/GC, route Gateway complete 30s và smoke Gateway→RustFS; xem
+[evidence](../evidence/cat-03-local-2026-10-08.md) và
+[handoff](../superpowers/plans/2026-10-08-cat-03-handoff.md). Chưa deploy/staging và chưa Done
+tới khi chủ dự án nghiệm thu CAT-03.
+Chưa Done: còn review/nghiệm thu parent CAT-01 và CAT-03;
 public read CAT-02 và relay/Kafka ngoài phạm vi 1a/1b. SKU mới canonical uppercase với V003,
 SKU legacy không backfill.
 

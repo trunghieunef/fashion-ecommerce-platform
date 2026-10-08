@@ -114,10 +114,10 @@ erDiagram
 | `brands` (T) | `id`, `name text`, `logo_url text?`, `status varchar(32) = 'ACTIVE'`, `version bigint = 0` | ACTIVE/INACTIVE; version guard |
 | `products` (T) | `id`, `category_id uuid FK categories`, `brand_id uuid? FK brands`, `name_vi text`, `name_en text`, `slug text`, `description_vi text = ''`, `description_en text = ''`, `base_price bigint`, `tags text[] = '{}'`, `status varchar(32) = 'DRAFT'`, `published_at timestamptz?`, `version bigint = 0`, `sold_quantity bigint = 0` | UNIQUE slug; price/sold_quantity >= 0; DRAFT/ACTIVE/INACTIVE; indexes `(category_id, status, published_at, id)`, `(status, base_price, id)`, `(status, sold_quantity, id)` |
 | `product_variants` (T) | `id`, `product_id uuid FK products`, `sku varchar(64)`, `size text`, `color text`, `price_override bigint?`, `weight_grams int`, `status varchar(32) = 'ACTIVE'`, `version bigint = 0` | UNIQUE sku không phân biệt casing (V003), `(product_id, size, color)`; SKU mới uppercase ASCII, legacy giữ nguyên; price >= 0, weight > 0; ACTIVE/INACTIVE; SKU bất biến |
-| `product_images` (CAT-03 đề xuất) | `product_id uuid FK products`, `asset_id uuid FK media_assets`, `variant_color text?`, `alt_vi text`, `alt_en text`, `sort_order int = 0` | PK `(product_id, asset_id)`; FK `(asset_id, product_id)` tới `media_uploads(id, product_id)` chặn sai target; index `(product_id, sort_order, asset_id)`; không lưu arbitrary URL |
+| `product_images` (CAT-03, V005) | `product_id uuid FK products`, `asset_id uuid FK media_assets`, `variant_color text?`, `alt_vi text`, `alt_en text`, `sort_order int = 0` | PK `(product_id, asset_id)`; FK `(asset_id, product_id)` tới `media_uploads(id, product_id)` chặn sai target; index `(product_id, sort_order, asset_id)`; không lưu arbitrary URL |
 | `collections` (T) | `id`, `name_vi text`, `name_en text`, `slug text`, `cover_url text?`, `start_at timestamptz?`, `end_at timestamptz?`, `status varchar(32) = 'DRAFT'`, `version bigint = 0` | UNIQUE slug; DRAFT/ACTIVE/INACTIVE; version >= 0, version guard; end > start khi cả hai có giá trị; cover_url luôn null trong CAT-01b |
 | `collection_items` | `collection_id uuid FK collections`, `product_id uuid FK products`, `sort_order int = 0` | PK `(collection_id, product_id)`; sort_order 0..2147483647, cho phép trùng; index `(collection_id, sort_order, product_id)` |
-| `lookbook_images` (CAT-03 đề xuất) | `collection_id uuid FK collections`, `asset_id uuid FK media_assets`, `caption_vi text = ''`, `caption_en text = ''`, `sort_order int = 0` | PK `(collection_id, asset_id)`; FK `(asset_id, collection_id)` tới `media_uploads(id, collection_id)` chặn sai target; index `(collection_id, sort_order, asset_id)`; cover FK cùng collection |
+| `lookbook_images` (CAT-03, V005/V006) | `collection_id uuid FK collections`, `asset_id uuid FK media_assets`, `caption_vi text = ''`, `caption_en text = ''`, `sort_order int = 0` | PK `(collection_id, asset_id)`; FK `(asset_id, collection_id)` tới `media_uploads(id, collection_id)` chặn sai target; index `(collection_id, sort_order, asset_id)`; cover FK cùng collection |
 | `size_guides` (T) | `id`, `category_id uuid FK categories`, `locale varchar(2)`, `guideline_html text = ''`, `table_json jsonb`, `version bigint = 1` | UNIQUE `(category_id, locale)`; vi/en; version >= 1, version guard; validate JSON; HTML sanitize, tối đa 20.000 ký tự sau sanitize |
 | `review_eligibilities` (C, Phase 2) | `id`, `order_id uuid`, `user_id uuid`, `variant_id uuid FK product_variants`, `delivered_at timestamptz`, `expires_at timestamptz` | UNIQUE `(order_id, variant_id)`; index `(user_id, expires_at)`; projection từ ORDER_COMPLETED, thời hạn 30 ngày |
 | `reviews` (T, Phase 2) | `id`, `eligibility_id uuid FK review_eligibilities`, `rating smallint`, `title text`, `content text`, `images text[] = '{}'`, `status varchar(32) = 'PENDING'`, `moderated_by uuid?`, `moderated_at timestamptz?`, `moderation_reason text?` | UNIQUE eligibility_id; rating 1–5, cardinality(images) <= 5; PENDING/APPROVED/REJECTED; index `(status, created_at, id)` |
@@ -186,9 +186,10 @@ Timestamp request ISO-8601 có offset → UTC/timestamptz; service chỉ nhận 
 và truncate xuống microsecond trước so sánh/hash/lưu, end > start sau truncate khi có cả hai.
 JDBC đọc/ghi OffsetDateTime để giữ đúng năm biên, không chuyển qua lịch legacy Timestamp.
 Không thêm CHECK năm vào V004 đã deploy; validation tại service theo chốt PR15.
-Null là không giới hạn phía tương ứng. CAT-01b không nhận cover_url/lookbook trong request,
-cover_url lưu/trả null; lookbook_images chưa tạo/nhận dữ liệu trong CAT-01b, thuộc CAT-03
-sau upload được kiểm tra. Bảng media trên là mục tiêu CAT-03, không phải schema đã triển khai.
+Null là không giới hạn phía tương ứng. Request collection core không nhận cover_url/lookbook; cover_url
+là đường dẫn Gateway tính từ `cover_asset_id` (null khi chưa có cover) và lookbook/cover chỉ
+đổi qua `PUT /collections/{id}/images`. Bảng media (V005/V006) đã có và đã kiểm local bằng
+Testcontainers (CAT-03), chưa deploy.
 
 Shape `size_guides.table_json` đã chốt cho CAT-01b (chủ dự án, 2026-10-07):
 
@@ -242,7 +243,7 @@ Product ACTIVE từ V001 có thể còn `published_at` null. Unpublish giữ gi�
 thuộc CAT-02; các index price/sold_quantity trong bảng là mục tiêu CAT-02, chưa có trong V002.
 Outbox/idempotency/audit thuộc catalog-db; audit runtime chỉ INSERT/SELECT, `request_id`
 khớp metadata của response mutation đầu; retry không ghi thêm audit. Collection,
-size-guide và media chưa có; đây chưa phải acceptance toàn bộ CAT-01.
+size-guide đã có từ CAT-01b; media (upload/attach/read) thuộc CAT-03 và đã chạy local. Đây chưa phải acceptance toàn bộ CAT-01.
 
 `TASK:PLT-01` có `V001` làm read sample tối thiểu: `products` chỉ gồm `id`,
 `slug`, `status`, tên VI/EN, `version` và timestamps, cùng index public ACTIVE.

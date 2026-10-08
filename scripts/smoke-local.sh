@@ -97,20 +97,6 @@ variant_id="$(catalog_post variant "/products/$product_id/variants" \
 catalog_post variant "/products/$product_id/variants" \
   "{\"sku\":\"SMOKE-${catalog_suffix^^}\",\"size\":\"M\",\"color\":\"black\",\"weight_grams\":100}" | \
   python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["id"] == sys.argv[1] and d["sku"] == sys.argv[2].upper()' "$variant_id" "SMOKE-$catalog_suffix"
-catalog_post publish "/products/$product_id/publish" '{"expected_version":1}' | \
-  python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["status"] == "ACTIVE" and d["version"] == 2 and d["published_at"]'
-curl --fail --silent --show-error "$GATEWAY_URL/api/v1/catalog/products?limit=100" | \
-  python3 -c 'import json,sys; assert any(p["id"] == sys.argv[1] for p in json.load(sys.stdin)["data"]["items"])' "$product_id"
-# TASK:CAT-01b: retain 401 and real-member 403 before the synthetic OPS flow.
-for route in /collections "/size-guides/$category_id/vi"; do
-  for bearer in '' "$access"; do
-    expected=401; [[ -z "$bearer" ]] || expected=403
-    actual="$(status -H "Authorization: Bearer $bearer" "$GATEWAY_URL/admin/api/v1/catalog$route")"
-    if [[ "$actual" != "$expected" ]]; then
-      echo "CAT-01b $route: expected $expected, got $actual" >&2; exit 1
-    fi
-  done
-done
 # Capture headers/body in process memory, checking status and metadata on every call.
 catalog_request() {
   local expected="$1" method="$2" route="$3" body="${4-}" key="${5-}"
@@ -130,6 +116,55 @@ assert headers["x-correlation-id"].strip() == m["trace_id"]
 assert d["code"] == ("OK" if code < 400 else "VERSION_CONFLICT")
 print(json.dumps(d))' "$expected" "$route"
 }
+# TASK:CAT-03: upload -> PUT to RustFS -> complete -> attach -> publish -> public read -> unpublish.
+# The signed URL and token live only in process memory and are never printed.
+mkdir -p .superpowers/cat-03
+png="$(mktemp -p .superpowers/cat-03 smoke-XXXXXX.png)"
+python3 - "$png" <<'PY'
+import struct, sys, zlib
+w = h = 64
+raw = b"".join(bytes([0]) + bytes(v for x in range(w) for v in (x * 4, y * 4, 128)) for y in range(h))
+chunk = lambda t, d: struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d))
+open(sys.argv[1], "wb").write(bytes([137]) + b"PNG" + bytes([13, 10, 26, 10]) + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+                              + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+PY
+png_size="$(wc -c <"$png" | tr -d ' ')"
+intent="$(catalog_request 201 POST /images/uploads   "{\"filename\":\"smoke.png\",\"content_type\":\"image/png\",\"size_bytes\":$png_size,\"target_type\":\"PRODUCT\",\"target_id\":\"$product_id\"}"   "smoke-$catalog_suffix-intent")"
+upload_id="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["upload_id"])' <<<"$intent")"
+python3 -c '
+import json, sys, urllib.request
+d = json.load(sys.stdin)["data"]
+req = urllib.request.Request(d["put_url"], data=open(sys.argv[1], "rb").read(), method="PUT",
+                             headers={k: str(v) for k, v in d["put_headers"].items()})
+assert urllib.request.urlopen(req, timeout=20).status == 200' "$png" <<<"$intent"
+rm -f "$png"
+asset_id="$(catalog_request 200 POST "/images/uploads/$upload_id/complete" |   python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; a=d.get("asset") or d; assert a["image"]["content_type"] == "image/png" and a["thumb"]["width"] <= 800, d; print(a["asset_id"])')"
+catalog_request 200 GET "/images/uploads/$upload_id" |   python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["state"] == "APPROVED" and d["asset_availability"] is not None, d'
+catalog_request 200 PUT "/products/$product_id/images"   "{\"expected_version\":1,\"images\":[{\"asset_id\":\"$asset_id\",\"alt_vi\":\"Smoke\",\"alt_en\":\"Smoke\",\"sort_order\":0}]}" |   python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["version"] == 2 and len(d["images"]) == 1, d'
+image_url="$GATEWAY_URL/api/v1/catalog/images/$asset_id?kind=image"
+test "$(status "$image_url")" = 404 # attached but the product is still DRAFT
+echo 'CAT-03 upload/complete/attach PASS'
+catalog_request 200 POST "/products/$product_id/publish" '{"expected_version":2}' "smoke-$catalog_suffix-publish" |   python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["status"] == "ACTIVE" and d["version"] == 3 and d["published_at"]'
+curl --fail --silent --show-error "$GATEWAY_URL/api/v1/catalog/products?limit=100" |   python3 -c 'import json,sys; assert any(p["id"] == sys.argv[1] for p in json.load(sys.stdin)["data"]["items"])' "$product_id"
+test "$(curl -sS -o /dev/null -D "$headers" -w '%{http_code}' "$image_url")" = 200
+etag="$(grep -i '^etag:' "$headers" | cut -d' ' -f2- | tr -d '\r')"
+test -n "$etag"
+grep -qi '^content-type: image/png' "$headers"
+test "$(status -H "If-None-Match: $etag" "$image_url")" = 304
+catalog_request 200 POST "/products/$product_id/unpublish" '{"expected_version":3}' "smoke-$catalog_suffix-unpublish" |   python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["status"] != "ACTIVE", d'
+test "$(status "$image_url")" = 404
+test "$(status -H "If-None-Match: $etag" "$image_url")" = 404
+echo 'CAT-03 publish/public read/304/unpublish PASS'
+# TASK:CAT-01b: retain 401 and real-member 403 before the synthetic OPS flow.
+for route in /collections "/size-guides/$category_id/vi"; do
+  for bearer in '' "$access"; do
+    expected=401; [[ -z "$bearer" ]] || expected=403
+    actual="$(status -H "Authorization: Bearer $bearer" "$GATEWAY_URL/admin/api/v1/catalog$route")"
+    if [[ "$actual" != "$expected" ]]; then
+      echo "CAT-01b $route: expected $expected, got $actual" >&2; exit 1
+    fi
+  done
+done
 collection_body="{\"name_vi\":\"Smoke\",\"name_en\":\"Smoke\",\"slug\":\"smoke-$catalog_suffix\",\"items\":[{\"product_id\":\"$product_id\",\"sort_order\":0}]}"
 collection="$(catalog_request 201 POST /collections "$collection_body" "smoke-$catalog_suffix-collection")"
 collection_id="$(python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["status"] == "DRAFT" and d["version"] == 0 and d["cover_url"] is None and d["items"] == [{"product_id":sys.argv[1],"sort_order":0}]; print(d["id"])' "$product_id" <<<"$collection")"

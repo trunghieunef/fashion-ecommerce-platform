@@ -60,6 +60,6 @@ public class ApiExceptionHandler {
     LOG.error("Catalog admin request failed", e);
     var meta = Api.metadata(tracer);
     return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).header("X-Correlation-Id", meta.traceId())
-        .body(Map.of("code", "INTERNAL", "message", "INTERNAL_ERROR", "metadata", meta));
+        .contentType(MediaType.APPLICATION_JSON).body(Map.of("code", "INTERNAL", "message", "INTERNAL_ERROR", "metadata", meta));
   }
 }
