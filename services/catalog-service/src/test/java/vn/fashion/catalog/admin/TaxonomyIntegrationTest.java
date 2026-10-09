@@ -24,6 +24,7 @@ class TaxonomyIntegrationTest extends CatalogAdminTestSupport {
     audited(call("PUT", "/products/" + productId, input), 200, "catalog.product.update");
     var variant = audited(call("POST", "/products/" + productId + "/variants", variantInput("AUDIT")), 201, "catalog.variant.create");
     audited(call("PUT", "/variants/" + variant.path("id").asText(), Map.of("weight_grams", 150, "status", "ACTIVE", "expected_version", 0)), 200, "catalog.variant.update");
+    attachSyntheticImage(UUID.fromString(productId));
     audited(call("POST", "/products/" + productId + "/publish", Map.of("expected_version", 2)), 200, "catalog.product.publish");
     audited(call("POST", "/products/" + productId + "/unpublish", Map.of("expected_version", 3)), 200, "catalog.product.unpublish");
     var retry = send("POST", "/admin/api/v1/catalog/categories", token("catalog.write"), key, body);

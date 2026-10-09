@@ -12,13 +12,23 @@ Task1–7 đã thực hiện; full verification/evidence PASS, whole-branch revi
 1Minor stale docs đã đồng bộ; verdict Ready to merge, không thay nghiệm thu của chủ dự án.
 Chủ dự án đã yêu cầu push dev/mở [PR15 vào main](https://github.com/trunghieunef/fashion-ecommerce-platform/pull/15).
 CI s1-local/docs-check SUCCESS trên1251ea3; review PR15 không Critical/Important, có4Minor.
+Chủ dự án đã merge PR15 ngày2026-10-07 tại `f5c64d9` sau bản sửa `45d7610`;
+Application CI và hai Documentation CI trên đúng45d7610 đều SUCCESS. Phiên tiếp theo
+đã fast-forward dev lên origin/main/f5c64d9, không có content diff so với45d7610.
 Follow-up sửa cả4 theo hai chốt bổ sung của chủ dự án: timestamp UTC year1..9999/truncate
 microsecond trước so sánh/hash/lưu; key lạ nested có path đầy đủ. Đọc timestamp bằng
 OffsetDateTime giữ đúng year1/9999. OpenAPI name/slug limits và header valid-only dedupe đồng bộ.
 Full reactor286 PASS (36/38/65/119/28), contracts33/scripts14/docs48/diff PASS;
 chi tiết RED/GREEN/mutation và giới hạn tại evidence. CI follow-up xem đúng head PR15.
-**Không merge/nghiệm thu parent.**
-Base để review/PR sau này là `origin/main`/`8f27663` (PR14 đã merge), không dùng local main cũ.
+**Merge PR15 không thay nghiệm thu parent.** CAT-01 vẫn In progress.
+Theo Phase1A Task2 và handoff CAT-01a, tiếp tục thiết kế CAT-03 safe media/upload/attach
+và image publish gate; chưa có spec/plan CAT-03 đã duyệt. Chốt backing store local trước
+thiết kế; đã chốt S3-compatible Docker local/private/loopback. Xem
+[spec media bản nháp](../specs/2026-10-07-cat-03-media-design.md) và
+[research image/SDK](../../evidence/cat-03-stack-research-2026-10-07.md), chưa duyệt
+spec/plan; image RustFS 1.0.1 và SDK 2.55.12 đã duyệt, spike PASS/module193 tests
+PASS ghi evidence/17. Chưa provision AWS hoặc kéo public read CAT-02/inventory vào slice media.
+Base cho slice tiếp là `origin/main`/`f5c64d9` (PR15 đã merge), không dùng local main cũ.
 Chỉ push dev/mở PR main khi chủ dự án yêu cầu riêng. Parent CAT-01 **In progress**.
 
 Commits: docs checkpoint6ccbbd3; docs-approved7cd95d7; schema d317c03;

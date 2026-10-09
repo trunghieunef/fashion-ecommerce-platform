@@ -128,7 +128,8 @@ collection chỉ gồm product `ACTIVE`; điều kiện được kiểm ở th�
 | POST | /catalog/review-images/uploads | Member eligible / 2 | filename,type,size → scoped upload |
 | POST | /notifications/unsubscribe | Scoped token / 2 | token trong body → preference, idempotent |
 
-Catalog images upload admin được mô tả ở §3. Upload hoàn tất được kiểm tra type thực/size/ownership khi attach; chưa đủ validation không publish ảnh.
+Catalog images upload admin được mô tả ở §3. Complete kiểm bytes/type thực/size;
+attach kiểm APPROVED/ownership/target trong DB; chưa đủ validation không publish ảnh.
 
 ### 2.3 Order và payment của khách
 
@@ -198,7 +199,7 @@ Contract thực thi tại [`catalog.yaml`](../../contracts/openapi/catalog.yaml)
 description lưu HTML đã sanitize, tiền là bigint VND (không nhận số thập phân). Các endpoint
 cần `catalog.write` (OPS), mọi POST có `Idempotency-Key`; PUT và publish/unpublish có
 `expected_version`. Publish/unpublish nhận reason tùy chọn ≤ 500, cạnh sai trả 409;
-publish kiểm taxonomy ACTIVE và ≥ 1 variant ACTIVE (điều kiện ảnh thuộc CAT-03).
+publish kiểm taxonomy ACTIVE, ≥ 1 variant ACTIVE và ≥ 1 ảnh đã attach (400 field `images`; CAT-03 Task 6 implemented, test PostgreSQL).
 Token được kiểm bằng `AccessTokenVerifier`, không gọi user-service; thu hồi quyền trễ tối đa
 15 phút theo ADR-21. Retry key/body chuẩn hóa trả cùng kết quả; đổi body trả 409 IDEMPOTENCY_KEY_REUSED.
 SKU mới: `String.strip` → kiểm 1–64 ký tự ASCII `^[A-Za-z0-9][A-Za-z0-9._-]*$` →
@@ -239,7 +240,7 @@ trước so sánh/hash/lưu; năm UTC phải trong 1..9999, ngoài phạm vi tr�
 Null nghĩa không giới hạn phía tương ứng; có cả hai thì `end_at > start_at` sau truncate.
 CAT-01b không nhận `cover_url`,
 `lookbook` hoặc `lookbook_images` trong request, kể cả null; response `cover_url`
-luôn null. Cover/lookbook thuộc CAT-03, chỉ attach sau upload được kiểm tra;
+null cho tới khi attach cover; từ CAT-03 Task 6 `cover_url` là path Gateway `/api/v1/catalog/images/{cover_asset_id}?kind=image` khi có cover. Cover/lookbook chỉ attach qua PUT images sau upload được kiểm tra;
 không mở đường nhận URL chưa được kiểm tra trong CAT-01b. Contract tại `catalog.yaml`
 đã có POST/PUT/examples và endpoint collection mutation thực thi tại Task 3.
 
@@ -314,6 +315,81 @@ HTTP Testcontainers đã kiểm 401/403/404, locale sai400, thứ tự items, đ
 GET → PUT dùng version nhận được thành công và version cũ sau cập nhật trả 409.
 Không bổ sung public read; phần đó giữ tại TASK:CAT-02.
 
+CAT-03 media design (chủ dự án chốt ngày 2026-10-07; chỉnh theo review
+2026-10-08; **chưa implementation**): presigned PUT sống 300 giây và ký
+Content-Length/Content-Type cho quarantine private. Server sinh key; upload
+scope actor JWT và target product/collection, không nhận URL/key hoặc chuyển owner.
+Complete HEAD size, bounded stream, magic bytes và dimensions trước decode, rồi
+re-encode loại EXIF/GPS thành approved image/thumb. Không CopyObject approve.
+
+Complete dùng transaction ngắn claim PROCESSING, S3 ngoài transaction, rồi
+transaction ngắn ghi kết quả với CAS token/attempt và lease còn hiệu lực.
+Approved key cố định, PUT If-None-Match:*; 412 recovery từ object thực tế và
+không lộ 412 ra client. Metadata durable lấy từ bytes thực tế. Complete idempotent
+theo upload_id; terminal không đọc quarantine hoặc thêm audit. Recovery ưu tiên
+approved primary đã có và tạo thumb thiếu; lỗi tạm thumb/DB không tự expire/reject.
+Shape/error/schema tại [spec để review](../superpowers/specs/2026-10-07-cat-03-media-design.md)
+và [catalog.yaml](../../contracts/openapi/catalog.yaml); mọi operation media đã `implemented` trong catalog.yaml (đã kiểm local, chưa deploy).
+
+Validation chỉ JPEG/PNG, raw và mỗi output tối đa 5 MiB, width/height 1..8192 và
+tối đa 25 triệu pixel. Approved cạnh dài tối đa 2560, thumb tối đa 800, không
+upscale. Một re-encode/instance, không queue; hết slot trả 429 và Retry-After: 1
+trước đổi state. Decode lỗi hoặc output vượt cap bị REJECTED có code, không 500.
+WebP/format mới cần duyệt riêng.
+
+Public image GET dùng **Cache-Control: public, max-age=300** và ETag cố định là
+quoted SHA-256 của representation approved. If-None-Match trùng trả **304 không
+body**, vẫn có ETag/cache/correlation headers. Khi request tới service, visibility
+trong DB quyết định trước: public chỉ ảnh đang attach product ACTIVE hoặc collection
+ACTIVE trong [start_at, end_at) có ít nhất một product ACTIVE; không visible trả 404
+kể cả ETag trùng. If-None-Match trùng và visible trả 304 mà không gọi S3; 200 mới mở
+object, object thiếu hoặc lỗi storage trả 503 DEPENDENCY_UNAVAILABLE. Cache fresh có
+thể tiếp tục hiển thị ảnh tối đa 5 phút sau unpublish. Admin preview kiểm
+catalog.write và dùng **Cache-Control: private, no-store**, được xem DRAFT/INACTIVE.
+Không đọc raw hoặc thêm public browse CAT-02.
+
+Query kind chỉ nhận image hoặc thumb, omitted mặc định image. Giá trị lạ hoặc
+rỗng trả **400 VALIDATION_ERROR / INVALID_FIELDS, field kind** ở cả public/admin.
+Route public implemented (CAT-03 Task 7, test PostgreSQL+RustFS) là GET /api/v1/catalog/images/{asset_id}; thành công là
+binary, lỗi dùng JSON envelope.
+
+Publish product cần ít nhất một APPROVED image đã attach và alt VI/EN hợp lệ,
+giữ gates CAT-01a. PUT images không làm ACTIVE còn 0 ảnh: 400
+ACTIVE_PRODUCT_REQUIRES_IMAGE, field images. ACTIVE legacy V001 giữ status,
+được attach, không backfill/unpublish. Collection không có cover/lookbook gate.
+
+URL PUT sống 300 giây; complete_deadline = put_expires_at + 24h; PROCESSING lease
+120 giây. Trùng PROCESSING trả 409 CONFLICT/UPLOAD_PROCESSING; REJECTED trả 400
+VALIDATION_ERROR/IMAGE_REJECTED với reason_code; quá deadline EXPIRED trả 409
+CONFLICT/UPLOAD_EXPIRED, không đọc S3. Raw HEAD 404 trước deadline trả 409
+CONFLICT/UPLOAD_NOT_UPLOADED và giữ PENDING cho retry.
+
+Storage outage làm thao tác route ảnh/upload/complete cần S3 trả **503
+TEMPORARILY_UNAVAILABLE / DEPENDENCY_UNAVAILABLE**. Không thêm S3 vào readiness
+catalog-service; metric/health group media riêng báo storage lỗi. Terminal
+complete replay không S3 và vẫn giữ kết quả đã lưu. Policy chi tiết tại 13.
+Gateway response budget 30 giây riêng cho complete và hai route GET ảnh public/admin
+(chủ dự án duyệt 2026-10-08); các route khác giữ 2 giây. Budget ảnh lớn hơn timeout S3
+mặc định 10 giây để lỗi storage 503 từ service đi qua Gateway với envelope và `no-store`.
+
+GET/PUT images dùng full replacement và resource expected_version, không
+Idempotency-Key. GET snapshot cùng version; PUT tăng version và audit diff chỉ
+asset_id thêm/gỡ/cover. Tối đa 20 ảnh product và 50 ảnh collection; alt plain text
+1–255 sau strip, caption 0–500, sort_order integer 0..2147483647 cho trùng,
+đọc theo (sort_order, asset_id). Variant_color null hoặc đúng variant cùng product.
+Cover nullable; khác null phải thuộc images request, sai trả 400 cover_asset_id.
+Duplicate asset trả 400 images[i].asset_id.
+
+Asset mới gắn phải uploader/đúng target/APPROVED; retained asset cho OPS khác
+giữ hoặc sửa alt/sort. Upload thiếu hoặc khác owner trả 404. Gỡ chỉ cập nhật DB,
+không xóa S3; reattach trong retention 7 ngày chỉ uploader/target cũ.
+DELETING/DELETED trả 400 images[i].asset_id. GC mỗi giờ/batch 100 dùng single-runner
+lease platform; quarantine sweep mỗi 60 giây/batch 100 dùng row claim
+FOR UPDATE SKIP LOCKED, cleanup token/lease và CAS, không expire PROCESSING còn
+lease. Raw terminal dọn ngay; chưa complete dọn sau deadline, lifecycle quarantine
+2 ngày làm lưới an toàn. Partial keys của terminal non-approved chưa asset/
+reference/lease được GC sau 7 ngày từ terminal, suy ra upload_id, không list bucket.
+
 | Methods / path | Quyền | Đầu ra / phase |
 |---|---|---|
 | GET /users; PUT /users/{id}/roles; POST /users/{id}/lock | SUPER_ADMIN (`user.manage`) | Danh sách, phân quyền/khóa audit / 1. Contract: [`user.yaml`](../../contracts/openapi/user.yaml) (`TASK:USR-02` phần 2b); đổi role và khóa cần `reason` + `expected_version` (= `version` của user), khóa cần `Idempotency-Key`; admin không tự đổi/khóa chính mình (403) |
@@ -322,10 +398,14 @@ Không bổ sung public read; phần đó giữ tại TASK:CAT-02.
 | POST /catalog/products/{id}/variants; PUT /catalog/variants/{id} | OPS | SKU immutable, price/weight/version / 1 |
 | GET,POST /catalog/categories; PUT /catalog/categories/{id} | OPS | Hierarchy/sort/status / 1 |
 | GET,POST /catalog/brands; PUT /catalog/brands/{id} | OPS | Brand/status / 1 |
-| GET,POST /catalog/collections; GET,PUT /catalog/collections/{id} | OPS (`catalog.write`) | CAT-01b: POST key → DRAFT/version 0; PUT chỉ expected_version, thay toàn bộ items; GET gồm items thứ tự (sort_order, product_id) + version, kể cả DRAFT/INACTIVE; cover_url luôn null, không nhận media/lookbook / 1 |
+| GET,POST /catalog/collections; GET,PUT /catalog/collections/{id} | OPS (`catalog.write`) | CAT-01b: POST key → DRAFT/version 0; PUT chỉ expected_version, thay toàn bộ items; GET gồm items thứ tự (sort_order, product_id) + version, kể cả DRAFT/INACTIVE; PUT core vẫn từ chối cover_url/lookbook trong body; GET cover_url suy ra từ cover_asset_id (path Gateway `/api/v1/catalog/images/{id}?kind=image`, null khi chưa có cover); media gắn qua GET/PUT `/collections/{id}/images` / 1 |
 | GET /catalog/size-guides/{category_id}/{locale} | OPS (`catalog.write`) | CAT-01b: nội dung + version; chưa có 404 NOT_FOUND, locale ngoài vi/en 400 / 1 |
 | PUT /catalog/size-guides/{category_id}/{locale} | OPS (`catalog.write`) | CAT-01b: key + expected_version; 0 tạo → 201/version 1, cập nhật → 200/version +1; replay trước version guard / 1 |
-| POST /catalog/images/uploads; PUT /catalog/products/{id}/images | OPS | Scoped upload rồi attach/sort/remove / 1 |
+| POST /catalog/images/uploads | OPS (`catalog.write`) | CAT-03 implemented (Task 4, test PostgreSQL+RustFS): key bắt buộc, URL PUT sống 300 giây, idempotency chỉ lưu descriptor không URL; complete deadline = PUT expiry +24h; replay sau hạn PUT trả 409 UPLOAD_URL_EXPIRED, client không còn upload_id thì tạo intent mới với key mới / 1 |
+| GET,PUT /catalog/products/{id}/images; GET,PUT /catalog/collections/{id}/images | OPS (`catalog.write`) | CAT-03 implemented (Task 6, test PostgreSQL): full replacement/version resource, không key; ownership chỉ mới-gắn (APPROVED, đúng actor/target, trong retention 7 ngày), snapshot cùng version; 400 `images[i].asset_id`/`images[i].variant_color`/`cover_asset_id`, 400 ACTIVE_PRODUCT_REQUIRES_IMAGE, 409 VERSION_CONFLICT; lookbook chỉ có caption (V006 bỏ alt_vi/alt_en) / 1 |
+| GET /catalog/images/{asset_id}?kind=image hoặc thumb | OPS (`catalog.write`) | CAT-03 implemented (Task 7, test PostgreSQL+RustFS): admin preview approved, không raw; `Cache-Control: private, no-store`; attached → mọi OPS, detached/chưa attach → chỉ uploader, else 404 / 1 |
+| POST /catalog/images/uploads/{upload_id}/complete | OPS (`catalog.write`) | CAT-03 implemented (Task 5, test PostgreSQL+RustFS): không body/key, idempotent theo upload_id, owner-only (404); 200 data là approved asset; terminal replay không gọi S3/audit; 400 IMAGE_REJECTED, 409 UPLOAD_PROCESSING/UPLOAD_EXPIRED/UPLOAD_NOT_UPLOADED, 429 Retry-After: 1, 503 storage; 504/timeout là UNKNOWN: client poll GET status, retry có thể nhận 409 UPLOAD_PROCESSING khi lease 120s còn sống, không coi là thất bại; luồng tại 06 §3.1 / 1 |
+| GET /catalog/images/uploads/{upload_id} | OPS (`catalog.write`) | CAT-03 implemented (Task 4): upload status để phục hồi complete timeout; owner strict (khác owner/thiếu → 404) / 1 |
 | GET /orders; GET /orders/{order_no} | OPS, FINANCE (PII tối thiểu) | Filter ngày/status/search, page / 1 |
 | POST /orders/{order_no}/confirm-cod | OPS | CONFIRMED → durable commit, PACKING khi xong / 1 |
 | POST /orders/{order_no}/pack | OPS | PAID → PACKING và create shipment step / 1 |

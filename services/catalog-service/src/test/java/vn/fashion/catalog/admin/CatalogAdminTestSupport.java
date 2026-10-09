@@ -39,15 +39,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 public abstract class CatalogAdminTestSupport {
-  static final UUID ACTOR = UUID.randomUUID();
+  protected static final UUID ACTOR = UUID.randomUUID();
   static final UUID SEED = UUID.fromString("00000000-0000-4000-8000-000000000001");
-  static final ECKey KEY = key();
-  @Container static final PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:17.11")
+  protected static final ECKey KEY = key();
+  @Container protected static final PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:17.11")
       .withDatabaseName("catalog").withUsername("postgres").withPassword("postgres")
       .withInitScript("catalog-test-init.sql");
   @Autowired protected JdbcTemplate jdbc;
   @Autowired protected ObjectMapper mapper;
-  @LocalServerPort int port;
+  @LocalServerPort protected int port;
   private final HttpClient http = HttpClient.newHttpClient();
 
   static ECKey key() {
@@ -69,21 +69,23 @@ public abstract class CatalogAdminTestSupport {
   }
   @BeforeEach void clearCatalog() throws Exception {
     try (var c = DriverManager.getConnection(postgres.getJdbcUrl(), "postgres", "postgres"); var s = c.createStatement()) {
-      s.execute("delete from audit_logs; delete from outbox_events; delete from idempotency_requests; delete from collection_items; delete from collections; delete from size_guides; delete from product_variants; delete from products; delete from brands; delete from categories where id <> '" + SEED + "'");
+      s.execute("update collections set cover_asset_id=null; delete from lookbook_images; delete from product_images; delete from media_assets; delete from media_uploads; update media_job_leases set lease_token=null, lease_until=null; delete from audit_logs; delete from outbox_events; delete from idempotency_requests; delete from collection_items; delete from collections; delete from size_guides; delete from product_variants; delete from products; delete from brands; delete from categories where id <> '" + SEED + "'");
     }
   }
-  String token(String... permissions) { return signed(KEY, Instant.now(), permissions); }
-  String signed(ECKey key, Instant now, String... permissions) {
+  protected String token(String... permissions) { return signed(KEY, Instant.now(), permissions); }
+  protected String tokenFor(UUID subject, String... permissions) { return signed(KEY, Instant.now(), subject, permissions); }
+  protected String signed(ECKey key, Instant now, String... permissions) { return signed(key, now, ACTOR, permissions); }
+  protected String signed(ECKey key, Instant now, UUID subject, String... permissions) {
     try {
       var jwt = new SignedJWT(new JWSHeader.Builder(JWSAlgorithm.ES256).keyID("test").build(),
-          new JWTClaimsSet.Builder().issuer("user-service").audience("fashion-api").subject(ACTOR.toString())
+          new JWTClaimsSet.Builder().issuer("user-service").audience("fashion-api").subject(subject.toString())
               .issueTime(Date.from(now)).expirationTime(Date.from(now.plusSeconds(900)))
               .claim("auth_version", 0).claim("permissions", List.of(permissions)).build());
       jwt.sign(new ECDSASigner(key));
       return jwt.serialize();
     } catch (Exception e) { throw new AssertionError(e); }
   }
-  HttpResponse<String> send(String method, String path, String token, String key, String body) {
+  protected HttpResponse<String> send(String method, String path, String token, String key, String body) {
     try {
       var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
           .header("Content-Type", "application/json");
@@ -93,12 +95,12 @@ public abstract class CatalogAdminTestSupport {
           : HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());
     } catch (Exception e) { throw new AssertionError(e); }
   }
-  HttpResponse<String> call(String method, String path, Object body) {
+  protected HttpResponse<String> call(String method, String path, Object body) {
     return send(method, "/admin/api/v1/catalog" + path, token("catalog.write"), UUID.randomUUID().toString(),
         body == null ? null : mapper.writeValueAsString(body));
   }
-  JsonNode json(HttpResponse<String> response) { return mapper.readTree(response.body()); }
-  JsonNode data(HttpResponse<String> response, int status) {
+  protected JsonNode json(HttpResponse<String> response) { return mapper.readTree(response.body()); }
+  protected JsonNode data(HttpResponse<String> response, int status) {
     assertThat(response.statusCode()).withFailMessage(response.body()).isEqualTo(status);
     JsonNode result = json(response);
     assertThat(result.path("metadata").path("trace_id").asText()).matches("[0-9a-f]{32}");
@@ -108,19 +110,30 @@ public abstract class CatalogAdminTestSupport {
   Map<String,Object> category(String slug) {
     return Map.of("name_vi", "Áo", "name_en", "Shirt", "slug", slug, "sort_order", 1);
   }
-  JsonNode audited(HttpResponse<String> response, int status, String action) {
+  protected JsonNode audited(HttpResponse<String> response, int status, String action) {
     var result = data(response, status);
     var requestId = UUID.fromString(json(response).path("metadata").path("request_id").asText());
     assertThat(jdbc.queryForObject("select request_id from audit_logs where resource_id=? and action=?",
         UUID.class, result.path("id").asText(), action)).isEqualTo(requestId);
     return result;
   }
-  UUID createCategory(String slug) { return UUID.fromString(data(call("POST", "/categories", category(slug)), 201).path("id").asText()); }
-  Map<String,Object> productInput(String slug) {
+  protected UUID createCategory(String slug) { return UUID.fromString(data(call("POST", "/categories", category(slug)), 201).path("id").asText()); }
+  protected Map<String,Object> productInput(String slug) {
     return new java.util.HashMap<>(Map.of("category_id", SEED, "name_vi", "Áo", "name_en", "Shirt", "slug", slug,
         "base_price", 100000L, "description_vi", "<p>Safe<strong>text</strong></p>", "tags", List.of("cotton")));
   }
-  UUID createProduct(String slug) { return UUID.fromString(data(call("POST", "/products", productInput(slug)), 201).path("id").asText()); }
-  Map<String,Object> variantInput(String sku) { return new java.util.HashMap<>(Map.of("sku", sku, "size", "M", "color", "Blue", "weight_grams", 100)); }
-  JsonNode createVariant(UUID product, String sku) { return data(call("POST", "/products/" + product + "/variants", variantInput(sku)), 201); }
+  protected UUID createProduct(String slug) { return UUID.fromString(data(call("POST", "/products", productInput(slug)), 201).path("id").asText()); }
+  protected Map<String,Object> variantInput(String sku) { return new java.util.HashMap<>(Map.of("sku", sku, "size", "M", "color", "Blue", "weight_grams", 100)); }
+  protected JsonNode createVariant(UUID product, String sku) { return data(call("POST", "/products/" + product + "/variants", variantInput(sku)), 201); }
+  protected UUID attachSyntheticImage(UUID productId) {
+    UUID id = UUID.randomUUID();
+    jdbc.update("insert into media_uploads(id,actor_id,target_type,product_id,filename,content_type,size_bytes,quarantine_key,put_expires_at,complete_deadline,state,terminal_at) "
+        + "values (?,?,'PRODUCT',?,'synthetic.jpg','image/jpeg',1,?, now(), now() + interval '24 hours','APPROVED', now())",
+        id, ACTOR, productId, "quarantine/" + id + "/raw");
+    jdbc.update("insert into media_assets(id,image_key,thumb_key,image_content_type,image_size_bytes,image_width,image_height,image_sha256,"
+        + "thumb_content_type,thumb_size_bytes,thumb_width,thumb_height,thumb_sha256) values (?,?,?,'image/jpeg',1,1,1,?,'image/jpeg',1,1,1,?)",
+        id, "approved/" + id + "/image", "approved/" + id + "/thumb", "0".repeat(64), "0".repeat(64));
+    jdbc.update("insert into product_images(product_id,asset_id,alt_vi,alt_en,sort_order) values (?,?,'Ảnh','Image',0)", productId, id);
+    return id;
+  }
 }

@@ -57,7 +57,7 @@ class CatalogCollectionsSchemaIntegrationTest {
         + SEED + "','" + locale + "','{\"columns\":[\"Size\"],\"rows\":[[\"M\"]]}'," + version + ")";
   }
   @Test void newTablesExistAfterV003Upgrade() throws SQLException {
-    try (var c = connection(); var s = c.createStatement(); var r = s.executeQuery("select version from flyway_schema_history where success order by installed_rank desc limit 1")) {
+    try (var c = connection(); var s = c.createStatement(); var r = s.executeQuery("select version from flyway_schema_history where success and version='004'")) {
       assertThat(r.next()).isTrue(); assertThat(r.getString(1)).isEqualTo("004");
     }
   }

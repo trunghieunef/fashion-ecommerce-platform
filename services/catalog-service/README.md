@@ -87,6 +87,11 @@ local trong `.env` (chỉ memory, quyền `catalog.write`, TTL 300 giây). Smoke
 chuỗi login → token OPS. Slug/SKU ngẫu nhiên; dữ liệu smoke tích lũy trên volume local vì không có DELETE.
 Smoke tạo SKU có whitespace/chữ thường rồi retry cùng key bằng uppercase; kiểm cùng variant id
 và product version không tăng thêm trước publish.
+CAT-03 xen trước publish (publish nay cần ảnh): intent → PUT PNG tới RustFS public endpoint
+(URL ký chỉ trong bộ nhớ, không in) → complete → `PUT /products/{id}/images` → publish → public GET
+200 + ETag, If-None-Match 304 → unpublish → 404. Gateway có route `catalog-admin-media-complete`
+(timeout 30s) cho complete và hai route GET ảnh public/admin cùng budget 30s;
+các route catalog còn lại giữ timeout 2s.
 Smoke CAT-01b tiếp tục bằng cùng JWT/category/product: collection POST201/DRAFT/version0 →
 GET items/version → PUT không key200/version1 → stale409; guide PUT0/key201/version1 →
 GET → PUT1/newkey200/version2 → stale409 và replay key tạo giữ201/data version1, metadata mới.
@@ -115,6 +120,86 @@ Lệnh này giữ volume local; chỉ dùng `down -v` khi chủ động xóa to�
 
 ## Configuration và database roles
 
+CAT-03 đã hiện thực và kiểm thử local; chủ dự án đã duyệt S3/URLConnection SDK v2 2.55.12 (BOM
+chỉ service này). [Spike RustFS local](../../docs/evidence/cat-03-stack-research-2026-10-07.md)
+PASS, upload/complete/attach/publish image gate và public/admin read đã có trong code service. RustFS local-only,
+không staging/prod; SDK không dùng Apache/Netty/native CRT transport mới.
+local-up.sh sinh CATALOG_S3_ACCESS_KEY/SECRET_KEY vào .env local, giữ qua retry,
+không log/commit.
+
+Storage adapter (TASK:CAT-03, Task 2) đã có: `MediaStorage` (presign PUT ký
+Content-Type/Content-Length, head, read giới hạn, putIfAbsent với If-None-Match,
+delete, open, ensureBucket), mọi lỗi SDK/timeout thành `MediaStorage.Unavailable`
+không chứa key/URL. Đã có `POST /admin/api/v1/catalog/images/uploads` (intent, key bắt buộc, PUT 300s,
+idempotency chỉ lưu descriptor không URL, replay sau hạn PUT -> 409 `UPLOAD_URL_EXPIRED`) và
+`GET .../uploads/{upload_id}` (owner-only, khác owner/thiếu -> 404); test `UploadIntentIntegrationTest`.
+`POST .../uploads/{upload_id}/complete` (Task 5): không body/key; terminal replay không gọi S3/audit;
+claim lease 120s, 1 slot re-encode/instance (thiếu slot -> 429 + `Retry-After: 1`), primary có sẵn
+được ưu tiên (không đọc raw), thumb sinh từ primary thực tế, kiểm lại lease/deadline trước mỗi
+lần ghi S3, CAS lease_token/lease_until/deadline ghi APPROVED/REJECTED + audit một lần (mất fence
+quá deadline -> EXPIRED, còn hạn -> release), sau commit xóa raw best-effort; test `UploadCompleteIntegrationTest`.
+Regression `staleLeaseAfterThumbWriteCannotCommit` đổi token sau khi ghi thumb thật để kiểm riêng CAS finish,
+không dựa vào pre-write fence; attempt cũ không ghi asset/audit hoặc giải phóng lease của attempt mới.
+Jobs (Task 8, `MediaJobs`, chỉ chạy định kỳ khi `CATALOG_MEDIA_JOBS_ENABLED=true` qua `@EnableScheduling` có điều kiện):
+`sweepQuarantine` mỗi 60s, batch 100, claim `FOR UPDATE SKIP LOCKED` (nhiều instance an toàn), lease 120s;
+dọn raw của upload terminal hoặc quá `put_expires_at + 24h` (chuyển EXPIRED, không đụng PROCESSING còn lease),
+lỗi S3 -> `quarantine_attempts+1`, retry sau min(2^n, 60) phút. `collectGarbage` mỗi 1h, single-runner bằng
+`LeaseRepository` (`media_job_leases`, lease 30 phút), batch tổng 100: asset AVAILABLE không reference quá
+7 ngày từ `coalesce(detached_at, approved_at)` -> DELETING (khóa row, skip locked, re-check) -> xóa image/thumb
+ngoài tx -> DELETED; lỗi giữ DELETING, `gc_attempts` tối đa 10 rồi chỉ log/metric; partial approved objects của
+upload EXPIRED/REJECTED không asset quá 7 ngày từ `terminal_at` (key suy từ upload_id, không list bucket).
+Metric counter `catalog.media.jobs` tag `job` (sweep|gc), `outcome` (ok|error); không tag/log key hay upload_id.
+CAS kết quả sweep chỉ fence bằng token (reclaim đổi token). `spring.task.scheduling.pool.size: 2` để GC chậm
+không chặn sweep. Test: `MediaJobsIntegrationTest`.
+Config (`fashion.catalog.media.*`, env): `CATALOG_S3_BUCKET` (catalog-media-local),
+`CATALOG_S3_ENDPOINT` (nội bộ, bắt buộc), `CATALOG_S3_PUBLIC_ENDPOINT` (URL browser
+dùng cho presigned PUT, mặc định = endpoint), `CATALOG_S3_REGION`,
+`CATALOG_S3_ACCESS_KEY/SECRET_KEY` (bắt buộc), `CATALOG_S3_CORS_ORIGINS`,
+`CATALOG_S3_QUARANTINE_RETENTION_DAYS` (2), `CATALOG_S3_BOOTSTRAP_BUCKET` (false),
+`CATALOG_MEDIA_JOBS_ENABLED` (true; bật scheduling sweep/GC, test đặt false), timeout S3 10s.
+Compose local chạy `rustfs` (digest ghim, chỉ `127.0.0.1:19000`, không console, volume
+`catalog-media-data`), catalog bật bootstrap bucket (tạo bucket, CORS PUT cho origin
+storefront, lifecycle chỉ prefix `quarantine/` 2 ngày, không bucket policy; retry 10x1s
+rồi fail startup). `depends_on rustfs` chỉ service_started, readiness catalog không
+phụ thuộc S3. `.env` cũ tự nhận `CATALOG_S3_PUBLIC_ENDPOINT` khi chạy local-up.sh;
+`CATALOG_S3_ENDPOINT` trong `.env` không còn dùng (Compose đặt http://rustfs:9000).
+RustFS/credential local chỉ cho local, không staging/prod. Test:
+`MediaStorageIntegrationTest` (RustFS Testcontainers thật, credential ngẫu nhiên mỗi run).
+
+Contract [CAT-03 spec đã duyệt](../../docs/superpowers/specs/2026-10-07-cat-03-media-design.md)
+và OpenAPI đã hiện thực: PUT300s; complete deadline=put_expires_at+24h (thay TTL
+intent15phút); quarantine lifecycle2ngày, sweep60s/batch100, terminal dọn ngay.
+Compose truyền CATALOG_S3_QUARANTINE_RETENTION_DAYS=2 và bootstrap bucket đã áp
+lifecycle quarantine; các job cleanup sweep/GC đã có (Task 8, xem mục Jobs). Orphan/detached7ngày,
+GC hourly/batch100/single-runner lease platform; reattach chỉ uploader/target cũ.
+Asset đang attach cho OPS khác giữ/sửa alt/sort; DELETING/DELETED không attach.
+Audit media chỉ asset_id. Policy đã duyệt tại13; job sweep/GC đã hiện thực (Task 8).
+Partial objects terminal EXPIRED/REJECTED chưa asset/reference/lease GC7ngày từ
+terminal, key suy ra upload_id/không list bucket; retry trước terminal ưu tiên
+approved đã ghi, phục hồi thumb/commit fenced, không reject vì lỗi tạm S3/DB.
+
+Review spec ngày 2026-10-08: public media dùng Cache-Control: public, max-age=300,
+ETag cố định và If-None-Match → 304; cache fresh có thể giữ ảnh tối đa 5 phút sau
+unpublish. Admin preview dùng private, no-store. Kind lạ/rỗng trả 400 field kind
+ở cả public/admin. Quarantine sweep dùng row claim FOR UPDATE SKIP LOCKED,
+cleanup token/lease và CAS; GC approved/partial vẫn single-runner lease platform.
+Composite FK association tới media_uploads chặn sai target trong V005.
+S3 không tham gia readiness; thao tác media cần S3 lỗi trả 503
+DEPENDENCY_UNAVAILABLE. Spec/plan đã duyệt; routes và constraints đã hiện thực local.
+Metric jobs đã có; health group `media` và metric latency/lỗi S3 theo thao tác còn hoãn, chưa có trong runtime.
+Gateway dành response budget 30 giây cho complete và GET ảnh public/admin, lớn hơn timeout S3
+mặc định 10 giây để giữ 503 từ service; các route catalog khác vẫn 2 giây.
+
+PNG kiểm bounds từng chunk, CRC và IEND sau kiểm dimensions, trước full decode;
+ảnh hỏng trả `IMAGE_DECODE_FAILED`, approved object hỏng trả `APPROVED_OBJECT_INVALID`.
+Re-encode vẫn loại payload sau IEND hợp lệ; không thêm dependency ngoài JDK.
+Giới hạn media đã duyệt: JPEG/PNG, raw/mỗi output <=5 MiB, dimensions <=8192
+và <=25M pixels; approved cạnh dài <=2560, thumb <=800, không upscale. Một
+re-encode/instance, không queue; hết slot trả 429/Retry-After: 1 trước đổi state.
+Một buffer RGBA 25MP khoảng **100 MB** (95 MiB), chưa gồm decoded source/resize/
+encoder buffers và phần heap của Spring. Đây là ước lượng, chưa là đo peak heap
+hoặc bằng chứng pod sizing; không tự tăng node/heap để nhận ảnh lớn hơn.
+
 | Variable | Default local | Dùng bởi |
 |---|---|---|
 | `CATALOG_DB_URL` | `jdbc:postgresql://localhost:5432/catalog` | Runtime datasource |
@@ -132,6 +217,21 @@ tạo. Runtime role không có `CREATE` schema và không được dùng làm Fl
 `V001__catalog_baseline.sql` là migration append-only đầu tiên. Migration sau phải
 tương thích với dữ liệu cũ; không sửa `V001` sau khi nó đã được áp dụng ở bất kỳ môi
 trường nào.
+
+## Xử lý ảnh media (CAT-03)
+
+`vn.fashion.catalog.media.ImageProcessor` là lớp thuần JDK (ImageIO/`java.awt`, không thêm dependency)
+dùng cho luồng upload complete (`UploadService.complete`). Giới hạn (hằng số trong code):
+
+- File gốc 1..5 242 880 byte; chỉ JPEG/PNG, magic bytes phải khớp `Content-Type` khai báo.
+- Width/height 1..8192 và tối đa 25 000 000 pixel; kích thước đọc từ header và kiểm **trước** khi decode.
+- Decode lỗi (file cắt cụt, CMYK/4-band, cảnh báo của reader) -> `IMAGE_DECODE_FAILED`.
+- Re-encode không metadata: JPEG RGB quality 0.85, PNG giữ alpha nếu có; EXIF orientation 1-8 (IFD0) được
+  áp dụng trước khi bỏ EXIF, EXIF hỏng được coi là 1. Cạnh dài tối đa 2560 (thumbnail 800), không upscale.
+- Output vượt 5 MiB -> `IMAGE_OUTPUT_TOO_LARGE`; `verify` kiểm lại object approved (`APPROVED_OBJECT_INVALID`).
+
+Ước lượng heap: buffer ARGB 25 MP khoảng 100 MB (4 byte/pixel), chưa đo thực tế; cần đo trước khi chốt
+giới hạn đồng thời (slot re-encode 1/instance) và heap của container. Test: `ImageProcessorTest` (unit, không Docker).
 
 ## Test và health
 

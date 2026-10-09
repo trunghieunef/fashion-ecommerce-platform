@@ -17,10 +17,32 @@ spring:
             connect-timeout: 500
             response-timeout: 2s
           routes:
+            # CAT-03: S3 can take 10s to return an error; preserve the service's 503.
+            - id: catalog-public-media-read
+              uri: ${CATALOG_BASE_URL:http://localhost:8081}
+              predicates:
+                - Path=/api/v1/catalog/images/*
+                - Method=GET
+              metadata:
+                response-timeout: 30000
             - id: catalog-public
               uri: ${CATALOG_BASE_URL:http://localhost:8081}
               predicates:
                 - Path=/api/v1/catalog/**
+            # CAT-03: complete downloads and re-encodes the image; 30s instead of the global 2s.
+            - id: catalog-admin-media-complete
+              uri: ${CATALOG_BASE_URL:http://localhost:8081}
+              predicates:
+                - Path=/admin/api/v1/catalog/images/uploads/*/complete
+              metadata:
+                response-timeout: 30000
+            - id: catalog-admin-media-read
+              uri: ${CATALOG_BASE_URL:http://localhost:8081}
+              predicates:
+                - Path=/admin/api/v1/catalog/images/*
+                - Method=GET
+              metadata:
+                response-timeout: 30000
             - id: catalog-admin
               uri: ${CATALOG_BASE_URL:http://localhost:8081}
               predicates:

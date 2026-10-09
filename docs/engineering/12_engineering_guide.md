@@ -85,6 +85,10 @@ chỉ copy JAR/`dist` vào image runtime pin tag + digest.
 Ports chỉ bind `127.0.0.1`: storefront 4173, Gateway 8080, PostgreSQL 5432 (cho chạy JVM
 trên host). Smoke catalog hiện gồm CAT-01a category/product/variant/publish và CAT-01b
 collection/size guide create/read/update/replay/stale qua Gateway; giữ401/403 với member thật.
+CAT-03: intent → PUT PNG synthetic tới RustFS (`127.0.0.1:19000`, URL ký chỉ trong bộ nhớ) →
+complete (route Gateway riêng, timeout 30s) → attach → publish → public GET 200/ETag/304 →
+unpublish → 404. Hai route GET ảnh public/admin cũng có response budget Gateway 30s để giữ
+503 storage sau timeout S3 10s; các route catalog khác vẫn 2s (regression GatewayBoundaryTest).
 OPS smoke dùng JWT synthetic local; phạm vi, giới hạn và dữ liệu tích lũy ghi tại
 [catalog README](../../services/catalog-service/README.md). Lệnh trong bảng không đổi.
 Catalog và Nacos không publish port. CI tương ứng ở

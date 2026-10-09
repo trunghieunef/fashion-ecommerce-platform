@@ -114,10 +114,10 @@ erDiagram
 | `brands` (T) | `id`, `name text`, `logo_url text?`, `status varchar(32) = 'ACTIVE'`, `version bigint = 0` | ACTIVE/INACTIVE; version guard |
 | `products` (T) | `id`, `category_id uuid FK categories`, `brand_id uuid? FK brands`, `name_vi text`, `name_en text`, `slug text`, `description_vi text = ''`, `description_en text = ''`, `base_price bigint`, `tags text[] = '{}'`, `status varchar(32) = 'DRAFT'`, `published_at timestamptz?`, `version bigint = 0`, `sold_quantity bigint = 0` | UNIQUE slug; price/sold_quantity >= 0; DRAFT/ACTIVE/INACTIVE; indexes `(category_id, status, published_at, id)`, `(status, base_price, id)`, `(status, sold_quantity, id)` |
 | `product_variants` (T) | `id`, `product_id uuid FK products`, `sku varchar(64)`, `size text`, `color text`, `price_override bigint?`, `weight_grams int`, `status varchar(32) = 'ACTIVE'`, `version bigint = 0` | UNIQUE sku không phân biệt casing (V003), `(product_id, size, color)`; SKU mới uppercase ASCII, legacy giữ nguyên; price >= 0, weight > 0; ACTIVE/INACTIVE; SKU bất biến |
-| `product_images` | `id`, `product_id uuid FK products`, `variant_color text?`, `url text`, `thumb_url text`, `alt_vi text`, `alt_en text`, `sort_order int = 0` | Index `(product_id, sort_order)`; kiểm tra màu thuộc sản phẩm tại service |
+| `product_images` (CAT-03, V005) | `product_id uuid FK products`, `asset_id uuid FK media_assets`, `variant_color text?`, `alt_vi text`, `alt_en text`, `sort_order int = 0` | PK `(product_id, asset_id)`; FK `(asset_id, product_id)` tới `media_uploads(id, product_id)` chặn sai target; index `(product_id, sort_order, asset_id)`; không lưu arbitrary URL |
 | `collections` (T) | `id`, `name_vi text`, `name_en text`, `slug text`, `cover_url text?`, `start_at timestamptz?`, `end_at timestamptz?`, `status varchar(32) = 'DRAFT'`, `version bigint = 0` | UNIQUE slug; DRAFT/ACTIVE/INACTIVE; version >= 0, version guard; end > start khi cả hai có giá trị; cover_url luôn null trong CAT-01b |
 | `collection_items` | `collection_id uuid FK collections`, `product_id uuid FK products`, `sort_order int = 0` | PK `(collection_id, product_id)`; sort_order 0..2147483647, cho phép trùng; index `(collection_id, sort_order, product_id)` |
-| `lookbook_images` | `id`, `collection_id uuid FK collections`, `url text`, `caption_vi text = ''`, `caption_en text = ''`, `sort_order int = 0` | Index `(collection_id, sort_order)` |
+| `lookbook_images` (CAT-03, V005/V006) | `collection_id uuid FK collections`, `asset_id uuid FK media_assets`, `caption_vi text = ''`, `caption_en text = ''`, `sort_order int = 0` | PK `(collection_id, asset_id)`; FK `(asset_id, collection_id)` tới `media_uploads(id, collection_id)` chặn sai target; index `(collection_id, sort_order, asset_id)`; cover FK cùng collection |
 | `size_guides` (T) | `id`, `category_id uuid FK categories`, `locale varchar(2)`, `guideline_html text = ''`, `table_json jsonb`, `version bigint = 1` | UNIQUE `(category_id, locale)`; vi/en; version >= 1, version guard; validate JSON; HTML sanitize, tối đa 20.000 ký tự sau sanitize |
 | `review_eligibilities` (C, Phase 2) | `id`, `order_id uuid`, `user_id uuid`, `variant_id uuid FK product_variants`, `delivered_at timestamptz`, `expires_at timestamptz` | UNIQUE `(order_id, variant_id)`; index `(user_id, expires_at)`; projection từ ORDER_COMPLETED, thời hạn 30 ngày |
 | `reviews` (T, Phase 2) | `id`, `eligibility_id uuid FK review_eligibilities`, `rating smallint`, `title text`, `content text`, `images text[] = '{}'`, `status varchar(32) = 'PENDING'`, `moderated_by uuid?`, `moderated_at timestamptz?`, `moderation_reason text?` | UNIQUE eligibility_id; rating 1–5, cardinality(images) <= 5; PENDING/APPROVED/REJECTED; index `(status, created_at, id)` |
@@ -127,6 +127,53 @@ Schema collections/collection_items/size_guides đã được hiện thực ở 
 kiểm upgrade Testcontainers từ V003 giữ legacy SKU/sample và audit append-only.
 Task 6 đã áp V004 trên volume local V003, không reset dữ liệu; Task 2/3 có GET/POST/PUT
 admin collection, Task 4/5 GET/PUT guide và smoke Gateway PASS.
+
+CAT-03 media design (chủ dự án, 2026-10-07; **migration V005 đã có và đã kiểm (Task 1); runtime upload/complete/attach/read và job sweep/GC (`MediaJobs`, Task 8) đã có, đã kiểm local bằng Testcontainers, chưa deploy**): upload intent
+lưu actor UUID, target product/collection, key quarantine do server sinh, expiry,
+state/PROCESSING lease token/attempt và kết quả complete theo upload_id. Không
+FK sang DB user-service. Approved image/thumb dùng key cố định từ upload_id,
+conditional PUT first-writer-wins, không key mới mỗi retry. Metadata durable
+size/dimensions/checksum/type phải lấy từ object approved thực tế (kể cả nhánh
+412), chỉ tx CAS token/lease còn hiệu lực được commit APPROVED. Terminal không
+đọc quarantine; attach/sort/remove dùng resource version + audit cùng tx và
+không S3 I/O trong row lock. Columns/constraints và asset reference cụ thể ở
+[spec đã duyệt 2026-10-08](../superpowers/specs/2026-10-07-cat-03-media-design.md), V005 đã hiện thực;
+Không sửa V001–V004.
+
+CAT-03 Task 1: `V005__media.sql` đã viết và kiểm bằng Testcontainers (upgrade từ V004 có dữ liệu):
+`media_uploads`, `media_assets`, `product_images`, `lookbook_images`, `media_job_leases` (seed một dòng
+lease cho GC runner) và `collections.cover_asset_id`. FK ghép `(asset_id, product_id)` →
+`media_uploads(id, product_id)` (tương tự collection) ép asset chỉ gắn vào đúng target; UNIQUE `asset_id`
+cho phép gắn một lần; `(id, cover_asset_id)` → `lookbook_images(collection_id, asset_id)` DEFERRABLE
+INITIALLY DEFERRED. V005 thêm nhầm `lookbook_images.alt_vi/alt_en` (spec §5 chỉ có caption); `V006__drop_lookbook_alt.sql` bỏ hai cột (append-only, V005 đã áp dụng trên volume local). Attach images (Task 6) đã chạy; chưa deploy.
+
+CAT-03 attach/GC đã chốt: liên kết dùng asset_id; cover_asset_id nullable phải
+thuộc collection images. Resource row lock/version và asset row locks bảo vệ
+replace/audit/reattach. Asset AVAILABLE/DELETING/DELETED độc lập với upload
+APPROVED terminal; detached_at hoặc approved_at cho asset chưa từng gắn xác định
+retention7ngày. GC chỉ claim DELETING quá hạn/không reference trong tx khóa cùng
+asset; DeleteObject ngoài tx, finalize CAS. Single-runner tái sử dụng LeaseRepository
+platform-durability với dòng job trong DB catalog, không FK user DB. Audit media
+diff chỉ asset_id, không URL/key/bytes/alt/caption. Schema V005 đã có và đã kiểm
+(Task 1); GC/sweep chạy bằng `MediaJobs` (Task 8): GC khóa `for update skip locked` rồi re-check
+reference/retention bằng câu lệnh thứ hai trong cùng tx trước khi chuyển DELETING; retry
+DeleteObject tối đa 10 lần (`gc_attempts`, backoff 2^n phút, trần 60). Partial cleanup chỉ có
+marker `partial_cleaned_at` (V005 không có cột retry riêng): lỗi thì chạy lại ở lượt GC sau.
+
+Upload giữ terminal_at và partial cleanup marker/retry để GC key approved/thumb
+chưa thành asset sau7ngày từ EXPIRED/REJECTED. Không list bucket; no asset/
+reference/lease dưới row lock. Temporary thumb/DB failure không ghi terminal;
+retry ưu tiên approved object để hoàn tất APPROVED với fencing. Sweep không
+expire PROCESSING còn lease. Đây là schema dự kiến CAT-03, chưa deploy.
+
+Review CAT-03 ngày 2026-10-08: media_uploads thêm UNIQUE(id, product_id) và
+UNIQUE(id, collection_id); product_images/lookbook_images có composite FK ở
+bảng trên, cùng FK asset_id tới media_assets. DB chặn gắn asset sai target hoặc
+sai loại target; service vẫn kiểm ownership/status. Quarantine sweep dùng row
+claim FOR UPDATE SKIP LOCKED với quarantine_lease_token/quarantine_lease_until,
+marker/retry và CAS sau S3 I/O ngoài transaction. GC approved/partial giữ
+single-runner lease platform-durability riêng. Các constraint/column chưa migrate;
+acceptance cần test DB guard và concurrent sweep trên PostgreSQL thật.
 
 Collection CAT-01b (chủ dự án, 2026-10-07): POST tạo DRAFT/version 0, cần key;
 PUT thay toàn bộ nội dung/items, chỉ cần expected_version (không cần Idempotency-Key),
@@ -139,9 +186,10 @@ Timestamp request ISO-8601 có offset → UTC/timestamptz; service chỉ nhận 
 và truncate xuống microsecond trước so sánh/hash/lưu, end > start sau truncate khi có cả hai.
 JDBC đọc/ghi OffsetDateTime để giữ đúng năm biên, không chuyển qua lịch legacy Timestamp.
 Không thêm CHECK năm vào V004 đã deploy; validation tại service theo chốt PR15.
-Null là không giới hạn phía tương ứng. CAT-01b không nhận cover_url/lookbook trong request,
-cover_url lưu/trả null; lookbook_images chưa tạo/nhận dữ liệu trong CAT-01b, thuộc CAT-03
-sau upload được kiểm tra. Bảng media trên là mục tiêu CAT-03, không phải schema đã triển khai.
+Null là không giới hạn phía tương ứng. Request collection core không nhận cover_url/lookbook; cover_url
+là đường dẫn Gateway tính từ `cover_asset_id` (null khi chưa có cover) và lookbook/cover chỉ
+đổi qua `PUT /collections/{id}/images`. Bảng media (V005/V006) đã có và đã kiểm local bằng
+Testcontainers (CAT-03), chưa deploy.
 
 Shape `size_guides.table_json` đã chốt cho CAT-01b (chủ dự án, 2026-10-07):
 
@@ -195,7 +243,7 @@ Product ACTIVE từ V001 có thể còn `published_at` null. Unpublish giữ gi�
 thuộc CAT-02; các index price/sold_quantity trong bảng là mục tiêu CAT-02, chưa có trong V002.
 Outbox/idempotency/audit thuộc catalog-db; audit runtime chỉ INSERT/SELECT, `request_id`
 khớp metadata của response mutation đầu; retry không ghi thêm audit. Collection,
-size-guide và media chưa có; đây chưa phải acceptance toàn bộ CAT-01.
+size-guide đã có từ CAT-01b; media (upload/attach/read) thuộc CAT-03 và đã chạy local. Đây chưa phải acceptance toàn bộ CAT-01.
 
 `TASK:PLT-01` có `V001` làm read sample tối thiểu: `products` chỉ gồm `id`,
 `slug`, `status`, tên VI/EN, `version` và timestamps, cùng index public ACTIVE.

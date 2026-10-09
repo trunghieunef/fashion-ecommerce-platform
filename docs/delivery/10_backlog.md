@@ -112,11 +112,19 @@ vào `main` tại `8f27663`; REQ CAT-01/02, dependency PLT-02/03 và USR-02. Có
 product/variant, publish/unpublish, HTML sanitize, SKU immutable, version/idempotency/audit và
 VARIANT_CREATED durable outbox. Acceptance phần 1a và bằng chứng tại
 [evidence CAT-01a](../evidence/cat-01a-local-2026-10-07.md). CAT-01b collection/size-guide
-đã commit local Task1–6 trên dev, V004/HTTP Testcontainers/Gateway smoke/full reactor281 PASS;
+đã thực hiện Task1–7 trên dev, V004/HTTP Testcontainers/Gateway smoke/full reactor281 PASS;
 Task7 whole-branch review0Critical/0Important, Minor docs đã đồng bộ theo
 [plan](../superpowers/plans/2026-10-07-cat-01b-catalog-admin.md)
-và [evidence](../evidence/cat-01b-local-2026-10-07.md). Chưa push/PR/CI remote CAT-01b.
-Chưa Done: còn review/nghiệm thu parent, ảnh/publish gate CAT-03;
+và [evidence](../evidence/cat-01b-local-2026-10-07.md). Đã merge PR15 tại f5c64d9 ngày2026-10-07;
+4Minor review đã sửa trong45d7610, full reactor286 PASS, Application/Documentation CI
+trên đúng45d7610 đều SUCCESS. **CAT-03 safe media: In progress, đã hiện thực local** theo
+[plan](../superpowers/plans/2026-10-08-cat-03-media.md) (spec đã duyệt 2026-10-08): V005/V006,
+S3/RustFS, re-encode, upload intent/complete/status, attach + publish gate, public/admin read,
+sweep/GC, route Gateway complete 30s và smoke Gateway→RustFS; xem
+[evidence](../evidence/cat-03-local-2026-10-08.md) và
+[handoff](../superpowers/plans/2026-10-08-cat-03-handoff.md). Chưa deploy/staging và chưa Done
+tới khi chủ dự án nghiệm thu CAT-03. Acceptance còn mở (hoãn): health group `media` và metric latency/lỗi S3 theo thao tác.
+Chưa Done: còn review/nghiệm thu parent CAT-01 và CAT-03;
 public read CAT-02 và relay/Kafka ngoài phạm vi 1a/1b. SKU mới canonical uppercase với V003,
 SKU legacy không backfill.
 

@@ -12,6 +12,16 @@ while IFS= read -r line; do
   grep -q "^${BASH_REMATCH[1]}=" "$ENV_FILE" || printf '%s\n' "$line" >> "$ENV_FILE"
 done < infra/local/.env.example
 
+# TASK:CAT-03: local-only S3 credentials; keep existing values across restarts.
+for s3_key in CATALOG_S3_ACCESS_KEY CATALOG_S3_SECRET_KEY; do
+  if ! grep -q "^${s3_key}=." "$ENV_FILE"; then
+    sed -i "s|^${s3_key}=.*|${s3_key}=$(openssl rand -hex 32)|" "$ENV_FILE"
+  fi
+done
+
+# TASK:CAT-03 approved safety-net policy (quarantine lifecycle days); passed to catalog by Compose.
+sed -i 's/^CATALOG_S3_QUARANTINE_RETENTION_DAYS=.*/CATALOG_S3_QUARANTINE_RETENTION_DAYS=2/' "$ENV_FILE"
+
 # Local-only access-token signing key (TASK:USR-01a); generated once, never committed.
 if ! grep -q '^USER_JWT_PRIVATE_KEY=.' "$ENV_FILE"; then
   key="$(openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 |

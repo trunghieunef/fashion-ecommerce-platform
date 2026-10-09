@@ -1,4 +1,4 @@
-"""TASK:CAT-01a/1b: admin security, version/key requirements and executable examples."""
+"""TASK:CAT-01a/1b and CAT-03: security, mutation guards, examples."""
 from pathlib import Path
 import unittest
 from urllib.parse import urljoin
@@ -36,12 +36,12 @@ class CatalogAdminContractTest(unittest.TestCase):
     def test_admin_operations_require_bearer_and_mutation_guards(self):
         operations = [(method, op) for path, item in self.doc["paths"].items()
                       if path.startswith("/admin/") for method, op in item.items() if method != "parameters"]
-        self.assertEqual(len(operations), 20)
+        self.assertEqual(len(operations), 28)
         for method, op in operations:
             with self.subTest(operation=op["operationId"]):
                 self.assertNotEqual(method, "delete")
                 self.assertEqual(op["security"], [{"bearerAuth": []}])
-                if method == "post":
+                if method == "post" and op["operationId"] != "completeImageUpload":
                     self.assertIn({"$ref": "./common.yaml#/components/parameters/IdempotencyKey"}, op["parameters"])
                 if method == "put" or op["operationId"] in ("publishProduct", "unpublishProduct"):
                     schema = op["requestBody"]["content"]["application/json"]["schema"]
@@ -197,6 +197,13 @@ class CatalogAdminContractTest(unittest.TestCase):
                 examples = {"2": 0, "4": 0}
                 for status, response in op["responses"].items():
                     response = self.resolve(response)
+                    if "application/json" not in response["content"]:
+                        self.assertEqual(op["operationId"], "previewCatalogImage")
+                        self.assertEqual(status, "200")
+                        self.assertEqual(set(response["content"]), {"image/jpeg", "image/png"})
+                        self.assertEqual(response["headers"]["Cache-Control"]["schema"]["const"], "private, no-store")
+                        examples["2"] += 1
+                        continue
                     media = response["content"]["application/json"]
                     schema = {"$ref": urljoin(BASE + "catalog.yaml", media["schema"]["$ref"])}
                     validator = Draft202012Validator(schema, registry=self.registry, format_checker=FormatChecker())
@@ -207,4 +214,94 @@ class CatalogAdminContractTest(unittest.TestCase):
                             examples[status[0]] += 1
                 self.assertGreater(examples["2"], 0)
                 self.assertGreater(examples["4"], 0)
-        self.assertEqual(count, 20)
+        self.assertEqual(count, 28)
+
+    def test_every_media_operation_is_implemented(self):
+        media = [(path, method, op) for path, item in self.doc["paths"].items() if "/images" in path
+                 for method, op in item.items() if method in ("get", "post", "put")]
+        self.assertGreaterEqual(len(media), 9)
+        for path, method, op in media:
+            self.assertEqual(op.get("x-implementation-status"), "implemented", (path, method))
+        self.assertNotIn("planned contract", (ROOT / "contracts/openapi/catalog.yaml").read_text(encoding="utf-8"))
+
+    def test_media_replacement_is_closed_and_requires_resource_version(self):
+        asset = "66666666-6666-4666-8666-666666666666"
+        product = {"expected_version": 0, "images": [
+            {"asset_id": asset, "alt_vi": "Áo", "alt_en": "Shirt", "sort_order": 0}]}
+        collection = {"expected_version": 0, "cover_asset_id": asset,
+                      "images": [{"asset_id": asset, "sort_order": 0}]}
+        for name, body, limit in (("ProductImagesPut", product, 20), ("CollectionImagesPut", collection, 50)):
+            with self.subTest(schema=name):
+                validator = self.validator(name)
+                self.assertEqual(list(validator.iter_errors(body)), [])
+                for changed in ({**body, "expected_version": None}, {**body, "url": "https://invalid.local"},
+                                {**body, "images": body["images"] * (limit + 1)},
+                                {**body, "images": [{**body["images"][0], "sort_order": None}]},
+                                {**body, "images": [{**body["images"][0], "key": "arbitrary"}]}):
+                    self.assertTrue(list(validator.iter_errors(changed)))
+        validator = self.validator("CollectionImagesPut")
+        self.assertEqual(list(validator.iter_errors({**collection, "cover_asset_id": None})), [])
+        self.assertTrue(list(validator.iter_errors({k: v for k, v in collection.items() if k != "cover_asset_id"})))
+
+    def test_media_routes_keep_completion_key_and_binary_visibility_contract(self):
+        root = "/admin/api/v1/catalog"
+        complete = self.doc["paths"][root + "/images/uploads/{upload_id}/complete"]["post"]
+        self.assertNotIn({"$ref": "./common.yaml#/components/parameters/IdempotencyKey"}, complete["parameters"])
+        self.assertNotIn("requestBody", complete)
+        for status in ("400", "404", "409", "429", "503"):
+            self.assertIn(status, complete["responses"])
+        conflict = self.resolve(complete["responses"]["409"])
+        messages = {e["value"]["message"] for e in conflict["content"]["application/json"]["examples"].values()}
+        self.assertEqual(messages, {"UPLOAD_PROCESSING", "UPLOAD_EXPIRED", "UPLOAD_NOT_UPLOADED"})
+        rate = self.resolve(complete["responses"]["429"])
+        self.assertEqual(rate["headers"]["Retry-After"]["schema"]["const"], 1)
+        for path in (root + "/products/{id}/images", root + "/collections/{id}/images"):
+            self.assertEqual(set(self.doc["paths"][path]), {"get", "put"})
+            self.assertNotIn({"$ref": "./common.yaml#/components/parameters/IdempotencyKey"}, self.doc["paths"][path]["put"]["parameters"])
+        public = self.doc["paths"]["/api/v1/catalog/images/{asset_id}"]["get"]
+        self.assertEqual(public["security"], [])
+        self.assertIn("404", public["responses"])
+        binary = self.resolve(public["responses"]["200"])
+        self.assertEqual(binary["headers"]["Cache-Control"]["schema"]["const"], "public, max-age=300")
+        self.assertNotIn("application/json", binary["content"])
+
+    def test_public_media_conditional_cache_and_invalid_kind_contract(self):
+        public = self.doc["paths"]["/api/v1/catalog/images/{asset_id}"]["get"]
+        admin = self.doc["paths"]["/admin/api/v1/catalog/images/{asset_id}"]["get"]
+        params = [self.resolve(p) for p in public["parameters"]]
+        self.assertTrue(any(p["in"] == "header" and p["name"] == "If-None-Match" for p in params))
+        etag = None
+        for status in ("200", "304"):
+            response = self.resolve(public["responses"][status])
+            headers = response["headers"]
+            self.assertEqual(headers["Cache-Control"]["schema"]["const"], "public, max-age=300")
+            self.assertIn("X-Correlation-Id", headers)
+            current = self.resolve(headers["ETag"]) if "$ref" in headers["ETag"] else headers["ETag"]
+            self.assertEqual(current["schema"]["pattern"], '^"[0-9a-f]{64}"$')
+            if etag is not None:
+                self.assertEqual(current, etag)
+            etag = current
+            if status == "304":
+                self.assertNotIn("content", response)
+        self.assertEqual(self.resolve(admin["responses"]["200"])["headers"]["Cache-Control"]["schema"]["const"], "private, no-store")
+        for operation in (public, admin):
+            kind = next(self.resolve(p) for p in operation["parameters"] if self.resolve(p)["name"] == "kind")
+            self.assertEqual(kind["schema"]["enum"], ["image", "thumb"])
+            for invalid in ("raw", ""):
+                self.assertTrue(list(Draft202012Validator(kind["schema"]).iter_errors(invalid)))
+            response = self.resolve(operation["responses"]["400"])
+            example = response["content"]["application/json"]["examples"]["invalidKind"]["value"]
+            self.assertEqual(example["code"], "VALIDATION_ERROR")
+            self.assertEqual(example["errors"][0]["field"], "kind")
+
+    def test_upload_intent_bounds_and_status_do_not_expose_storage_keys(self):
+        body = {"filename": "sample.png", "content_type": "image/png", "size_bytes": 100,
+                "target_type": "PRODUCT", "target_id": "33333333-3333-4333-8333-333333333333"}
+        validator = self.validator("ImageUploadCreate")
+        self.assertEqual(list(validator.iter_errors(body)), [])
+        for field, value in (("content_type", "image/webp"), ("size_bytes", 5242881),
+                             ("size_bytes", None), ("target_type", "REVIEW"), ("url", "https://invalid.local")):
+            self.assertTrue(list(validator.iter_errors({**body, field: value})))
+        props = self.doc["components"]["schemas"]["ImageUploadStatus"]["properties"]
+        self.assertFalse({"raw_key", "image_key", "thumb_key", "lease_token", "put_url"} & props.keys())
+        self.assertEqual(props["asset_availability"]["enum"], ["AVAILABLE", "DELETING", "DELETED", None])

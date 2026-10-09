@@ -281,4 +281,130 @@ Gate task là work package trong [backlog](../delivery/10_backlog.md). Mã task 
   hợp lệ, tránh lỗi duplicate giả. [Review PR15](https://github.com/trunghieunef/fashion-ecommerce-platform/pull/15),
   `TASK:CAT-01` phần 1b, `REQ:CAT-03/06`; không nghiệm thu parent hoặc tự merge.
 
+- CAT-03 backing store local — **chủ dự án, 2026-10-07**: chọn object storage
+  S3-compatible trong Docker local, code dùng S3 API/endpoint cấu hình để staging
+  đổi config. Bind host 127.0.0.1, bucket private, không policy public; local-up.sh
+  sinh credential vào .env local, không commit/in ra. Không provision AWS/bucket
+  thật. Trình 1–2 image kèm license/bảo trì kiểm tại ngày chọn và pin digest;
+  SDK S3 là dependency mới phải trình version để duyệt, ghi 17 sau lựa chọn.
+  [Research](../evidence/cat-03-stack-research-2026-10-07.md) và
+  [spec bản nháp](../superpowers/specs/2026-10-07-cat-03-media-design.md) chưa thay
+  contract/schema hoặc là phê duyệt image/SDK/flow upload. REQ:CAT-11, TASK:CAT-03.
+
+- CAT-03 lựa chọn image/SDK có điều kiện — **chủ dự án, 2026-10-07**: RustFS
+  1.0.1/digest đã xác minh, Apache-2.0, chỉ local, không staging/prod. Spike
+  S3 path-style/endpoint override/presigned PUT/type-length/HEAD/GET/DELETE và
+  COPY nếu dùng, anonymous GET phải bị từ chối; lỗi báo chủ dự án và fallback
+  Garage 2.4.1 được cho phép. Code chỉ dùng API có trên AWS S3.
+  AWS SDK v2 2.55.12/BOM Apache-2.0 chỉ catalog-service, S3 + URLConnection,
+  exclude Apache/Netty khỏi S3, không async/native CRT. Dependency tree phải
+  chứng minh không đổi các version Boot quản lý hoặc thêm Jackson xung đột.
+  StaticCredentialsProvider local/config endpoint/region, không AWS profile/default
+  chain. Ghi [17](../engineering/17_tech_stack.md) và
+  [spike evidence](../evidence/cat-03-stack-research-2026-10-07.md) trước chốt spec.
+
+- CAT-03 flow/ownership — **chủ dự án, 2026-10-07**: presigned PUT 300s quarantine
+  → POST complete HEAD/stream/magic/dimensions/re-encode strip EXIF/GPS → PUT
+  images chỉ DB/expected_version; GET upload status để recover. Owner actor JWT
+  + target, server sinh key, không nhận URL/key/chuyển owner. Complete idempotent
+  theo upload_id, terminal không đọc quarantine, không CopyObject approve; tx
+  ngắn PROCESSING claim → S3 ngoài tx → tx ngắn kết quả. ImageIO built-in,
+  concurrency giới hạn và cleanup quarantine sau complete/expiry; limits/schedule
+  cụ thể cần chốt trước spec toàn bộ và implementation plan.
+
+- CAT-03 approved key/recovery — **chủ dự án, 2026-10-07**: key cố định từ upload_id
+  + PutObject If-None-Match:* first-writer-wins, thay chỉ đạo retry overwrite.
+  Spike RustFS lần hai phải 412 (đã PASS); nếu không hỗ trợ báo chủ dự án, không
+  tự đổi phương án. Recovery lấy size/dimensions/checksum/type từ object approved
+  thực tế và kiểm lại hợp lệ, không metadata candidate in-memory. Tx APPROVED
+  CAS lease token/attempt còn hiệu lực; attempt hết lease không ghi DB. S3 412
+  không lộ client; trùng PROCESSING trả status/409, client GET status. Đồng bộ
+  [spec security](../superpowers/specs/2026-10-07-cat-03-media-design.md) và 13;
+  chưa duyệt toàn bộ spec/plan hoặc endpoint shapes/errors.
+
+- CAT-03 validation limits — **chủ dự án, 2026-10-07**: JPEG/PNG only;
+  raw và từng approved/thumb output <=5 MiB, width/height 1..8192, <=25M pixel.
+  Approved cạnh dài <=2560, thumb <=800, giữ tỷ lệ/không upscale. Một re-encode
+  /instance, không queue; hết slot429/Retry-After:1 trước đổi upload state.
+  Output vượt cap, CMYK JPEG/file hỏng/ảnh ImageIO không xử lý được/decode
+  exception → REJECTED có code/test, không500. WebP/format khác duyệt riêng.
+  README catalog và 16 ghi ~100MB/buffer decode25MP, chưa là peak heap/sizing
+  proof và không tự tăng máy/chi phí. Spec toàn bộ vẫn cần review sau chốt contract.
+
+- CAT-03 read/publish — **chủ dự án, 2026-10-07**: stream ảnh approved qua Gateway,
+  kiểm visibility khi request tới service; cache public/admin theo hiệu chỉnh
+  review 2026-10-08 bên dưới. Public attach product ACTIVE
+  hoặc collection ACTIVE/trong[start,end)/có >=1 ACTIVE product. Admin preview
+  catalog.write xem DRAFT/INACTIVE; không download raw/browse CAT-02.
+  Publish cần >=1 APPROVED image/alt vi-en hợp lệ, giữ gates CAT-01a. Gỡ ảnh cuối
+  ACTIVE400 field images, unpublish trước; ACTIVE legacy V001 giữ status/không
+  backfill, được attach. Không gate cover/lookbook collection hoặc ảnh từng màu.
+
+- CAT-03 state/TTL/cleanup — **chủ dự án, 2026-10-07**: PENDING intent15phút,
+  presigned300s, PROCESSING lease120s và CAS token/lease khi commit; trùng
+  PROCESSING409 CONFLICT/UPLOAD_PROCESSING, REJECTED400 VALIDATION_ERROR/IMAGE_REJECTED
+  với reason_code cụ thể, EXPIRED409 CONFLICT/UPLOAD_EXPIRED; S3 lỗi503 retry cùng
+  upload_id. Dọn raw sau terminal/sweep expired60s batch100 tránh lease còn hiệu
+  lực; lifecycle chỉ quarantine expire1ngày để bắt PUT muộn. Không xóa approved/
+  ảnh đang attach. S3 lifecycle config round-trip đã spike PASS; chưa chờ ngày
+  để chứng minh lifecycle thực xóa object. Shape contract cuối cần spec review.
+
+- CAT-03 attach/read — **chủ dự án, 2026-10-07**: GET/PUT product/collection images,
+  full replacement + expected_version resource, không key;20 product/50 collection,
+  alt strip plain1–255 VI/EN, caption0–500, sort0..2147483647 cho trùng, đọc
+  (sort_order,asset_id), variant_color đúng product hoặc null. Cover nullable và
+  thuộc images request, sai400 cover_asset_id; duplicate400 images[i].asset_id.
+  Ownership chỉ mới-gắn; asset đang attach cho actor khác giữ/sửa alt/sort.
+  Upload thiếu/foreign owner404. PUT version+1/snapshot/audit diff asset/cover,
+  audit chỉ asset_id. ProductACTIVE không0ảnh; collection không cover gate.
+
+- CAT-03 detached/orphan GC — **chủ dự án, 2026-10-07**:7ngày từ gỡ, approved
+  chưa attach7ngày từ approve; reattach trong hạn chỉ uploader/target cũ, không
+  ngoại lệ OPS. GC mỗi giờ/batch100, single-runner lease platform-durability;
+  attach và GC cùng lock asset, DELETING/DELETED400 images[i].asset_id.
+  Claim quá hạn/không reference tx ngắn → xóa image/thumb ngoài tx → kết quả
+  CAS/retry giới hạn, lỗi lặp log/metric không chặn batch; key mất coi success.
+  Không xóa object trong PUT hoặc ảnh đang attach/evidence. Quarantine chưa
+  complete dọn sau presigned hết hạn+24h; terminal dọn raw. Lifecycle chốt mới
+  ở mục sau thay policy1ngày trước để không dọn sớm.
+  Ghi13/spec; chưa thực thi GC hoặc nghiệm thu TASK:CAT-03/REQ:CAT-11.
+
+- CAT-03 deadline/lifecycle superseding — **chủ dự án, 2026-10-07**: PUT300s,
+  complete_deadline=put_expires_at+24h (thay TTL intent15phút trước); quá hạn
+  EXPIRED/409 UPLOAD_EXPIRED, không đọc S3. Quarantine HEAD404 có lỗi controlled
+  UPLOAD_NOT_UPLOADED trước hạn, không500. Sweep sau deadline xóa key mất coi
+  success và ghi EXPIRED, bảo vệ valid PROCESSING lease. Lifecycle quarantine
+  **2ngày** làm lưới an toàn, thay1ngày; terminal dọn ngay. Config local-up/spike
+  đã cập nhật, PUT/GET round-trip PASS, chưa runtime expiry proof. 03/13/spec/
+  OpenAPI đồng bộ, chưa triển khai endpoint/sweep hoặc nghiệm thu CAT-03.
+
+- CAT-03 partial objects/recovery — **chủ dự án, 2026-10-07**: approved/thumb keys
+  cố định của upload terminal EXPIRED/REJECTED được GC sau7ngày từ terminal,
+  chỉ khi không asset/reference/lease; cùng GC job, không xóa trong request,
+  keys suy ra upload_id/không list bucket. Recovery khi approved đã tồn tại ưu
+  tiên kiểm object/tạo thumb thiếu/commit fenced APPROVED; lỗi tạm thumb/DB
+  không tự EXPIRED/REJECTED. Sweep không expire PROCESSING còn lease. Test
+  approved-written/commit-fail→retry APPROVED và terminal partial→GC sau hạn.
+  Ghi13/spec/schema; không tự vượt deadline đã chốt hoặc triển khai trước duyệt plan.
+
+- CAT-03 spec review — **chủ dự án, 2026-10-08; spec chưa duyệt**: sửa public
+  Cache-Control thành public, max-age=300; ETag cố định theo bytes approved,
+  If-None-Match trùng trả 304 sau kiểm visibility. Chấp nhận cache fresh hiển thị
+  ảnh tối đa 5 phút sau unpublish. Admin giữ private, no-store. S3 không vào
+  readiness catalog-service; route media cần storage trả 503 DEPENDENCY_UNAVAILABLE,
+  báo S3 qua metric/health group media riêng. Media_uploads thêm UNIQUE(id,
+  product_id)/(id, collection_id); association dùng composite FK chặn sai target.
+  Kind lạ/rỗng trả 400 field kind ở cả admin/public. Quarantine sweep dùng row
+  claim FOR UPDATE SKIP LOCKED và cleanup token/lease/CAS; GC vẫn single-runner
+  lease platform riêng. Đồng bộ spec/03/05/06/13/OpenAPI/tests/README/evidence;
+  chưa migration, media runtime hoặc viết implementation plan.
+
+- CAT-03 Gateway image response budget — **chủ dự án, 2026-10-08**: tăng riêng
+  `GET /api/v1/catalog/images/{asset_id}` và `GET /admin/api/v1/catalog/images/{asset_id}`
+  lên 30 giây, như route complete; các route khác giữ 2 giây. S3 mặc định timeout
+  10 giây, nên budget 2 giây cũ có thể biến 503 của service thành 504 tại Gateway.
+  Thêm regression upstream trả chậm 503, giữ envelope và `Cache-Control: no-store`,
+  cùng mutation timeout từng route. Đồng bộ 03/13, spec/plan và README/runbook;
+  không đổi quyền/visibility hoặc readiness. Bằng chứng tại [evidence CAT-03](../evidence/cat-03-local-2026-10-08.md).
+
 Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác và lý do; ảnh hưởng PRD/API/schema/test/task; người quyết định; ngày; link bằng chứng. Chưa có chữ ký phê duyệt giả định thương mại.

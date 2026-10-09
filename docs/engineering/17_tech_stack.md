@@ -75,6 +75,29 @@ Giữ các invariant của [04](../design/04_architecture.md), [05](../design/05
 - Kafka không thay outbox/inbox, dedupe trong transaction và recovery worker. KRaft combined single-node chỉ là profile local/staging, không phải production HA.
 - Không thêm Redis Stack modules, Elasticsearch hoặc database thứ hai khi chưa có task chứng minh nhu cầu.
 
+### 3.1. CAT-03 object storage local và client (2026-10-07)
+
+Chủ dự án chọn **RustFS 1.0.1**, Apache-2.0, kiểm nguồn/bảo trì và digest ngày
+**2026-10-07**: `rustfs/rustfs:1.0.1@sha256:1803faef57627e2d9c2e7d89d655d712ddded5389040054987163043fecb6a3c`.
+**Local-only, không dùng ở staging/prod.** Private bucket, host bind 127.0.0.1;
+local-up.sh sinh credential trong .env local, không commit/in ra. Trước chốt
+spec phải spike các S3 API cần dùng; nếu lỗi báo chủ dự án, fallback đã cho phép
+Garage 2.4.1 (AGPLv3). Không dùng RustFS admin API hoặc tính năng riêng trong
+code nghiệp vụ; staging dùng S3 được provision riêng, không provision trong task.
+
+Chủ dự án duyệt **AWS SDK for Java v2 2.55.12**, Apache-2.0, kiểm ngày
+**2026-10-07**. BOM import chỉ ở dependencyManagement catalog-service;
+hai dependency trực tiếp `s3` + `url-connection-client`, không version rời.
+Exclude `apache-client`/`netty-nio-client` khỏi S3; dùng HTTP URLConnection
+tường minh vì sync S3 chỉ cần HTTP của JDK, không thêm async/native CRT.
+Credential local dùng StaticCredentialsProvider, endpoint/region từ config,
+không default chain hoặc đọc AWS profile thật. Presigner ký offline; nếu cần
+S3Client thì truyền client đã chọn URLConnection, không tạo transport ngầm.
+
+Nguồn, release/date/license/digest và kết quả compatibility/dependency tree tại
+[evidence CAT-03](../evidence/cat-03-stack-research-2026-10-07.md). Chọn version
+không đồng nghĩa spec đã duyệt, storage đã nghiệm thu hoặc staging đã chạy.
+
 ## 4. Frontend: một toolchain, triển khai file tĩnh
 
 | Thành phần | Phiên bản chọn | Quy ước |

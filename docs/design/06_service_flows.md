@@ -126,8 +126,10 @@ version mới; retry cùng key không tạo event khác. Hiện intent PENDING, 
 
 Publish CAT-01a kiểm category/brand ACTIVE và ít nhất một variant ACTIVE, tên VI/EN bắt buộc,
 dưới khóa product + version guard; key/reason/idempotency và audit theo spec đã duyệt.
-Điều kiện có ảnh hoãn tới CAT-03 theo quyết định chủ dự án ngày 2026-10-07; chưa đủ acceptance
-CAT-01. CATALOG_CHANGED/cache invalidation không nằm trong phần 1a.
+Từ CAT-03 Task 6, publish còn kiểm `exists(product_images)` trong cùng transaction (không HEAD S3):
+thiếu ảnh trả 400 field `images`. PUT images không làm product ACTIVE còn 0 ảnh (400
+ACTIVE_PRODUCT_REQUIRES_IMAGE); ACTIVE legacy V001 giữ status. Đọc ảnh public/admin thuộc Task 7.
+CATALOG_CHANGED/cache invalidation không nằm trong phần 1a.
 Publish đặt `published_at` lần đầu; unpublish không sửa cột này, kể cả ACTIVE legacy từ V001
 còn null. CAT-02 chốt backfill/xử lý null cho sort/index theo published_at.
 
@@ -161,6 +163,79 @@ Collection detail đọc parent/items/version bằng một SQL json_agg ORDER BY
 Collection flow đã hiện thực tại Task 2/3, GET/PUT guide Task 4/5, kiểm HTTP Testcontainers;
 guide PUT có replay/category order, create/update race và rollback audit/key.
 Task 6 đã upgrade V004 trên volume local và smoke CAT-01b qua Gateway PASS (OPS synthetic).
+
+### 3.1. CAT-03 media — đã hiện thực và kiểm thử local (spec duyệt 2026-10-08)
+
+Chủ dự án chốt ngày 2026-10-07, chỉnh theo review 2026-10-08: URL PUT sống
+300 giây vào quarantine private; complete_deadline = put_expires_at + 24h.
+Quá hạn trả EXPIRED/409, không đọc S3. Complete dùng transaction ngắn claim
+PROCESSING lease 120 giây, bounded S3/validation/re-encode ngoài transaction,
+rồi CAS token/deadline ghi kết quả. Terminal replay không đọc quarantine hoặc
+thêm audit; raw thiếu trước deadline trả lỗi có kiểm soát, không 500.
+
+Approved/thumb key cố định và conditional PUT không overwrite; 412 recovery
+metadata từ object thực tế. Retry ưu tiên primary đã có, phục hồi thumb và
+commit fenced; lỗi tạm thumb/DB không tự expire/reject. Partial terminal
+non-approved được GC sau 7 ngày nếu không asset/reference/lease; keys suy ra
+upload_id, không list bucket.
+
+PUT images dùng resource/version lock và asset locks để full replacement,
+tăng version và audit diff asset_id. Asset mới gắn phải uploader/đúng target/
+APPROVED; retained asset cho OPS khác sửa. Composite FK tới media_uploads chặn
+sai target tại DB. Product ACTIVE không được còn 0 ảnh; collection không cover
+gate; legacy ACTIVE giữ status. GET snapshot và version dùng một statement.
+
+Public GET kiểm visibility trong DB khi request tới service, trước
+If-None-Match: DB quyết định 304 và 304 không gọi S3; 200 mới mở object, object
+thiếu hoặc lỗi storage trả 503. Response 200/304 dùng Cache-Control: public, max-age=300 và ETag
+cố định theo representation; 304 không body. Cache fresh có thể hiển thị ảnh
+tối đa 5 phút sau unpublish. Admin dùng private, no-store. Kind lạ/rỗng trả 400
+field kind ở cả public/admin. Không thêm public browse CAT-02 hoặc đọc raw.
+S3 outage trả 503 DEPENDENCY_UNAVAILABLE cho thao tác route media cần storage;
+readiness catalog-service không đổi (test readiness UP khi endpoint S3 chết); health group media và metric latency/lỗi S3 theo thao tác còn là acceptance mở (hoãn).
+
+Gỡ không xóa object trong request; retention 7 ngày từ detach hoặc approve nếu
+chưa từng attach. Reattach chỉ uploader/target cũ. GC mỗi giờ/batch 100 dùng
+single-runner lease platform: claim DELETING dưới asset lock, xóa ngoài transaction,
+finalize CAS; attach từ chối DELETING/DELETED. Quarantine sweep mỗi 60 giây/
+batch 100 dùng row claim FOR UPDATE SKIP LOCKED, cleanup token/lease và CAS,
+không expire PROCESSING còn lease. Terminal dọn ngay; pending quá deadline dọn
+và ghi EXPIRED. Lifecycle quarantine 2 ngày làm lưới an toàn.
+Policy tại 13, contract tại 03/OpenAPI và
+[spec](../superpowers/specs/2026-10-07-cat-03-media-design.md).
+
+**Complete đã hiện thực (Task 5, `UploadService.complete`).** Thứ tự: đọc row
+theo id + actor (thiếu/khác owner 404); terminal trả ngay (APPROVED 200 asset,
+REJECTED 400 IMAGE_REJECTED với reason đã lưu, EXPIRED 409) không gọi S3/audit;
+quá deadline theo DB clock thì chuyển EXPIRED (PENDING hoặc PROCESSING hết lease)
+và trả 409 UPLOAD_EXPIRED; PROCESSING còn lease trả 409 UPLOAD_PROCESSING. Sau
+preflight mới lấy slot (Semaphore 1/instance); không có slot trả 429
+RATE_LIMITED/IMAGE_PROCESSING_CAPACITY, Retry-After: 1, không đổi state. Claim
+một statement: PROCESSING, attempt+1, lease_token mới, lease 120 giây, chỉ khi
+chưa quá deadline và PENDING hoặc lease cũ đã hết. Ngoài transaction: đọc
+approved primary trước; có thì verify và không đọc raw. Chưa có thì HEAD raw
+(thiếu → release CAS về PENDING, 409 UPLOAD_NOT_UPLOADED), so size HEAD và bytes
+đọc với size_bytes (khác → IMAGE_SIZE_MISMATCH), re-encode, putIfAbsent rồi đọc
+lại primary thực tế (first writer wins). Thumb luôn sinh từ primary thực tế
+đã verify; thumb có sẵn được verify ≤ 800. Transaction kết quả CAS id +
+lease_token + lease còn hạn + deadline: APPROVED + media_assets (metadata/sha256
+từ bytes thực tế) + audit `catalog.media.upload.approve`, hoặc REJECTED +
+reason_code + audit `catalog.media.upload.reject`; mỗi kết quả audit đúng một
+lần; response 400 IMAGE_REJECTED dùng cùng metadata (request_id) với audit
+reject. Ngay trước mỗi lần ghi S3 (putIfAbsent primary và thumb) worker kiểm lại
+trên row: lease_token của mình, lease_until > now() và now() <= deadline; sai thì
+không ghi. Mất fence hoặc CAS 0 dòng: không ghi kết quả; nếu row vẫn mang token
+của mình thì quá deadline → EXPIRED (xóa lease), chưa quá → release về PENDING;
+sau đó đọc lại row một lần và trả theo state hiện tại (EXPIRED 409
+UPLOAD_EXPIRED; row còn claim được thì 409 UPLOAD_PROCESSING). Storage lỗi tạm → release CAS,
+503; lỗi DB không tự reject/expire, lease hết hạn sẽ được claim lại. Sau commit
+xóa raw best-effort và đặt quarantine_cleaned_at; lỗi cleanup chỉ log class lỗi,
+để sweep xử lý. Kiểm bằng `UploadCompleteIntegrationTest` (PostgreSQL + RustFS
+Testcontainers, spy MediaStorage tiêm lỗi; mutation bỏ từng điều kiện của CAS
+kết quả — lease_token, lease_until, deadline — và điều kiện deadline của fence
+trước ghi S3 đều làm test tương ứng FAIL). Sweep/GC, PUT images và public/admin
+read đã hiện thực và kiểm thử local (PostgreSQL + RustFS Testcontainers); chưa
+nghiệm thu CAT-03.
 
 ## 4. `cart-service`
 
