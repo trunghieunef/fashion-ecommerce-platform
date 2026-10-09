@@ -6,7 +6,7 @@ Sprint 1 theo ADR-18 chỉ triển khai local và đạt checkpoint S1-local tro
 
 Tiếp tục trên máy mới: đọc [handoff S1-local ngày 2026-10-02](superpowers/plans/2026-10-02-s1-local-machine-handoff.md)
 để biết toolchain, thứ tự kiểm thử, phạm vi và mẫu prompt cho agent.
-Tiến độ mới nhất: [handoff CAT-01b ngày 2026-10-07](superpowers/plans/2026-10-07-cat-01b-handoff.md),
+Tiến độ trước CAT-03: [handoff CAT-01b ngày 2026-10-07](superpowers/plans/2026-10-07-cat-01b-handoff.md),
 [evidence CAT-01b](evidence/cat-01b-local-2026-10-07.md); CAT-01a đã merge PR #14,
 CAT-01b đã merge [PR15 vào main](https://github.com/trunghieunef/fashion-ecommerce-platform/pull/15)
 tại f5c64d9; review không Critical/Important, 4Minor đã sửa theo chốt chủ dự án,
@@ -68,7 +68,7 @@ Mỗi loại dữ liệu có một tài liệu chủ quản như bảng trên. K
 2. Thay đổi nghiệp vụ: PO quyết định; đổi boundary/contract/schema: TL và producer/consumer cùng review.
 3. Cập nhật 08 trước hoặc cùng PR thay đổi; không dùng lại mã yêu cầu cũ cho nghĩa khác.
 4. OpenAPI/JSON Schema được tạo trong PLT-02 từ 03. Khi có code, contract thực thi và tài liệu phải cùng PR; CI kiểm tra drift.
-5. Trạng thái task: Planned, In progress, Review, Done, Blocked. S1-local được Codex (GPT-6) nghiệm thu theo chỉ định chủ dự án ngày 2026-10-04. Parent PLT-01/02/03, SEC-01 vẫn In progress; contract core đã review, durability/security được user-service dùng. Phase 1A có USR-01/02 và catalog admin CAT-01a/1b đã merge; parent còn chờ nghiệm thu. [Handoff CAT-01b](superpowers/plans/2026-10-07-cat-01b-handoff.md) là bản mới nhất; còn media/public catalog, cart/checkout và UI auth-admin. Chưa nghiệm thu G0 hoặc PLT-04; O01/SEO/O02 ngoài S1 còn mở. Chi tiết ở 10/16 và evidence.
+5. Trạng thái task: Planned, In progress, Review, Done, Blocked. S1-local được Codex (GPT-6) nghiệm thu theo chỉ định chủ dự án ngày 2026-10-04. Parent PLT-01/02/03, SEC-01 vẫn In progress; contract core đã review, durability/security được user-service dùng. Phase 1A có USR-01/02 và catalog admin CAT-01a/1b đã merge; parent còn chờ nghiệm thu. [Handoff CAT-03](superpowers/plans/2026-10-08-cat-03-handoff.md) là bản hiện tại; media đã hiện thực local, PR16 đang review và chưa nghiệm thu. Public catalog, cart/checkout và UI auth-admin còn phía sau. Chưa nghiệm thu G0 hoặc PLT-04; O01/SEO/O02 ngoài S1 còn mở. Chi tiết ở 10/16 và evidence.
 6. Chỉ đánh dấu đã test/deploy/duyệt khi có bằng chứng, người xác nhận và ngày.
 
 ## 4. Thuật ngữ chung
