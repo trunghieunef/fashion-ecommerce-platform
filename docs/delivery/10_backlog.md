@@ -135,6 +135,15 @@ trong CAT-01b; cần test collection rỗng/chỉ product chưa publish không �
 start_at tương lai, đúng biên start_at/end_at, lọc bỏ product INACTIVE và unpublish product
 ACTIVE cuối cùng sau khi collection đã được kích hoạt.
 
+Update 2026-10-11 — nghiệm thu local: chủ dự án chỉ định Claude Code (agent) nghiệm thu thay
+reviewer người/TL (tiền lệ S1-local); không độc lập vì cùng là tác giả. **Done (local, trước G0):**
+`TASK:PLT-03`, `TASK:USR-01` (gồm 1b-ii), `TASK:USR-02`, `TASK:CAT-01`, `TASK:CAT-03`.
+CAT-03 giữ follow-up mở đã hoãn: health group `media`, metric latency/lỗi S3 theo thao tác,
+lifecycle 2 ngày, đo heap. Email reset thật thuộc NOT-01, UI admin thuộc ADM-01, public read
+thuộc CAT-02; relay Kafka end-to-end/staging chưa kiểm. **Chưa nghiệm thu:** PLT-01 (SEO SPA,
+O02), PLT-02 (O02, consumer review), SEC-01 (O06), PLT-05 (staging), PLT-04 (O01).
+Bằng chứng và từng tiêu chí: [evidence nghiệm thu](../evidence/acceptance-2026-10-11.md).
+
 ## 2. Phase 0 — nền tảng
 
 | Task | Owner role / ngày | Phụ thuộc | REQ | Đầu ra và acceptance |
