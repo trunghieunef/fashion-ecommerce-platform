@@ -191,6 +191,28 @@ class BrowseFiltersTest {
         new ProductCursor("UNKNOWN", "0", ID, "").encode(), "UNKNOWN", ""));
   }
 
+  @Test void timestampCursorRejectsUtcYearsOutsideDatabaseDomain() {
+    var filters = BrowseFilters.parse(Map.of(), false);
+    for (var value : List.of("+300000-01-01T00:00:00Z", "+1000000000-01-01T00:00:00Z",
+        "0000-12-31T23:59:59Z", "+10000-01-01T00:00:00Z")) {
+      assertCursorError(new ProductCursor("NEWEST", value, ID, filters.hash()).encode(), filters);
+      var error = assertThrows(Api.Problem.class, () -> ProductCursor.decode(
+          new ProductCursor("COLLECTIONS", value, ID, "").encode(), "COLLECTIONS", ""));
+      assertThat(error.getMessage()).isEqualTo("INVALID_CURSOR");
+      assertThat(error.errors()).extracting(Api.FieldError::field).containsExactly("cursor");
+    }
+  }
+
+  @Test void timestampCursorAcceptsUtcYearBoundaries() {
+    var filters = BrowseFilters.parse(Map.of(), false);
+    for (var value : List.of("0001-01-01T00:00:00Z", "9999-12-31T23:59:59.999999Z")) {
+      var newest = new ProductCursor("NEWEST", value, ID, filters.hash());
+      assertThat(ProductCursor.decode(newest.encode(), filters)).isEqualTo(newest);
+      var collections = new ProductCursor("COLLECTIONS", value, ID, "");
+      assertThat(ProductCursor.decode(collections.encode(), "COLLECTIONS", "")).isEqualTo(collections);
+    }
+  }
+
   private static Api.Problem filterError(Map<String, String> params, boolean requireQ) {
     return assertThrows(Api.Problem.class, () -> BrowseFilters.parse(params, requireQ));
   }

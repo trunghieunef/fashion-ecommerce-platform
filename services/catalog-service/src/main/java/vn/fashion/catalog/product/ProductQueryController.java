@@ -2,6 +2,7 @@ package vn.fashion.catalog.product;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
+import java.util.Map;
 import io.micrometer.tracing.Span;
 import io.micrometer.tracing.Tracer;
 import java.util.UUID;
@@ -15,26 +16,38 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import org.springframework.web.server.ResponseStatusException;
 
 @RestController
-@RequestMapping("/api/v1/catalog/products")
+@RequestMapping("/api/v1/catalog")
 public class ProductQueryController {
-  private final ProductQueryRepository products;
+  private final ProductBrowseRepository products;
   private final Tracer tracer;
 
-  public ProductQueryController(ProductQueryRepository products, Tracer tracer) {
+  public ProductQueryController(ProductBrowseRepository products, Tracer tracer) {
     this.products = products;
     this.tracer = tracer;
   }
 
-  @GetMapping
+  @GetMapping("/products")
   public ResponseEntity<ApiResponse<ProductPage>> listProducts(
-      @RequestParam(defaultValue = "20") int limit) {
+      @RequestParam(defaultValue = "20") int limit, @RequestParam Map<String, String> params) {
+    return browse(limit, params, false);
+  }
+
+  @GetMapping("/search")
+  public ResponseEntity<ApiResponse<ProductPage>> search(
+      @RequestParam(defaultValue = "20") int limit, @RequestParam Map<String, String> params) {
+    return browse(limit, params, true);
+  }
+
+  private ResponseEntity<ApiResponse<ProductPage>> browse(int limit, Map<String, String> params, boolean requireQ) {
     if (limit < 1 || limit > 100) {
       throw new InvalidLimitException(limit);
     }
+    BrowseFilters filters = BrowseFilters.parse(params, requireQ);
+    ProductCursor after = params.containsKey("cursor") ? ProductCursor.decode(params.get("cursor"), filters) : null;
     ResponseMetadata metadata = metadata();
     return ResponseEntity.ok()
         .header("X-Correlation-Id", metadata.traceId())
-        .body(new ApiResponse<>("OK", products.findActive(limit), metadata));
+        .body(new ApiResponse<>("OK", products.browse(filters, after, limit), metadata));
   }
 
   @ExceptionHandler({InvalidLimitException.class, ResponseStatusException.class,

@@ -104,6 +104,10 @@ Cursor: base64url (không padding) của JSON `{"s": sort, "v": value, "id": uui
 `f` là 16 ký tự hex đầu của SHA-256 bộ lọc chuẩn hóa (`q` trim + lowercase, các tham số theo thứ tự cố định).
 Giải mã lỗi, sai kiểu, `s` hoặc `f` không khớp request → `400` field `cursor`. Cursor không ký HMAC vì chỉ
 dẫn tới dữ liệu public đã lọc.
+Giá trị cursor được kiểm trước khi bind SQL: timestamp `NEWEST`/`COLLECTIONS` phải là Instant có năm UTC
+1–9999; giá/sold là số nguyên `long` không âm; `COLLECTION:<slug>` có `sort_order` 0–2_147_483_647.
+Ngoài các miền này → `400 VALIDATION_ERROR`, message `INVALID_CURSOR`, field `cursor`
+(chủ dự án xác nhận ngày 2026-10-11; cùng miền timestamp với CAT-01b).
 
 Detail product đọc product, variants, images, size guide trong một transaction read-only.
 

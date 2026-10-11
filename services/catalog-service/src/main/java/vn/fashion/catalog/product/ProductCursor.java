@@ -3,6 +3,7 @@ package vn.fashion.catalog.product;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.DateTimeException;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
@@ -36,7 +37,8 @@ public record ProductCursor(@JsonProperty("s") String sort, @JsonProperty("v") S
       if (!id.toString().equalsIgnoreCase(rawId) || !sort.equals(expectedSort)
           || !filters.equals(expectedFilters)) throw new IllegalArgumentException();
       if (sort.equals("NEWEST") || sort.equals("COLLECTIONS")) {
-        Instant.parse(value);
+        int year = Instant.parse(value).atOffset(ZoneOffset.UTC).getYear();
+        if (year < 1 || year > 9999) throw new IllegalArgumentException();
       } else if (sort.equals("BEST_SELLING") || sort.equals("PRICE_ASC") || sort.equals("PRICE_DESC")) {
         if (Long.parseLong(value) < 0) throw new IllegalArgumentException();
       } else if (sort.startsWith("COLLECTION:") && sort.length() > "COLLECTION:".length()) {
