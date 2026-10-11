@@ -120,7 +120,8 @@ và [evidence](../evidence/cat-01b-local-2026-10-07.md). Đã merge PR15 tại f
 trên đúng45d7610 đều SUCCESS. **CAT-03 safe media: In progress, đã hiện thực local** theo
 [plan](../superpowers/plans/2026-10-08-cat-03-media.md) (spec đã duyệt 2026-10-08): V005/V006,
 S3/RustFS, re-encode, upload intent/complete/status, attach + publish gate, public/admin read,
-sweep/GC, route Gateway complete 30s và smoke Gateway→RustFS; xem
+sweep/GC, route Gateway complete và GET ảnh 30s, smoke Gateway→RustFS; đã merge PR16 vào `main`
+tại `5dbd088` ngày 2026-10-09, Application/Documentation CI SUCCESS; xem
 [evidence](../evidence/cat-03-local-2026-10-08.md) và
 [handoff](../superpowers/plans/2026-10-08-cat-03-handoff.md). Chưa deploy/staging và chưa Done
 tới khi chủ dự án nghiệm thu CAT-03. Acceptance còn mở (hoãn): health group `media` và metric latency/lỗi S3 theo thao tác.
