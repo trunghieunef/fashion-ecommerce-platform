@@ -206,6 +206,7 @@ hoặc bằng chứng pod sizing; không tự tăng node/heap để nhận ảnh
 | `CATALOG_DB_USERNAME` / `CATALOG_DB_PASSWORD` | `catalog_runtime` / synthetic local value | Runtime datasource |
 | `CATALOG_DB_MAX_POOL_SIZE` | `10` | Hikari runtime pool |
 | `CATALOG_JWT_PUBLIC_KEYS` | bắt buộc, không default | `kid:base64-X.509` để kiểm access token ES256; dùng public keys của user-service |
+| `CATALOG_INTERNAL_CALLERS` | rỗng | Public keys của caller, cùng định dạng `kid:base64-X.509`; quote chỉ cho `cart-service` và `order-service` |
 | `CATALOG_MIGRATION_DB_URL` | `jdbc:postgresql://localhost:5432/catalog` | Flyway datasource |
 | `CATALOG_MIGRATION_DB_USERNAME` / `CATALOG_MIGRATION_DB_PASSWORD` | `catalog_migration` / synthetic local value | Flyway migration |
 
@@ -233,10 +234,29 @@ dùng cho luồng upload complete (`UploadService.complete`). Giới hạn (hằ
 Ước lượng heap: buffer ARGB 25 MP khoảng 100 MB (4 byte/pixel), chưa đo thực tế; cần đo trước khi chốt
 giới hạn đồng thời (slot re-encode 1/instance) và heap của container. Test: `ImageProcessorTest` (unit, không Docker).
 
+## Internal variant quote (CAT-02a)
+
+`POST /internal/api/v1/catalog/variants/quote` nhận `{"variant_ids":["uuid"]}` với
+1–100 UUID chuẩn không trùng (kể cả khác casing), giữ thứ tự input. Service token
+ADR-19 phải có audience `catalog-service`; chỉ `cart-service`/`order-service` được gọi.
+Thiếu/sai/hết hạn token trả `401 UNAUTHORIZED/INVALID_SERVICE_TOKEN`; caller có key
+nhưng ngoài allowlist trả `403 FORBIDDEN/CALLER_NOT_ALLOWED`. Gateway chặn route internal (404).
+
+Một query PostgreSQL đọc cả variant không bán được (`found=true`, `active=false`),
+giá VND nguyên theo override hoặc base, product version và ảnh card AVAILABLE đầu tiên.
+ID không tồn tại chỉ có `variant_id`/`found=false`. Đây là snapshot; order phải quote lại
+khi chốt đơn. Mọi response có `Cache-Control: no-store`, bao gồm validation, lỗi binding
+JSON và lỗi HTTP trước controller.
+
+`CATALOG_INTERNAL_CALLERS` rỗng theo mặc định (deny all); Compose chỉ truyền public keys
+được cấu hình. Không sinh key cart/order trong `local-up.sh` khi service chưa tồn tại.
+OpenAPI và tài liệu CAT-02a tổng hợp được đồng bộ ở Task 7; parent CAT-02 còn phần 02b.
+
 ## Test và health
 
 ```bash
 ./mvnw -pl services/catalog-service -Dtest=ProductQueryIntegrationTest test
+./mvnw -pl services/catalog-service -am -Dsurefire.failIfNoSpecifiedTests=false -Dtest=VariantQuoteIntegrationTest test
 ./mvnw -pl services/catalog-service test
 ```
 

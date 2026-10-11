@@ -44,6 +44,7 @@ logging:
 
 fashion:
   catalog:
+    internal-callers: ${CATALOG_INTERNAL_CALLERS:}
     jwt:
       public-keys: ${CATALOG_JWT_PUBLIC_KEYS}
     media:
