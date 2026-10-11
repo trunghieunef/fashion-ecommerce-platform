@@ -251,7 +251,7 @@ CAT-01b Task7 ban đầu có114 test catalog (43 mới), 13 mutation Java và sm
 follow-up 4Minor PR15 có119 test catalog/286 toàn reactor, contracts33; regression và mutation
 year guard tại evidence (không thêm schema/dependency hoặc đổi phạm vi).
 full verification/whole-branch review tại [evidence CAT-01b](../../docs/evidence/cat-01b-local-2026-10-07.md)
-và [handoff](../../docs/superpowers/plans/2026-10-07-cat-01b-handoff.md). Parent CAT-01 vẫn In progress.
+và [handoff](../../docs/superpowers/plans/2026-10-07-cat-01b-handoff.md). CAT-01 Done (local) ngày 2026-10-11 theo [nghiệm thu](../../docs/evidence/acceptance-2026-10-11.md).
 
 Sau khi service chạy:
 

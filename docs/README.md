@@ -13,11 +13,12 @@ tại f5c64d9; review không Critical/Important, 4Minor đã sửa theo chốt c
 full reactor286 PASS; Application/Documentation CI trên45d7610 đều SUCCESS.
 CAT-03 đã có [spec đã duyệt](superpowers/specs/2026-10-07-cat-03-media-design.md) và
 [plan đã duyệt](superpowers/plans/2026-10-08-cat-03-media.md), Task 1–9 đã hiện thực local;
-[PR16](https://github.com/trunghieunef/fashion-ecommerce-platform/pull/16) đã merge vào `main` tại `5dbd088` ngày 2026-10-09, CI xanh; chưa nghiệm thu.
+[PR16](https://github.com/trunghieunef/fashion-ecommerce-platform/pull/16) đã merge vào `main` tại `5dbd088` ngày 2026-10-09, CI xanh.
 RustFS 1.0.1/SDK 2.55.12 đã duyệt và spike PASS; xem [research image/SDK](evidence/cat-03-stack-research-2026-10-07.md).
 Kết quả kiểm thử, mutation và giới hạn còn mở tại [evidence CAT-03](evidence/cat-03-local-2026-10-08.md)
 và [handoff](superpowers/plans/2026-10-08-cat-03-handoff.md).
-Parent CAT-01 còn In progress, chưa nghiệm thu.
+Ngày 2026-10-11 [nghiệm thu local](evidence/acceptance-2026-10-11.md): PLT-03, USR-01, USR-02,
+CAT-01, CAT-03 Done (local, trước G0, agent nghiệm thu theo chỉ định chủ dự án); PLT-01/02/04/05, SEC-01 chưa.
 [Spec CAT-01b](superpowers/specs/2026-10-07-cat-01b-design.md) đã duyệt;
 [plan CAT-01b](superpowers/plans/2026-10-07-cat-01b-catalog-admin.md) đã duyệt Native, commit local từng task;
 Task 1–6 đã có schema V004, GET/POST/PUT admin collection và GET/PUT size guide,
@@ -68,7 +69,7 @@ Mỗi loại dữ liệu có một tài liệu chủ quản như bảng trên. K
 2. Thay đổi nghiệp vụ: PO quyết định; đổi boundary/contract/schema: TL và producer/consumer cùng review.
 3. Cập nhật 08 trước hoặc cùng PR thay đổi; không dùng lại mã yêu cầu cũ cho nghĩa khác.
 4. OpenAPI/JSON Schema được tạo trong PLT-02 từ 03. Khi có code, contract thực thi và tài liệu phải cùng PR; CI kiểm tra drift.
-5. Trạng thái task: Planned, In progress, Review, Done, Blocked. S1-local được Codex (GPT-6) nghiệm thu theo chỉ định chủ dự án ngày 2026-10-04. Parent PLT-01/02/03, SEC-01 vẫn In progress; contract core đã review, durability/security được user-service dùng. Phase 1A có USR-01/02 và catalog admin CAT-01a/1b đã merge; parent còn chờ nghiệm thu. [Handoff CAT-03](superpowers/plans/2026-10-08-cat-03-handoff.md) là bản hiện tại; media đã hiện thực local, PR16 đã merge và chưa nghiệm thu. Public catalog, cart/checkout và UI auth-admin còn phía sau. Chưa nghiệm thu G0 hoặc PLT-04; O01/SEO/O02 ngoài S1 còn mở. Chi tiết ở 10/16 và evidence.
+5. Trạng thái task: Planned, In progress, Review, Done, Blocked. S1-local được Codex (GPT-6) nghiệm thu theo chỉ định chủ dự án ngày 2026-10-04. Ngày 2026-10-11 Claude Code nghiệm thu local theo chỉ định chủ dự án: PLT-03, USR-01, USR-02, CAT-01, CAT-03 Done (local, trước G0); parent PLT-01/02, SEC-01 vẫn In progress ([evidence](evidence/acceptance-2026-10-11.md)). [Handoff CAT-03](superpowers/plans/2026-10-08-cat-03-handoff.md) là bản hiện tại. Public catalog, cart/checkout và UI auth-admin còn phía sau. Chưa nghiệm thu G0 hoặc PLT-04; O01/SEO/O02 ngoài S1 còn mở. Chi tiết ở 10/16 và evidence.
 6. Chỉ đánh dấu đã test/deploy/duyệt khi có bằng chứng, người xác nhận và ngày.
 
 ## 4. Thuật ngữ chung
