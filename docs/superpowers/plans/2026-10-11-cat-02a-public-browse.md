@@ -224,7 +224,7 @@ Mệnh đề SQL động (chỉ ghép hằng, bind mọi giá trị):
 - Produces:
   - Mảnh SQL visibility collection: `co.status='ACTIVE' and (co.start_at is null or co.start_at <= now()) and (co.end_at is null or co.end_at > now()) and exists (select 1 from collection_items ci join products p on p.id=ci.product_id ... <FROM_PUBLIC điều kiện> where ci.collection_id=co.id)`.
   - `CollectionSummary(UUID id, String slug, String nameVi, String nameEn, UUID coverAssetId, Instant startAt, Instant endAt)`; `CollectionPage(List<CollectionSummary> items, String nextCursor)`.
-  - `CollectionDetail(CollectionSummary collection, List<LookbookView> lookbook, List<ProductSummary> products, String nextCursor)`; `LookbookView(UUID assetId, String altVi, String altEn, String captionVi, String captionEn, int sortOrder)` (chỉ asset AVAILABLE).
+  - `CollectionDetail(CollectionSummary collection, List<LookbookView> lookbook, List<ProductSummary> products, String nextCursor)`; `LookbookView(UUID assetId, String captionVi, String captionEn, int sortOrder)` (chỉ asset AVAILABLE; frontend dùng caption làm alternate text theo quyết định chủ dự án 2026-10-11, khớp V006). Cover không AVAILABLE trả `coverAssetId=null`.
   - Cursor collection list: keyset `(co.created_at, co.id)` desc; cursor products: `(ci.sort_order, ci.product_id)` asc. Dùng lại `ProductCursor` với `sort` = `"COLLECTIONS"` hoặc `"COLLECTION:" + slug`, `filters` = `""`.
   - Controller: `GET /api/v1/catalog/collections?limit&cursor`, `GET /api/v1/catalog/collections/{slug}?limit&cursor`; limit sai → 400 field `limit`; không public → 404 `COLLECTION_NOT_FOUND`.
 

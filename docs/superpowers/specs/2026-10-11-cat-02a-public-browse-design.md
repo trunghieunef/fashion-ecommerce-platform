@@ -49,10 +49,13 @@ Envelope và lỗi theo 03 §1.2. Locale từ `Accept-Language` vi/en, mặc đ�
 | `GET /categories` | — | Cây category ACTIVE tối đa 2 cấp: `id, slug, name_vi, name_en, children[]` |
 | `GET /brands` | — | Brand ACTIVE `id, name` |
 | `GET /collections` | `limit`, `cursor` | Collection hiển thị: `id, slug, name_vi, name_en, cover_asset_id, start_at, end_at` (cover từ V005, null nếu chưa chọn) |
-| `GET /collections/{slug}` | `limit`, `cursor` | Collection + `lookbook[]` (asset, alt, caption, sort) + `products` (card như list, theo `sort_order`) + `next_cursor` |
+| `GET /collections/{slug}` | `limit`, `cursor` | Collection + `lookbook[]` (`asset_id, caption_vi, caption_en, sort_order`; chỉ asset AVAILABLE) + `products` (card như list, theo `sort_order`) + `next_cursor` |
 | `GET /size-guides/{category_id}` | `locale` | `category_id, locale, guideline_html, table`; 404 nếu không có hoặc category không ACTIVE |
 
 `GET /products` hiện tại (PLT-01 sample) chỉ được **thêm** field; field cũ giữ nguyên.
+
+Lookbook không có `alt_vi`/`alt_en` theo schema V006; frontend dùng caption theo locale làm alternate text
+(chủ dự án xác nhận ngày 2026-10-11). Cover cũng chỉ trả `cover_asset_id` khi asset AVAILABLE, nếu không là null.
 
 Tham số và giới hạn:
 
