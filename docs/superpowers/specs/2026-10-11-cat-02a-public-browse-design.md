@@ -1,7 +1,7 @@
 # CAT-02a — public catalog browse và internal variant quote
 
-**Trạng thái: thiết kế đã duyệt từng phần trong phiên ngày 2026-10-11; bản viết chờ chủ dự án duyệt.**
-Chưa có plan và chưa có code. Làm trên `dev`; chỉ push/mở PR khi chủ dự án yêu cầu.
+**Trạng thái: đã duyệt ngày 2026-10-11.** Khi lập plan sửa cho khớp schema: brand nullable, cover là
+`cover_asset_id`. Plan: [CAT-02a](../plans/2026-10-11-cat-02a-public-browse.md). Chưa có code. Làm trên `dev`; chỉ push/mở PR khi chủ dự án yêu cầu.
 
 `TASK:CAT-02` (phần 02a) · `REQ:CAT-04`, hỗ trợ `REQ:CAT-03/05`.
 Dependency: CAT-01, CAT-03 (Done local 2026-10-11), SEC-01 phần service token (ADR-19).
@@ -48,7 +48,7 @@ Envelope và lỗi theo 03 §1.2. Locale từ `Accept-Language` vi/en, mặc đ�
 | `GET /products/{id}` | — | Product (slug, tên, `description_vi/en` đã sanitize khi ghi, tags, category, brand, min/max price), variants ACTIVE `id, sku, size, color, effective_price`, images `asset_id, alt_vi, alt_en, variant_color, sort_order`, `size_guide` theo locale hoặc null, `available: null`, `observed_at: null` |
 | `GET /categories` | — | Cây category ACTIVE tối đa 2 cấp: `id, slug, name_vi, name_en, children[]` |
 | `GET /brands` | — | Brand ACTIVE `id, name` |
-| `GET /collections` | `limit`, `cursor` | Collection hiển thị: `id, slug, name_vi, name_en, cover_url, start_at, end_at` |
+| `GET /collections` | `limit`, `cursor` | Collection hiển thị: `id, slug, name_vi, name_en, cover_asset_id, start_at, end_at` (cover từ V005, null nếu chưa chọn) |
 | `GET /collections/{slug}` | `limit`, `cursor` | Collection + `lookbook[]` (asset, alt, caption, sort) + `products` (card như list, theo `sort_order`) + `next_cursor` |
 | `GET /size-guides/{category_id}` | `locale` | `category_id, locale, guideline_html, table`; 404 nếu không có hoặc category không ACTIVE |
 
@@ -64,7 +64,7 @@ Tham số và giới hạn:
 
 ## 3. Quy tắc hiển thị và truy vấn
 
-Một product **public** khi tất cả đúng tại thời điểm đọc: `status = 'ACTIVE'`; category và brand ACTIVE;
+Một product **public** khi tất cả đúng tại thời điểm đọc: `status = 'ACTIVE'`; category ACTIVE; brand null hoặc ACTIVE (`brand_id` nullable);
 có ít nhất một variant ACTIVE. Ảnh chỉ lấy asset `availability = 'AVAILABLE'`; ảnh card là ảnh `sort_order`
 nhỏ nhất.
 
