@@ -131,8 +131,6 @@ class CatalogAdminContractTest(unittest.TestCase):
                     self.assertEqual(locale["schema"]["enum"], ["vi", "en"])
                     self.assertTrue(list(Draft202012Validator(locale["schema"]).iter_errors("fr")))
                     self.assertIn("400", op["responses"])
-        self.assertNotIn("/api/v1/catalog/collections/{slug}", self.doc["paths"])
-        self.assertNotIn("/api/v1/catalog/size-guides/{category_id}", self.doc["paths"])
 
     def test_collection_mutations_reject_media_and_bound_order_and_timestamps(self):
         self.assertTrue("/admin/api/v1/catalog/collections" in self.doc["paths"], "missing collection POST")

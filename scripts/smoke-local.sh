@@ -14,7 +14,8 @@ assert isinstance(d["data"]["items"], list), d
 assert d["data"]["next_cursor"] is None or isinstance(d["data"]["next_cursor"], str), d
 # ProductSummary in contracts/openapi/catalog.yaml (additionalProperties: false).
 for item in d["data"]["items"]:
-    assert set(item) == {"id", "slug", "name_vi", "name_en"}, item
+    assert set(item) == {"id", "slug", "name_vi", "name_en", "min_price", "max_price", "image"}, item
+    assert isinstance(item["min_price"], int) and 0 <= item["min_price"] <= item["max_price"], item
     uuid.UUID(item["id"])
     assert 1 <= len(item["slug"]) <= 160, item
     assert 1 <= len(item["name_vi"]) <= 255 and 1 <= len(item["name_en"]) <= 255, item
@@ -146,6 +147,14 @@ test "$(status "$image_url")" = 404 # attached but the product is still DRAFT
 echo 'CAT-03 upload/complete/attach PASS'
 catalog_request 200 POST "/products/$product_id/publish" '{"expected_version":2}' "smoke-$catalog_suffix-publish" |   python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["status"] == "ACTIVE" and d["version"] == 3 and d["published_at"]'
 curl --fail --silent --show-error "$GATEWAY_URL/api/v1/catalog/products?limit=100" |   python3 -c 'import json,sys; assert any(p["id"] == sys.argv[1] for p in json.load(sys.stdin)["data"]["items"])' "$product_id"
+# TASK:CAT-02a: browse the published fixture, read ACTIVE variants, then search its accent-free name.
+curl --fail --silent --show-error "$GATEWAY_URL/api/v1/catalog/products?size=M&limit=100" | \
+  python3 -c 'import json,sys; assert any(p["id"] == sys.argv[1] for p in json.load(sys.stdin)["data"]["items"])' "$product_id"
+curl --fail --silent --show-error "$GATEWAY_URL/api/v1/catalog/products/$product_id" | \
+  python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["id"] == sys.argv[1] and any(v["id"] == sys.argv[2] for v in d["variants"])' "$product_id" "$variant_id"
+curl --fail --silent --show-error "$GATEWAY_URL/api/v1/catalog/search?q=Smoke&limit=100" | \
+  python3 -c 'import json,sys; assert any(p["id"] == sys.argv[1] for p in json.load(sys.stdin)["data"]["items"])' "$product_id"
+echo 'CAT-02a browse/detail/search PASS'
 test "$(curl -sS -o /dev/null -D "$headers" -w '%{http_code}' "$image_url")" = 200
 etag="$(grep -i '^etag:' "$headers" | cut -d' ' -f2- | tr -d '\r')"
 test -n "$etag"

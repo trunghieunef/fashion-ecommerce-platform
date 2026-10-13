@@ -1,7 +1,7 @@
 # CAT-02a — public catalog browse và internal variant quote
 
 **Trạng thái: đã duyệt ngày 2026-10-11.** Khi lập plan sửa cho khớp schema: brand nullable, cover là
-`cover_asset_id`. Plan: [CAT-02a](../plans/2026-10-11-cat-02a-public-browse.md). Chưa có code. Làm trên `dev`; chỉ push/mở PR khi chủ dự án yêu cầu.
+`cover_asset_id`. Plan: [CAT-02a](../plans/2026-10-11-cat-02a-public-browse.md). Đã hiện thực và kiểm local trên `dev` (V007, 8 public reads + internal quote); [evidence](../../evidence/cat-02a-local-2026-10-11.md) và [handoff](../plans/2026-10-11-cat-02a-handoff.md). CAT-02 In progress, 02b pending; chỉ push/mở PR khi chủ dự án yêu cầu.
 
 `TASK:CAT-02` (phần 02a) · `REQ:CAT-04`, hỗ trợ `REQ:CAT-03/05`.
 Dependency: CAT-01, CAT-03 (Done local 2026-10-11), SEC-01 phần service token (ADR-19).
@@ -105,6 +105,8 @@ Collection list: `(created_at, id)` desc. Product trong collection: `(sort_order
 
 Cursor: base64url (không padding) của JSON `{"s": sort, "v": value, "id": uuid, "f": filters}`.
 `f` là 16 ký tự hex đầu của SHA-256 bộ lọc chuẩn hóa (`q` trim + lowercase, các tham số theo thứ tự cố định).
+Technical ruling của controller: escape backslash rồi pipe trong từng giá trị trước khi nối bằng pipe,
+để hai bộ filter có delimiter không trùng hash; giữ thứ tự field và wire 16 hex, không đổi miền request.
 Giải mã lỗi, sai kiểu, `s` hoặc `f` không khớp request → `400` field `cursor`. Cursor không ký HMAC vì chỉ
 dẫn tới dữ liệu public đã lọc.
 Giá trị cursor được kiểm trước khi bind SQL: timestamp `NEWEST`/`COLLECTIONS` phải là Instant có năm UTC

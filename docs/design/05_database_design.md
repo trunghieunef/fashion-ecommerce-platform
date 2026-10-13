@@ -239,11 +239,19 @@ Outbox, audit, hash/response idempotency cũ không sửa; consumer giữ đúng
 Migration gán sản phẩm sample vào category seed `uncategorized`
 (`00000000-0000-4000-8000-000000000001`), base_price 0, giữ trạng thái cũ.
 Product ACTIVE từ V001 có thể còn `published_at` null. Unpublish giữ giá trị cũ; chỉ publish
-đặt `coalesce(published_at, now())`. Backfill hoặc xử lý null khi sort/index theo published_at
-thuộc CAT-02; các index price/sold_quantity trong bảng là mục tiêu CAT-02, chưa có trong V002.
+đặt `coalesce(published_at, now())`. CAT-02a dùng coalesce(published_at,created_at) để sort
+NEWEST, không backfill. Các index price/sold_quantity trong bảng chưa có trong V002;
+không tự thêm index trong 02a.
 Outbox/idempotency/audit thuộc catalog-db; audit runtime chỉ INSERT/SELECT, `request_id`
 khớp metadata của response mutation đầu; retry không ghi thêm audit. Collection,
 size-guide đã có từ CAT-01b; media (upload/attach/read) thuộc CAT-03 và đã chạy local. Đây chưa phải acceptance toàn bộ CAT-01.
+
+`TASK:CAT-02a` thêm append-only `V007__public_search_unaccent.sql`: CREATE EXTENSION IF NOT
+EXISTS unaccent và hàm f_unaccent(text) IMMUTABLE bọc unaccent('unaccent', $1). Flyway role
+có CREATE database/schema; runtime gọi hàm để tìm kiếm bỏ dấu, không cần quyền tạo extension.
+Đã kiểm PostgreSQL 17.11 Testcontainers và volume local qua local-up; V001–V006 giữ nguyên.
+Min/max price aggregate lúc query trên variant ACTIVE; không thêm cột projection/trigram/index
+hoặc backfill. Price/sold_quantity optimization đo tải sau; sold consumer/cache/inventory thuộc 02b.
 
 `TASK:PLT-01` có `V001` làm read sample tối thiểu: `products` chỉ gồm `id`,
 `slug`, `status`, tên VI/EN, `version` và timestamps, cùng index public ACTIVE.

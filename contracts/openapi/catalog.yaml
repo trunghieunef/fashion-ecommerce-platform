@@ -6,7 +6,7 @@ info:
     TASK:PLT-02 public sample and TASK:CAT-01a admin (catalog.write; ADR-21 ES256, revocation TTL 15 minutes).
     TASK:CAT-01b admin collection list/detail/mutations and size-guide GET/PUT are implemented, tested with PostgreSQL Testcontainers and exercised through the local Gateway with a synthetic OPS token.
     TASK:CAT-03 upload, complete, status and image attach operations and public/admin image reads are implemented and tested locally (PostgreSQL + RustFS Testcontainers, local Gateway smoke).
-    Full catalog filters/sort/cursor belong to TASK:CAT-02 (docs/design/03_interfaces.md §2.2).
+    TASK:CAT-02a public browse/detail/search/taxonomy/collections/size guides and internal variant quote are implemented and verified locally; parent CAT-02 remains In progress pending 02b.
 servers:
   - url: http://localhost:8080
     description: Local Gateway (S1-local)
@@ -14,51 +14,806 @@ paths:
   /api/v1/catalog/products:
     get:
       operationId: listProducts
-      summary: List ACTIVE products, newest first
+      summary: Browse public product cards
+      x-implementation-status: implemented
+      description: 'CAT-02a implemented. PostgreSQL public products: ACTIVE product and category, brand absent or ACTIVE, at
+        least one ACTIVE variant. Money min/max aggregates coalesce(price_override,base_price) over ACTIVE variants. Only AVAILABLE
+        images. Public JSON HTTP cache headers deferred to CAT-02b. All user values bound; min_price <= max_price. Stable tuple
+        keyset with UUID tie-break; limit+1. Empty items and null next_cursor at end.'
       security: []
       parameters:
-        - $ref: './common.yaml#/components/parameters/Limit'
+      - name: q
+        in: query
+        required: false
+        description: Trimmed; accent-insensitive VI/EN name and slug search. Percent, underscore and backslash are literal.
+        schema: {type: string, minLength: 1, maxLength: 100}
+      - name: category_id
+        in: query
+        required: false
+        description: Category itself or direct children.
+        schema: {type: string, format: uuid}
+      - name: brand_id
+        in: query
+        required: false
+        description: Exact brand UUID.
+        schema: {type: string, format: uuid}
+      - name: size
+        in: query
+        required: false
+        description: Trimmed; size/color case-insensitive and match the same ACTIVE variant; tag exact.
+        schema: {type: string, minLength: 1, maxLength: 64}
+      - name: color
+        in: query
+        required: false
+        description: Trimmed; size/color case-insensitive and match the same ACTIVE variant; tag exact.
+        schema: {type: string, minLength: 1, maxLength: 64}
+      - name: tag
+        in: query
+        required: false
+        description: Trimmed; size/color case-insensitive and match the same ACTIVE variant; tag exact.
+        schema: {type: string, minLength: 1, maxLength: 64}
+      - name: min_price
+        in: query
+        required: false
+        description: Inclusive lower bound on representative min_price.
+        schema: {type: integer, format: int64, minimum: 0, maximum: 9223372036854775807}
+      - name: max_price
+        in: query
+        required: false
+        description: Inclusive upper bound on min_price; must be >= min_price.
+        schema: {type: integer, format: int64, minimum: 0, maximum: 9223372036854775807}
+      - name: sort
+        in: query
+        required: false
+        description: 'NEWEST: coalesce(published_at,created_at) DESC/id DESC; BEST_SELLING: sold_quantity DESC/id DESC (consumer
+          deferred); PRICE_ASC min_price ASC/id ASC; PRICE_DESC min_price DESC/id DESC.'
+        schema:
+          type: string
+          enum: [NEWEST, BEST_SELLING, PRICE_ASC, PRICE_DESC]
+          default: NEWEST
+      - {$ref: ./common.yaml#/components/parameters/Limit}
+      - name: cursor
+        in: query
+        description: Opaque base64url JSON s/v/id/f, no padding; sort and normalized filter hash must match. NEWEST/COLLECTIONS
+          timestamp UTC year 1..9999; price/sold integer 0..9223372036854775807; COLLECTION:<slug> sort_order 0..2147483647.
+          Malformed, wrong type/domain, sort or filter mismatch returns 400 VALIDATION_ERROR / INVALID_CURSOR, field cursor.
+          Product filters f use first 16 SHA-256 hex characters; collection cursors use empty f. No price or inventory reservation.
+        schema: {type: string, minLength: 1}
       responses:
         '200':
-          description: Stable public product page; next_cursor is always null in S1
+          description: CAT-02a implemented response
           headers:
-            X-Correlation-Id: {$ref: './common.yaml#/components/headers/CorrelationId'}
+            X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ProductPageResponse'}
               examples:
-                empty:
-                  value:
-                    code: OK
-                    data: {items: [], next_cursor: null}
-                    metadata: {request_id: 4c8a1f2e-0000-4000-8000-000000000001, trace_id: 4c8a1f2e-0000-4000-8000-000000000002}
-                one:
+                success:
                   value:
                     code: OK
                     data:
                       items:
-                        - {id: 11111111-1111-4111-8111-111111111111, slug: ao-thun-mau, name_vi: Áo thun mẫu, name_en: Sample tee}
+                      - id: 11111111-1111-4111-8111-111111111111
+                        slug: ao-mau
+                        name_vi: Áo mẫu
+                        name_en: Sample tee
+                        min_price: 100000
+                        max_price: 120000
+                        image: {asset_id: 66666666-6666-4666-8666-666666666666, alt_vi: Áo mẫu, alt_en: Sample tee}
+                      - {id: 11111111-1111-4111-8111-111111111111, slug: ao-mau, name_vi: Áo mẫu, name_en: Sample tee, min_price: 100000,
+                        max_price: 120000, image: null}
                       next_cursor: null
-                    metadata: {request_id: 4c8a1f2e-0000-4000-8000-000000000003, trace_id: 4c8a1f2e-0000-4000-8000-000000000004}
+                    metadata: {request_id: cat02a-synthetic-request, trace_id: cat02a-synthetic-trace}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+        '500': {$ref: '#/components/responses/Error500'}
+        '503': {$ref: '#/components/responses/Error503'}
         '400':
-          description: limit outside 1..100 or not an integer
+          description: INVALID_FILTER
           headers:
-            X-Correlation-Id: {$ref: './common.yaml#/components/headers/CorrelationId'}
+            X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
           content:
             application/json:
-              schema:
-                allOf:
-                  - $ref: './common.yaml#/components/schemas/ApiError'
-                  - properties:
-                      code: {const: VALIDATION_ERROR}
+              schema: {$ref: ./common.yaml#/components/schemas/ApiError}
               examples:
-                invalidLimit:
+                error:
+                  value:
+                    code: VALIDATION_ERROR
+                    message: INVALID_FILTER
+                    errors:
+                    - {field: q, message: invalid value}
+                    metadata: {request_id: cat02a-synthetic-request, trace_id: cat02a-synthetic-trace}
+                cursor:
+                  value:
+                    code: VALIDATION_ERROR
+                    message: INVALID_CURSOR
+                    errors:
+                    - {field: cursor, message: invalid value}
+                    metadata: {request_id: cat02a-synthetic-request, trace_id: cat02a-synthetic-trace}
+                limit:
                   value:
                     code: VALIDATION_ERROR
                     message: INVALID_LIMIT
                     errors:
-                      - {field: limit, message: must be between 1 and 100, rejected_value: 0}
-                    metadata: {request_id: 4c8a1f2e-0000-4000-8000-000000000005, trace_id: 4c8a1f2e-0000-4000-8000-000000000006}
+                    - {field: limit, message: invalid value}
+                    metadata: {request_id: cat02a-synthetic-request, trace_id: cat02a-synthetic-trace}
+  /api/v1/catalog/search:
+    get:
+      operationId: searchProducts
+      summary: Search public product cards without Vietnamese accents
+      x-implementation-status: implemented
+      description: 'CAT-02a implemented. PostgreSQL public products: ACTIVE product and category, brand absent or ACTIVE, at
+        least one ACTIVE variant. Money min/max aggregates coalesce(price_override,base_price) over ACTIVE variants. Only AVAILABLE
+        images. Public JSON HTTP cache headers deferred to CAT-02b. Same filters and cursor rules as products; q required.'
+      security: []
+      parameters:
+      - name: q
+        in: query
+        required: true
+        description: Trimmed; accent-insensitive VI/EN name and slug search. Percent, underscore and backslash are literal.
+        schema: {type: string, minLength: 1, maxLength: 100}
+      - name: category_id
+        in: query
+        required: false
+        description: Category itself or direct children.
+        schema: {type: string, format: uuid}
+      - name: brand_id
+        in: query
+        required: false
+        description: Exact brand UUID.
+        schema: {type: string, format: uuid}
+      - name: size
+        in: query
+        required: false
+        description: Trimmed; size/color case-insensitive and match the same ACTIVE variant; tag exact.
+        schema: {type: string, minLength: 1, maxLength: 64}
+      - name: color
+        in: query
+        required: false
+        description: Trimmed; size/color case-insensitive and match the same ACTIVE variant; tag exact.
+        schema: {type: string, minLength: 1, maxLength: 64}
+      - name: tag
+        in: query
+        required: false
+        description: Trimmed; size/color case-insensitive and match the same ACTIVE variant; tag exact.
+        schema: {type: string, minLength: 1, maxLength: 64}
+      - name: min_price
+        in: query
+        required: false
+        description: Inclusive lower bound on representative min_price.
+        schema: {type: integer, format: int64, minimum: 0, maximum: 9223372036854775807}
+      - name: max_price
+        in: query
+        required: false
+        description: Inclusive upper bound on min_price; must be >= min_price.
+        schema: {type: integer, format: int64, minimum: 0, maximum: 9223372036854775807}
+      - name: sort
+        in: query
+        required: false
+        description: 'NEWEST: coalesce(published_at,created_at) DESC/id DESC; BEST_SELLING: sold_quantity DESC/id DESC (consumer
+          deferred); PRICE_ASC min_price ASC/id ASC; PRICE_DESC min_price DESC/id DESC.'
+        schema:
+          type: string
+          enum: [NEWEST, BEST_SELLING, PRICE_ASC, PRICE_DESC]
+          default: NEWEST
+      - {$ref: ./common.yaml#/components/parameters/Limit}
+      - name: cursor
+        in: query
+        description: Opaque base64url JSON s/v/id/f, no padding; sort and normalized filter hash must match. NEWEST/COLLECTIONS
+          timestamp UTC year 1..9999; price/sold integer 0..9223372036854775807; COLLECTION:<slug> sort_order 0..2147483647.
+          Malformed, wrong type/domain, sort or filter mismatch returns 400 VALIDATION_ERROR / INVALID_CURSOR, field cursor.
+          Product filters f use first 16 SHA-256 hex characters; collection cursors use empty f. No price or inventory reservation.
+        schema: {type: string, minLength: 1}
+      responses:
+        '200':
+          description: CAT-02a implemented response
+          headers:
+            X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProductPageResponse'}
+              examples:
+                success:
+                  value:
+                    code: OK
+                    data:
+                      items:
+                      - id: 11111111-1111-4111-8111-111111111111
+                        slug: ao-mau
+                        name_vi: Áo mẫu
+                        name_en: Sample tee
+                        min_price: 100000
+                        max_price: 120000
+                        image: {asset_id: 66666666-6666-4666-8666-666666666666, alt_vi: Áo mẫu, alt_en: Sample tee}
+                      next_cursor: null
+                    metadata: {request_id: cat02a-synthetic-request, trace_id: cat02a-synthetic-trace}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+        '500': {$ref: '#/components/responses/Error500'}
+        '503': {$ref: '#/components/responses/Error503'}
+        '400':
+          description: INVALID_FILTER
+          headers:
+            X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+          content:
+            application/json:
+              schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+              examples:
+                error:
+                  value:
+                    code: VALIDATION_ERROR
+                    message: INVALID_FILTER
+                    errors:
+                    - {field: q, message: invalid value}
+                    metadata: {request_id: cat02a-synthetic-request, trace_id: cat02a-synthetic-trace}
+                cursor:
+                  value:
+                    code: VALIDATION_ERROR
+                    message: INVALID_CURSOR
+                    errors:
+                    - {field: cursor, message: invalid value}
+                    metadata: {request_id: cat02a-synthetic-request, trace_id: cat02a-synthetic-trace}
+                limit:
+                  value:
+                    code: VALIDATION_ERROR
+                    message: INVALID_LIMIT
+                    errors:
+                    - {field: limit, message: invalid value}
+                    metadata: {request_id: cat02a-synthetic-request, trace_id: cat02a-synthetic-trace}
+  /api/v1/catalog/products/{id}:
+    get:
+      operationId: getProduct
+      summary: Get public product detail
+      x-implementation-status: implemented
+      description: 'CAT-02a implemented. PostgreSQL public products: ACTIVE product and category, brand absent or ACTIVE, at
+        least one ACTIVE variant. Money min/max aggregates coalesce(price_override,base_price) over ACTIVE variants. Only AVAILABLE
+        images. Public JSON HTTP cache headers deferred to CAT-02b. One read-only transaction; sanitized descriptions, locale
+        category and size guide; only ACTIVE variants. brand and size_guide can be null; available and observed_at are null
+        until CAT-02b.'
+      security: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        description: Product UUID; malformed, absent or hidden returns the same 404.
+        schema: {type: string, format: uuid}
+      - name: Accept-Language
+        in: header
+        required: false
+        description: Starts with en selects en; otherwise vi.
+        schema: {type: string}
+      responses:
+        '200':
+          description: CAT-02a implemented response
+          headers:
+            X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PublicProductResponse'}
+              examples:
+                success:
+                  value:
+                    code: OK
+                    data:
+                      id: 11111111-1111-4111-8111-111111111111
+                      slug: ao-mau
+                      name_vi: Áo mẫu
+                      name_en: Sample tee
+                      description_vi: <p>Áo</p>
+                      description_en: ''
+                      tags: [new]
+                      category: {id: 11111111-1111-4111-8111-111111111111, name: Áo}
+                      brand: null
+                      min_price: 100000
+                      max_price: 120000
+                      variants:
+                      - {id: 11111111-1111-4111-8111-111111111111, sku: TEE-M, size: M, color: Blue, effective_price: 100000}
+                      images:
+                      - {asset_id: 66666666-6666-4666-8666-666666666666, alt_vi: Áo, alt_en: Shirt, variant_color: null, sort_order: 0}
+                      size_guide:
+                        category_id: 11111111-1111-4111-8111-111111111111
+                        locale: vi
+                        guideline_html: ''
+                        table:
+                          columns: [Size]
+                          rows:
+                          - [M]
+                      available: null
+                      observed_at: null
+                    metadata: {request_id: cat02a-synthetic-request, trace_id: cat02a-synthetic-trace}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+        '500': {$ref: '#/components/responses/Error500'}
+        '503': {$ref: '#/components/responses/Error503'}
+        '404':
+          description: PRODUCT_NOT_FOUND
+          headers:
+            X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+          content:
+            application/json:
+              schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+              examples:
+                error:
+                  value:
+                    code: NOT_FOUND
+                    message: PRODUCT_NOT_FOUND
+                    errors: []
+                    metadata: {request_id: cat02a-synthetic-request, trace_id: cat02a-synthetic-trace}
+  /api/v1/catalog/categories:
+    get:
+      operationId: listCategories
+      summary: List ACTIVE category tree
+      x-implementation-status: implemented
+      description: CAT-02a implemented. Maximum two levels; ACTIVE child requires ACTIVE root; order sort_order/slug/id.
+      security: []
+      parameters: []
+      responses:
+        '200':
+          description: CAT-02a implemented response
+          headers:
+            X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PublicCategoriesResponse'}
+              examples:
+                success:
+                  value:
+                    code: OK
+                    data:
+                    - id: 11111111-1111-4111-8111-111111111111
+                      slug: shirts
+                      name_vi: Áo
+                      name_en: Shirts
+                      children: []
+                    metadata: {request_id: cat02a-synthetic-request, trace_id: cat02a-synthetic-trace}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+        '500': {$ref: '#/components/responses/Error500'}
+        '503': {$ref: '#/components/responses/Error503'}
+  /api/v1/catalog/brands:
+    get:
+      operationId: listBrands
+      summary: List ACTIVE brands
+      x-implementation-status: implemented
+      description: CAT-02a implemented. Unpaginated, ordered name/id.
+      security: []
+      parameters: []
+      responses:
+        '200':
+          description: CAT-02a implemented response
+          headers:
+            X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PublicBrandsResponse'}
+              examples:
+                success:
+                  value:
+                    code: OK
+                    data:
+                    - {id: 11111111-1111-4111-8111-111111111111, name: Sample}
+                    metadata: {request_id: cat02a-synthetic-request, trace_id: cat02a-synthetic-trace}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+        '500': {$ref: '#/components/responses/Error500'}
+        '503': {$ref: '#/components/responses/Error503'}
+  /api/v1/catalog/collections:
+    get:
+      operationId: listCollections
+      summary: List visible collections
+      x-implementation-status: implemented
+      description: CAT-02a implemented. ACTIVE collection within [start_at,end_at), nullable bounds, at least one public product.
+        Available cover only, otherwise null. Keyset (created_at,id) DESC; cursor s=COLLECTIONS/f empty.
+      security: []
+      parameters:
+      - {$ref: ./common.yaml#/components/parameters/Limit}
+      - name: cursor
+        in: query
+        description: Opaque base64url JSON s/v/id/f, no padding; sort and normalized filter hash must match. NEWEST/COLLECTIONS
+          timestamp UTC year 1..9999; price/sold integer 0..9223372036854775807; COLLECTION:<slug> sort_order 0..2147483647.
+          Malformed, wrong type/domain, sort or filter mismatch returns 400 VALIDATION_ERROR / INVALID_CURSOR, field cursor.
+          Product filters f use first 16 SHA-256 hex characters; collection cursors use empty f. No price or inventory reservation.
+        schema: {type: string, minLength: 1}
+      responses:
+        '200':
+          description: CAT-02a implemented response
+          headers:
+            X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PublicCollectionsResponse'}
+              examples:
+                success:
+                  value:
+                    code: OK
+                    data:
+                      items:
+                      - {id: 11111111-1111-4111-8111-111111111111, slug: sample, name_vi: Mẫu, name_en: Sample, cover_asset_id: null,
+                        start_at: null, end_at: null}
+                      next_cursor: null
+                    metadata: {request_id: cat02a-synthetic-request, trace_id: cat02a-synthetic-trace}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+        '500': {$ref: '#/components/responses/Error500'}
+        '503': {$ref: '#/components/responses/Error503'}
+        '400':
+          description: INVALID_CURSOR
+          headers:
+            X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+          content:
+            application/json:
+              schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+              examples:
+                error:
+                  value:
+                    code: VALIDATION_ERROR
+                    message: INVALID_CURSOR
+                    errors:
+                    - {field: cursor, message: invalid value}
+                    metadata: {request_id: cat02a-synthetic-request, trace_id: cat02a-synthetic-trace}
+  /api/v1/catalog/collections/{slug}:
+    get:
+      operationId: getCollection
+      summary: Get visible collection and product page
+      x-implementation-status: implemented
+      description: CAT-02a implemented. ACTIVE collection within [start_at,end_at), nullable bounds, at least one public product.
+        Available cover only, otherwise null. AVAILABLE lookbook images only, captions used as alternate text. Public products
+        ordered (sort_order,product_id) ASC; cursor s=COLLECTION:<slug>/f empty. One read-only transaction.
+      security: []
+      parameters:
+      - name: slug
+        in: path
+        required: true
+        description: Exact collection slug.
+        schema: {type: string}
+      - {$ref: ./common.yaml#/components/parameters/Limit}
+      - name: cursor
+        in: query
+        description: Opaque base64url JSON s/v/id/f, no padding; sort and normalized filter hash must match. NEWEST/COLLECTIONS
+          timestamp UTC year 1..9999; price/sold integer 0..9223372036854775807; COLLECTION:<slug> sort_order 0..2147483647.
+          Malformed, wrong type/domain, sort or filter mismatch returns 400 VALIDATION_ERROR / INVALID_CURSOR, field cursor.
+          Product filters f use first 16 SHA-256 hex characters; collection cursors use empty f. No price or inventory reservation.
+        schema: {type: string, minLength: 1}
+      responses:
+        '200':
+          description: CAT-02a implemented response
+          headers:
+            X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PublicCollectionResponse'}
+              examples:
+                success:
+                  value:
+                    code: OK
+                    data:
+                      collection: {id: 11111111-1111-4111-8111-111111111111, slug: sample, name_vi: Mẫu, name_en: Sample, cover_asset_id: null,
+                        start_at: null, end_at: null}
+                      lookbook:
+                      - {asset_id: 66666666-6666-4666-8666-666666666666, caption_vi: Áo mẫu, caption_en: '', sort_order: 0}
+                      products:
+                      - id: 11111111-1111-4111-8111-111111111111
+                        slug: ao-mau
+                        name_vi: Áo mẫu
+                        name_en: Sample tee
+                        min_price: 100000
+                        max_price: 120000
+                        image: {asset_id: 66666666-6666-4666-8666-666666666666, alt_vi: Áo mẫu, alt_en: Sample tee}
+                      next_cursor: null
+                    metadata: {request_id: cat02a-synthetic-request, trace_id: cat02a-synthetic-trace}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+        '500': {$ref: '#/components/responses/Error500'}
+        '503': {$ref: '#/components/responses/Error503'}
+        '400':
+          description: INVALID_CURSOR
+          headers:
+            X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+          content:
+            application/json:
+              schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+              examples:
+                error:
+                  value:
+                    code: VALIDATION_ERROR
+                    message: INVALID_CURSOR
+                    errors:
+                    - {field: cursor, message: invalid value}
+                    metadata: {request_id: cat02a-synthetic-request, trace_id: cat02a-synthetic-trace}
+        '404':
+          description: COLLECTION_NOT_FOUND
+          headers:
+            X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+          content:
+            application/json:
+              schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+              examples:
+                error:
+                  value:
+                    code: NOT_FOUND
+                    message: COLLECTION_NOT_FOUND
+                    errors: []
+                    metadata: {request_id: cat02a-synthetic-request, trace_id: cat02a-synthetic-trace}
+  /api/v1/catalog/size-guides/{category_id}:
+    get:
+      operationId: getSizeGuide
+      summary: Get localized guide for ACTIVE category
+      x-implementation-status: implemented
+      description: CAT-02a implemented. Missing guide or non-ACTIVE category returns 404. table is the stored size table, guideline_html
+        may be empty.
+      security: []
+      parameters:
+      - name: category_id
+        in: path
+        required: true
+        description: Category UUID; malformed, absent or INACTIVE returns 404.
+        schema: {type: string, format: uuid}
+      - name: locale
+        in: query
+        required: false
+        description: Explicit locale overrides Accept-Language; otherwise starts with en selects en, default vi.
+        schema:
+          type: string
+          enum: [vi, en]
+      - name: Accept-Language
+        in: header
+        required: false
+        description: Locale fallback, default vi.
+        schema: {type: string}
+      responses:
+        '200':
+          description: CAT-02a implemented response
+          headers:
+            X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PublicSizeGuideResponse'}
+              examples:
+                success:
+                  value:
+                    code: OK
+                    data:
+                      category_id: 11111111-1111-4111-8111-111111111111
+                      locale: vi
+                      guideline_html: ''
+                      table:
+                        columns: [Size]
+                        rows:
+                        - [M]
+                    metadata: {request_id: cat02a-synthetic-request, trace_id: cat02a-synthetic-trace}
+        '406': {$ref: '#/components/responses/HttpRequestError'}
+        '500': {$ref: '#/components/responses/Error500'}
+        '503': {$ref: '#/components/responses/Error503'}
+        '400':
+          description: INVALID_FIELDS
+          headers:
+            X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+          content:
+            application/json:
+              schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+              examples:
+                error:
+                  value:
+                    code: VALIDATION_ERROR
+                    message: INVALID_FIELDS
+                    errors:
+                    - {field: locale, message: invalid value}
+                    metadata: {request_id: cat02a-synthetic-request, trace_id: cat02a-synthetic-trace}
+        '404':
+          description: SIZE_GUIDE_NOT_FOUND
+          headers:
+            X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+          content:
+            application/json:
+              schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+              examples:
+                error:
+                  value:
+                    code: NOT_FOUND
+                    message: SIZE_GUIDE_NOT_FOUND
+                    errors: []
+                    metadata: {request_id: cat02a-synthetic-request, trace_id: cat02a-synthetic-trace}
+  /internal/api/v1/catalog/variants/quote:
+    post:
+      operationId: quoteVariants
+      summary: Quote a batch of variants for cart/order
+      x-implementation-status: implemented
+      servers:
+      - {url: 'http://catalog:8081', description: Direct catalog service on the Compose network; no public Gateway route.}
+      description: CAT-02a implemented. Service token ADR-19 audience catalog-service, caller allowlist cart-service/order-service,
+        fashion.catalog.internal-callers / CATALOG_INTERNAL_CALLERS (empty default). Gateway does not route /internal/**. Single
+        query; request order preserved. found false omits all other fields; found true active uses public visibility and variant
+        ACTIVE. QuoteItem NON_NULL omits null price_override/image; nested image retains its full shape. Snapshot only; order
+        must recheck at confirmation. Cache-Control no-store on success and every error, including binding/security errors.
+      security:
+      - serviceToken: []
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/VariantQuoteRequest'}
+            examples:
+              request:
+                value:
+                  variant_ids: [11111111-1111-4111-8111-111111111111, 33333333-3333-4333-8333-333333333333, 22222222-2222-4222-8222-222222222222]
+      responses:
+        '200':
+          description: CAT-02a implemented response
+          headers:
+            X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+            Cache-Control:
+              schema: {type: string, const: no-store}
+              description: Never cache internal quote responses.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VariantQuoteResponse'}
+              examples:
+                success:
+                  value:
+                    code: OK
+                    data:
+                    - variant_id: 11111111-1111-4111-8111-111111111111
+                      found: true
+                      active: true
+                      sku: TEE-M
+                      product_id: 11111111-1111-4111-8111-111111111111
+                      name_vi: Áo mẫu
+                      name_en: Sample tee
+                      size: M
+                      color: Blue
+                      base_price: 100000
+                      effective_price: 100000
+                      weight_grams: 100
+                      product_version: 3
+                      image: {asset_id: 66666666-6666-4666-8666-666666666666, alt_vi: Áo mẫu, alt_en: Sample tee}
+                    - variant_id: 33333333-3333-4333-8333-333333333333
+                      found: true
+                      active: true
+                      sku: TEE-M
+                      product_id: 11111111-1111-4111-8111-111111111111
+                      name_vi: Áo mẫu
+                      name_en: Sample tee
+                      size: M
+                      color: Blue
+                      base_price: 100000
+                      effective_price: 90000
+                      weight_grams: 100
+                      product_version: 3
+                      image: {asset_id: 66666666-6666-4666-8666-666666666666, alt_vi: Áo mẫu, alt_en: Sample tee}
+                      price_override: 90000
+                    - {variant_id: 22222222-2222-4222-8222-222222222222, found: false}
+                    metadata: {request_id: cat02a-synthetic-request, trace_id: cat02a-synthetic-trace}
+        '400':
+          description: INVALID_FIELDS
+          headers:
+            X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+            Cache-Control:
+              schema: {type: string, const: no-store}
+              description: Applied before authentication and binding, including errors.
+          content:
+            application/json:
+              schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+              examples:
+                error:
+                  value:
+                    code: VALIDATION_ERROR
+                    message: INVALID_FIELDS
+                    errors:
+                    - {field: variant_ids, message: invalid value}
+                    metadata: {request_id: cat02a-synthetic-request, trace_id: cat02a-synthetic-trace}
+        '401':
+          description: INVALID_SERVICE_TOKEN
+          headers:
+            X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+            Cache-Control:
+              schema: {type: string, const: no-store}
+              description: Applied before authentication and binding, including errors.
+          content:
+            application/json:
+              schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+              examples:
+                error:
+                  value:
+                    code: UNAUTHORIZED
+                    message: INVALID_SERVICE_TOKEN
+                    errors: []
+                    metadata: {request_id: cat02a-synthetic-request, trace_id: cat02a-synthetic-trace}
+        '403':
+          description: CALLER_NOT_ALLOWED
+          headers:
+            X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+            Cache-Control:
+              schema: {type: string, const: no-store}
+              description: Applied before authentication and binding, including errors.
+          content:
+            application/json:
+              schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+              examples:
+                error:
+                  value:
+                    code: FORBIDDEN
+                    message: CALLER_NOT_ALLOWED
+                    errors: []
+                    metadata: {request_id: cat02a-synthetic-request, trace_id: cat02a-synthetic-trace}
+        '406':
+          description: INVALID_HTTP_REQUEST
+          headers:
+            X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+            Cache-Control:
+              schema: {type: string, const: no-store}
+              description: Applied before authentication and binding, including errors.
+          content:
+            application/json:
+              schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+              examples:
+                error:
+                  value:
+                    code: VALIDATION_ERROR
+                    message: INVALID_HTTP_REQUEST
+                    errors: []
+                    metadata: {request_id: cat02a-synthetic-request, trace_id: cat02a-synthetic-trace}
+        '405':
+          description: INVALID_HTTP_REQUEST
+          headers:
+            X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+            Cache-Control:
+              schema: {type: string, const: no-store}
+              description: Applied before authentication and binding, including errors.
+          content:
+            application/json:
+              schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+              examples:
+                error:
+                  value:
+                    code: VALIDATION_ERROR
+                    message: INVALID_HTTP_REQUEST
+                    errors: []
+                    metadata: {request_id: cat02a-synthetic-request, trace_id: cat02a-synthetic-trace}
+        '415':
+          description: INVALID_HTTP_REQUEST
+          headers:
+            X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+            Cache-Control:
+              schema: {type: string, const: no-store}
+              description: Applied before authentication and binding, including errors.
+          content:
+            application/json:
+              schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+              examples:
+                error:
+                  value:
+                    code: VALIDATION_ERROR
+                    message: INVALID_HTTP_REQUEST
+                    errors: []
+                    metadata: {request_id: cat02a-synthetic-request, trace_id: cat02a-synthetic-trace}
+        '500':
+          description: INTERNAL_ERROR
+          headers:
+            X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+            Cache-Control:
+              schema: {type: string, const: no-store}
+              description: Applied before authentication and binding, including errors.
+          content:
+            application/json:
+              schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+              examples:
+                error:
+                  value:
+                    code: INTERNAL
+                    message: INTERNAL_ERROR
+                    errors: []
+                    metadata: {request_id: cat02a-synthetic-request, trace_id: cat02a-synthetic-trace}
+        '503':
+          description: DEPENDENCY_UNAVAILABLE
+          headers:
+            X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+            Cache-Control:
+              schema: {type: string, const: no-store}
+              description: Applied before authentication and binding, including errors.
+          content:
+            application/json:
+              schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+              examples:
+                error:
+                  value:
+                    code: TEMPORARILY_UNAVAILABLE
+                    message: DEPENDENCY_UNAVAILABLE
+                    errors: []
+                    metadata: {request_id: cat02a-synthetic-request, trace_id: cat02a-synthetic-trace}
   /admin/api/v1/catalog/categories:
     get:
       operationId: listAdminCategories
@@ -1226,29 +1981,299 @@ components:
           "$ref": "#/components/schemas/CollectionImages"
         metadata:
           "$ref": "./common.yaml#/components/schemas/Metadata"
+    PublicCardImage:
+      type: object
+      additionalProperties: false
+      required: [asset_id, alt_vi, alt_en]
+      properties:
+        asset_id: {type: string, format: uuid}
+        alt_vi: {type: string, minLength: 1, maxLength: 255}
+        alt_en: {type: string, minLength: 1, maxLength: 255}
     ProductSummary:
       type: object
-      required: [id, slug, name_vi, name_en]
       additionalProperties: false
+      required: [id, slug, name_vi, name_en, min_price, max_price, image]
       properties:
         id: {type: string, format: uuid}
         slug: {type: string, minLength: 1, maxLength: 160}
         name_vi: {type: string, minLength: 1, maxLength: 255}
         name_en: {type: string, minLength: 1, maxLength: 255}
+        min_price: {type: integer, format: int64, minimum: 0, maximum: 9223372036854775807}
+        max_price: {type: integer, format: int64, minimum: 0, maximum: 9223372036854775807}
+        image:
+          anyOf:
+          - {$ref: '#/components/schemas/PublicCardImage'}
+          - {type: 'null'}
+    PublicProductPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/ProductSummary'}
+        next_cursor:
+          type: [string, 'null']
+    PublicReference:
+      type: object
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+    PublicVariant:
+      type: object
+      additionalProperties: false
+      required: [id, sku, size, color, effective_price]
+      properties:
+        id: {type: string, format: uuid}
+        sku: {type: string}
+        size: {type: string}
+        color: {type: string}
+        effective_price: {type: integer, format: int64, minimum: 0, maximum: 9223372036854775807}
+    PublicProductImage:
+      type: object
+      additionalProperties: false
+      required: [asset_id, alt_vi, alt_en, variant_color, sort_order]
+      properties:
+        asset_id: {type: string, format: uuid}
+        alt_vi: {type: string, minLength: 1, maxLength: 255}
+        alt_en: {type: string, minLength: 1, maxLength: 255}
+        variant_color:
+          type: [string, 'null']
+        sort_order: {type: integer, minimum: 0, maximum: 2147483647}
+    PublicSizeGuide:
+      type: object
+      additionalProperties: false
+      required: [category_id, locale, guideline_html, table]
+      properties:
+        category_id: {type: string, format: uuid}
+        locale:
+          type: string
+          enum: [vi, en]
+        guideline_html: {type: string}
+        table: {$ref: '#/components/schemas/SizeGuideTable'}
+    PublicProductDetail:
+      type: object
+      additionalProperties: false
+      required: [id, slug, name_vi, name_en, description_vi, description_en, tags, category, brand, min_price, max_price, variants,
+        images, size_guide, available, observed_at]
+      properties:
+        id: {type: string, format: uuid}
+        slug: {type: string}
+        name_vi: {type: string}
+        name_en: {type: string}
+        description_vi: {type: string}
+        description_en: {type: string}
+        tags:
+          type: array
+          items: {type: string}
+        category: {$ref: '#/components/schemas/PublicReference'}
+        brand:
+          anyOf:
+          - {$ref: '#/components/schemas/PublicReference'}
+          - {type: 'null'}
+        min_price: {type: integer, format: int64, minimum: 0, maximum: 9223372036854775807}
+        max_price: {type: integer, format: int64, minimum: 0, maximum: 9223372036854775807}
+        variants:
+          type: array
+          items: {$ref: '#/components/schemas/PublicVariant'}
+        images:
+          type: array
+          items: {$ref: '#/components/schemas/PublicProductImage'}
+        size_guide:
+          anyOf:
+          - {$ref: '#/components/schemas/PublicSizeGuide'}
+          - {type: 'null'}
+        available: {type: 'null', description: Inventory observation deferred to CAT-02b.}
+        observed_at: {type: 'null', description: Inventory observation deferred to CAT-02b.}
+    PublicCategory:
+      type: object
+      additionalProperties: false
+      required: [id, slug, name_vi, name_en, children]
+      properties:
+        id: {type: string, format: uuid}
+        slug: {type: string}
+        name_vi: {type: string}
+        name_en: {type: string}
+        children:
+          type: array
+          items: {$ref: '#/components/schemas/PublicCategory'}
+    PublicBrand:
+      type: object
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+    PublicCollection:
+      type: object
+      additionalProperties: false
+      required: [id, slug, name_vi, name_en, cover_asset_id, start_at, end_at]
+      properties:
+        id: {type: string, format: uuid}
+        slug: {type: string}
+        name_vi: {type: string}
+        name_en: {type: string}
+        cover_asset_id:
+          type: [string, 'null']
+          format: uuid
+        start_at:
+          type: [string, 'null']
+          format: date-time
+        end_at:
+          type: [string, 'null']
+          format: date-time
+    PublicCollectionPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/PublicCollection'}
+        next_cursor:
+          type: [string, 'null']
+    PublicLookbookImage:
+      type: object
+      additionalProperties: false
+      required: [asset_id, caption_vi, caption_en, sort_order]
+      properties:
+        asset_id: {type: string, format: uuid}
+        caption_vi: {type: string, maxLength: 500}
+        caption_en: {type: string, maxLength: 500}
+        sort_order: {type: integer, minimum: 0, maximum: 2147483647}
+      description: Captions provide alternate text by locale. No alt fields in V006.
+    PublicCollectionDetail:
+      type: object
+      additionalProperties: false
+      required: [collection, lookbook, products, next_cursor]
+      properties:
+        collection: {$ref: '#/components/schemas/PublicCollection'}
+        lookbook:
+          type: array
+          items: {$ref: '#/components/schemas/PublicLookbookImage'}
+        products:
+          type: array
+          items: {$ref: '#/components/schemas/ProductSummary'}
+        next_cursor:
+          type: [string, 'null']
+    VariantQuoteRequest:
+      type: object
+      additionalProperties: false
+      required: [variant_ids]
+      properties:
+        variant_ids:
+          description: Distinct UUID identities; different casing does not distinguish IDs (enforced by the service).
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          items: {type: string, format: uuid}
+    VariantQuoteMissing:
+      type: object
+      additionalProperties: false
+      required: [variant_id, found]
+      properties:
+        variant_id: {type: string, format: uuid}
+        found: {type: boolean, const: false}
+    VariantQuoteFound:
+      type: object
+      additionalProperties: false
+      required: [variant_id, found, active, sku, product_id, name_vi, name_en, size, color, base_price, effective_price, weight_grams,
+        product_version]
+      properties:
+        variant_id: {type: string, format: uuid}
+        found: {type: boolean, const: true}
+        active: {type: boolean}
+        sku: {type: string}
+        product_id: {type: string, format: uuid}
+        name_vi: {type: string}
+        name_en: {type: string}
+        size: {type: string}
+        color: {type: string}
+        base_price: {type: integer, format: int64, minimum: 0, maximum: 9223372036854775807}
+        price_override: {type: integer, format: int64, minimum: 0, maximum: 9223372036854775807}
+        effective_price: {type: integer, format: int64, minimum: 0, maximum: 9223372036854775807}
+        weight_grams: {type: integer, minimum: 1, maximum: 2147483647}
+        product_version: {type: integer, format: int64, minimum: 0, maximum: 9223372036854775807}
+        image: {$ref: '#/components/schemas/PublicCardImage'}
+      description: 'QuoteItem alone uses NON_NULL: absent price_override/image are omitted, never null. Nested image retains the
+        complete PublicCardImage shape.'
+    VariantQuoteItem:
+      oneOf:
+      - {$ref: '#/components/schemas/VariantQuoteMissing'}
+      - {$ref: '#/components/schemas/VariantQuoteFound'}
     ProductPageResponse:
       type: object
+      additionalProperties: false
+      required: [code, data, metadata]
+      properties:
+        code: {type: string, const: OK}
+        data: {$ref: '#/components/schemas/PublicProductPage'}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
+    PublicProductResponse:
+      type: object
+      additionalProperties: false
+      required: [code, data, metadata]
+      properties:
+        code: {type: string, const: OK}
+        data: {$ref: '#/components/schemas/PublicProductDetail'}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
+    PublicCategoriesResponse:
+      type: object
+      additionalProperties: false
       required: [code, data, metadata]
       properties:
         code: {type: string, const: OK}
         data:
-          type: object
-          required: [items, next_cursor]
-          properties:
-            items:
-              type: array
-              items: {$ref: '#/components/schemas/ProductSummary'}
-            next_cursor: {type: [string, 'null']}
-        metadata: {$ref: './common.yaml#/components/schemas/Metadata'}
+          type: array
+          items: {$ref: '#/components/schemas/PublicCategory'}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
+    PublicBrandsResponse:
+      type: object
+      additionalProperties: false
+      required: [code, data, metadata]
+      properties:
+        code: {type: string, const: OK}
+        data:
+          type: array
+          items: {$ref: '#/components/schemas/PublicBrand'}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
+    PublicCollectionsResponse:
+      type: object
+      additionalProperties: false
+      required: [code, data, metadata]
+      properties:
+        code: {type: string, const: OK}
+        data: {$ref: '#/components/schemas/PublicCollectionPage'}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
+    PublicCollectionResponse:
+      type: object
+      additionalProperties: false
+      required: [code, data, metadata]
+      properties:
+        code: {type: string, const: OK}
+        data: {$ref: '#/components/schemas/PublicCollectionDetail'}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
+    PublicSizeGuideResponse:
+      type: object
+      additionalProperties: false
+      required: [code, data, metadata]
+      properties:
+        code: {type: string, const: OK}
+        data: {$ref: '#/components/schemas/PublicSizeGuide'}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
+    VariantQuoteResponse:
+      type: object
+      additionalProperties: false
+      required: [code, data, metadata]
+      properties:
+        code: {type: string, const: OK}
+        data:
+          type: array
+          items: {$ref: '#/components/schemas/VariantQuoteItem'}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
     AdminCategory:
       type: object
       additionalProperties: false
@@ -1736,6 +2761,7 @@ components:
             code: {const: INTERNAL}
             message: {const: INTERNAL_ERROR}
   securitySchemes:
+    serviceToken: {type: http, scheme: bearer, bearerFormat: JWT, description: "ADR-19 service token; aud catalog-service; cart-service or order-service only."}
     bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT, description: ADR-21 ES256; catalog.write required at catalog-service.}
   parameters:
     ImageIfNoneMatch:

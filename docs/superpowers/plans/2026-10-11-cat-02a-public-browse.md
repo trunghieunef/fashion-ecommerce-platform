@@ -10,6 +10,13 @@
 
 **Spec:** [CAT-02a design](../specs/2026-10-11-cat-02a-public-browse-design.md) (đã duyệt 2026-10-11).
 
+**Trạng thái local:** Task1–6 đã commit và review; Task7 verification ngày 2026-10-11
+có contract43/Redocly, scripts14, smoke và sáu mutation PASS, full reactor453 PASS.
+Tài liệu hoàn tất ngày 2026-10-13 với docs58, diff checks và staged secret scan;
+Task7/task review và whole-branch review do controller chốt. Parent CAT-02 **In progress**,
+02b pending; chưa push/PR/merge/remote CI/staging hoặc nghiệm thu parent.
+[Evidence](../../evidence/cat-02a-local-2026-10-11.md) và [handoff](2026-10-11-cat-02a-handoff.md).
+
 ## Global Constraints
 
 - `TASK:CAT-02` phần 02a · `REQ:CAT-04`, hỗ trợ `REQ:CAT-03/05`. Làm trên `dev`; commit từng task, chỉ push/mở PR khi chủ dự án yêu cầu.
@@ -21,6 +28,7 @@
 - Sort: `NEWEST` (mặc định) `coalesce(published_at, created_at)` desc, id desc; `BEST_SELLING` `sold_quantity` desc, id desc; `PRICE_ASC` min_price asc, id asc; `PRICE_DESC` min_price desc, id desc.
 - Lỗi tham số → `400 VALIDATION_ERROR` có field; không public/không tồn tại → `404 NOT_FOUND`. Mọi giá trị đi qua bind parameter.
 - Internal quote: audience `catalog-service`, callers `{cart-service, order-service}`, config `fashion.catalog.internal-callers` = `${CATALOG_INTERNAL_CALLERS:}`; `401 INVALID_SERVICE_TOKEN`, `403 CALLER_NOT_ALLOWED`, `Cache-Control: no-store`; 1–100 UUID không trùng.
+- Technical ruling của controller: canonical filter hash escape backslash rồi pipe trong từng field trước join fixed-order; giữ 16-hex SHA-256/wire shape, tránh delimiter collision (không thêm quyết định nghiệp vụ).
 - Lệnh Java cần `JAVA_HOME` JDK 21 (xem `docs/engineering/12_engineering_guide.md` §1) và Docker cho Testcontainers.
 
 ## Review Focus
@@ -42,7 +50,7 @@
 **Interfaces:**
 - Produces: SQL function `f_unaccent(text) returns text` IMMUTABLE, gọi được bởi `catalog_runtime`.
 
-- [ ] **Step 1: Write the failing test** (extends `vn.fashion.catalog.admin.CatalogAdminTestSupport`, dùng `jdbc` = runtime role)
+- [x] **Step 1: Write the failing test** (extends `vn.fashion.catalog.admin.CatalogAdminTestSupport`, dùng `jdbc` = runtime role)
 
 ```java
 @Test void runtimeCanUseUnaccentFunction() {
@@ -53,9 +61,9 @@
 }
 ```
 
-- [ ] **Step 2: Run** `./mvnw -B -pl services/catalog-service -am -Dsurefire.failIfNoSpecifiedTests=false -Dtest=PublicSearchSchemaIntegrationTest test` — Expected: FAIL (function does not exist).
+- [x] **Step 2: Run** `./mvnw -B -pl services/catalog-service -am -Dsurefire.failIfNoSpecifiedTests=false -Dtest=PublicSearchSchemaIntegrationTest test` — Expected: FAIL (function does not exist).
 
-- [ ] **Step 3: Write V007**
+- [x] **Step 3: Write V007**
 
 ```sql
 -- TASK:CAT-02a: accent-insensitive public search (spec §3); index deferred until measured load.
@@ -67,9 +75,9 @@ CREATE FUNCTION f_unaccent(text) RETURNS text
 
 `đ` không thuộc rule mặc định của mọi bản unaccent; nếu assert `do` fail vì `đ`, bọc thêm `translate(..., 'đĐ', 'dD')` trong hàm và giữ test.
 
-- [ ] **Step 4: Run** cùng lệnh — Expected: PASS. Chạy thêm `-Dtest=CatalogSchemaIntegrationTest,MediaSchemaIntegrationTest` — PASS (migrate từ đầu vẫn chạy).
+- [x] **Step 4: Run** cùng lệnh — Expected: PASS. Chạy thêm `-Dtest=CatalogSchemaIntegrationTest,MediaSchemaIntegrationTest` — PASS (migrate từ đầu vẫn chạy).
 
-- [ ] **Step 5: Commit** `git add` hai file; `git commit -m "feat(CAT-02): add accent-insensitive search function V007"`
+- [x] **Step 5: Commit** `git add` hai file; `git commit -m "feat(CAT-02): add accent-insensitive search function V007"`
 
 ### Task 2: Bộ lọc và cursor
 
@@ -87,7 +95,7 @@ CREATE FUNCTION f_unaccent(text) RETURNS text
   - `String likePattern()` — `'%' + escape(f_unaccent-ready lowercase q) + '%'`, escape `\`→`\\`, `%`→`\%`, `_`→`\_`; null khi không có q.
   - `record ProductCursor(String sort, String value, UUID id, String filters)`; `String encode()` base64url không padding của JSON `{"s","v","id","f"}`; `static ProductCursor decode(String raw, BrowseFilters f)` ném `Api.Problem(400, "VALIDATION_ERROR", "INVALID_CURSOR", [FieldError("cursor", ...)])` khi base64/JSON hỏng, thiếu field, `s != f.sort().name()` hoặc `f != f.hash()`. Kiểm `value` trước bind SQL: giá/sold parse `long` không âm; `NEWEST`/`COLLECTIONS` parse Instant và năm UTC 1–9999; `COLLECTION:<slug>` giữ `sort_order` 0–2_147_483_647. Ngoài miền trả cùng lỗi cursor (chủ dự án xác nhận 2026-10-11).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```java
 @Test void defaultsAndTrim() {
@@ -123,10 +131,10 @@ CREATE FUNCTION f_unaccent(text) RETURNS text
 }
 ```
 
-- [ ] **Step 2: Run** `-Dtest=BrowseFiltersTest` — Expected: FAIL (classes missing).
-- [ ] **Step 3: Implement** the two records per the Interfaces block; JSON qua `ObjectMapper` tĩnh `new ObjectMapper()` (Jackson đã có trên classpath).
-- [ ] **Step 4: Run** — Expected: PASS.
-- [ ] **Step 5: Commit** `feat(CAT-02): browse filters and filter-bound keyset cursor`
+- [x] **Step 2: Run** `-Dtest=BrowseFiltersTest` — Expected: FAIL (classes missing).
+- [x] **Step 3: Implement** the two records per the Interfaces block; JSON qua `ObjectMapper` tĩnh `new ObjectMapper()` (Jackson đã có trên classpath).
+- [x] **Step 4: Run** — Expected: PASS.
+- [x] **Step 5: Commit** `feat(CAT-02): browse filters and filter-bound keyset cursor`
 
 ### Task 3: List và search sản phẩm public
 
@@ -159,7 +167,7 @@ Mệnh đề SQL động (chỉ ghép hằng, bind mọi giá trị):
 - keyset theo bảng sort ở Global Constraints, so sánh tuple `(key, p.id) < (:v, :id)` (desc) hoặc `>` (asc); `order by key, p.id` cùng chiều; `limit :limit + 1`.
 - Ghi chú trong code: `// ponytail: query-time aggregation; denormalize min_price/sizes onto products when measured load needs it (spec §1).`
 
-- [ ] **Step 1: Write failing integration tests** (`ProductBrowseIntegrationTest extends CatalogAdminTestSupport`, dữ liệu qua `PublicCatalogFixtures`, gọi `send("GET", path, null, null, null)`):
+- [x] **Step 1: Write failing integration tests** (`ProductBrowseIntegrationTest extends CatalogAdminTestSupport`, dữ liệu qua `PublicCatalogFixtures`, gọi `send("GET", path, null, null, null)`):
 
 ```java
 @Test void hidesNonPublicProducts()        // DRAFT; ACTIVE không variant; mọi variant INACTIVE; category INACTIVE; brand INACTIVE → chỉ product hợp lệ; product brand null vẫn hiện
@@ -174,10 +182,10 @@ Mệnh đề SQL động (chỉ ghép hằng, bind mọi giá trị):
 @Test void legacyActiveWithoutPublishedAtSortsByCreatedAt()
 ```
 
-- [ ] **Step 2: Run** `-Dtest=ProductBrowseIntegrationTest` — Expected: FAIL.
-- [ ] **Step 3: Implement** `PublicProductSql`, `ProductBrowseRepository`, controller, advice basePackages; xóa `ProductQueryRepository`; sửa `ProductQueryIntegrationTest` seed variant ACTIVE cho product ACTIVE (quy tắc mới của spec §3), sửa constructor trong `ProductQueryControllerErrorResponseTest`.
-- [ ] **Step 4: Run** `-Dtest='ProductBrowseIntegrationTest,ProductQueryIntegrationTest,ProductQueryControllerErrorResponseTest,BrowseFiltersTest'` — Expected: PASS.
-- [ ] **Step 5: Commit** `feat(CAT-02): public product list and accent-insensitive search`
+- [x] **Step 2: Run** `-Dtest=ProductBrowseIntegrationTest` — Expected: FAIL.
+- [x] **Step 3: Implement** `PublicProductSql`, `ProductBrowseRepository`, controller, advice basePackages; xóa `ProductQueryRepository`; sửa `ProductQueryIntegrationTest` seed variant ACTIVE cho product ACTIVE (quy tắc mới của spec §3), sửa constructor trong `ProductQueryControllerErrorResponseTest`.
+- [x] **Step 4: Run** `-Dtest='ProductBrowseIntegrationTest,ProductQueryIntegrationTest,ProductQueryControllerErrorResponseTest,BrowseFiltersTest'` — Expected: PASS.
+- [x] **Step 5: Commit** `feat(CAT-02): public product list and accent-insensitive search`
 
 ### Task 4: Detail sản phẩm, categories, brands, size guide public
 
@@ -196,7 +204,7 @@ Mệnh đề SQL động (chỉ ghép hằng, bind mọi giá trị):
   - `Optional<SizeGuideView> sizeGuide(UUID categoryId, String locale)` — category phải ACTIVE.
   - Controller: `GET /api/v1/catalog/products/{id}`, `/categories`, `/brands`, `/size-guides/{categoryId}?locale=`. Locale: `locale` param (size guide) hoặc `Accept-Language` bắt đầu bằng `en` → `en`, còn lại `vi`; `locale` khác vi/en → 400 field `locale`. Id không phải UUID → 404 (path không public). Không có → `Api.Problem(404, "NOT_FOUND", "PRODUCT_NOT_FOUND"|"SIZE_GUIDE_NOT_FOUND", [])`.
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 ```java
 @Test void detailShowsOnlyActiveVariantsAndAvailableImages() // variant INACTIVE ẩn; ảnh DELETING ẩn; available và observed_at là null
@@ -207,10 +215,10 @@ Mệnh đề SQL động (chỉ ghép hằng, bind mọi giá trị):
 @Test void sizeGuidePublicRequiresActiveCategoryAndValidLocale() // category INACTIVE → 404; locale=fr → 400 field locale
 ```
 
-- [ ] **Step 2: Run** `-Dtest=PublicCatalogReadIntegrationTest` — FAIL.
-- [ ] **Step 3: Implement** per Interfaces.
-- [ ] **Step 4: Run** — PASS.
-- [ ] **Step 5: Commit** `feat(CAT-02): public product detail, taxonomy and size guide reads`
+- [x] **Step 2: Run** `-Dtest=PublicCatalogReadIntegrationTest` — FAIL.
+- [x] **Step 3: Implement** per Interfaces.
+- [x] **Step 4: Run** — PASS.
+- [x] **Step 5: Commit** `feat(CAT-02): public product detail, taxonomy and size guide reads`
 
 ### Task 5: Collection public
 
@@ -228,7 +236,7 @@ Mệnh đề SQL động (chỉ ghép hằng, bind mọi giá trị):
   - Cursor collection list: keyset `(co.created_at, co.id)` desc; cursor products: `(ci.sort_order, ci.product_id)` asc. Dùng lại `ProductCursor` với `sort` = `"COLLECTIONS"` hoặc `"COLLECTION:" + slug`, `filters` = `""`.
   - Controller: `GET /api/v1/catalog/collections?limit&cursor`, `GET /api/v1/catalog/collections/{slug}?limit&cursor`; limit sai → 400 field `limit`; không public → 404 `COLLECTION_NOT_FOUND`.
 
-- [ ] **Step 1: Write failing tests** (thời điểm lấy từ `jdbc.queryForObject("select now()", Instant.class)`):
+- [x] **Step 1: Write failing tests** (thời điểm lấy từ `jdbc.queryForObject("select now()", Instant.class)`):
 
 ```java
 @Test void emptyCollectionIsHidden()
@@ -241,10 +249,10 @@ Mệnh đề SQL động (chỉ ghép hằng, bind mọi giá trị):
 @Test void listPaginatesAndRejectsForeignCursor()    // cursor từ /products → 400 field cursor
 ```
 
-- [ ] **Step 2: Run** `-Dtest=CollectionPublicIntegrationTest` — FAIL.
-- [ ] **Step 3: Implement** per Interfaces.
-- [ ] **Step 4: Run** — PASS.
-- [ ] **Step 5: Commit** `feat(CAT-02): public collections with time-window and active-product visibility`
+- [x] **Step 2: Run** `-Dtest=CollectionPublicIntegrationTest` — FAIL.
+- [x] **Step 3: Implement** per Interfaces.
+- [x] **Step 4: Run** — PASS.
+- [x] **Step 5: Commit** `feat(CAT-02): public collections with time-window and active-product visibility`
 
 ### Task 6: Internal variant quote
 
@@ -264,7 +272,7 @@ Mệnh đề SQL động (chỉ ghép hằng, bind mọi giá trị):
   - `active` = variant ACTIVE ∧ product ACTIVE ∧ category ACTIVE ∧ (brand null ∨ ACTIVE).
   - Lỗi: thiếu/sai token → 401 `UNAUTHORIZED`/`INVALID_SERVICE_TOKEN`; caller ngoài allowlist → 403 `FORBIDDEN`/`CALLER_NOT_ALLOWED`; `variant_ids` null/rỗng/>100/trùng/không UUID → 400 field `variant_ids`. Mọi response `Cache-Control: no-store`.
 
-- [ ] **Step 1: Write failing tests** (đăng ký `fashion.catalog.internal-callers` với key cart/order/stranger qua `@DynamicPropertySource`; token bằng `ServiceTokenIssuer(caller, pub, priv, Clock.systemUTC()).issue("catalog-service")`):
+- [x] **Step 1: Write failing tests** (đăng ký `fashion.catalog.internal-callers` với key cart/order/stranger qua `@DynamicPropertySource`; token bằng `ServiceTokenIssuer(caller, pub, priv, Clock.systemUTC()).issue("catalog-service")`):
 
 ```java
 @Test void missingOrInvalidTokenIs401()   // không header; token audience "user-service"; token key lạ
@@ -278,10 +286,10 @@ Mệnh đề SQL động (chỉ ghép hằng, bind mọi giá trị):
 
 Gateway: thêm `/internal/api/v1/catalog/variants/quote` (POST) vào test 404 hiện có cho `/internal/**`.
 
-- [ ] **Step 2: Run** `-Dtest=VariantQuoteIntegrationTest` (catalog) và `-pl services/gateway -Dtest=GatewayBoundaryTest` — catalog FAIL; gateway PASS ngay (route đã chặn) — ghi nhận là regression guard.
-- [ ] **Step 3: Implement** controller theo mẫu `services/user-service/src/main/java/vn/fashion/user/auth/NotificationSecretController.java`; một query `where v.id = any(:ids)` rồi sắp lại theo request.
-- [ ] **Step 4: Run** — PASS.
-- [ ] **Step 5: Commit** `feat(CAT-02): internal variant quote for cart and order callers`
+- [x] **Step 2: Run** `-Dtest=VariantQuoteIntegrationTest` (catalog) và `-pl services/gateway -Dtest=GatewayBoundaryTest` — catalog FAIL; gateway PASS ngay (route đã chặn) — ghi nhận là regression guard.
+- [x] **Step 3: Implement** controller theo mẫu `services/user-service/src/main/java/vn/fashion/user/auth/NotificationSecretController.java`; một query `where v.id = any(:ids)` rồi sắp lại theo request.
+- [x] **Step 4: Run** — PASS.
+- [x] **Step 5: Commit** `feat(CAT-02): internal variant quote for cart and order callers`
 
 ### Task 7: Contract, smoke, mutation và docs
 
@@ -292,11 +300,11 @@ Gateway: thêm `/internal/api/v1/catalog/variants/quote` (POST) vào test 404 hi
 - Modify docs: `docs/design/03_interfaces.md` (§2.2 bảng catalog, §4 quote), `docs/design/05_database_design.md` (V007), `docs/design/06_service_flows.md` (dòng "Danh sách/search/detail"), `docs/design/08_decisions.md` (4 quyết định spec §1), `docs/delivery/10_backlog.md` (CAT-02a), `services/catalog-service/README.md`, `docs/superpowers/plans/README.md`
 - Create: `docs/evidence/cat-02a-local-2026-10-11.md`, `docs/superpowers/plans/2026-10-11-cat-02a-handoff.md`
 
-- [ ] **Step 1: Write failing contract test** `test_catalog_public.py`: mọi operation trên tồn tại; public ops không yêu cầu bearer; `quoteVariants` path bắt đầu `/internal/` và khai báo 401/403; `limit` max 100; `sort` enum đúng 4 giá trị; money fields `type: integer, minimum: 0`; examples validate theo schema (theo mẫu `test_catalog_admin.py`).
-- [ ] **Step 2: Run** `bash scripts/validate-contracts.sh` — FAIL ở test mới.
-- [ ] **Step 3: Update** `catalog.yaml`; chạy lại — PASS.
-- [ ] **Step 4: Smoke** — sau đoạn CAT-03 publish (trước unpublish) thêm: `GET /api/v1/catalog/products?size=<size của variant smoke>&limit=100` chứa `$product_id`; `GET /api/v1/catalog/products/$product_id` 200 có `variants`; `GET /api/v1/catalog/search?q=<tên không dấu>` chứa `$product_id`; echo `CAT-02a browse/detail/search PASS`. Chạy `bash scripts/local-up.sh && bash scripts/smoke-local.sh` — Expected: `S1-local smoke PASS`.
-- [ ] **Step 5: Mutation thủ công** — mỗi mutant chạy test liên quan, phải FAIL, rồi khôi phục: (1) bỏ `pr.min_price is not null` khỏi `FROM_PUBLIC`; (2) bỏ `p.id` khỏi tuple keyset; (3) bỏ kiểm `f` trong `ProductCursor.decode`; (4) bỏ kiểm allowlist caller; (5) đổi `co.end_at > now()` thành `>=`; (6) bỏ `escape` cho `%`. Ghi kết quả vào evidence.
-- [ ] **Step 6: Full verification** — `./mvnw -B test`, `bash scripts/validate-contracts.sh`, `python3 -B -m unittest discover -s scripts -p 'test_*.py' -v`, `python3 -B scripts/check_docs.py`, `bash scripts/scan-secrets.sh`, `git diff --check`. Ghi số test từng module vào evidence.
-- [ ] **Step 7: Docs** — cập nhật các file ở mục Files; backlog ghi CAT-02 **In progress**, 02a đã hiện thực local, 02b còn mở (cache/invalidation, `sold_quantity` từ `ORDER_COMPLETED`, tồn kho, HTTP cache header).
-- [ ] **Step 8: Commit** `docs(CAT-02): contract, smoke and docs for CAT-02a public browse`
+- [x] **Step 1: Write failing contract test** `test_catalog_public.py`: mọi operation trên tồn tại; public ops không yêu cầu bearer; `quoteVariants` path bắt đầu `/internal/` và khai báo 401/403; `limit` max 100; `sort` enum đúng 4 giá trị; money fields `type: integer, minimum: 0`; examples validate theo schema (theo mẫu `test_catalog_admin.py`).
+- [x] **Step 2: Run** `bash scripts/validate-contracts.sh` — FAIL ở test mới.
+- [x] **Step 3: Update** `catalog.yaml`; chạy lại — PASS.
+- [x] **Step 4: Smoke** — sau đoạn CAT-03 publish (trước unpublish) thêm: `GET /api/v1/catalog/products?size=<size của variant smoke>&limit=100` chứa `$product_id`; `GET /api/v1/catalog/products/$product_id` 200 có `variants`; `GET /api/v1/catalog/search?q=<tên không dấu>` chứa `$product_id`; echo `CAT-02a browse/detail/search PASS`. Chạy `bash scripts/local-up.sh && bash scripts/smoke-local.sh` — Expected: `S1-local smoke PASS`.
+- [x] **Step 5: Mutation thủ công** — mỗi mutant chạy test liên quan, phải FAIL, rồi khôi phục: (1) bỏ `pr.min_price is not null` khỏi `FROM_PUBLIC`; (2) bỏ `p.id` khỏi tuple keyset; (3) bỏ kiểm `f` trong `ProductCursor.decode`; (4) bỏ kiểm allowlist caller; (5) đổi `co.end_at > now()` thành `>=`; (6) bỏ `escape` cho `%`. Ghi kết quả vào evidence.
+- [x] **Step 6: Full verification** — `./mvnw -B test`, `bash scripts/validate-contracts.sh`, `python3 -B -m unittest discover -s scripts -p 'test_*.py' -v`, `python3 -B scripts/check_docs.py`, `bash scripts/scan-secrets.sh`, `git diff --check`. Ghi số test từng module vào evidence.
+- [x] **Step 7: Docs** — cập nhật các file ở mục Files; backlog ghi CAT-02 **In progress**, 02a đã hiện thực local, 02b còn mở (cache/invalidation, `sold_quantity` từ `ORDER_COMPLETED`, tồn kho, HTTP cache header).
+- [x] **Step 8: Commit** `docs(CAT-02): contract, smoke and docs for CAT-02a public browse`

@@ -29,7 +29,7 @@ category trước replay, replay trước version guard; create race ON CONFLICT
 Bảng đóng columns/rows, strip plain text, chỉ header hợp lệ tham gia unique Locale.ROOT,
 header sai type/rỗng/quá dài không thêm lỗi duplicate; tối đa32768 UTF-8 bytes;
 guideline optional/sanitize/max20000 sau sanitize. Audit/key/data cùng transaction.
-Không public read CAT-02; Task 6 đã smoke đầy đủ qua Gateway với 6 container healthy.
+CAT-01b Task 6 đã smoke admin qua Gateway; public read CAT-02a hiện có, xem phần bên dưới.
 Admin taxonomy đã có GET/POST categories/brands và PUT theo id
 tại `/admin/api/v1/catalog`. Mọi endpoint kiểm ES256 và `catalog.write` tại service;
 POST cần `Idempotency-Key`, PUT cần `expected_version`; mutation và audit cùng transaction.
@@ -42,8 +42,8 @@ Lỗi Spring ErrorResponse 4xx đến advice admin giữ status/header gốc (41
 406 Accept), envelope VALIDATION_ERROR/INVALID_HTTP_REQUEST bằng application/json,
 metadata/X-Correlation-Id và không log ERROR. Lỗi còn lại mới dùng fallback 500;
 không đổi các handler cụ thể hoặc thứ tự auth trong controller.
-Public API hiện có `GET /api/v1/catalog/products`.
-Endpoint trả các product `ACTIVE` theo `created_at DESC, id DESC`; `limit` mặc định
+Public API CAT-02a có browse/search/detail/taxonomy/collections/size guide, xem bên dưới.
+Browse trả product public theo `coalesce(published_at,created_at) DESC, id DESC` (NEWEST mặc định); `limit` mặc định
 `20`, tối đa `100`. Response thành công theo [contract 03 §1.2](../../docs/design/03_interfaces.md):
 `code: "OK"`, `data`, `metadata.request_id`, và `metadata.trace_id`.
 
@@ -71,13 +71,13 @@ có collision thì migration dừng, cần quyết định dữ liệu riêng, k
 Publish/unpublish qua POST `/products/{id}/publish|unpublish` cần key + expected_version,
 reason tùy chọn ≤ 500. Publish DRAFT/INACTIVE → ACTIVE kiểm category/brand ACTIVE và có variant
 ACTIVE; thiếu điều kiện trả 400 và rollback. Unpublish ACTIVE → INACTIVE; cạnh khác 409.
-Published_at giữ mốc publish đầu. Điều kiện ảnh được chủ dự án hoãn tới CAT-03.
+Published_at giữ mốc publish đầu. Từ CAT-03, publish cần ảnh đính kèm trong DB.
 Product ACTIVE từ V001 có thể còn `published_at` null: unpublish giữ null, publish lại mới đặt
-timestamp. Quyết định backfill hoặc xử lý null trong sort/index theo `published_at` thuộc CAT-02.
+timestamp. CAT-02a sort NEWEST dùng coalesce(published_at,created_at), không backfill.
 
-Đây chưa phải acceptance đầy đủ của `TASK:CAT-01`: còn
-reviewer nghiệm thu, media (CAT-03), filter/search public (CAT-02), cursor thật, cache hoặc Kafka. `next_cursor` luôn
-`null`; producer intent `catalog.events` trong outbox, chưa publish; consumer: none.
+CAT-01/CAT-03 Done local theo evidence nghiệm thu. CAT-02a có filter/search/cursor thật;
+next_cursor null ở trang cuối. Parent CAT-02 In progress, cache/sold consumer/inventory thuộc 02b;
+producer intent `catalog.events` trong outbox chưa relay; consumer: none.
 
 ## Chạy local
 
@@ -234,6 +234,30 @@ dùng cho luồng upload complete (`UploadService.complete`). Giới hạn (hằ
 Ước lượng heap: buffer ARGB 25 MP khoảng 100 MB (4 byte/pixel), chưa đo thực tế; cần đo trước khi chốt
 giới hạn đồng thời (slot re-encode 1/instance) và heap của container. Test: `ImageProcessorTest` (unit, không Docker).
 
+## Public catalog browse (CAT-02a)
+
+`TASK:CAT-02` phần 02a · `REQ:CAT-04`, hỗ trợ `REQ:CAT-03/05`; phụ thuộc CAT-01/CAT-03
+và SEC-01 service token. PostgreSQL là nguồn đọc, chưa dùng Redis/Kafka/inventory.
+V007 cài unaccent/f_unaccent (append-only); query-time min/max coalesce override/base trên
+variant ACTIVE. Public product cần ACTIVE category và brand null/ACTIVE, có variant ACTIVE.
+
+GET `/api/v1/catalog/products` và `/search` nhận q/category_id/brand_id/size/color/tag/
+min_price/max_price/sort/limit/cursor; q bắt buộc ở search, accent-insensitive/literal wildcard,
+size/color cùng variant. Bốn sort NEWEST/BEST_SELLING/PRICE_ASC/PRICE_DESC, tuple UUID
+tie-break, cursor ràng buộc filter/domain; limit20/max100.
+Hash canonicalization theo technical ruling của controller escape backslash rồi pipe từng field
+trước khi join theo thứ tự cố định, giữ SHA-256 16 hex và wire cursor.
+Detail `/products/{id}` gồm ACTIVE variants, AVAILABLE images, localized category/guide, available/observed_at null.
+GET `/categories`, `/brands`, `/collections`, `/collections/{slug}`, `/size-guides/{category_id}`
+không bearer; collection ACTIVE trong [start,end) và ≥1 product public, lookbook chỉ caption
+(dùng làm alternate text). locale query vi/en ưu tiên Accept-Language, default vi.
+
+Contract đầy đủ: [catalog.yaml](../../contracts/openapi/catalog.yaml),
+[evidence](../../docs/evidence/cat-02a-local-2026-10-11.md),
+[handoff](../../docs/superpowers/plans/2026-10-11-cat-02a-handoff.md).
+CAT-02 **In progress**; 02b còn cache/invalidation, replay-safe ORDER_COMPLETED sold_quantity,
+inventory observations và public JSON HTTP cache headers. BEST_SELLING dùng giá trị hiện có.
+
 ## Internal variant quote (CAT-02a)
 
 `POST /internal/api/v1/catalog/variants/quote` nhận `{"variant_ids":["uuid"]}` với
@@ -250,19 +274,20 @@ JSON và lỗi HTTP trước controller.
 
 `CATALOG_INTERNAL_CALLERS` rỗng theo mặc định (deny all); Compose chỉ truyền public keys
 được cấu hình. Không sinh key cart/order trong `local-up.sh` khi service chưa tồn tại.
-OpenAPI và tài liệu CAT-02a tổng hợp được đồng bộ ở Task 7; parent CAT-02 còn phần 02b.
+OpenAPI và tài liệu CAT-02a đã đồng bộ ở Task 7. QuoteItem NON_NULL bỏ price_override/image khi null;
+nested image giữ đủ field PublicCardImage. Parent CAT-02 In progress, còn phần 02b.
 
 ## Test và health
 
 ```bash
-./mvnw -pl services/catalog-service -Dtest=ProductQueryIntegrationTest test
+./mvnw -pl services/catalog-service -am -Dsurefire.failIfNoSpecifiedTests=false -Dtest=ProductBrowseIntegrationTest,PublicCatalogReadIntegrationTest,CollectionPublicIntegrationTest test
 ./mvnw -pl services/catalog-service -am -Dsurefire.failIfNoSpecifiedTests=false -Dtest=VariantQuoteIntegrationTest test
 ./mvnw -pl services/catalog-service test
 ```
 
 Surefire chạy JVM test với `-Duser.timezone=UTC` để pgjdbc không gửi alias zone cũ
 (ví dụ `Asia/Saigon` trên Windows) mà PostgreSQL từ chối.
-Hai lệnh dùng Testcontainers PostgreSQL `17.11`; chúng cần Docker daemon khả dụng,
+Các lệnh integration dùng Testcontainers PostgreSQL `17.11`; chúng cần Docker daemon khả dụng,
 không dùng H2 hoặc mock repository thay thế. Test kiểm tra migration, active-only
 query, limit, response envelope, readiness và runtime role không thể tạo table, cùng admin
 auth, version/SKU races, idempotency, sanitize, publish và rollback outbox/audit. CAT-01a local
