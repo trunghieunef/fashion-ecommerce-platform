@@ -18,6 +18,9 @@ import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import tools.jackson.databind.JsonNode;
@@ -64,6 +67,57 @@ class VariantQuoteIntegrationTest extends CatalogAdminTestSupport {
   @Test void unknownCallerIs403() {
     error(quote(serviceToken("notification-service"), List.of(UUID.randomUUID().toString())),
         403, "FORBIDDEN", "CALLER_NOT_ALLOWED");
+  }
+
+  @Test @ExtendWith(OutputCaptureExtension.class)
+  void unknownFieldsAre400WithoutLeakingValues(CapturedOutput output) {
+    for (String key : List.of("extra", "items", "unknown_fields", "unknownFields")) {
+      for (String value : List.of("null", "0", "{\"nested\":\"synthetic-unknown-value\"}")) {
+        String body = "{\"variant_ids\":[\"abcdefab-1234-4321-8765-abcdefabcdef\"],\"" + key + "\":" + value + "}";
+        var response = send("POST", PATH, serviceToken("cart-service"), null, body);
+        error(response, 400, "VALIDATION_ERROR", "INVALID_FIELDS");
+        JsonNode errors = json(response).path("errors");
+        assertThat(errors.size()).isEqualTo(1);
+        assertThat(errors.get(0).path("field").asText()).isEqualTo(key);
+        assertThat(errors.get(0).path("message").asText()).isEqualTo("unknown field");
+        assertThat(json(response).size()).isEqualTo(4);
+        assertThat(json(response).path("metadata").path("request_id").asText())
+            .matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
+        assertThat(response.body()).doesNotContain("synthetic-unknown-value", "nested");
+      }
+    }
+    assertThat(output.getAll()).doesNotContain("synthetic-unknown-value");
+    assertThat(jdbc.queryForObject("select count(*) from audit_logs", Integer.class)).isZero();
+  }
+
+  @Test void serviceAuthPrecedesUnknownFieldValidation() {
+    String body = "{\"variant_ids\":[],\"extra\":\"synthetic-unknown-value\"}";
+    for (String token : java.util.Arrays.asList(null, "broken")) {
+      var response = send("POST", PATH, token, null, body);
+      error(response, 401, "UNAUTHORIZED", "INVALID_SERVICE_TOKEN");
+      assertThat(json(response).path("errors").isEmpty()).isTrue();
+      assertThat(response.body()).doesNotContain("extra", "synthetic-unknown-value");
+    }
+    var response = send("POST", PATH, serviceToken("notification-service"), null, body);
+    error(response, 403, "FORBIDDEN", "CALLER_NOT_ALLOWED");
+    assertThat(json(response).path("errors").isEmpty()).isTrue();
+    assertThat(response.body()).doesNotContain("extra", "synthetic-unknown-value");
+  }
+
+  @Test @ExtendWith(OutputCaptureExtension.class)
+  void serviceAuthPrecedesBodyBinding(CapturedOutput output) {
+    for (String body : List.of("{\"variant_ids\":{},\"extra\":\"synthetic-binding-value\"}",
+        "{\"extra\":\"synthetic-binding-value\",", "", "null", "[]")) {
+      for (String callerToken : java.util.Arrays.asList(null, "broken", serviceToken("notification-service"))) {
+        var response = send("POST", PATH, callerToken, null, body);
+        boolean forbidden = callerToken != null && !callerToken.equals("broken");
+        error(response, forbidden ? 403 : 401, forbidden ? "FORBIDDEN" : "UNAUTHORIZED",
+            forbidden ? "CALLER_NOT_ALLOWED" : "INVALID_SERVICE_TOKEN");
+        assertThat(json(response).path("errors").isEmpty()).isTrue();
+        assertThat(response.body()).doesNotContain("extra", "synthetic-binding-value");
+      }
+    }
+    assertThat(output.getAll()).doesNotContain("synthetic-binding-value");
   }
 
   @Test void cartAndOrderGetItemsInRequestOrder() {
@@ -182,7 +236,7 @@ class VariantQuoteIntegrationTest extends CatalogAdminTestSupport {
     }
   }
 
-  @Test void bindingErrorsAreNoStoreBeforeControllerInvocation() {
+  @Test void bodyErrorsAreNoStoreAfterAuthentication() {
     for (String body : List.of("{", "", "null", "[]", "{\"variant_ids\":{}}")) {
       var response = send("POST", PATH, serviceToken("cart-service"), null, body);
       data(response, 400);
@@ -192,6 +246,14 @@ class VariantQuoteIntegrationTest extends CatalogAdminTestSupport {
   }
 
   @Test void httpErrorsAreNoStore() throws Exception {
+    var jsonRequest = HttpRequest.newBuilder(URI.create("http://localhost:" + port + PATH))
+        .header("Content-Type", "application/vnd.fashion.quote+json")
+        .header("Authorization", "Bearer " + serviceToken("cart-service"))
+        .POST(HttpRequest.BodyPublishers.ofString("{\"variant_ids\":[\"abcdefab-1234-4321-8765-abcdefabcdef\"]}"))
+        .build();
+    var jsonResponse = HttpClient.newHttpClient().send(jsonRequest, HttpResponse.BodyHandlers.ofString());
+    assertThat(data(jsonResponse, 200).size()).isEqualTo(1);
+    noStore(jsonResponse);
     for (String[] headers : List.of(new String[]{"text/plain", "application/json"},
         new String[]{"application/json", "text/plain"})) {
       var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + PATH))

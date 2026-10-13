@@ -32,8 +32,8 @@ Final review ngày 2026-10-13: F1 search normalization và F2 detail snapshot l�
 final fix wave sửa SQL lower/unaccent trước escape cho names/slug và read-only REPEATABLE_READ
 cho product/collection detail. F4 V007 filename, F5 năm public contract test methods và F6
 phạm vi exception advice đã đồng bộ. Đây là technical corrections theo ledger, không thêm
-quyết định nghiệp vụ. F3 Minor còn chờ owner: schema quote đóng shape nhưng runtime bỏ qua
-unknown fields; quote/schema giữ nguyên trong wave này, scoped re-review phải ghi NOT ADDRESSED.
+quyết định nghiệp vụ. Trong wave này trước chỉ đạo bổ sung, F3 Minor còn chờ owner,
+runtime bỏ qua unknown fields; trạng thái lịch sử được cập nhật bởi F3 follow-up bên dưới.
 
 Fresh final fix verification ngày 2026-10-13: full reactor BUILD SUCCESS **457 tests**
 (durability36/security38/user65/catalog286/gateway32), 0 failures/errors/skips; connected48,
@@ -43,6 +43,19 @@ full tests. Pinned Gitleaks history102/staged patch không leaks. Raw `final-fix
 tách khỏi Task7Oct11; không rerun smoke/local-up hoặc năm mutants unchanged ở wave này.
 Fix subject `fix(CAT-02): normalize search and keep detail snapshots consistent`; local hash
 nằm trong report/git log. Scoped re-review và archive còn do controller chốt.
+
+F3 follow-up theo chỉ đạo owner 2026-10-13 đã hiện thực/kiểm local: QuoteRequest áp dụng
+quy tắc any-setter hiện có tại03 quanh277, giữ `variant_ids` và không thêm request items.
+Verifier/allowlist trước đọc/bind/validate body; missing/invalid401 và forbidden403 kể cả
+JSON lỗi/sai kiểu. Unknown →400 field tên key/message cố định, không echo/log value.
+Collection ItemRequest đã có rule; thêm `items[0]` regression, giữ `items[1]`.
+Fresh full461 (catalog290), targeted31, contracts43/Redocly, scripts14, docs58/diff,
+history103/staged secret scans PASS; RED unknown3/1fail và auth-binding1/1fail,
+final unknown-check mutant1/1fail, tất cả0 errors; bytes restore/compile44/hash/XML checked.
+Raw `f3-*` logs/report giữ riêng; interim460 trước auth-binding correction và historical457
+không thay proof cuối. Sau full chỉ rename test/comment, assertions và executable logic không đổi.
+Subject `fix(CAT-02): reject unknown quote fields after service authentication`, local hash
+trong f3-report/git log. F3 không còn pending owner; controller scoped re-review/archive còn mở.
 
 CAT-02 **In progress**, CAT-02b pending: Redis cache/invalidation durable (CAT-09),
 replay-safe ORDER_COMPLETED sold_quantity, inventory observation và public HTTP cache

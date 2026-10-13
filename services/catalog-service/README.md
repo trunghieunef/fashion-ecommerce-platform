@@ -276,6 +276,13 @@ giá VND nguyên theo override hoặc base, product version và ảnh card AVAIL
 ID không tồn tại chỉ có `variant_id`/`found=false`. Đây là snapshot; order phải quote lại
 khi chốt đơn. Mọi response có `Cache-Control: no-store`, bao gồm validation, lỗi binding
 JSON và lỗi HTTP trước controller.
+Theo chỉ đạo owner 2026-10-13, QuoteRequest dùng `@JsonAnySetter` như CAT-01b để
+gom tên field lạ rồi trả `400 VALIDATION_ERROR/INVALID_FIELDS` sau service token/allowlist;
+`errors[].field` là key, message cố định `unknown field`, không giữ/log/echo value.
+Token sai/thiếu và caller bị cấm vẫn trả 401/403 trước đọc/bind/validate body, kể cả JSON lỗi
+hoặc `variant_ids` sai kiểu. Sau auth, lỗi body trả MALFORMED_JSON400 qua global ObjectMapper;
+global Jackson flag và lỗi HTTP415/406/405 giữ nguyên, nhận application/json và application/*+json. Quote không nhận `items`;
+regression `items[0].item_extra` thuộc CollectionAdminService.ItemRequest đã có.
 
 `CATALOG_INTERNAL_CALLERS` rỗng theo mặc định (deny all); Compose chỉ truyền public keys
 được cấu hình. Không sinh key cart/order trong `local-up.sh` khi service chưa tồn tại.

@@ -119,6 +119,20 @@ class CollectionAdminIntegrationTest extends CatalogAdminTestSupport {
     assertThat(audits("catalog.collection.create")).isEqualTo(1); assertThat(audits("catalog.collection.update")).isZero();
     assertThat(jdbc.queryForObject("select count(*) from idempotency_requests where operation='catalog.collection.create'", Integer.class)).isEqualTo(1);
   }
+  @Test void firstItemUnknownFieldIsRejectedWithoutLeakingValue() {
+    UUID p = createProduct("first-unknown-item");
+    for (Object value : new Object[]{null, 0, "synthetic-unknown-item-value"}) {
+      var row = item(p, 0); row.put("item_extra", value);
+      var body = input("first-unknown-item"); body.put("items", List.of(row));
+      var response = post("first-unknown-item", body);
+      invalid(response, "items[0].item_extra");
+      assertThat(json(response).path("message").asText()).isEqualTo("INVALID_FIELDS");
+      assertThat(json(response).path("errors").get(0).path("message").asText()).isEqualTo("unknown field");
+      assertThat(response.body()).doesNotContain("synthetic-unknown-item-value");
+    }
+    assertThat(audits("catalog.collection.create")).isZero();
+    assertThat(jdbc.queryForObject("select count(*) from idempotency_requests where key='first-unknown-item'", Integer.class)).isZero();
+  }
   @Test void missingProductKeepsOriginalItemIndex() {
     UUID p = createProduct("exists"); var body = input("missing-product"); body.put("items", List.of(item(p, 9), item(UUID.randomUUID(), 0)));
     invalid(post("missing-product", body), "items[1].product_id");

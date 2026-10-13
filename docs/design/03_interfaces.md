@@ -489,6 +489,13 @@ product_id/name_vi/name_en/size/color/base_price/effective_price/weight_grams/pr
 Chỉ record QuoteItem dùng NON_NULL: price_override và image bị bỏ khi null; nested image giữ
 đủ field asset_id/alt_vi/alt_en theo PublicCardImage. Snapshot không giữ giá; ORD-01 phải kiểm lại khi chốt đơn.
 Cache-Control no-store áp trước auth/binding, cả lỗi HTTP. Không sinh key caller thật trong local-up.
+Theo chỉ đạo owner 2026-10-13, QuoteRequest áp dụng quy tắc any-setter ở đoạn request đóng §2.2:
+chỉ gom tên key lạ; ServiceTokenVerifier và allowlist chạy trước đọc/bind/validate body,
+key lạ trả 400 VALIDATION_ERROR/INVALID_FIELDS,
+field bằng tên key và message cố định `unknown field`; không log/lưu/echo value lạ.
+Thiếu/sai token vẫn 401, caller ngoài allowlist vẫn 403 kể cả JSON lỗi hoặc `variant_ids` sai kiểu;
+sau auth, lỗi đọc/bind body trả 400 VALIDATION_ERROR/MALFORMED_JSON. Lỗi HTTP 415/406/405 giữ nguyên.
+Request vẫn chỉ `variant_ids`; `items` là key lạ top-level, không có request item DTO trong quote.
 
 Internal stock return chỉ order; OPS dùng admin order returns để giữ evidence và orchestration. Query pure POST không cần idempotency key; mọi command còn lại cần key + stable business reference. Hash canonical tại service đích phải khớp original payload; không chỉ so chuỗi caller gửi.
 

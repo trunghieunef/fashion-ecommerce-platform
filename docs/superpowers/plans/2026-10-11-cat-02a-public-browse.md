@@ -14,13 +14,19 @@
 có contract43/Redocly, scripts14, smoke và sáu mutation PASS, full reactor453 PASS.
 Tài liệu hoàn tất ngày 2026-10-13 với docs58, diff checks và staged secret scan;
 Task7 đã review; whole-branch review ngày 2026-10-13 yêu cầu final fix wave F1/F2 và docs F4/F5/F6,
-F3 chờ owner decision. F1 escape sau lower/unaccent và F2 snapshot consistency là technical
+F3 chờ chỉ đạo owner tại thời điểm wave đó. F1 escape sau lower/unaccent và F2 snapshot consistency là technical
 corrections đã ghi ledger; controller scoped re-review sau wave. Parent CAT-02 **In progress**,
 02b pending; chưa push/PR/merge/remote CI/staging hoặc nghiệm thu parent.
 [Evidence](../../evidence/cat-02a-local-2026-10-11.md) và [handoff](2026-10-11-cat-02a-handoff.md).
 Final fix verification 2026-10-13: full457 (catalog286), connected48, contracts43/Redocly,
 scripts14, docs58/diff và pinned secret scans PASS; RED4 và SQL percent mutant1 assertion
-failure/0 errors, source restored/recompiled. F3 Minor vẫn chờ owner, quote/schema chưa đổi.
+failure/0 errors, source restored/recompiled. F3 tại wave đó chưa đổi quote/schema;
+follow-up theo chỉ đạo owner 2026-10-13 đã áp dụng quy tắc any-setter hiện có, auth trước
+đọc/bind/validate body, giữ variant_ids. Fresh F3 full461/catalog290, targeted31, contracts43,
+scripts14, docs58/diff/history103/staged scans PASS; RED unknown3/1fail, auth-binding1/1fail,
+final unknown mutant1/1fail,0 errors, restore/compile44/XML checked. F3 không còn pending owner;
+controller scoped re-review/archive còn mở, xem evidence/handoff. Interim460 trước correction
+auth-binding và historical457 được giữ riêng, không là final F3 proof.
 
 ## Global Constraints
 

@@ -16,7 +16,7 @@ public class VariantQuoteNoStoreFilter extends OncePerRequestFilter {
 
   @Override protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                            FilterChain chain) throws ServletException, IOException {
-    // Binding and HTTP errors can occur before the controller runs.
+    // HTTP errors can occur before the controller runs.
     response.setHeader("Cache-Control", "no-store");
     chain.doFilter(request, response);
   }
