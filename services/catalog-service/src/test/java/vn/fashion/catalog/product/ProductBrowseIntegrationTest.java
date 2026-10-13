@@ -100,6 +100,22 @@ class ProductBrowseIntegrationTest extends CatalogAdminTestSupport {
     fields("/api/v1/catalog/search", "q");
   }
 
+  @Test void accentedQueryMatchesSlugWithoutMatchingNames() {
+    UUID product = publicProduct("ao-so-mi", category, null, 200000);
+    for (String route : List.of(PRODUCTS, "/api/v1/catalog/search")) {
+      assertThat(ids(page(route + "?q=" + encode("ÁO-SO")))).containsExactly(product.toString());
+    }
+  }
+
+  @Test void normalizedFullwidthLikeCharactersStayLiteral() {
+    UUID product = fixtures.product("literal", "50%_off\\sale", category, null, "ACTIVE", 200000, PUBLISHED, 0);
+    fixtures.variant(product, "LITERAL", "M", "Black", null, "ACTIVE");
+    publicProduct("plain", category, null, 200000);
+    for (String literal : List.of("％", "＿", "＼", "%", "_", "\\")) {
+      assertThat(ids(page(PRODUCTS + "?q=" + encode(literal)))).containsExactly(product.toString());
+    }
+  }
+
   @Test void everySortPagesWithoutDuplicatesOrGaps() {
     var tied = new ArrayList<String>();
     for (int i = 0; i < 7; i++) tied.add(publicProduct("tied-" + i, category, null, 150000).toString());

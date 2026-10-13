@@ -37,7 +37,8 @@ Thu hồi quyền ở catalog trễ tối đa TTL access token 15 phút theo ADR
 Audit dùng `request_id` của metadata response mutation đầu; retry giữ data/status đã lưu,
 metadata mới và không thêm audit. Lỗi nội bộ admin trả 500 `INTERNAL`/`INTERNAL_ERROR`
 với body chỉ code/message/metadata và X-Correlation-Id; exception vẫn log server qua
-logger redact PII hiện có. Handler admin không áp cho ProductQueryController public.
+logger redact PII hiện có. Advice áp dụng cho admin, product public, collection và internal quote;
+ProductQueryController giữ handler local INVALID_LIMIT với behavior cũ.
 Lỗi Spring ErrorResponse 4xx đến advice admin giữ status/header gốc (415 Content-Type,
 406 Accept), envelope VALIDATION_ERROR/INVALID_HTTP_REQUEST bằng application/json,
 metadata/X-Correlation-Id và không log ERROR. Lỗi còn lại mới dùng fallback 500;
@@ -245,9 +246,13 @@ GET `/api/v1/catalog/products` và `/search` nhận q/category_id/brand_id/size/
 min_price/max_price/sort/limit/cursor; q bắt buộc ở search, accent-insensitive/literal wildcard,
 size/color cùng variant. Bốn sort NEWEST/BEST_SELLING/PRICE_ASC/PRICE_DESC, tuple UUID
 tie-break, cursor ràng buộc filter/domain; limit20/max100.
+Raw q đã trim được bind; PostgreSQL lower/unaccent trước rồi escape backslash, %, _.
+Cùng pattern literal áp dụng cho cả names và slug, kể cả ký tự fullwidth thành wildcard sau unaccent.
 Hash canonicalization theo technical ruling của controller escape backslash rồi pipe từng field
 trước khi join theo thứ tự cố định, giữ SHA-256 16 hex và wire cursor.
 Detail `/products/{id}` gồm ACTIVE variants, AVAILABLE images, localized category/guide, available/observed_at null.
+Product và collection detail dùng transaction read-only REPEATABLE_READ để metadata/nội dung/giá
+trong một response cùng snapshot khi writer commit giữa reads; không giữ giá giữa requests.
 GET `/categories`, `/brands`, `/collections`, `/collections/{slug}`, `/size-guides/{category_id}`
 không bearer; collection ACTIVE trong [start,end) và ≥1 product public, lookbook chỉ caption
 (dùng làm alternate text). locale query vi/en ưu tiên Accept-Language, default vi.

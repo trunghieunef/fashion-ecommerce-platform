@@ -13,9 +13,14 @@
 **Trạng thái local:** Task1–6 đã commit và review; Task7 verification ngày 2026-10-11
 có contract43/Redocly, scripts14, smoke và sáu mutation PASS, full reactor453 PASS.
 Tài liệu hoàn tất ngày 2026-10-13 với docs58, diff checks và staged secret scan;
-Task7/task review và whole-branch review do controller chốt. Parent CAT-02 **In progress**,
+Task7 đã review; whole-branch review ngày 2026-10-13 yêu cầu final fix wave F1/F2 và docs F4/F5/F6,
+F3 chờ owner decision. F1 escape sau lower/unaccent và F2 snapshot consistency là technical
+corrections đã ghi ledger; controller scoped re-review sau wave. Parent CAT-02 **In progress**,
 02b pending; chưa push/PR/merge/remote CI/staging hoặc nghiệm thu parent.
 [Evidence](../../evidence/cat-02a-local-2026-10-11.md) và [handoff](2026-10-11-cat-02a-handoff.md).
+Final fix verification 2026-10-13: full457 (catalog286), connected48, contracts43/Redocly,
+scripts14, docs58/diff và pinned secret scans PASS; RED4 và SQL percent mutant1 assertion
+failure/0 errors, source restored/recompiled. F3 Minor vẫn chờ owner, quote/schema chưa đổi.
 
 ## Global Constraints
 
@@ -92,7 +97,7 @@ CREATE FUNCTION f_unaccent(text) RETURNS text
   - `record BrowseFilters(String q, UUID categoryId, UUID brandId, String size, String color, String tag, Long minPrice, Long maxPrice, Sort sort)`
   - `static BrowseFilters parse(Map<String,String> params, boolean requireQ)` — gom mọi lỗi rồi ném một `Api.Problem(400, "VALIDATION_ERROR", "INVALID_FILTER", errors)`; field name là tên query param (`q`, `category_id`, `brand_id`, `size`, `color`, `tag`, `min_price`, `max_price`, `sort`). UUID/long nhận dạng String và parse tại đây (tránh `MethodArgumentTypeMismatchException`).
   - `String hash()` — 16 hex đầu SHA-256 của chuỗi `sort|q(lowercase)|category|brand|size(lowercase)|color(lowercase)|tag|min|max` (null → rỗng).
-  - `String likePattern()` — `'%' + escape(f_unaccent-ready lowercase q) + '%'`, escape `\`→`\\`, `%`→`\%`, `_`→`\_`; null khi không có q.
+  - `q()` giữ raw query đã trim; pattern literal dựng trong PostgreSQL sau lower/unaccent (technical correction F1 ngày 2026-10-13), không có Java likePattern helper.
   - `record ProductCursor(String sort, String value, UUID id, String filters)`; `String encode()` base64url không padding của JSON `{"s","v","id","f"}`; `static ProductCursor decode(String raw, BrowseFilters f)` ném `Api.Problem(400, "VALIDATION_ERROR", "INVALID_CURSOR", [FieldError("cursor", ...)])` khi base64/JSON hỏng, thiếu field, `s != f.sort().name()` hoặc `f != f.hash()`. Kiểm `value` trước bind SQL: giá/sold parse `long` không âm; `NEWEST`/`COLLECTIONS` parse Instant và năm UTC 1–9999; `COLLECTION:<slug>` giữ `sort_order` 0–2_147_483_647. Ngoài miền trả cùng lỗi cursor (chủ dự án xác nhận 2026-10-11).
 
 - [x] **Step 1: Write the failing tests**
@@ -113,8 +118,8 @@ CREATE FUNCTION f_unaccent(text) RETURNS text
   assertThat(fields(Map.of(), true)).containsExactly("q");
   assertThat(fields(Map.of("q", "a".repeat(101)), false)).containsExactly("q");
 }
-@Test void likePatternEscapesWildcards() {
-  assertThat(BrowseFilters.parse(Map.of("q", "50%_off\\"), false).likePattern()).isEqualTo("%50\\%\\_off\\\\%");
+@Test void rawQueryIsPreservedForDatabaseNormalization() {
+  assertThat(BrowseFilters.parse(Map.of("q", " ÁO ĐỎ "), false).q()).isEqualTo("ÁO ĐỎ");
 }
 @Test void cursorRoundTripsAndIsBoundToFiltersAndSort() {
   var f = BrowseFilters.parse(Map.of("size", "M"), false);
@@ -160,7 +165,7 @@ CREATE FUNCTION f_unaccent(text) RETURNS text
   - Test fixture `PublicCatalogFixtures(JdbcTemplate jdbc)`: `UUID category(UUID parent, String slug, String status)`, `UUID brand(String name, String status)`, `UUID product(String slug, String nameVi, UUID category, UUID brand, String status, long basePrice, Instant publishedAt, long sold, String... tags)`, `UUID variant(UUID product, String sku, String size, String color, Long override, String status)`, `UUID image(UUID product, int sort, String availability)`, `UUID collection(String slug, String status, Instant start, Instant end)`, `void item(UUID collection, UUID product, int sort)`, `UUID lookbook(UUID collection, int sort)`, `void sizeGuide(UUID category, String locale)`. Insert SQL thẳng (dùng `postgres` superuser connection như `clearCatalog` nếu runtime role thiếu quyền insert media).
 
 Mệnh đề SQL động (chỉ ghép hằng, bind mọi giá trị):
-- `q`: `(f_unaccent(lower(p.name_vi)) ilike f_unaccent(:like) escape '\' or f_unaccent(lower(p.name_en)) ilike f_unaccent(:like) escape '\' or p.slug ilike :like escape '\')`
+- `q`: bind raw trimmed `:q`; PostgreSQL lower/unaccent trước, rồi escape backslash, %, _ và thêm wildcard bao quanh. Một pattern literal dùng chung cho `f_unaccent(lower(p.name_vi/name_en/slug)) ILIKE pattern ESCAPE`. Correction F1 sửa snippet cũ thiếu normalization slug và escape trước unaccent; giữ accepted q/hash/wire contract. HTTP PostgreSQL tests kiểm accented slug, ASCII và fullwidth %, _, backslash.
 - `category_id`: `(p.category_id = :cat or c.parent_id = :cat)`; `brand_id`: `p.brand_id = :brand`; `tag`: `p.tags @> array[:tag]::text[]`
 - `size`/`color`: một `exists (select 1 from product_variants v2 where v2.product_id=p.id and v2.status='ACTIVE' [and lower(v2.size)=lower(:size)] [and lower(v2.color)=lower(:color)])`
 - giá: `pr.min_price >= :min`, `pr.min_price <= :max`
@@ -198,7 +203,7 @@ Mệnh đề SQL động (chỉ ghép hằng, bind mọi giá trị):
 - Consumes: `PublicProductSql.FROM_PUBLIC`, `PublicCatalogFixtures`.
 - Produces (records lồng trong `PublicCatalogRepository`):
   - `ProductDetail(UUID id, String slug, String nameVi, String nameEn, String descriptionVi, String descriptionEn, List<String> tags, Ref category, Ref brand, long minPrice, long maxPrice, List<VariantView> variants, List<ImageView> images, SizeGuideView sizeGuide, Boolean available, Instant observedAt)`; `Ref(UUID id, String name)` (category name theo locale); `VariantView(UUID id, String sku, String size, String color, long effectivePrice)`; `ImageView(UUID assetId, String altVi, String altEn, String variantColor, int sortOrder)`; `SizeGuideView(UUID categoryId, String locale, String guidelineHtml, JsonNode table)`.
-  - `Optional<ProductDetail> product(UUID id, String locale)` trong `@Transactional(readOnly = true)`; `available`/`observedAt` luôn null (spec §2).
+  - `Optional<ProductDetail> product(UUID id, String locale)` trong `@Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)`; `available`/`observedAt` luôn null (spec §2). Product/variants/images/guide cùng snapshot dù writer commit giữa reads (technical ruling F2 ngày 2026-10-13).
   - `List<CategoryNode> categories()` — `CategoryNode(UUID id, String slug, String nameVi, String nameEn, List<CategoryNode> children)`, chỉ ACTIVE, con của cha INACTIVE bị ẩn.
   - `List<BrandView> brands()` — `BrandView(UUID id, String name)`, ACTIVE, order by name.
   - `Optional<SizeGuideView> sizeGuide(UUID categoryId, String locale)` — category phải ACTIVE.
@@ -232,7 +237,7 @@ Mệnh đề SQL động (chỉ ghép hằng, bind mọi giá trị):
 - Produces:
   - Mảnh SQL visibility collection: `co.status='ACTIVE' and (co.start_at is null or co.start_at <= now()) and (co.end_at is null or co.end_at > now()) and exists (select 1 from collection_items ci join products p on p.id=ci.product_id ... <FROM_PUBLIC điều kiện> where ci.collection_id=co.id)`.
   - `CollectionSummary(UUID id, String slug, String nameVi, String nameEn, UUID coverAssetId, Instant startAt, Instant endAt)`; `CollectionPage(List<CollectionSummary> items, String nextCursor)`.
-  - `CollectionDetail(CollectionSummary collection, List<LookbookView> lookbook, List<ProductSummary> products, String nextCursor)`; `LookbookView(UUID assetId, String captionVi, String captionEn, int sortOrder)` (chỉ asset AVAILABLE; frontend dùng caption làm alternate text theo quyết định chủ dự án 2026-10-11, khớp V006). Cover không AVAILABLE trả `coverAssetId=null`.
+  - `CollectionDetail(CollectionSummary collection, List<LookbookView> lookbook, List<ProductSummary> products, String nextCursor)`; `LookbookView(UUID assetId, String captionVi, String captionEn, int sortOrder)` (chỉ asset AVAILABLE; frontend dùng caption làm alternate text theo quyết định chủ dự án 2026-10-11, khớp V006). Cover không AVAILABLE trả `coverAssetId=null`. Detail dùng transaction read-only REPEATABLE_READ, visibility/cover/lookbook/products cùng snapshot (technical ruling F2); regression HTTP có test-only SQL hook và writer transaction riêng commit giữa reads, không sleep/timing loop.
   - Cursor collection list: keyset `(co.created_at, co.id)` desc; cursor products: `(ci.sort_order, ci.product_id)` asc. Dùng lại `ProductCursor` với `sort` = `"COLLECTIONS"` hoặc `"COLLECTION:" + slug`, `filters` = `""`.
   - Controller: `GET /api/v1/catalog/collections?limit&cursor`, `GET /api/v1/catalog/collections/{slug}?limit&cursor`; limit sai → 400 field `limit`; không public → 404 `COLLECTION_NOT_FOUND`.
 

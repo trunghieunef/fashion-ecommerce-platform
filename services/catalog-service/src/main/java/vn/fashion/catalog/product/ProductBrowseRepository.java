@@ -24,11 +24,14 @@ public class ProductBrowseRepository {
     var params = new HashMap<String, Object>();
     if (f.q() != null) {
       sql.append("""
-          and (f_unaccent(lower(p.name_vi)) ilike f_unaccent(:like) escape '\\'
-            or f_unaccent(lower(p.name_en)) ilike f_unaccent(:like) escape '\\'
-            or p.slug ilike :like escape '\\')
+          and exists (select 1 from (select '%' ||
+            replace(replace(replace(f_unaccent(lower(:q)), chr(92), chr(92)||chr(92)),
+              '%', chr(92)||'%'), '_', chr(92)||'_') || '%' pattern) search
+            where f_unaccent(lower(p.name_vi)) ilike search.pattern escape '\\'
+              or f_unaccent(lower(p.name_en)) ilike search.pattern escape '\\'
+              or f_unaccent(lower(p.slug)) ilike search.pattern escape '\\')
           """);
-      params.put("like", f.likePattern());
+      params.put("q", f.q());
     }
     if (f.categoryId() != null) {
       sql.append(" and (p.category_id=:cat or c.parent_id=:cat)");

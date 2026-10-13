@@ -129,6 +129,10 @@ collection chỉ gồm product public (`ACTIVE`, category ACTIVE, brand null ho�
 | POST | /notifications/unsubscribe | Scoped token / 2 | token trong body → preference, idempotent |
 
 CAT-02a: limit mặc định 20, 1–100; size/color/tag trim 1–64; UUID chuẩn cho category_id/brand_id.
+Search bind raw q đã trim, PostgreSQL lower/unaccent rồi escape backslash, %, _ trước khi
+thêm wildcard bao quanh; names và slug dùng cùng pattern literal. Detail product và collection
+dùng transaction read-only REPEATABLE_READ để mọi reads trong response cùng snapshot;
+writer commit giữa reads chỉ hiện trong request sau, không giữ giá giữa requests.
 Tiền integer VND 0..9_223_372_036_854_775_807; min_price <= max_price, lọc/sort theo
 min(coalesce(price_override,base_price)) trên variant ACTIVE. size/color phải khớp cùng variant.
 Sort NEWEST (coalesce(published_at,created_at) DESC/id DESC), BEST_SELLING (sold_quantity

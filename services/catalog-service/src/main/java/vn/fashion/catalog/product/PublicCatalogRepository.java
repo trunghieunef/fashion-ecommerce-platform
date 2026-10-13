@@ -10,6 +10,7 @@ import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Isolation;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
@@ -31,7 +32,7 @@ public class PublicCatalogRepository {
 
   public PublicCatalogRepository(JdbcClient jdbc, ObjectMapper json) { this.jdbc = jdbc; this.json = json; }
 
-  @Transactional(readOnly = true)
+  @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
   public Optional<ProductDetail> product(UUID id, String locale) {
     return jdbc.sql("""
         select p.id, p.slug, p.name_vi, p.name_en, p.description_vi, p.description_en, p.tags,

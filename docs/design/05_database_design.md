@@ -246,7 +246,7 @@ Outbox/idempotency/audit thuộc catalog-db; audit runtime chỉ INSERT/SELECT, 
 khớp metadata của response mutation đầu; retry không ghi thêm audit. Collection,
 size-guide đã có từ CAT-01b; media (upload/attach/read) thuộc CAT-03 và đã chạy local. Đây chưa phải acceptance toàn bộ CAT-01.
 
-`TASK:CAT-02a` thêm append-only `V007__public_search_unaccent.sql`: CREATE EXTENSION IF NOT
+`TASK:CAT-02a` thêm append-only `V007__public_search.sql`: CREATE EXTENSION IF NOT
 EXISTS unaccent và hàm f_unaccent(text) IMMUTABLE bọc unaccent('unaccent', $1). Flyway role
 có CREATE database/schema; runtime gọi hàm để tìm kiếm bỏ dấu, không cần quyền tạo extension.
 Đã kiểm PostgreSQL 17.11 Testcontainers và volume local qua local-up; V001–V006 giữ nguyên.

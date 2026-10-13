@@ -22,7 +22,7 @@ class BrowseFiltersTest {
     var f = BrowseFilters.parse(Map.of("q", "  Áo  "), false);
     assertThat(f.q()).isEqualTo("Áo");
     assertThat(f.sort()).isEqualTo(Sort.NEWEST);
-    assertThat(BrowseFilters.parse(Map.of(), false).likePattern()).isNull();
+    assertThat(BrowseFilters.parse(Map.of(), false).q()).isNull();
   }
 
   @Test void reportsEveryInvalidField() {
@@ -63,9 +63,9 @@ class BrowseFiltersTest {
         .containsExactlyInAnyOrder("min_price", "max_price", "category_id", "brand_id");
   }
 
-  @Test void likePatternEscapesWildcards() {
-    assertThat(BrowseFilters.parse(Map.of("q", "50%_off\\"), false).likePattern()).isEqualTo("%50\\%\\_off\\\\%");
-    assertThat(BrowseFilters.parse(Map.of("q", " ÁO ĐỎ "), false).likePattern()).isEqualTo("%áo đỏ%");
+  @Test void rawQueryIsPreservedForDatabaseNormalization() {
+    assertThat(BrowseFilters.parse(Map.of("q", "50%_off\\"), false).q()).isEqualTo("50%_off\\");
+    assertThat(BrowseFilters.parse(Map.of("q", " ÁO ĐỎ "), false).q()).isEqualTo("ÁO ĐỎ");
   }
 
   @Test void cursorRoundTripsAndIsBoundToFiltersAndSort() {
@@ -107,7 +107,6 @@ class BrowseFiltersTest {
     var previous = Locale.getDefault();
     try {
       Locale.setDefault(Locale.forLanguageTag("tr"));
-      assertThat(BrowseFilters.parse(Map.of("q", "I"), false).likePattern()).isEqualTo("%i%");
       assertThat(BrowseFilters.parse(Map.of("q", "I"), false).hash())
           .isEqualTo(BrowseFilters.parse(Map.of("q", "i"), false).hash());
     } finally {

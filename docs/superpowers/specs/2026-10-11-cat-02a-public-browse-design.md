@@ -82,8 +82,11 @@ Truy vấn list trong một repository mới `ProductBrowseRepository`, một c�
   phải khớp cả hai.
 - `category_id`: category đó hoặc category con trực tiếp. `brand_id`: bằng. `tag`: `tags @> ARRAY[:tag]`.
 - Khoảng giá: so với `min_price`.
-- `q`: `f_unaccent(lower(x)) ILIKE '%' || f_unaccent(lower(:q)) || '%' ESCAPE '\'` trên `name_vi`,
-  `name_en`, `slug`; `%`, `_`, `\` trong `q` được escape trước khi bind.
+- `q`: bind raw query đã trim; PostgreSQL `f_unaccent(lower(:q))` trước, rồi escape backslash,
+  `%`, `_` và thêm `%` hai đầu. Cùng pattern literal so với `f_unaccent(lower(x))` cho
+  `name_vi`, `name_en`, `slug` bằng ILIKE/ESCAPE. Unaccent có thể tạo metacharacter từ
+  ký tự fullwidth, nên escape phải sau normalization (technical correction F1 ngày 2026-10-13).
+  Miền q, hash/cursor wire shape giữ nguyên.
 
 Mọi giá trị đi qua bind parameter; SQL động chỉ ghép các mệnh đề hằng.
 
@@ -114,7 +117,10 @@ Giá trị cursor được kiểm trước khi bind SQL: timestamp `NEWEST`/`COL
 Ngoài các miền này → `400 VALIDATION_ERROR`, message `INVALID_CURSOR`, field `cursor`
 (chủ dự án xác nhận ngày 2026-10-11; cùng miền timestamp với CAT-01b).
 
-Detail product đọc product, variants, images, size guide trong một transaction read-only.
+Detail product đọc product, variants, images, size guide trong một transaction read-only
+`REPEATABLE_READ`; collection detail cũng đọc visibility/cover, lookbook và products trong
+cùng snapshot. Đây là technical ruling F2 ngày 2026-10-13 để response nội bộ nhất quán
+khi writer commit giữa reads; không giữ giá giữa requests và không thêm row lock.
 
 ## 4. Internal variant quote
 

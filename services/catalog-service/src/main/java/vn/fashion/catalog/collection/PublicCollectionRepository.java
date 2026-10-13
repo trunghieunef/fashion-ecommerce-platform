@@ -11,6 +11,7 @@ import java.util.UUID;
 import org.springframework.stereotype.Repository;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Isolation;
 import vn.fashion.catalog.product.ProductCursor;
 import vn.fashion.catalog.product.ProductSummary;
 import vn.fashion.catalog.product.PublicProductSql;
@@ -56,7 +57,7 @@ public class PublicCollectionRepository {
     return new CollectionPage(page.stream().map(CollectionRow::collection).toList(), next);
   }
 
-  @Transactional(readOnly = true)
+  @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
   public Optional<CollectionDetail> detail(String slug, ProductCursor after, int limit) {
     var collection = jdbc.sql("select " + COLUMNS + VISIBLE + " and co.slug=:slug").param("slug", slug)
         .query((rs, row) -> summary(rs)).optional();

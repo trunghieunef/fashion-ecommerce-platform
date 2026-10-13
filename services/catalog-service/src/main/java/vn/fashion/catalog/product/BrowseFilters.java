@@ -54,11 +54,6 @@ public record BrowseFilters(String q, UUID categoryId, UUID brandId, String size
     }
   }
 
-  public String likePattern() {
-    return q == null ? null : "%" + lower(q).replace("\\", "\\\\")
-        .replace("%", "\\%").replace("_", "\\_") + "%";
-  }
-
   private static String lower(String value) {
     return value == null ? null : value.toLowerCase(Locale.ROOT);
   }

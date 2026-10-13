@@ -19,13 +19,30 @@ contracts43 + Redocly và scripts14 PASS; local-up/smoke PASS. Sáu required sou
 mutants đều killed với 1 assertion failure/0 errors, source phục hồi nguyên byte.
 Hoàn tất tài liệu ngày 2026-10-13: docs58/diff checks và pinned Gitleaks staged patch
 PASS; history scan101 commits không có leaks. Full suite/mutation/smoke không rerun
-trong lượt hoàn tất docs; log thực và counts nằm trong evidence.
+trong lượt hoàn tất Task 7 docs tại `d18b7fd`; đây là bằng chứng lịch sử trước final fixes,
+log thực và counts nằm trong evidence.
 
 Commit Task1–6: `a260312`, `8ae8fcf`, `57ce012`, `086b8a5`, `97fdef9`, `e141af5`.
 Task7 có subject `docs(CAT-02): contract, smoke and docs for CAT-02a public browse`;
 hash local nằm trong task-7-report.md và `git log` (tránh hash tự tham chiếu trong commit).
 Raw evidence sẽ archive ở `.superpowers/cat-02a-verification-2026-10-11/` sau final
 whole-branch review; controller copy rồi chỉ xóa plan SDD workspace, giữ ignored archive.
+
+Final review ngày 2026-10-13: F1 search normalization và F2 detail snapshot là Important;
+final fix wave sửa SQL lower/unaccent trước escape cho names/slug và read-only REPEATABLE_READ
+cho product/collection detail. F4 V007 filename, F5 năm public contract test methods và F6
+phạm vi exception advice đã đồng bộ. Đây là technical corrections theo ledger, không thêm
+quyết định nghiệp vụ. F3 Minor còn chờ owner: schema quote đóng shape nhưng runtime bỏ qua
+unknown fields; quote/schema giữ nguyên trong wave này, scoped re-review phải ghi NOT ADDRESSED.
+
+Fresh final fix verification ngày 2026-10-13: full reactor BUILD SUCCESS **457 tests**
+(durability36/security38/user65/catalog286/gateway32), 0 failures/errors/skips; connected48,
+contracts43/Redocly, scripts14, docs58/diff PASS. RED4 assertion failures/no errors và SQL percent
+mutant1 assertion failure/no errors; restored bytes/SHA và recompilation được xác minh trước
+full tests. Pinned Gitleaks history102/staged patch không leaks. Raw `final-fix-*` logs/report
+tách khỏi Task7Oct11; không rerun smoke/local-up hoặc năm mutants unchanged ở wave này.
+Fix subject `fix(CAT-02): normalize search and keep detail snapshots consistent`; local hash
+nằm trong report/git log. Scoped re-review và archive còn do controller chốt.
 
 CAT-02 **In progress**, CAT-02b pending: Redis cache/invalidation durable (CAT-09),
 replay-safe ORDER_COMPLETED sold_quantity, inventory observation và public HTTP cache
@@ -34,5 +51,5 @@ Chưa sinh key cart/order thật; local smoke dùng synthetic OPS token, không 
 login→OPS issuance. Existing local `.env`, credentials, volumes/data giữ nguyên; smoke để
 lại fixture synthetic theo policy hiện có.
 
-Bước tiếp theo: controller review toàn diff/evidence trước lưu archive; parent vẫn mở.
+Bước tiếp theo: controller scoped re-review final fixes/diff/evidence trước lưu archive; parent vẫn mở.
 Push/PR/merge hoặc triển khai 02b chỉ khi chủ dự án yêu cầu; không tự provision AWS.
