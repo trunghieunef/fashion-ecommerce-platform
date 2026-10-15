@@ -51,8 +51,9 @@
 ### Task 1: platform-messaging — relay, envelope, consumer helper
 
 **Files:**
-- Create: `services/platform-messaging/pom.xml` (deps: `platform-durability`, `spring-kafka`, `spring-boot-autoconfigure`, `jackson-databind`; test: `spring-boot-starter-test`, `testcontainers-kafka`, `testcontainers-postgresql`, `postgresql`)
+- Create: `services/platform-messaging/pom.xml` (deps: `platform-durability`, `spring-kafka`, `spring-boot-autoconfigure`, `jackson-databind`, `micrometer-core`, `spring-boot-health`; test: `spring-boot-starter-test`, `testcontainers-junit-jupiter`, `testcontainers-kafka`, `testcontainers-postgresql`, `postgresql`; version từ BOM hiện hành — chủ dự án duyệt bổ sung ngày 2026-10-15)
 - Create: `services/platform-messaging/src/main/java/vn/fashion/platform/messaging/{EventEnvelope,OutboxRelay,InboxListenerSupport,PermanentEventException,MessagingAutoConfiguration}.java`
+- Create: `services/platform-messaging/src/main/java/vn/fashion/platform/messaging/KafkaHealthIndicator.java` (Interfaces đã yêu cầu health riêng, không thuộc readiness)
 - Create: `services/platform-messaging/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`
 - Create: `services/platform-messaging/README.md`
 - Modify: `pom.xml` (module `services/platform-messaging` sau `platform-security`)
@@ -68,6 +69,7 @@
   - `MessagingAutoConfiguration`: bean `DefaultErrorHandler` với `ExponentialBackOff(1000, 2.0)` max interval 30 s, `maxElapsedTime = Long.MAX_VALUE` (retry vô hạn); `addNotRetryableExceptions(PermanentEventException.class)`; recoverer `DeadLetterPublishingRecoverer` đích `<topic>.DLT` cùng partition; bean `OutboxRelay` khi `fashion.messaging.relay.enabled=true`; `@EnableScheduling`.
   - Header khi publish: `event_id`, `event_type` (từ envelope), `correlation_id`, và `traceparent = "00-" + correlationId + "-" + 16 hex ngẫu nhiên + "-01"` khi `correlationId` khớp `[0-9a-f]{32}`.
   - Producer props bắt buộc: `acks=all`, `enable.idempotence=true`, key/value `StringSerializer`. Consumer: `enable.auto.commit=false`, `AckMode.MANUAL`, `auto.offset.reset=earliest`, value `ByteArrayDeserializer`.
+  - Ngoại lệ DLT đã duyệt ngày 2026-10-15: recoverer dùng template riêng `KafkaTemplate<String, byte[]>`, key StringSerializer/value ByteArraySerializer để giữ nguyên record lỗi; đợi ACK DLT, gửi thất bại phải ném lỗi để retry record gốc. Relay giữ nguyên String/String và constructor đã nêu.
   - Metrics (Micrometer): gauge `outbox_pending` (`count(*) where status <> 'SENT'`), gauge `outbox_oldest_pending_age_seconds`; counter `outbox_relay_failures_total` (publish lỗi), counter `messaging_dlt_total{topic}` (recoverer gửi DLT).
   - `KafkaHealthIndicator` (tên `kafka`): `AdminClient.describeCluster()` timeout 2 s. **Không** đưa vào readiness: Kafka down không chặn nhận request vì outbox giữ event (sửa spec §8 cho khớp).
 
@@ -83,7 +85,7 @@
 
 // OutboxRelayKafkaIntegrationTest (Postgres + Kafka containers, schema từ durability.sql)
 @Test void marksSentOnlyAfterBrokerAck()            // append 1 → relayOnce()==1 → record trên topic, status SENT
-@Test void keepsPendingWhileBrokerDown()            // relay với KafkaTemplate trỏ 127.0.0.1:1 (max.block.ms 500, send-timeout 1 s, lease 1 s) → relayOnce()==0, status != SENT, last_error not null, outbox_relay_failures_total == 1; sau 1 s relay với template thật gửi được, SENT
+@Test void keepsPendingWhileBrokerDown()            // relay với KafkaTemplate trỏ 127.0.0.1:1 (max.block.ms 500, send-timeout 1 s, production lease 30 s) → relayOnce()==0, status != SENT, last_error not null, outbox_relay_failures_total == 1; test cho lease hết hạn bằng SQL trên PostgreSQL Testcontainer rồi relay với template thật gửi được, SENT (chủ dự án duyệt 2026-10-15, không thêm knob lease test-only)
 @Test void publishesTraceAndEventHeaders()          // header traceparent bắt đầu "00-" + correlation_id; event_id == outbox id
 @Test void preservesAggregateOrder()                // 3 event cùng aggregate → offset tăng đúng aggregate_sequence
 @Test void exposesOutboxGauges()                    // 2 PENDING → outbox_pending == 2, oldest age > 0

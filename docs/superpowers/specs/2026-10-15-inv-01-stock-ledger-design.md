@@ -142,6 +142,8 @@ Kafka headers: `event_id`, `event_type`, `traceparent`, `correlation_id`.
   - Lỗi tạm thời (DB down, timeout): retry backoff tăng dần, trần 30 s, không giới hạn số lần.
   - Lỗi vĩnh viễn (JSON/envelope sai schema, `event_type`/`version` không hỗ trợ, dữ liệu mâu thuẫn):
     publish nguyên record + header sang `<topic>.DLT`, log ERROR kèm `event_id`.
+    DLT dùng producer byte[] riêng, đợi ACK; gửi DLT lỗi phải retry record gốc, không bỏ message.
+    Relay vẫn dùng producer String/String (chủ dự án duyệt làm rõ ngày 2026-10-15).
 - **Envelope:** theo 03 §5.1; topic/key tra `contracts/events/registry.json`, không hardcode trong service.
 
 ## 8. Vận hành
