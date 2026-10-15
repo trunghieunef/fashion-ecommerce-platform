@@ -1,0 +1,1045 @@
+openapi: 3.1.0
+info:
+  title: Inventory API
+  version: 0.1.0
+  description: TASK:INV-01 stock authority and immutable ledger; admin ES256 permissions checked at service, internal ADR-19
+    service tokens. Local implementation, not reserve/commit/release (INV-02).
+servers:
+- url: http://localhost:8080
+  description: Local Gateway (admin only)
+tags:
+- name: Stock admin
+  description: OPS stock and ledger
+- name: Internal stock
+  description: Private service-to-service stock reads
+paths:
+  /admin/api/v1/inventory/skus:
+    get:
+      operationId: listStock
+      summary: List stock by SKU
+      description: Requires inventory.read. Prefix is ASCII, trimmed and uppercased; literal prefix, SKU keyset ascending.
+        End page has null next_cursor.
+      tags:
+      - Stock admin
+      x-implementation-status: implemented
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: sku_prefix
+        in: query
+        schema:
+          type: string
+          maxLength: 64
+      - $ref: ./common.yaml#/components/parameters/Limit
+      - name: cursor
+        in: query
+        description: Base64url SKU for stock; base64url JSON {t,id} for newest-first ledger. Invalid cursor returns 400.
+        schema:
+          type: string
+          minLength: 1
+      responses:
+        '200':
+          description: Success with a consistent stock/version snapshot
+          headers:
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockPageResponse'
+              example:
+                code: OK
+                data:
+                  items:
+                  - sku: SKU-1
+                    variant_id: 4c8a1f2e-0000-4000-8000-000000000002
+                    product_id: 4c8a1f2e-0000-4000-8000-000000000003
+                    on_hand: 5
+                    reserved: 2
+                    available: 3
+                    min_stock: 0
+                    status: ACTIVE
+                    version: 1
+                  next_cursor: null
+                metadata:
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+        '400':
+          description: Safe error envelope
+          headers:
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: VALIDATION_ERROR
+                message: VALIDATION_ERROR
+                metadata:
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+        '401':
+          description: Safe error envelope
+          headers:
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: UNAUTHORIZED
+                message: UNAUTHORIZED
+                metadata:
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+        '403':
+          description: Safe error envelope
+          headers:
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: FORBIDDEN
+                message: FORBIDDEN
+                metadata:
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+        '500':
+          description: Safe error envelope
+          headers:
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: INTERNAL
+                message: INTERNAL
+                metadata:
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+        '503':
+          description: Safe error envelope
+          headers:
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: TEMPORARILY_UNAVAILABLE
+                message: TEMPORARILY_UNAVAILABLE
+                metadata:
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+  /admin/api/v1/inventory/skus/{sku}/transactions:
+    get:
+      operationId: listStockTransactions
+      summary: Read immutable ledger
+      description: Requires inventory.read. Newest (created_at,id) first, SKU missing returns 404; cursor timestamp must fit
+        UTC years 1..9999.
+      tags:
+      - Stock admin
+      x-implementation-status: implemented
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: sku
+        in: path
+        required: true
+        description: ASCII SKU; trimmed and normalized to uppercase
+        schema:
+          type: string
+      - $ref: ./common.yaml#/components/parameters/Limit
+      - name: cursor
+        in: query
+        description: Base64url SKU for stock; base64url JSON {t,id} for newest-first ledger. Invalid cursor returns 400.
+        schema:
+          type: string
+          minLength: 1
+      responses:
+        '200':
+          description: Success with a consistent stock/version snapshot
+          headers:
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LedgerPageResponse'
+              example:
+                code: OK
+                data:
+                  items:
+                  - id: 4c8a1f2e-0000-4000-8000-000000000004
+                    type: ADJUST
+                    on_hand_delta: 5
+                    reserved_delta: 0
+                    reason: delivery
+                    actor_id: 4c8a1f2e-0000-4000-8000-000000000005
+                    order_id: null
+                    created_at: '2026-10-16T00:00:00Z'
+                  next_cursor: null
+                metadata:
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+        '400':
+          description: Safe error envelope
+          headers:
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: VALIDATION_ERROR
+                message: VALIDATION_ERROR
+                metadata:
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+        '401':
+          description: Safe error envelope
+          headers:
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: UNAUTHORIZED
+                message: UNAUTHORIZED
+                metadata:
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+        '403':
+          description: Safe error envelope
+          headers:
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: FORBIDDEN
+                message: FORBIDDEN
+                metadata:
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+        '404':
+          description: SKU_NOT_FOUND
+          headers:
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: NOT_FOUND
+                message: SKU_NOT_FOUND
+                metadata:
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+        '500':
+          description: Safe error envelope
+          headers:
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: INTERNAL
+                message: INTERNAL
+                metadata:
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+        '503':
+          description: Safe error envelope
+          headers:
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: TEMPORARILY_UNAVAILABLE
+                message: TEMPORARILY_UNAVAILABLE
+                metadata:
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+  /admin/api/v1/inventory/adjust:
+    post:
+      operationId: adjustStock
+      summary: Apply signed stock delta
+      description: 'Requires inventory.adjust. One transaction: lock SKU, stock/version update, immutable ADJUST ledger and
+        snapshot outbox. No stock below reserved; integer overflow is 400 field delta. Idempotency scoped actor/operation/key;
+        hash canonical SKU/reason/body, replay stored data/status with new metadata. Ledger key user:<actor>:inventory.adjust:<key>.'
+      tags:
+      - Stock admin
+      x-implementation-status: implemented
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      responses:
+        '200':
+          description: Success with a consistent stock/version snapshot
+          headers:
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockResponse'
+              example:
+                code: OK
+                data:
+                  sku: SKU-1
+                  variant_id: 4c8a1f2e-0000-4000-8000-000000000002
+                  product_id: 4c8a1f2e-0000-4000-8000-000000000003
+                  on_hand: 5
+                  reserved: 2
+                  available: 3
+                  min_stock: 0
+                  status: ACTIVE
+                  version: 1
+                metadata:
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+        '400':
+          description: Safe error envelope
+          headers:
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: VALIDATION_ERROR
+                message: VALIDATION_ERROR
+                metadata:
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+        '401':
+          description: Safe error envelope
+          headers:
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: UNAUTHORIZED
+                message: UNAUTHORIZED
+                metadata:
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+        '403':
+          description: Safe error envelope
+          headers:
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: FORBIDDEN
+                message: FORBIDDEN
+                metadata:
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+        '404':
+          description: SKU_NOT_FOUND
+          headers:
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: NOT_FOUND
+                message: SKU_NOT_FOUND
+                metadata:
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+        '409':
+          description: Idempotency body conflict or ON_HAND_BELOW_RESERVED
+          headers:
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: CONFLICT
+                message: CONFLICT
+                metadata:
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+        '500':
+          description: Safe error envelope
+          headers:
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: INTERNAL
+                message: INTERNAL
+                metadata:
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+        '503':
+          description: Safe error envelope
+          headers:
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: TEMPORARILY_UNAVAILABLE
+                message: TEMPORARILY_UNAVAILABLE
+                metadata:
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdjustRequest'
+            example:
+              sku: SKU-1
+              delta: 5
+              reason: delivery
+  /admin/api/v1/inventory/import:
+    post:
+      operationId: importInboundStock
+      summary: Import inbound CSV atomically
+      description: Requires inventory.adjust. UTF-8, optional BOM, LF/CRLF, exact sku,quantity header; no quoted cells; 1..1000
+        data rows, quantity 1..1000000, no duplicate canonical SKU. File <=128 KiB, multipart <=160 KiB. Strip reason 1..500.
+        Validate every row/unknown SKU/overflow before writing; errors use rows[n].sku/quantity (header line 1). INBOUND adds
+        quantity, never overwrites on_hand. Idempotency hashes raw file bytes SHA-256 plus stripped reason; replay stored
+        data/status with fresh metadata; ledger key user:<actor>:inventory.import:<key>.
+      tags:
+      - Stock admin
+      x-implementation-status: implemented
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      responses:
+        '200':
+          description: Success with a consistent stock/version snapshot
+          headers:
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportResultResponse'
+              example:
+                code: OK
+                data:
+                  rows: 1
+                  total_quantity: 5
+                metadata:
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+        '400':
+          description: Safe error envelope
+          headers:
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: VALIDATION_ERROR
+                message: VALIDATION_ERROR
+                metadata:
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+        '401':
+          description: Safe error envelope
+          headers:
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: UNAUTHORIZED
+                message: UNAUTHORIZED
+                metadata:
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+        '403':
+          description: Safe error envelope
+          headers:
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: FORBIDDEN
+                message: FORBIDDEN
+                metadata:
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+        '409':
+          description: Idempotency body conflict or ON_HAND_BELOW_RESERVED
+          headers:
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: CONFLICT
+                message: CONFLICT
+                metadata:
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+        '413':
+          description: Multipart file exceeds 128 KiB or request exceeds 160 KiB
+          headers:
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: VALIDATION_ERROR
+                message: VALIDATION_ERROR
+                metadata:
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+        '500':
+          description: Safe error envelope
+          headers:
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: INTERNAL
+                message: INTERNAL
+                metadata:
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+        '503':
+          description: Safe error envelope
+          headers:
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: TEMPORARILY_UNAVAILABLE
+                message: TEMPORARILY_UNAVAILABLE
+                metadata:
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+              - file
+              - reason
+              additionalProperties: false
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  maxLength: 131072
+                reason:
+                  type: string
+                  minLength: 1
+                  maxLength: 500
+  /internal/api/v1/inventory/skus/{sku}:
+    get:
+      operationId: getInternalStock
+      summary: Read internal availability
+      description: ADR-19 ES256 service token audience inventory-service. Fixed callers catalog-service/cart-service with
+        configured public keys. Verify token/caller before SKU validation. observed_at is updated_at from the same stock/version
+        row. Not routed by Gateway.
+      tags:
+      - Internal stock
+      x-implementation-status: implemented
+      security:
+      - serviceToken: []
+      parameters:
+      - name: sku
+        in: path
+        required: true
+        description: ASCII SKU; trimmed and normalized to uppercase
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Success with a consistent stock/version snapshot
+          headers:
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+            Cache-Control:
+              description: Never cache internal stock or its errors
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternalStockResponse'
+              example:
+                code: OK
+                data:
+                  sku: SKU-1
+                  variant_id: 4c8a1f2e-0000-4000-8000-000000000002
+                  available: 3
+                  version: 1
+                  observed_at: '2026-10-16T00:00:00Z'
+                metadata:
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+        '400':
+          description: Safe error envelope
+          headers:
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+            Cache-Control:
+              description: Never cache internal stock or its errors
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: VALIDATION_ERROR
+                message: VALIDATION_ERROR
+                metadata:
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+        '401':
+          description: Safe error envelope
+          headers:
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+            Cache-Control:
+              description: Never cache internal stock or its errors
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: UNAUTHORIZED
+                message: UNAUTHORIZED
+                metadata:
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+        '403':
+          description: Safe error envelope
+          headers:
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+            Cache-Control:
+              description: Never cache internal stock or its errors
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: FORBIDDEN
+                message: FORBIDDEN
+                metadata:
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+        '404':
+          description: SKU_NOT_FOUND
+          headers:
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+            Cache-Control:
+              description: Never cache internal stock or its errors
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: NOT_FOUND
+                message: SKU_NOT_FOUND
+                metadata:
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+        '500':
+          description: Safe error envelope
+          headers:
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+            Cache-Control:
+              description: Never cache internal stock or its errors
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: INTERNAL
+                message: INTERNAL
+                metadata:
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+        '503':
+          description: Safe error envelope
+          headers:
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+            Cache-Control:
+              description: Never cache internal stock or its errors
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: TEMPORARILY_UNAVAILABLE
+                message: TEMPORARILY_UNAVAILABLE
+                metadata:
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+      servers:
+      - url: http://localhost:8083
+        description: Private inventory service; bypasses public Gateway
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: ADR-21 user ES256 token; inventory.read or inventory.adjust
+    serviceToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: ADR-19 ES256, audience inventory-service, fixed caller allowlist
+  schemas:
+    Stock:
+      type: object
+      required:
+      - sku
+      - variant_id
+      - product_id
+      - on_hand
+      - reserved
+      - available
+      - min_stock
+      - status
+      - version
+      additionalProperties: false
+      properties:
+        sku:
+          type: string
+          pattern: ^[A-Z0-9][A-Z0-9._-]{0,63}$
+          maxLength: 64
+        variant_id:
+          type: string
+          format: uuid
+        product_id:
+          type: string
+          format: uuid
+        on_hand:
+          type: integer
+          minimum: 0
+          maximum: 2147483647
+        reserved:
+          type: integer
+          minimum: 0
+          maximum: 2147483647
+        available:
+          type: integer
+          minimum: 0
+          maximum: 2147483647
+        min_stock:
+          type: integer
+          minimum: 0
+          maximum: 2147483647
+        status:
+          type: string
+          enum:
+          - ACTIVE
+          - INACTIVE
+        version:
+          type: integer
+          minimum: 0
+          maximum: 9223372036854775807
+    InternalStock:
+      type: object
+      required:
+      - sku
+      - variant_id
+      - available
+      - version
+      - observed_at
+      additionalProperties: false
+      properties:
+        sku:
+          type: string
+          pattern: ^[A-Z0-9][A-Z0-9._-]{0,63}$
+          maxLength: 64
+        variant_id:
+          type: string
+          format: uuid
+        available:
+          type: integer
+          minimum: 0
+          maximum: 2147483647
+        version:
+          type: integer
+          minimum: 0
+          maximum: 9223372036854775807
+        observed_at:
+          type: string
+          format: date-time
+          pattern: Z$
+    LedgerItem:
+      type: object
+      required:
+      - id
+      - type
+      - on_hand_delta
+      - reserved_delta
+      - reason
+      - actor_id
+      - order_id
+      - created_at
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum:
+          - INBOUND
+          - RESERVE
+          - COMMIT
+          - RELEASE
+          - ADJUST
+          - RETURN
+        on_hand_delta:
+          type: integer
+          minimum: -2147483648
+          maximum: 2147483647
+        reserved_delta:
+          type: integer
+          minimum: -2147483648
+          maximum: 2147483647
+        reason:
+          type: string
+        actor_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        order_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+          pattern: Z$
+    StockPage:
+      type: object
+      required:
+      - items
+      - next_cursor
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Stock'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+    LedgerPage:
+      type: object
+      required:
+      - items
+      - next_cursor
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/LedgerItem'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+    AdjustRequest:
+      type: object
+      required:
+      - sku
+      - delta
+      - reason
+      additionalProperties: false
+      properties:
+        sku:
+          type: string
+          minLength: 1
+          description: Trim then validate ASCII SKU 1..64 and uppercase before hash/store.
+        delta:
+          type: integer
+          minimum: -2147483648
+          maximum: 2147483647
+          not:
+            const: 0
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: Strip; must remain nonblank.
+    ImportResult:
+      type: object
+      required:
+      - rows
+      - total_quantity
+      additionalProperties: false
+      properties:
+        rows:
+          type: integer
+          minimum: 1
+          maximum: 1000
+        total_quantity:
+          type: integer
+          minimum: 1
+          maximum: 1000000000
+    StockResponse:
+      type: object
+      required:
+      - code
+      - data
+      - metadata
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          const: OK
+        data:
+          $ref: '#/components/schemas/Stock'
+        metadata:
+          $ref: ./common.yaml#/components/schemas/Metadata
+    InternalStockResponse:
+      type: object
+      required:
+      - code
+      - data
+      - metadata
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          const: OK
+        data:
+          $ref: '#/components/schemas/InternalStock'
+        metadata:
+          $ref: ./common.yaml#/components/schemas/Metadata
+    StockPageResponse:
+      type: object
+      required:
+      - code
+      - data
+      - metadata
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          const: OK
+        data:
+          $ref: '#/components/schemas/StockPage'
+        metadata:
+          $ref: ./common.yaml#/components/schemas/Metadata
+    LedgerPageResponse:
+      type: object
+      required:
+      - code
+      - data
+      - metadata
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          const: OK
+        data:
+          $ref: '#/components/schemas/LedgerPage'
+        metadata:
+          $ref: ./common.yaml#/components/schemas/Metadata
+    ImportResultResponse:
+      type: object
+      required:
+      - code
+      - data
+      - metadata
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          const: OK
+        data:
+          $ref: '#/components/schemas/ImportResult'
+        metadata:
+          $ref: ./common.yaml#/components/schemas/Metadata

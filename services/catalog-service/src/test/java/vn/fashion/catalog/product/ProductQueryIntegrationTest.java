@@ -47,6 +47,9 @@ class ProductQueryIntegrationTest {
   @Autowired
   private ObjectMapper objectMapper;
 
+  @Autowired
+  private org.springframework.context.ApplicationContext context;
+
   @LocalServerPort
   private int port;
 
@@ -65,6 +68,11 @@ class ProductQueryIntegrationTest {
   void clearProducts() {
     jdbc.execute("delete from product_variants");
     jdbc.execute("delete from products");
+  }
+
+  @Test
+  void legacyReadContextDoesNotStartRelay() {
+    assertThat(context.getBeansOfType(vn.fashion.platform.messaging.OutboxRelay.class)).isEmpty();
   }
 
   @Test

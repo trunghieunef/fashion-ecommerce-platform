@@ -59,3 +59,19 @@ Cache-Control no-store cả lỗi; observed_at là updated_at cùng snapshot sto
 Service token audience inventory-service, caller catalog-service/cart-service với key
 allowlist; kiểm token/caller trước chuẩn hóa SKU. Gateway chỉ route admin inventory,
 không route internal; local trực tiếp 127.0.0.1:8083, staging dùng private service network.
+
+Smoke INV-01 tạo variant, đợi SKU tối đa10s, adjust +5 rồi admin GET xác nhận available5
+và đọc Kafka snapshot. Internal chỉ có integration test; smoke chưa kiểm cấu hình
+INVENTORY_INTERNAL_CALLERS trong Compose. CART-01 sẽ kiểm với caller thật đầu tiên;
+smoke INV-01 không tạo private key hoặc service token.
+
+Đọc DLT (từ repo root; Git Bash cần tắt path conversion):
+
+```bash
+MSYS_NO_PATHCONV=1 docker compose --env-file infra/local/.env -f infra/local/compose.yaml exec -T kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic catalog.events.DLT --from-beginning
+```
+
+Không replay tự động; điều tra event_id và nguyên nhân, không chỉnh ledger/counter bằng tay.
+Smoke local dùng token synthetic riêng chỉ inventory.read/inventory.adjust, khóa đọc từ .env,
+TTL 300 giây, token trong memory, không chứng minh login → token OPS. SKU có suffix UUID;
+không có DELETE, fixtures/ledger/outbox tích lũy trên volume local. Không reset volume khi phát triển.

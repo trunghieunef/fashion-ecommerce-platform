@@ -1,5 +1,8 @@
 # Cẩm nang tài liệu dự án
 
+INV-01 đang kiểm local trên dev: [evidence](evidence/inv-01-local-2026-10-15.md),
+[handoff](superpowers/plans/2026-10-15-inv-01-handoff.md); chưa Done hoặc push/PR.
+
 Baseline B1 · 2026-09-19 · Đồng bộ để phân công; chưa nghiệm thu triển khai.
 
 Sprint 1 theo ADR-18 chỉ triển khai local và đạt checkpoint S1-local trong 09/10. AWS/PLT-04, provider thật và toàn bộ G1/G2 được thực hiện sau; “local MVP foundation” không đồng nghĩa toàn bộ business MVP đã hoàn thành.

@@ -81,8 +81,25 @@ class InboxListenerSupportKafkaIntegrationTest extends MessagingTestSupport {
     assertThat(meters.find("messaging_dlt_total").tag("topic",topic).counter()).isNull();
   }
 
+  @Test @SuppressWarnings("unchecked") void nullEventIdHeaderDoesNotBlockAfterDlt() throws Exception {
+    var raw = (KafkaTemplate<String, byte[]>) context.getBean("dltKafkaTemplate");
+    byte[] corrupt = {(byte) 0xff, 0x00};
+    var record = new ProducerRecord<String, byte[]>(topic, 1, "product-a", corrupt);
+    record.headers().add("event_id", null);
+    raw.send(record).get(5, java.util.concurrent.TimeUnit.SECONDS);
+    send(UUID.randomUUID(), "VARIANT_CREATED", 1);
+
+    await(() -> effects() == 1 && committed(1) >= 2);
+    var dlt = consume(topic + ".DLT", 1).getFirst();
+    assertThat(dlt.value()).isEqualTo(corrupt);
+    assertThat(dlt.headers().lastHeader("event_id")).isNotNull();
+    assertThat(dlt.headers().lastHeader("event_id").value()).isNull();
+    assertThat(meters.get("messaging_dlt_total").tag("topic", topic).counter().count()).isEqualTo(1);
+  }
+
   @Test void unknownEventTypeIsAckedWithoutInbox() throws Exception {
     send(UUID.randomUUID(),"CATALOG_CHANGED",0); await(() -> committed(0)>=1);
+    send(UUID.randomUUID(),"UNREGISTERED_EVENT",0); await(() -> committed(0)>=2);
     assertThat(effects()).isZero();
     assertThat(jdbc.sql("select count(*) from processed_events").query(Integer.class).single()).isZero();
   }

@@ -16,9 +16,18 @@ Phase 1A hiện có [user-service](../../services/user-service/README.md),
 [platform-security](../../services/platform-security/README.md). Compose thêm Redis;
 login/forgot cần Redis để rate limit (USR-01b-ii), readiness user-service gồm DB + Redis.
 Proxy allowlist/IP handoff ở 03 §1.2 và README Gateway/user-service; mặc định standalone
-không tin header chuyển tiếp. Chưa có Kafka relay, notification-service hoặc UI auth/admin.
+không tin header chuyển tiếp. INV-01 thêm [platform-messaging](../../services/platform-messaging/README.md)
+và [inventory-service](../../services/inventory-service/README.md), Kafka local và relay catalog/inventory.
+User-service chưa bật relay; notification-service/UI auth/admin chưa có.
 Catalog admin CAT-01a dùng cùng ES256 verifier, JdbcClient và durability, có catalog.write,
 version/key/audit; [evidence local](../evidence/cat-01a-local-2026-10-07.md) ghi số test và mutation.
+
+INV-01: `bash scripts/local-up.sh` khởi động PostgreSQL/Kafka, chạy init DB inventory/topic
+idempotent rồi build/start stack; giữ volume. `bash scripts/smoke-local.sh` tạo variant,
+chờ đăng ký SKU, adjust +5 qua Gateway và kiểm event snapshot. JWT synthetic inventory
+chỉ inventory.read/adjust, token catalog vẫn chỉ catalog.write; không chứng minh login OPS.
+`./mvnw -B -pl services/inventory-service -am test` cần Docker PostgreSQL17.11/Kafka4.1.2.
+Readiness inventory chỉ DB, kafka health riêng. Chi tiết [evidence INV-01](../evidence/inv-01-local-2026-10-15.md).
 Quota namespace lấy từ `FASHION_ENV` (local mặc định); HMAC identity dùng khóa dẫn xuất từ
 master sẵn có. Allowlist rỗng phát WARN để tránh quên config khi chạy sau Gateway; header
 không được lookup DNS. Readiness/subnet IPv6 staging còn cần chốt ở 08.

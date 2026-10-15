@@ -16,7 +16,10 @@ chưa SENT tới khi lease hết hạn; crash sau publish có thể gửi trùng
 Consumer gọi `new InboxListenerSupport(inbox, mapper, consumerName).handle(record,
 ack, handlers)` trong listener. Handler ghi DB trong transaction do InboxGuard sở hữu;
 ack sau commit, duplicate event_id không chạy lại effect. Event type không có handler
-được ack mà không ghi inbox. Handler phải ném PermanentEventException với message
+được ack mà không ghi inbox, debug log chỉ event_id (kể cả loại chưa đăng ký; không có
+registry gate ở consumer). Envelope hỏng vào DLT; loại có handler sai version/payload
+phải ném PermanentEventException. Quy tắc DLT chỉ áp dụng hai trường hợp này.
+Handler dùng message
 chung cho dữ liệu lỗi vĩnh viễn; không đưa payload vào exception/log.
 
 | Config | Mặc định |
@@ -53,7 +56,8 @@ Từ repo root, Java21/Maven wrapper/Docker Desktop:
 Tests dùng PostgreSQL `postgres:17.11`, Kafka `apache/kafka:4.1.2` thật qua
 Testcontainers và DDL durability, không H2/mock broker. Retry lease trong test dùng
 SQL cho lease hết hạn; production vẫn30s. Ack observer đọc DB bằng connection độc lập
-để bắt ack trước commit. DLT test kiểm cả bytes không phải UTF-8.
+để bắt ack trước commit. DLT test kiểm cả bytes không phải UTF-8 và header event_id
+có giá trị null: log dùng unknown, record hợp lệ kế tiếp cùng partition vẫn được xử lý.
 
 At-least-once, không Kafka transaction, replay DLT tự động, schema registry server
 hoặc SASL/TLS local. Staging authentication thuộc PLT-04; không triển khai ở đây.

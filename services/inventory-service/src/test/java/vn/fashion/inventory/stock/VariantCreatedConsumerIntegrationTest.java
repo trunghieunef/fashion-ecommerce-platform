@@ -82,6 +82,14 @@ class VariantCreatedConsumerIntegrationTest extends InventoryTestSupport {
     assertThat(jdbc.queryForObject("select count(*) from stock_items",Integer.class)).isZero();
     assertThat(jdbc.queryForObject("select count(*) from processed_events",Integer.class)).isZero();
   }
+  @Test void unsupportedHandlerVersionGoesToDltWithoutBlocking() throws Exception {
+    var bad=(tools.jackson.databind.node.ObjectNode)mapper.readTree(event(UUID.randomUUID(),UUID.randomUUID(),"VERSION-BAD"));
+    bad.put("version",2);String body=mapper.writeValueAsString(bad);
+    start();publish(body);publish(event(UUID.randomUUID(),UUID.randomUUID(),"VERSION-GOOD"));
+    awaitSku("VERSION-GOOD");assertThat(poll("catalog.events.DLT",bad.path("event_id").asText())).isEqualTo(body);awaitCommitted();
+    assertThat(jdbc.queryForObject("select count(*) from stock_items where sku='VERSION-BAD'",Integer.class)).isZero();
+    assertThat(jdbc.queryForObject("select count(*) from processed_events where event_id=?::uuid",Integer.class,bad.path("event_id").asText())).isZero();
+  }
   @Test void inventoryRelayPublishesSnapshot() throws Exception {
     start(); publish(event(UUID.randomUUID(),UUID.randomUUID(),"RELAY")); awaitSku("RELAY");
     String body=poll("inventory.events","RELAY"); var n=mapper.readTree(body);

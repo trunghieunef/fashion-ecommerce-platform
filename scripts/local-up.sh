@@ -56,5 +56,5 @@ C=(docker compose --env-file "$ENV_FILE" -f infra/local/compose.yaml)
 "${C[@]}" up --wait -d postgres kafka
 # Re-apply the idempotent database/role scripts so existing volumes get databases added later.
 "${C[@]}" exec -T postgres sh -c 'for f in /docker-entrypoint-initdb.d/*.sh; do bash "$f"; done' >/dev/null
-"${C[@]}" exec -T kafka bash /opt/fashion-kafka-init/create-topics.sh
+MSYS_NO_PATHCONV=1 "${C[@]}" exec -T kafka bash /opt/fashion-kafka-init/create-topics.sh
 "${C[@]}" up --build --wait -d

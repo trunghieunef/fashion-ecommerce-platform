@@ -51,6 +51,13 @@ Gate task là work package trong [backlog](../delivery/10_backlog.md). Mã task 
 | ADR-20 | CSRF cho request ghi dùng cookie: kiểm `Origin` theo allowlist, nếu không có Origin thì chỉ nhận `Sec-Fetch-Site: same-origin`, không có cả hai thì từ chối; cookie `Secure`, `HttpOnly`, `SameSite`. Không dùng CSRF token | Chủ dự án chọn 2026-10-04 (SEC-01). Thực thi tại Gateway (`CsrfOriginFilter`, `GATEWAY_ALLOWED_ORIGINS`). FE không cần gửi token. Request chỉ dùng Bearer không bị kiểm. Nếu sau này cần double-submit token thì ghi ADR mới |
 | ADR-21 | Access token member/admin: JWT ES256 do user-service ký (`iss=user-service`, `aud=fashion-api`, TTL 900 s, `auth_version`, `permissions` = mảng permission code của các role, `kid`; thêm `permissions` 2026-10-05 ở USR-02b); verifier nhận public key qua config, xoay khóa bằng cách allowlist 2 `kid`. Không có endpoint JWKS | Chủ dự án chọn 2026-10-05 (USR-01). Cùng mô hình ADR-19, không phụ thuộc mạng lúc verify. Phương án khác: ES256/RS256 + JWKS (tự xoay khóa nhưng thêm route/cache). Private key qua Secret; local do `local-up.sh` sinh vào `.env` |
 
+| ADR-22 | INV-01 dùng platform-messaging tối thiểu (Spring Kafka + durability): relay chờ ACK, inbox commit rồi ack, DLT giữ raw bytes/header và chờ ACK; consumer inventory-service đọc earliest khi group mới. Kafka local KRaft combined single-node, 3 partitions/RF 1, PLAINTEXT, chỉ loopback; health kafka riêng, không readiness | Chủ dự án duyệt spec/plan 2026-10-15; ba làm rõ Task1 đã duyệt. Không Kafka transaction/schema registry/replay tool, không bật relay user-service. F8 duyệt 2026-10-16: ledger key user:actor:operation:key, cùng phạm vi actor/operation/header key của idempotency. SASL/TLS/HA thuộc staging, INV-02 reserve/commit/release chưa làm |
+
+Làm rõ ADR-22 bởi chủ dự án 2026-10-16 (F15): envelope hỏng → DLT; event_type
+không có handler → ack/no inbox và debug log chỉ event_id, không registry gate runtime
+ở consumer; loại có handler sai version/payload → PermanentEventException/DLT.
+Không mở rộng DLT cho mọi loại event chưa được service sử dụng.
+
 ## 4. Vấn đề mở
 
 | ID | Cần quyết định / đầu ra | Owner | Hạn gate | Có thể làm trước |

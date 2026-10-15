@@ -25,6 +25,10 @@
 
 ## Review Focus
 
+Chủ dự án làm rõ 2026-10-16 (F15): envelope hỏng → DLT; loại không có handler →
+ack/no inbox và debug log chỉ event_id; loại có handler sai version/payload → DLT.
+Không kiểm registry runtime ở consumer. Giữ các test ba nhánh, bổ sung nhánh còn thiếu.
+
 - Inventory khởi động sau khi catalog đã có event cũ: consumer group mới phải đọc từ đầu topic (`auto-offset-reset: earliest`), không bỏ SKU tạo trước đó. Task 4 test `startsFromEarliestForNewGroup`.
 - CSV xuất từ Excel có BOM UTF-8 và CRLF: phải được chấp nhận như file thường. Task 6 test `acceptsBomAndCrlf`.
 - SKU chữ thường trong path/body/CSV (`smoke-1`) phải tìm đúng SKU uppercase. Task 5 test `lowercaseSkuIsCanonicalized`, Task 7 test internal tương tự.
@@ -73,7 +77,7 @@
   - Metrics (Micrometer): gauge `outbox_pending` (`count(*) where status <> 'SENT'`), gauge `outbox_oldest_pending_age_seconds`; counter `outbox_relay_failures_total` (publish lỗi), counter `messaging_dlt_total{topic}` (recoverer gửi DLT).
   - `KafkaHealthIndicator` (tên `kafka`): `AdminClient.describeCluster()` timeout 2 s. **Không** đưa vào readiness: Kafka down không chặn nhận request vì outbox giữ event (sửa spec §8 cho khớp).
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 ```java
 // EventEnvelopeTest
@@ -97,11 +101,11 @@
 @Test void unknownEventTypeIsAckedWithoutInbox()    // handlers không chứa type → processed_events rỗng, offset được commit
 ```
 
-- [ ] **Step 2: Run** `./mvnw -pl services/platform-messaging -am test` — Expected: FAIL (class chưa tồn tại).
-- [ ] **Step 3: Implement** các class theo Interfaces. `OutboxRelay` publisher: `kafka.send(new ProducerRecord<>(m.topic(), m.partitionKey(), m.envelopeJson()) + headers).get(sendTimeout)`; bọc `ExecutionException/TimeoutException` thành `IllegalStateException` (relay của durability ghi `last_error` và để lease hết hạn). Timeout mặc định `fashion.messaging.relay.send-timeout=5s`.
-- [ ] **Step 4: Run** lại — Expected: PASS toàn bộ 12 test.
-- [ ] **Step 5: Docs** README module (mục đích, cấu hình `fashion.messaging.*`, cách dùng relay/consumer, giới hạn: không replay DLT, không Kafka transaction).
-- [ ] **Step 6: Commit** `feat(INV-01): add platform-messaging relay and inbox consumer support`
+- [x] **Step 2: Run** `./mvnw -pl services/platform-messaging -am test` — Expected: FAIL (class chưa tồn tại).
+- [x] **Step 3: Implement** các class theo Interfaces. `OutboxRelay` publisher: `kafka.send(new ProducerRecord<>(m.topic(), m.partitionKey(), m.envelopeJson()) + headers).get(sendTimeout)`; bọc `ExecutionException/TimeoutException` thành `IllegalStateException` (relay của durability ghi `last_error` và để lease hết hạn). Timeout mặc định `fashion.messaging.relay.send-timeout=5s`.
+- [x] **Step 4: Run** lại — Expected: PASS toàn bộ 12 test.
+- [x] **Step 5: Docs** README module (mục đích, cấu hình `fashion.messaging.*`, cách dùng relay/consumer, giới hạn: không replay DLT, không Kafka transaction).
+- [x] **Step 6: Commit** `feat(INV-01): add platform-messaging relay and inbox consumer support`
 
 ---
 
@@ -120,7 +124,7 @@
 - Consumes: `OutboxRelay` (Task 1), `CatalogAdminTestSupport.createProduct/createVariant`.
 - Produces: topic `catalog.events` chứa envelope `VARIANT_CREATED` (key `product_id`); `SPRING_KAFKA_BOOTSTRAP_SERVERS` env cho các service sau.
 
-- [ ] **Step 1: Write failing tests** trong `CatalogRelayIntegrationTest` (kế thừa `CatalogAdminTestSupport`, thêm `@Container` Kafka `apache/kafka:4.1.2` và override `fashion.messaging.relay.enabled=true` + bootstrap):
+- [x] **Step 1: Write failing tests** trong `CatalogRelayIntegrationTest` (kế thừa `CatalogAdminTestSupport`, thêm `@Container` Kafka `apache/kafka:4.1.2` và override `fashion.messaging.relay.enabled=true` + bootstrap):
 
 ```java
 @Test void variantCreatedReachesCatalogEvents() {
@@ -135,11 +139,11 @@
 @Test void drainsPreExistingPendingEventsInOrder() // insert trực tiếp 2 outbox row PENDING cùng aggregate (sequence 1, 2; created_at lùi 1 ngày) → poll 2 record, sequence 1 trước 2, cả hai SENT
 ```
 
-- [ ] **Step 2: Run** `./mvnw -pl services/catalog-service -Dtest=CatalogRelayIntegrationTest test` — Expected: FAIL (không có relay).
-- [ ] **Step 3: Implement** dependency + config; compose/topic script.
-- [ ] **Step 4: Run** `./mvnw -pl services/catalog-service -am verify` — Expected: toàn bộ test catalog PASS (gồm test cũ với Kafka container mới).
-- [ ] **Step 5: Validate infra** `bash scripts/validate-infra.sh` và `docker compose -f infra/local/compose.yaml config -q` — Expected: exit 0.
-- [ ] **Step 6: Commit** `feat(INV-01): run local Kafka and relay catalog outbox`
+- [x] **Step 2: Run** `./mvnw -pl services/catalog-service -Dtest=CatalogRelayIntegrationTest test` — Expected: FAIL (không có relay).
+- [x] **Step 3: Implement** dependency + config; compose/topic script.
+- [x] **Step 4: Run** `./mvnw -pl services/catalog-service -am verify` — Expected: toàn bộ test catalog PASS (gồm test cũ với Kafka container mới).
+- [x] **Step 5: Validate infra** `bash scripts/validate-infra.sh` và `docker compose -f infra/local/compose.yaml config -q` — Expected: exit 0.
+- [x] **Step 6: Commit** `feat(INV-01): run local Kafka and relay catalog outbox`
 
 ---
 
@@ -162,7 +166,7 @@
 - Produces: bảng `stock_items`, `stock_transactions` (spec §3) + `outbox_events`, `processed_events`, `idempotency_requests`; `AdminAuth.require(...)`; `InventoryTestSupport` helpers dùng cho Task 4–7.
 - V001: sau DDL, `grant select, insert on stock_transactions to inventory_runtime` — **không** update/delete; `stock_items` select/insert/update; bảng durability theo grant của catalog V002.
 
-- [ ] **Step 1: Write failing tests** `StockSchemaIntegrationTest` (kết nối bằng role runtime):
+- [x] **Step 1: Write failing tests** `StockSchemaIntegrationTest` (kết nối bằng role runtime):
 
 ```java
 @Test void reservedCannotExceedOnHand()   // insert on_hand=1 reserved=2 → DataIntegrityViolation
@@ -173,11 +177,11 @@
 @Test void ledgerTypeIsConstrained()      // type 'FOO' → check violation
 ```
 
-- [ ] **Step 2: Run** `./mvnw -pl services/inventory-service -am -Dtest=StockSchemaIntegrationTest test` — Expected: FAIL.
-- [ ] **Step 3: Implement** V001, app, config, init script, compose.
-- [ ] **Step 4: Run** lại — Expected: PASS; `GET /actuator/health/readiness` trong test trả UP.
-- [ ] **Step 5: Docs** `services/inventory-service/README.md` (chạy/test, config, migration, topics, health, giới hạn), 05 §8 ghi V001 đã hiện thực + grant ledger.
-- [ ] **Step 6: Commit** `feat(INV-01): scaffold inventory-service with stock and ledger schema`
+- [x] **Step 2: Run** `./mvnw -pl services/inventory-service -am -Dtest=StockSchemaIntegrationTest test` — Expected: FAIL.
+- [x] **Step 3: Implement** V001, app, config, init script, compose.
+- [x] **Step 4: Run** lại — Expected: PASS; `GET /actuator/health/readiness` trong test trả UP.
+- [x] **Step 5: Docs** `services/inventory-service/README.md` (chạy/test, config, migration, topics, health, giới hạn), 05 §8 ghi V001 đã hiện thực + grant ledger.
+- [x] **Step 6: Commit** `feat(INV-01): scaffold inventory-service with stock and ledger schema`
 
 ---
 
@@ -199,7 +203,7 @@
   - `SkuRegistration.register(EventEnvelope env) -> Boolean` (true khi tạo mới): đọc `product_id`, `variant_id`, `sku` từ payload (thiếu/sai UUID/SKU sai regex → `PermanentEventException`); `insert ... on conflict do nothing`; nếu không chèn: đọc dòng theo `variant_id` hoặc `sku` — khác cặp (variant_id, sku) → `PermanentEventException("sku/variant mismatch")`, trùng → false; chèn mới → `StockEvents.append(row, false, env.correlationId())`.
   - `CatalogEventsListener`: `@KafkaListener(topics = "catalog.events", groupId = "inventory-service")` → `support.handle(record, ack, Map.of("VARIANT_CREATED", registration::register))`.
 
-- [ ] **Step 1: Write failing tests** (publish envelope thô bằng `KafkaTemplate` test lên `catalog.events`):
+- [x] **Step 1: Write failing tests** (publish envelope thô bằng `KafkaTemplate` test lên `catalog.events`):
 
 ```java
 @Test void registersSkuWithZeroStockAndEmitsSnapshot()   // sau ≤10 s: stock_items 0/0, outbox INVENTORY_UPDATED payload available=0, stock_version=0
@@ -212,10 +216,10 @@
 @Test void inventoryRelayPublishesSnapshot()              // record trên inventory.events key = sku, event_type INVENTORY_UPDATED
 ```
 
-- [ ] **Step 2: Run** `./mvnw -pl services/inventory-service -Dtest=VariantCreatedConsumerIntegrationTest test` — Expected: FAIL.
-- [ ] **Step 3: Implement** theo Interfaces.
-- [ ] **Step 4: Run** lại — Expected: PASS 8 test.
-- [ ] **Step 5: Commit** `feat(INV-01): register SKUs from VARIANT_CREATED with stock snapshots`
+- [x] **Step 2: Run** `./mvnw -pl services/inventory-service -Dtest=VariantCreatedConsumerIntegrationTest test` — Expected: FAIL.
+- [x] **Step 3: Implement** theo Interfaces.
+- [x] **Step 4: Run** lại — Expected: PASS 8 test.
+- [x] **Step 5: Commit** `feat(INV-01): register SKUs from VARIANT_CREATED with stock snapshots`
 
 ---
 
@@ -234,7 +238,7 @@
   - Routes: `GET /admin/api/v1/inventory/skus` (`sku_prefix`, `limit` 1..100 mặc định 20, `cursor` = base64url của sku cuối), `GET /admin/api/v1/inventory/skus/{sku}/transactions` (`limit`, `cursor` = base64url `{"t":created_at,"id":uuid}`), `POST /admin/api/v1/inventory/adjust`. Idempotency operation `inventory.adjust`, actor key = user id.
   - Response stock: `{sku, variant_id, product_id, on_hand, reserved, available, min_stock, status, version}`; ledger item: `{id, type, on_hand_delta, reserved_delta, reason, actor_id, order_id, created_at}`.
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 ```java
 // StockAdjustmentIntegrationTest
@@ -258,10 +262,10 @@
 @Test void readRequiresInventoryRead()                 // inventory.adjust-only token → 403
 ```
 
-- [ ] **Step 2: Run** `./mvnw -pl services/inventory-service -Dtest='Stock*IntegrationTest' test` — Expected: FAIL.
-- [ ] **Step 3: Implement** theo Interfaces; khóa và ghi trong `AdminCommands.create` (một TX), không gọi Kafka.
-- [ ] **Step 4: Run** lại — Expected: PASS.
-- [ ] **Step 5: Commit** `feat(INV-01): add OPS stock reads and idempotent adjustments`
+- [x] **Step 2: Run** `./mvnw -pl services/inventory-service -Dtest='Stock*IntegrationTest' test` — Expected: FAIL.
+- [x] **Step 3: Implement** theo Interfaces; khóa và ghi trong `AdminCommands.create` (một TX), không gọi Kafka.
+- [x] **Step 4: Run** lại — Expected: PASS.
+- [x] **Step 5: Commit** `feat(INV-01): add OPS stock reads and idempotent adjustments`
 
 ---
 
@@ -280,7 +284,7 @@
   - `StockAdminService.importInbound(UUID actor, String key, byte[] file, String reason, String traceId) -> AdminCommands.Replay`: hash request = SHA-256 của file + reason; lock SKU đã sort; SKU không tồn tại → 400 `rows[n].sku` "unknown sku" (gom hết trước khi ghi); `applyDelta(..., "INBOUND", ...)`; response 200 `{rows, total_quantity}`; operation `inventory.import`.
   - Route `POST /admin/api/v1/inventory/import` (`multipart/form-data`, parts `file`, `reason`).
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 ```java
 // InboundCsvTest (unit)
@@ -298,10 +302,10 @@
 @Test void adjustAndImportCanReuseKeyForSameSku()       // cùng actor/key/SKU nhưng operation khác → ghi độc lập, không lỗi UNIQUE
 ```
 
-- [ ] **Step 2: Run** `./mvnw -pl services/inventory-service -Dtest='InboundCsvTest,StockImportIntegrationTest' test` — Expected: FAIL.
-- [ ] **Step 3: Implement** theo Interfaces.
-- [ ] **Step 4: Run** lại — Expected: PASS.
-- [ ] **Step 5: Commit** `feat(INV-01): import inbound stock CSV atomically`
+- [x] **Step 2: Run** `./mvnw -pl services/inventory-service -Dtest='InboundCsvTest,StockImportIntegrationTest' test` — Expected: FAIL.
+- [x] **Step 3: Implement** theo Interfaces.
+- [x] **Step 4: Run** lại — Expected: PASS.
+- [x] **Step 5: Commit** `feat(INV-01): import inbound stock CSV atomically`
 
 ---
 
@@ -316,7 +320,7 @@
 - Consumes: `Sku.canonical` (Task 4), `StockQueries` (Task 5); `ServiceTokenVerifier`, `AccessTokenVerifier.parseKeys` theo mẫu `VariantQuoteController`.
 - Produces: `GET /internal/api/v1/inventory/skus/{sku}` → `{sku, variant_id, available, version, observed_at}` + `Cache-Control: no-store`. Verifier audience `"inventory-service"`; `fashion.inventory.internal-callers` là map caller→public key (`parseKeys`) như catalog; `ALLOWED_CALLERS = Set.of("catalog-service", "cart-service")` trong controller (spec §5 ghi "giá trị local catalog-service,cart-service": hiện thực theo mẫu catalog là danh sách cố định + key map).
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 ```java
 @Test void returnsAvailableForAllowedCaller()  // seed 5/2 → available 3, version, observed_at, no-store
@@ -328,10 +332,10 @@
 @Test void inventoryAdminIsRouted()            // GET /admin/api/v1/inventory/skus tới stub upstream
 ```
 
-- [ ] **Step 2: Run** `./mvnw -pl services/inventory-service,services/gateway -am -Dtest='InternalStockIntegrationTest,GatewayBoundaryTest' -Dsurefire.failIfNoSpecifiedTests=false test` — Expected: FAIL.
-- [ ] **Step 3: Implement**.
-- [ ] **Step 4: Run** lại — Expected: PASS.
-- [ ] **Step 5: Commit** `feat(INV-01): add internal stock read and gateway route`
+- [x] **Step 2: Run** `./mvnw -pl services/inventory-service,services/gateway -am -Dtest='InternalStockIntegrationTest,GatewayBoundaryTest' -Dsurefire.failIfNoSpecifiedTests=false test` — Expected: FAIL.
+- [x] **Step 3: Implement**.
+- [x] **Step 4: Run** lại — Expected: PASS.
+- [x] **Step 5: Commit** `feat(INV-01): add internal stock read and gateway route`
 
 ---
 
@@ -341,15 +345,15 @@
 - Create: `contracts/openapi/inventory.yaml` (4 admin + 1 internal operation, `x-implementation-status: implemented`, `$ref` `common.yaml`, `additionalProperties: false` cho body adjust)
 - Create: `tests/contracts/test_inventory.py` (theo `test_catalog_admin.py`: operation tồn tại, error codes thuộc common, schema response khớp field spec §4/§5)
 - Modify: `tests/contracts/test_event_routing.py` nếu cần assert inventory producer dùng `inventory.events`/key `sku` khớp `registry.json`
-- Modify: `scripts/smoke-local.sh`, `scripts/validate-contracts.sh` (thêm inventory.yaml)
+- Modify: `scripts/smoke-local.sh`; `scripts/validate-contracts.sh` tự tìm mọi OpenAPI YAML, inventory.yaml được thêm tự động nên không cần sửa script.
 - Create: `docs/evidence/inv-01-local-2026-10-15.md`, `docs/superpowers/plans/2026-10-15-inv-01-handoff.md`
 - Modify: `docs/design/03_interfaces.md` (inventory admin/internal + §5.1 relay/consumer đang chạy), `docs/design/08_decisions.md` (ADR: `platform-messaging`, Kafka local single-node không auth, DLT, earliest), `docs/engineering/12_engineering_guide.md` (lệnh), `docs/engineering/17_tech_stack.md` (Spring Kafka đã dùng), `contracts/README.md`, `services/catalog-service/README.md` (relay), runbook DLT trong `services/inventory-service/README.md` (`kafka-console-consumer.sh --topic catalog.events.DLT --from-beginning`, không replay tự động), `docs/delivery/10_backlog.md` (INV-01 In progress → hiện thực local), `docs/superpowers/plans/README.md`, `docs/README.md` nếu có index, spec header (trạng thái + link plan)
 
-- [ ] **Step 1: Smoke** — thêm vào `smoke-local.sh` sau bước tạo variant: poll `GET $GATEWAY_URL/admin/api/v1/inventory/skus?sku_prefix=SMOKE-$catalog_suffix` tối đa 10 s đến khi có 1 item; `POST /admin/api/v1/inventory/adjust` `{sku, delta:5, reason:"smoke"}`; kiểm `available=5`; đọc 1 record `INVENTORY_UPDATED` của SKU từ `inventory.events` bằng `docker compose exec -T kafka kafka-console-consumer.sh --from-beginning --timeout-ms 10000` + grep SKU.
-- [ ] **Step 2: Run** `bash scripts/local-up.sh && bash scripts/smoke-local.sh` — Expected: `SMOKE PASS` (cùng output hiện có) gồm bước inventory.
-- [ ] **Step 3: Contract** `bash scripts/validate-contracts.sh` và `python -B -m pytest tests/contracts -q` — Expected: PASS.
-- [ ] **Step 4: Full reactor** `./mvnw verify` — Expected: BUILD SUCCESS; ghi số test từng module vào evidence.
-- [ ] **Step 5: Mutation** — áp từng mutation tạm thời, chạy test đích, ghi FAIL mong đợi, revert (`git diff` sạch sau mỗi lần):
+- [x] **Step 1: Smoke** — thêm vào `smoke-local.sh` sau bước tạo variant: poll `GET $GATEWAY_URL/admin/api/v1/inventory/skus?sku_prefix=SMOKE-$catalog_suffix` tối đa 10 s đến khi có 1 item; `POST /admin/api/v1/inventory/adjust` `{sku, delta:5, reason:"smoke"}`; kiểm `available=5`, gọi lại admin GET và kiểm SKU đó có `available=5`; đọc 1 record `INVENTORY_UPDATED` của SKU từ `inventory.events` bằng `docker compose exec -T kafka kafka-console-consumer.sh --from-beginning --timeout-ms 10000` + grep SKU. F18 chủ dự án chốt 2026-10-16: internal chỉ có integration test; cấu hình `INVENTORY_INTERNAL_CALLERS` trong Compose để smoke CART-01 kiểm với caller thật đầu tiên, không thêm private key/service token vào smoke INV-01.
+- [x] **Step 2: Run** `bash scripts/local-up.sh && bash scripts/smoke-local.sh` — Expected: `SMOKE PASS` (cùng output hiện có) gồm bước inventory.
+- [x] **Step 3: Contract** `bash scripts/validate-contracts.sh` và `python -B -m pytest tests/contracts -q` — Expected: PASS.
+- [x] **Step 4: Full reactor** `./mvnw verify` — Expected: BUILD SUCCESS; ghi số test từng module vào evidence.
+- [x] **Step 5: Mutation** — áp từng mutation tạm thời, chạy test đích, ghi FAIL mong đợi, revert (`git diff` sạch sau mỗi lần):
 
 | # | Mutation | Test phải đỏ |
 |---|---|---|
@@ -360,5 +364,5 @@
 | M5 | `ack.acknowledge()` trước `applyOnce` | `transientFailureIsRetriedThenApplied` |
 | M6 | Bỏ so sánh hash trong idempotency (`begin` luôn replay) | `sameKeyDifferentBodyIsConflict` |
 
-- [ ] **Step 6: Docs checks** `python -B -m unittest discover -s scripts -p 'test_*.py' -v`, `python -B scripts/check_docs.py`, `git diff --check` — Expected: PASS.
-- [ ] **Step 7: Commit** `docs(INV-01): contract, smoke, mutation evidence and docs for stock ledger`
+- [x] **Step 6: Docs checks** `python -B -m unittest discover -s scripts -p 'test_*.py' -v`, `python -B scripts/check_docs.py`, `git diff --check` — Expected: PASS.
+- [x] **Step 7: Commit** `docs(INV-01): contract, smoke, mutation evidence and docs for stock ledger`

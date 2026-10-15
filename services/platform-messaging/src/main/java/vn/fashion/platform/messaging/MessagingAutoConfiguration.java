@@ -81,7 +81,7 @@ public class MessagingAutoConfiguration {
       meters.counter("messaging_dlt_total", "topic", record.topic()).increment();
       String eventId = "unknown";
       var header = record.headers().lastHeader("event_id");
-      if (header != null) {
+      if (header != null && header.value() != null) {
         try { eventId = UUID.fromString(new String(header.value(), java.nio.charset.StandardCharsets.UTF_8)).toString(); }
         catch (IllegalArgumentException ignored) { }
       }

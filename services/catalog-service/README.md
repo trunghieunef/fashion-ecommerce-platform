@@ -4,7 +4,8 @@ INV-01 Task2 bật relay `platform-messaging`: `CATALOG_RELAY_ENABLED` mặc đ�
 `SPRING_KAFKA_BOOTSTRAP_SERVERS` mặc định localhost:19092, Compose dùng kafka:9092.
 Relay gửi cả outbox PENDING cũ lên topic/key đã lưu, giữ thứ tự aggregate_sequence;
 ACK trước SENT, lỗi broker giữ event chưa SENT. Kafka health riêng, không thuộc readiness.
-Admin integration tests thường tắt relay; `CatalogRelayIntegrationTest` dùng Kafka4.1.2 thật.
+Test resources tắt relay mặc định (kể cả legacy public/readiness context);
+`CatalogRelayIntegrationTest` override bật relay với Kafka4.1.2 Testcontainer riêng.
 Local Kafka/topics được khởi tạo idempotent bởi `scripts/local-up.sh`, giữ volume hiện có;
 không chạy Kafka hay HTTP trong transaction mutation catalog.
 

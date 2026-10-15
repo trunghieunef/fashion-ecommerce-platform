@@ -1,5 +1,8 @@
 # INV-01 — stock authority, ledger bất biến và luồng Kafka đầu tiên
 
+Hiện thực và kiểm tra local ngày 2026-10-16; đã whole-branch review, sửa finding và kiểm xanh local; chờ nghiệm thu,
+không tự chuyển INV-01 sang Done. Kết quả tại [evidence](../../evidence/inv-01-local-2026-10-15.md).
+
 **Trạng thái: đã duyệt ngày 2026-10-15.** Plan: [INV-01](../plans/2026-10-15-inv-01-stock-ledger.md). Khi lập plan sửa: health `kafka` không vào readiness; internal callers theo mẫu catalog (map caller→public key + danh sách cố định). Làm trên `dev`; chỉ push/mở PR khi
 chủ dự án yêu cầu.
 
@@ -145,7 +148,13 @@ Kafka headers: `event_id`, `event_type`, `traceparent`, `correlation_id`.
 - **`InboxListenerSupport`:** group theo tên service, manual ack sau DB commit, effect trong
   `InboxGuard.applyOnce`.
   - Lỗi tạm thời (DB down, timeout): retry backoff tăng dần, trần 30 s, không giới hạn số lần.
-  - Lỗi vĩnh viễn (JSON/envelope sai schema, `event_type`/`version` không hỗ trợ, dữ liệu mâu thuẫn):
+  - Envelope hỏng (không parse được, thiếu event_id/event_type/version): DLT.
+  - event_type không có handler: ack, không ghi inbox; log debug chỉ event_id, không payload.
+    Không kiểm registry lúc runtime. Quy tắc này khớp §2.1 và plan Task1.
+  - event_type có handler nhưng version không hỗ trợ, payload sai hoặc dữ liệu mâu thuẫn:
+    `PermanentEventException` → DLT. Quy tắc DLT chỉ áp dụng envelope hỏng và loại có handler
+    (chủ dự án làm rõ 2026-10-16).
+  - Khi vào DLT:
     publish nguyên record + header sang `<topic>.DLT`, log ERROR kèm `event_id`.
     DLT dùng producer byte[] riêng, đợi ACK; gửi DLT lỗi phải retry record gốc, không bỏ message.
     Relay vẫn dùng producer String/String (chủ dự án duyệt làm rõ ngày 2026-10-15).
@@ -169,8 +178,13 @@ PostgreSQL + Kafka thật qua Testcontainers; không mock broker.
 | Adjust/import | on_hand < reserved → 409 không đổi; CSV một dòng lỗi → ledger rỗng; SKU lặp/chưa đăng ký; 1.001 dòng; Idempotency replay và khác body; RESTOCKED khi 0 → > 0; hai adjust đồng thời không mất cập nhật; tràn `int` |
 | Bảo mật | OPS thiếu quyền 401/403; `inventory.read` không adjust; internal sai caller/thiếu token; Gateway không public `/internal/**` |
 | Contract | `contracts/openapi/inventory.yaml` và payload event khớp registry (`tests/contracts`) |
-| Smoke local | Tạo variant catalog → SKU có ở inventory trong 10 s → adjust +5 → internal `available=5` → có `INVENTORY_UPDATED` trên `inventory.events` |
+| Smoke local | Tạo variant catalog → SKU có ở inventory trong 10 s → admin adjust +5 → admin GET thấy `available=5` → có `INVENTORY_UPDATED` trên `inventory.events` |
 | Mutation (~6) | Bỏ `FOR UPDATE`; bỏ check reserved; `markSent` trước ACK; bỏ inbox; ack trước DB commit; bỏ check hash idempotency |
+
+Chủ dự án chốt F18 ngày 2026-10-16: internal GET `/internal/api/v1/inventory/skus/{sku}`
+chỉ được kiểm bằng integration test (token hợp lệ, caller không cho phép, SKU không tồn tại).
+Smoke chưa kiểm cấu hình `INVENTORY_INTERNAL_CALLERS` trong Compose; smoke CART-01,
+caller thật đầu tiên, sẽ kiểm. Không đưa private key hoặc service token vào smoke này.
 
 ## 10. Tài liệu đồng bộ
 

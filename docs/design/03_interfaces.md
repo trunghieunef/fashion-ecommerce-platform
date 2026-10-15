@@ -435,8 +435,8 @@ reference/lease được GC sau 7 ngày từ terminal, suy ra upload_id, không 
 | POST /orders/{order_no}/pack | OPS | PAID → PACKING và create shipment step / 1 |
 | POST /orders/{order_no}/cancel | OPS | Reason, key, version → cancellation / 1 |
 | POST /orders/{order_no}/returns | OPS | Evidence, items qty/condition, key → kiểm đếm/return work / 1 |
-| GET /inventory/skus; GET /inventory/skus/{sku}/transactions | OPS | Stock và ledger / 1 |
-| POST /inventory/adjust; POST /inventory/import | OPS | Key, reason; CSV <= 1.000 dòng / 1 |
+| GET /inventory/skus; GET /inventory/skus/{sku}/transactions | OPS (`inventory.read`) | INV-01 hiện thực local: keyset SKU tăng hoặc ledger (created_at,id) giảm; limit 1..100 mặc định 20, sai → 400; stock có available và version / 1 |
+| POST /inventory/adjust; POST /inventory/import | OPS (`inventory.adjust`) | INV-01 hiện thực local: key, reason strip 1..500; adjust delta nguyên khác 0; import INBOUND cộng tồn, CSV UTF-8/BOM/LF/CRLF <=128 KiB, 1..1000 dòng, quantity 1..1000000, multipart <=160 KiB (quá hạn mức 413); lỗi toàn file không ghi một phần / 1 |
 | GET /payments; GET /payments/{id} | FINANCE | Transaction/refund/discrepancy / 1 |
 | POST /payments/{id}/refunds | FINANCE | amount,reason,operation_key,evidence → refund resource / 1 |
 | GET /payments/{id}/refunds/{refund_id} | FINANCE | Trạng thái UNKNOWN/SUCCESS/FAILED / 1 |
@@ -467,7 +467,7 @@ Report orders do order sở hữu, cash do payment, stock do inventory; dashboar
 | POST /inventory/commit | order → inventory | order_id,key → COMMITTED hoặc conflict đã hết hạn |
 | POST /inventory/release | order → inventory | order_id,original_reservation {order_no,items,expires_at},original_request_hash,reason,key → RELEASED/EXPIRED/COMMITTED |
 | GET /inventory/reservations/{order_id} | order → inventory | Status/items/deadline,404 chưa có |
-| GET /inventory/skus/{sku} | catalog,cart → inventory | available,version,observed_at |
+| GET /inventory/skus/{sku} | catalog,cart → inventory | INV-01 hiện thực local: sku,variant_id,available,version,observed_at; no-store cả lỗi; auth/caller trước SKU validation; 404 SKU_NOT_FOUND, không route qua Gateway |
 | POST /inventory/returns | order → inventory | reservation/order,items,operation_key,evidence_ref → returned quantities |
 | POST /promotions/quote | order,cart,catalog → promotion | Server actor/verified flag,items,prices,fee → effective prices/discount/version |
 | POST /promotions/reservations/lock | order → promotion | order snapshot/hash,deadline,key → locks/quota |
@@ -520,7 +520,12 @@ VARIANT_CREATED, CATALOG_CHANGED, INVENTORY_UPDATED/RESTOCKED và ORDER_CREATED/
 PAID/CANCELLED có schema thực thi qua `contracts/events/registry.json`, kèm topic/partition
 key (§5.2) và field làm aggregate_id; test đối chiếu bảng §5.2 nên sửa topic/key phải
 sửa cả hai nơi. Các event còn lại thêm trong task producer. Quy ước §1.2/1.3 nằm ở `contracts/openapi/common.yaml`. Chưa có
-producer Kafka đang chạy; producer/consumer review pending.
+producer Kafka ở các domain khác. INV-01 hiện thực catalog relay VARIANT_CREATED,
+inventory inbox consumer và relay INVENTORY_UPDATED/RESTOCKED qua platform-messaging;
+review/acceptance theo [evidence INV-01](../evidence/inv-01-local-2026-10-15.md).
+Consumer envelope hỏng → DLT; event_type không có handler → ack/no inbox, debug chỉ
+event_id, không registry gate runtime. Loại có handler sai version/payload →
+PermanentEventException/DLT (chủ dự án chốt 2026-10-16).
 
 Envelope: event_id UUID, event_type, version (schema integer), occurred_at UTC, aggregate_id text, aggregate_version integer, aggregate_sequence integer, correlation_id, payload. event_id cố định qua retry. aggregate_sequence tăng trong mỗi aggregate cho từng event, giải quyết nhiều event ở cùng business version; unique ở outbox theo aggregate/sequence. Partition key như bảng dưới, consumer không giả định tổng thứ tự giữa topics.
 
