@@ -1,0 +1,71 @@
+server:
+  port: ${SERVER_PORT:8083}
+
+spring:
+  kafka:
+    consumer:
+      group-id: inventory-service
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:19092}
+  task:
+    scheduling:
+      pool:
+        size: 2
+  jackson:
+    property-naming-strategy: SNAKE_CASE
+    deserialization:
+      fail-on-unknown-properties: false
+      accept-float-as-int: false
+  application:
+    name: inventory-service
+  datasource:
+    url: ${INVENTORY_DB_URL:jdbc:postgresql://localhost:5432/inventory}
+    username: ${INVENTORY_DB_USERNAME:inventory_runtime}
+    password: ${INVENTORY_DB_PASSWORD:inventory_runtime_local}
+    hikari:
+      maximum-pool-size: ${INVENTORY_DB_MAX_POOL_SIZE:10}
+  cloud:
+    # Nacos is off by default; profile nacos-compat enables it (O02 proof).
+    nacos:
+      config:
+        enabled: false
+        import-check:
+          enabled: false
+      discovery:
+        enabled: false
+  flyway:
+    url: ${INVENTORY_MIGRATION_DB_URL:jdbc:postgresql://localhost:5432/inventory}
+    user: ${INVENTORY_MIGRATION_DB_USERNAME:inventory_migration}
+    password: ${INVENTORY_MIGRATION_DB_PASSWORD:inventory_migration_local}
+    locations: classpath:db/migration
+
+logging:
+  structured:
+    format:
+      # PLT-05: JSON (ECS) logs with trace ids; every string value is redacted (XCT-06).
+      console: ecs
+    json:
+      customizer: vn.fashion.platform.security.PiiRedactingJsonCustomizer
+
+fashion:
+  messaging:
+    relay:
+      enabled: ${INVENTORY_RELAY_ENABLED:true}
+  inventory:
+    internal-callers: ${INVENTORY_INTERNAL_CALLERS:}
+    jwt:
+      public-keys: ${INVENTORY_JWT_PUBLIC_KEYS}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,db

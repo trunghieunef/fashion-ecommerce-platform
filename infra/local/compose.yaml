@@ -38,12 +38,15 @@ services:
       CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD:?set CATALOG_DB_PASSWORD}
       USER_MIGRATION_DB_PASSWORD: ${USER_MIGRATION_DB_PASSWORD:?set USER_MIGRATION_DB_PASSWORD}
       USER_DB_PASSWORD: ${USER_DB_PASSWORD:?set USER_DB_PASSWORD}
+      INVENTORY_MIGRATION_DB_PASSWORD: ${INVENTORY_MIGRATION_DB_PASSWORD:?run scripts/local-up.sh}
+      INVENTORY_DB_PASSWORD: ${INVENTORY_DB_PASSWORD:?run scripts/local-up.sh}
     ports:
       - "127.0.0.1:${CATALOG_POSTGRES_PORT:-5432}:5432"
     volumes:
       - catalog-postgres-data:/var/lib/postgresql/data
       - ./postgres-init/01-catalog-roles.sh:/docker-entrypoint-initdb.d/01-catalog-roles.sh:ro
       - ./postgres-init/02-user-db.sh:/docker-entrypoint-initdb.d/02-user-db.sh:ro
+      - ./postgres-init/03-inventory-db.sh:/docker-entrypoint-initdb.d/03-inventory-db.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
@@ -135,6 +138,29 @@ services:
         required: false
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8081/actuator/health/readiness"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  inventory:
+    build: ../../services/inventory-service
+    environment:
+      INVENTORY_DB_URL: jdbc:postgresql://postgres:5432/inventory
+      INVENTORY_DB_PASSWORD: ${INVENTORY_DB_PASSWORD:?run scripts/local-up.sh}
+      INVENTORY_MIGRATION_DB_URL: jdbc:postgresql://postgres:5432/inventory
+      INVENTORY_MIGRATION_DB_PASSWORD: ${INVENTORY_MIGRATION_DB_PASSWORD:?run scripts/local-up.sh}
+      INVENTORY_JWT_PUBLIC_KEYS: ${USER_JWT_PUBLIC_KEYS:?run scripts/local-up.sh}
+      INVENTORY_INTERNAL_CALLERS: ${INVENTORY_INTERNAL_CALLERS:-}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    ports:
+      - "127.0.0.1:8083:8083"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8083/actuator/health/readiness"]
       interval: 5s
       timeout: 3s
       retries: 30

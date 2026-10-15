@@ -15,6 +15,7 @@
     <module>services/platform-messaging</module>
     <module>services/user-service</module>
     <module>services/catalog-service</module>
+    <module>services/inventory-service</module>
     <module>services/gateway</module>
   </modules>
 
