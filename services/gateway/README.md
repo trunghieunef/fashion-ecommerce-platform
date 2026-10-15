@@ -8,6 +8,10 @@ Gateway route `/api/v1/catalog/**` và `/admin/api/v1/catalog/**` sang `CATALOG_
 có thể giả mạo: `X-User-Id`, `X-User-Roles`, `X-Actor-Id`, `X-Service-Name`.
 Catalog-service tự kiểm token ES256 và quyền `catalog.write`; Gateway không cấp quyền qua header.
 
+INV-01 thêm `/admin/api/v1/inventory/**` sang `INVENTORY_BASE_URL` (mặc định
+http://localhost:8083, Compose http://inventory:8083). Inventory tự kiểm inventory.read/
+inventory.adjust; `/internal/api/v1/inventory/**` không có route qua Gateway.
+
 USR-01b-ii: filter cũng xóa `Forwarded`, `X-Forwarded-For`, `X-Real-IP`, `X-Client-IP`,
 rồi đặt `X-Client-IP` bằng socket peer. Chỉ khi peer thuộc `GATEWAY_TRUSTED_PROXIES` mới
 nhận một IP literal từ `X-Forwarded-For` (header thiếu/trùng/chain/hostname sai thì dùng peer).

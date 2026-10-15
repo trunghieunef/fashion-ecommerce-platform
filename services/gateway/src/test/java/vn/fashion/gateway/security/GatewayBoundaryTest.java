@@ -56,6 +56,7 @@ class GatewayBoundaryTest {
     registry.add("CATALOG_BASE_URL", CATALOG::baseUrl);
     // The recording stub also stands in for user-service; tests check the forwarded path.
     registry.add("USER_BASE_URL", CATALOG::baseUrl);
+    registry.add("INVENTORY_BASE_URL", CATALOG::baseUrl);
     registry.add("fashion.security.allowed-origins", () -> "http://localhost:4173");
     registry.add("GATEWAY_MANAGEMENT_PORT", () -> "0");
   }
@@ -68,6 +69,19 @@ class GatewayBoundaryTest {
   @AfterAll
   static void stopCatalog() {
     CATALOG.stop();
+  }
+
+  @Test
+  void inventoryInternalIsNotRouted() {
+    client.get().uri("/internal/api/v1/inventory/skus/X").exchange().expectStatus().isNotFound();
+    assertThat(CATALOG.requestCount()).isZero();
+  }
+
+  @Test
+  void inventoryAdminIsRouted() {
+    client.get().uri("/admin/api/v1/inventory/skus").exchange().expectStatus().isOk();
+    assertThat(CATALOG.requestCount()).isEqualTo(1);
+    assertThat(CATALOG.path()).isEqualTo("/admin/api/v1/inventory/skus");
   }
 
   @Test

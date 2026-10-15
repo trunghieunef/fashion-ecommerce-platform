@@ -47,6 +47,10 @@ spring:
               uri: ${CATALOG_BASE_URL:http://localhost:8081}
               predicates:
                 - Path=/admin/api/v1/catalog/**
+            - id: inventory-admin
+              uri: ${INVENTORY_BASE_URL:http://localhost:8083}
+              predicates:
+                - Path=/admin/api/v1/inventory/**
             - id: user-auth-public
               uri: ${USER_BASE_URL:http://localhost:8082}
               predicates:

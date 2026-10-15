@@ -54,4 +54,8 @@ stock tràn int từ chối cả file. Import cộng INBOUND, không ghi đè on
 Hash idempotency bao gồm SHA-256 toàn bộ bytes file và reason đã strip, theo
 AdminCommands; cùng nội dung parse nhưng bytes khác vẫn là body khác.
 Mọi SKU được khóa theo thứ tự tăng, kiểm toàn bộ trước khi update/ledger/outbox.
-Internal stock API ở task sau.
+GET `/internal/api/v1/inventory/skus/{sku}` trả sku/variant_id/available/version/observed_at,
+Cache-Control no-store cả lỗi; observed_at là updated_at cùng snapshot stock.
+Service token audience inventory-service, caller catalog-service/cart-service với key
+allowlist; kiểm token/caller trước chuẩn hóa SKU. Gateway chỉ route admin inventory,
+không route internal; local trực tiếp 127.0.0.1:8083, staging dùng private service network.
