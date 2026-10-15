@@ -82,6 +82,14 @@
   </dependencies>
 
   <build>
+    <resources>
+      <resource><directory>src/main/resources</directory></resource>
+      <resource>
+        <directory>../../contracts/events</directory>
+        <targetPath>contracts/events</targetPath>
+        <includes><include>registry.json</include></includes>
+      </resource>
+    </resources>
     <!-- Stable name so the Dockerfile copies exactly one artifact. -->
     <finalName>inventory-service</finalName>
     <plugins>

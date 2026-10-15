@@ -32,4 +32,7 @@ outbox_relay_failures_total/messaging_dlt_total; ECS logs redact PII, không pay
 Topics đã init: catalog.events, catalog.events.DLT, inventory.events (3 partitions,
 RF 1); inventory group inventory-service, earliest khi chưa có committed offset.
 Local-only Kafka single node PLAINTEXT; chưa có SASL/TLS/HA hay công cụ replay DLT.
-Chưa hiện thực consumer và admin/internal stock API ở Task 3; các task sau bổ sung.
+Task 4 đăng ký SKU từ VARIANT_CREATED qua inbox transaction; cùng event_id bỏ qua,
+event mới cùng variant/SKU không reset tồn. Payload lỗi/mâu thuẫn sang catalog.events.DLT;
+CATALOG_CHANGED được ack và bỏ qua. Snapshot INVENTORY_UPDATED phát khi đăng ký,
+topic/key lấy từ registry.json được đóng gói trong jar. Admin/internal stock API ở task sau.
