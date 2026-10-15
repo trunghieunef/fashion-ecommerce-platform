@@ -1,6 +1,6 @@
 # INV-01 — stock authority, ledger bất biến và luồng Kafka đầu tiên
 
-**Trạng thái: chờ chủ dự án duyệt (2026-10-15).** Chưa có plan. Làm trên `dev`; chỉ push/mở PR khi
+**Trạng thái: đã duyệt ngày 2026-10-15.** Plan: [INV-01](../plans/2026-10-15-inv-01-stock-ledger.md). Khi lập plan sửa: health `kafka` không vào readiness; internal callers theo mẫu catalog (map caller→public key + danh sách cố định). Làm trên `dev`; chỉ push/mở PR khi
 chủ dự án yêu cầu.
 
 `TASK:INV-01` · `REQ:INV-01`, `REQ:INV-08`, hỗ trợ `REQ:INV-06`.
@@ -119,9 +119,8 @@ chưa đăng ký → từ chối cả file với lỗi từng dòng `rows[<số 
 ## 5. Internal API
 
 `GET /internal/api/v1/inventory/skus/{sku}` → `{sku, variant_id, available, version, observed_at}`,
-`Cache-Control: no-store`. Service token ADR-19, caller trong
-`fashion.inventory.internal-callers=${INVENTORY_INTERNAL_CALLERS:}` với giá trị local
-`catalog-service,cart-service`. Auth trước validate: thiếu/sai token 401, caller không được phép 403,
+`Cache-Control: no-store`. Service token ADR-19 theo mẫu catalog: `fashion.inventory.internal-callers=${INVENTORY_INTERNAL_CALLERS:}`
+là map caller→public key, controller chỉ cho `catalog-service` và `cart-service`. Auth trước validate: thiếu/sai token 401, caller không được phép 403,
 SKU không tồn tại 404.
 
 ## 6. Event
@@ -147,7 +146,7 @@ Kafka headers: `event_id`, `event_type`, `traceparent`, `correlation_id`.
 
 ## 8. Vận hành
 
-- Readiness có health group `kafka` ở catalog và inventory.
+- Health indicator `kafka` ở catalog và inventory, **không** nằm trong readiness: Kafka down không chặn nhận request vì outbox giữ event.
 - Metric: `outbox_pending`, tuổi bản ghi PENDING cũ nhất, relay failures, số message DLT.
 - Log JSON có redaction, không log payload/CSV.
 - Runbook README: đọc DLT bằng `kafka-console-consumer`; không có công cụ replay trong INV-01.
