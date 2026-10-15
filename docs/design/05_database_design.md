@@ -328,6 +328,9 @@ erDiagram
 INV-01 Task 3 hiện thực V001 stock_items/stock_transactions và durability trong inventory-service.
 inventory_runtime chỉ SELECT/INSERT ledger (thu hồi UPDATE/DELETE/TRUNCATE);
 stock_items SELECT/INSERT/UPDATE. Các bảng reservation/return/subscription vẫn thuộc task sau.
+Chủ dự án duyệt 2026-10-16: ledger adjust/import dùng operation_key ghép
+`user:<actor UUID>:<operation>:<Idempotency-Key>` để UNIQUE không va chạm giữa actor hoặc
+operation; operation inventory.adjust/inventory.import, header và phạm vi replay giữ nguyên.
 
 Job hết hạn khóa reservation; commit cũng khóa cùng hàng và phải còn ACTIVE, chưa hết hạn. Chỉ một bên thắng. Reservation terminal giữ lại để request cũ không giữ hàng lại sau release. Release đến trước reserve tạo tombstone RELEASED theo order_id/request_hash; reserve đến muộn bị từ chối. Payload release phải có original reservation hash và original snapshot (order_no,items,expires_at) để tạo tombstone đủ cột; hash được tính lại từ snapshot. Không dùng hash của body release.
 

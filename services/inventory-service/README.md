@@ -35,4 +35,15 @@ Local-only Kafka single node PLAINTEXT; chưa có SASL/TLS/HA hay công cụ rep
 Task 4 đăng ký SKU từ VARIANT_CREATED qua inbox transaction; cùng event_id bỏ qua,
 event mới cùng variant/SKU không reset tồn. Payload lỗi/mâu thuẫn sang catalog.events.DLT;
 CATALOG_CHANGED được ack và bỏ qua. Snapshot INVENTORY_UPDATED phát khi đăng ký,
-topic/key lấy từ registry.json được đóng gói trong jar. Admin/internal stock API ở task sau.
+topic/key lấy từ registry.json được đóng gói trong jar.
+
+Admin `/admin/api/v1/inventory`: GET `/skus` (sku_prefix, limit 1..100 mặc định 20,
+cursor base64url SKU), GET `/skus/{sku}/transactions` (mới nhất trước, cursor t/id)
+cần inventory.read. POST `/adjust` cần inventory.adjust và Idempotency-Key,
+body đóng `{sku,delta,reason}`; delta nguyên khác 0, reason strip 1..500 ký tự.
+SKU chuẩn hóa ASCII uppercase trước hash/lưu; không thay identity catalog cũ.
+Điều chỉnh dưới reserved trả 409 ON_HAND_BELOW_RESERVED; tràn int 400 field delta.
+Ledger operation_key `user:<actor UUID>:<operation>:<key>` tách actor/adjust/import;
+replay cùng body chỉ trả data/status đã lưu với metadata mới.
+AdminCommands theo khuôn catalog; cập nhật/ledger/outbox chung transaction khóa SKU.
+Import và internal stock API ở task sau.

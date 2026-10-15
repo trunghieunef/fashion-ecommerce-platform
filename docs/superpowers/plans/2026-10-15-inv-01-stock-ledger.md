@@ -230,7 +230,7 @@
 - Produces:
   - `StockAdminService.adjust(UUID actor, String key, AdjustRequest req, String traceId) -> AdminCommands.Replay`; `record AdjustRequest(String sku, Integer delta, String reason)`.
   - `StockAdminService.lockForUpdate(List<String> sortedSkus) -> Map<String, StockRow>` (`select ... where sku = any(:skus) order by sku for update`) — Task 6 dùng lại.
-  - `StockAdminService.applyDelta(StockRow row, int delta, String type, String key, String reason, UUID actor, String traceId) -> StockRow`: kiểm tràn bằng `Math.addExact` (→ 400 field do caller truyền), `on_hand + delta < reserved` → 409 `CONFLICT`/`ON_HAND_BELOW_RESERVED`; update `on_hand`, `version+1`, `updated_at=now()`; insert ledger; `StockEvents.append(after, before.available()==0 && after.available()>0, traceId)`.
+  - `StockAdminService.applyDelta(StockRow row, int delta, String type, String key, String reason, UUID actor, String traceId) -> StockRow`: kiểm tràn bằng `Math.addExact` (→ 400 field do caller truyền), `on_hand + delta < reserved` → 409 `CONFLICT`/`ON_HAND_BELOW_RESERVED`; update `on_hand`, `version+1`, `updated_at=now()`; insert ledger với operation_key `user:<actor UUID>:<operation>:<key>` (ADJUST → inventory.adjust, INBOUND → inventory.import; chủ dự án duyệt 2026-10-16); `StockEvents.append(after, before.available()==0 && after.available()>0, traceId)`.
   - Routes: `GET /admin/api/v1/inventory/skus` (`sku_prefix`, `limit` 1..100 mặc định 20, `cursor` = base64url của sku cuối), `GET /admin/api/v1/inventory/skus/{sku}/transactions` (`limit`, `cursor` = base64url `{"t":created_at,"id":uuid}`), `POST /admin/api/v1/inventory/adjust`. Idempotency operation `inventory.adjust`, actor key = user id.
   - Response stock: `{sku, variant_id, product_id, on_hand, reserved, available, min_stock, status, version}`; ledger item: `{id, type, on_hand_delta, reserved_delta, reason, actor_id, order_id, created_at}`.
 
@@ -251,6 +251,7 @@
 @Test void lowercaseSkuIsCanonicalized()               // adjust "sku-1" tác động "SKU-1"
 @Test void concurrentAdjustsDoNotLoseUpdates()         // 20 thread × +1 key khác nhau → on_hand 20, 20 ledger, version 20
 @Test void readPermissionCannotAdjust()                // token inventory.read → 403; không token → 401; thiếu Idempotency-Key → 400
+@Test void separateActorsCanReuseKeyForSameSku()        // hai actor cùng key/SKU → hai ledger operation_key, không lỗi UNIQUE
 // StockReadIntegrationTest
 @Test void listsSkusWithKeysetAndPrefix()              // 3 SKU, limit 2 → next_cursor, trang 2 còn 1; sku_prefix lọc
 @Test void transactionsNewestFirstAnd404ForUnknown()
@@ -294,6 +295,7 @@
 @Test void replayDoesNotAddTwice()
 @Test void oversizedFileIs400Or413()       // 129 KB → không ghi; ghi rõ status thực tế trong test
 @Test void requiresAdjustPermissionAndKey()
+@Test void adjustAndImportCanReuseKeyForSameSku()       // cùng actor/key/SKU nhưng operation khác → ghi độc lập, không lỗi UNIQUE
 ```
 
 - [ ] **Step 2: Run** `./mvnw -pl services/inventory-service -Dtest='InboundCsvTest,StockImportIntegrationTest' test` — Expected: FAIL.

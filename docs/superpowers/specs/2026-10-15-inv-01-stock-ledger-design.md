@@ -73,7 +73,7 @@ POST import | adjust + Idempotency-Key → IdempotencyStore (hash request)
    khóa stock_items các SKU liên quan theo thứ tự sku tăng dần (FOR UPDATE)
    validate toàn bộ → lỗi: 400/404/409, không ghi gì
    update on_hand, version+1, updated_at
-   ledger stock_transactions (INBOUND|ADJUST, operation_key = Idempotency-Key, reason, actor_id)
+   ledger stock_transactions (INBOUND|ADJUST, operation_key = user:<actor>:<operation>:<Idempotency-Key>, reason, actor_id)
    outbox INVENTORY_UPDATED mỗi SKU; thêm INVENTORY_RESTOCKED khi available 0 → > 0
 → OutboxRelay inventory → inventory.events (key sku)
 ```
@@ -90,6 +90,11 @@ DDL outbox/inbox/idempotency chép từ `platform-durability/.../durability.sql`
 `inventory_runtime` chỉ có SELECT/INSERT trên `stock_transactions` (không UPDATE/DELETE): ledger bất
 biến do DB bảo đảm. `available = on_hand - reserved`, không lưu cột. Không tạo bảng reservation,
 return, subscription (INV-02/03/04).
+
+Chủ dự án duyệt ngày 2026-10-16: operation_key ledger của adjust/import ghép
+`user:<actor UUID>:<operation>:<Idempotency-Key>`; operation là inventory.adjust hoặc
+inventory.import. Header giữ nguyên, phạm vi replay vẫn actor + operation + key như catalog.
+Hai actor hoặc hai operation dùng cùng key cho cùng SKU là yêu cầu độc lập, không lỗi UNIQUE.
 
 ## 4. API admin
 
