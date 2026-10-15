@@ -132,7 +132,7 @@ khi writer commit giữa reads; không giữ giá giữa requests và không th�
 - Thiếu/sai/hết hạn token → `401 INVALID_SERVICE_TOKEN`; caller ngoài `{cart-service, order-service}` →
   `403 CALLER_NOT_ALLOWED`. Response `Cache-Control: no-store`.
 - Body `{"variant_ids": [uuid]}`: 1–100 phần tử, không trùng, đúng UUID; sai → `400`.
-- Theo chỉ đạo owner 2026-10-13, QuoteRequest áp dụng quy tắc `@JsonAnySetter`/field lạ tại [03 §2.2](../../design/03_interfaces.md) (đoạn request đóng quanh dòng 277); service auth/allowlist trước đọc/bind/validate body, giữ shape `variant_ids`.
+- Theo chỉ đạo owner 2026-10-13, QuoteRequest áp dụng quy tắc `@JsonAnySetter`/field lạ tại [03 §3](../../design/03_interfaces.md) (đoạn request đóng quanh dòng 277); service auth/allowlist trước đọc/bind/validate body, giữ shape `variant_ids`.
 - Response giữ đúng thứ tự request. Mỗi phần tử: `variant_id, found`; khi `found`: `active, sku, product_id,
   name_vi, name_en, size, color, base_price, price_override, effective_price, weight_grams, product_version,
   image{asset_id, alt_vi, alt_en}?`. `active` theo cùng quy tắc public ở §3 và variant ACTIVE.

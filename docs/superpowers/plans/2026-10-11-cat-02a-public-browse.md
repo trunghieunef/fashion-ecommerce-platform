@@ -27,6 +27,10 @@ scripts14, docs58/diff/history103/staged scans PASS; RED unknown3/1fail, auth-bi
 final unknown mutant1/1fail,0 errors, restore/compile44/XML checked. F3 không còn pending owner;
 controller scoped re-review/archive còn mở, xem evidence/handoff. Interim460 trước correction
 auth-binding và historical457 được giữ riêng, không là final F3 proof.
+Fix round1 ngày2026-10-15 sửa415 metadata (media guard sau auth trong controller, không consumes)
+và hai label policy §3; fresh full462/catalog291, targeted32, contracts43/scripts14/docs58/diff,
+history104/staged scans PASS; RED2/2fail, same unknown mutant1/1fail,0 errors, restore/compile44/XML
+checked. Raw f3-r1-* giữ riêng historical461; controller scoped re-review73a1e96..newHEAD còn mở.
 
 ## Global Constraints
 

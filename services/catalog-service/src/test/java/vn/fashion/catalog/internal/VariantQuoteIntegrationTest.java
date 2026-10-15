@@ -245,7 +245,8 @@ class VariantQuoteIntegrationTest extends CatalogAdminTestSupport {
     }
   }
 
-  @Test void httpErrorsAreNoStore() throws Exception {
+  @Test @ExtendWith(OutputCaptureExtension.class)
+  void httpErrorsAreNoStore(CapturedOutput output) throws Exception {
     var jsonRequest = HttpRequest.newBuilder(URI.create("http://localhost:" + port + PATH))
         .header("Content-Type", "application/vnd.fashion.quote+json")
         .header("Authorization", "Bearer " + serviceToken("cart-service"))
@@ -255,6 +256,7 @@ class VariantQuoteIntegrationTest extends CatalogAdminTestSupport {
     assertThat(data(jsonResponse, 200).size()).isEqualTo(1);
     noStore(jsonResponse);
     for (String[] headers : List.of(new String[]{"text/plain", "application/json"},
+        new String[]{"synthetic-invalid-media", "application/json"},
         new String[]{"application/json", "text/plain"})) {
       var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + PATH))
           .header("Content-Type", headers[0]).header("Accept", headers[1])
@@ -262,12 +264,39 @@ class VariantQuoteIntegrationTest extends CatalogAdminTestSupport {
           .POST(HttpRequest.BodyPublishers.ofString("{\"variant_ids\":[\"abcdefab-1234-4321-8765-abcdefabcdef\"]}"))
           .build();
       var response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
-      assertThat(response.statusCode()).isEqualTo(headers[0].equals("text/plain") ? 415 : 406);
+      assertThat(response.statusCode()).isEqualTo(headers[0].equals("application/json") ? 406 : 415);
+      if (response.statusCode() == 415) {
+        assertThat(json(response).path("code").asText()).isEqualTo("VALIDATION_ERROR");
+        error(response, 415, "VALIDATION_ERROR", "INVALID_HTTP_REQUEST");
+        assertThat(json(response).path("errors").isEmpty()).isTrue();
+        assertThat(json(response).path("metadata").path("request_id").asText())
+            .matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
+        assertThat(response.headers().firstValue("Accept").orElse("")).contains("application/json", "application/*+json");
+        assertThat(response.body()).doesNotContain("synthetic-invalid-media");
+      }
       noStore(response);
     }
     var response = send("GET", PATH, serviceToken("cart-service"), null, null);
     assertThat(response.statusCode()).isEqualTo(405);
     noStore(response);
+    assertThat(output.getAll()).doesNotContain("synthetic-invalid-media");
+  }
+
+  @Test void authPrecedesMediaValidation() throws Exception {
+    for (String type : List.of("text/plain", "synthetic-invalid-media")) {
+      for (String callerToken : java.util.Arrays.asList(null, "broken", serviceToken("notification-service"))) {
+        var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + PATH))
+            .header("Content-Type", type)
+            .POST(HttpRequest.BodyPublishers.ofString("{\"extra\":\"synthetic-media-payload\"}"));
+        if (callerToken != null) request.header("Authorization", "Bearer " + callerToken);
+        var response = HttpClient.newHttpClient().send(request.build(), HttpResponse.BodyHandlers.ofString());
+        boolean forbidden = callerToken != null && !callerToken.equals("broken");
+        error(response, forbidden ? 403 : 401, forbidden ? "FORBIDDEN" : "UNAUTHORIZED",
+            forbidden ? "CALLER_NOT_ALLOWED" : "INVALID_SERVICE_TOKEN");
+        assertThat(json(response).path("errors").isEmpty()).isTrue();
+        assertThat(response.body()).doesNotContain(type, "extra", "synthetic-media-payload");
+      }
+    }
   }
 
   private UUID product(String slug, UUID categoryId, UUID brand, String status) {

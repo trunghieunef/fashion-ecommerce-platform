@@ -283,6 +283,9 @@ Token sai/thiếu và caller bị cấm vẫn trả 401/403 trước đọc/bind
 hoặc `variant_ids` sai kiểu. Sau auth, lỗi body trả MALFORMED_JSON400 qua global ObjectMapper;
 global Jackson flag và lỗi HTTP415/406/405 giữ nguyên, nhận application/json và application/*+json. Quote không nhận `items`;
 regression `items[0].item_extra` thuộc CollectionAdminService.ItemRequest đã có.
+Content-Type được kiểm sau auth trong controller để 415 đi qua scoped Api advice:
+giữ envelope/metadata/correlation/no-store và Accept cho JSON/+json. Type sai cú pháp cũng
+trả 415 generic, không echo/log header hoặc payload; không dùng mapping `consumes` để chặn trước handler.
 
 `CATALOG_INTERNAL_CALLERS` rỗng theo mặc định (deny all); Compose chỉ truyền public keys
 được cấu hình. Không sinh key cart/order trong `local-up.sh` khi service chưa tồn tại.

@@ -14,7 +14,10 @@ import java.util.Set;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.InvalidMediaTypeException;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
@@ -30,6 +33,8 @@ import vn.fashion.platform.security.ServiceTokenVerifier;
 public class VariantQuoteController {
   static final String PATH = "/internal/api/v1/catalog/variants/quote";
   private static final Set<String> ALLOWED_CALLERS = Set.of("cart-service", "order-service");
+  private static final List<MediaType> JSON_TYPES = List.of(MediaType.APPLICATION_JSON,
+      MediaType.parseMediaType("application/*+json"));
   public static class QuoteRequest {
     public List<String> variantIds;
     @JsonIgnore public final List<String> unknownFields = new ArrayList<>();
@@ -49,16 +54,25 @@ public class VariantQuoteController {
     this.json = json;
   }
 
-  @PostMapping(value = PATH, consumes = {"application/json", "application/*+json"})
+  @PostMapping(PATH)
   public ResponseEntity<Api.Response<List<QuoteItem>>> quote(
       @RequestHeader(name = "Authorization", required = false) String authorization,
-      HttpServletRequest body) {
+      HttpServletRequest body) throws HttpMediaTypeNotSupportedException {
     String token = authorization != null && authorization.regionMatches(true, 0, "Bearer ", 0, 7)
         ? authorization.substring(7).strip() : null;
     String caller = callers.verify(token).orElseThrow(() ->
         new Api.Problem(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "INVALID_SERVICE_TOKEN", List.of()));
     if (!ALLOWED_CALLERS.contains(caller)) {
       throw new Api.Problem(HttpStatus.FORBIDDEN, "FORBIDDEN", "CALLER_NOT_ALLOWED", List.of());
+    }
+    try {
+      MediaType type = MediaType.parseMediaType(body.getContentType() == null
+          ? MediaType.APPLICATION_OCTET_STREAM_VALUE : body.getContentType());
+      if (JSON_TYPES.stream().noneMatch(supported -> supported.includes(type))) {
+        throw new HttpMediaTypeNotSupportedException("Unsupported media type", JSON_TYPES);
+      }
+    } catch (InvalidMediaTypeException e) {
+      throw new HttpMediaTypeNotSupportedException("Unsupported media type", JSON_TYPES);
     }
     QuoteRequest request;
     try {

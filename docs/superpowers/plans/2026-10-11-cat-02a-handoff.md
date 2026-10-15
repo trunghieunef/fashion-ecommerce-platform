@@ -57,6 +57,17 @@ không thay proof cuối. Sau full chỉ rename test/comment, assertions và exe
 Subject `fix(CAT-02): reject unknown quote fields after service authentication`, local hash
 trong f3-report/git log. F3 không còn pending owner; controller scoped re-review/archive còn mở.
 
+F3 fix round1 ngày2026-10-15 sửa Important415 mất Api envelope/metadata do consumes
+reject trước HandlerMethod: kiểm media trong controller sau auth, trước body, dùng ErrorResponse
+advice hiện có giữ generic415/errors/metadata/correlation/no-store/Accept. JSON/+json,406/405
+giữ nguyên; malformed media415, media sai với missing/invalid401 và forbidden403 đã kiểm.
+Minor hai nhãn policy03/spec sửa §3. Fresh full462 =36/38/65/291/32, targeted32,
+contracts43/scripts14/docs58/diff/history104/staged scans PASS; RED2/2 assertion failures,
+same unknown mutant1/1 assertion failure,0 errors, bytes/hash/compile44/XML verified.
+Raw `f3-r1-*`/report tách Oct13 historical461; source/test không đổi sau full.
+Subject `fix(CAT-02): preserve quote metadata for unsupported media`, hash trong f3-report/git log;
+controller scoped re-review73a1e96..newHEAD/archive còn mở, không whole-branch review/smoke rerun.
+
 CAT-02 **In progress**, CAT-02b pending: Redis cache/invalidation durable (CAT-09),
 replay-safe ORDER_COMPLETED sold_quantity, inventory observation và public HTTP cache
 headers. Chưa load benchmark, remote CI/staging hoặc UAT/nghiệm thu parent/toàn bộ MVP.
