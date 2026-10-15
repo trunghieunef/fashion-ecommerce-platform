@@ -36,6 +36,25 @@ public class StockAdminService {
         .param("skus",sortedSkus.toArray(String[]::new)).query(StockRow.class).list();
     var result=new LinkedHashMap<String,StockRow>();for(var row:rows) result.put(row.sku(),row);return result;
   }
+  public AdminCommands.Replay importInbound(UUID actor,String key,byte[] file,String rawReason,String traceId) {
+    AdminCommands.requireKey(key);String reason=reason(rawReason);var rows=InboundCsv.parse(file);
+    String fileHash;
+    try { fileHash=HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(file)); }
+    catch(java.security.NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
+    return commands.create(actor,"inventory.import",key,Map.of("file_sha256",fileHash,"reason",reason),()->{
+      var stocks=lockForUpdate(rows.stream().map(InboundCsv.Row::sku).sorted().toList());
+      var errors=new ArrayList<Api.FieldError>();
+      for(var row:rows) {
+        var stock=stocks.get(row.sku());
+        if(stock==null) errors.add(new Api.FieldError("rows["+row.line()+"].sku","unknown sku"));
+        else try { Math.addExact(stock.onHand(),row.quantity()); }
+        catch(ArithmeticException e) { errors.add(new Api.FieldError("rows["+row.line()+"].quantity","exceeds stock integer range")); }
+      }
+      if(!errors.isEmpty()) throw InboundCsv.invalid(errors);
+      for(var row:rows) applyDelta(stocks.get(row.sku()),row.quantity(),"INBOUND",key,reason,actor,traceId);
+      return new AdminCommands.Result(null,200,Map.of("rows",rows.size(),"total_quantity",rows.stream().mapToInt(InboundCsv.Row::quantity).sum()));
+    });
+  }
   public StockRow applyDelta(StockRow row,int delta,String type,String key,String reason,UUID actor,String traceId) {
     int next=Math.addExact(row.onHand(),delta);
     if(next<row.reserved()) throw new Api.Problem(HttpStatus.CONFLICT,"CONFLICT","ON_HAND_BELOW_RESERVED",List.of());

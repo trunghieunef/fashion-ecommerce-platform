@@ -46,4 +46,12 @@ SKU chuẩn hóa ASCII uppercase trước hash/lưu; không thay identity catalo
 Ledger operation_key `user:<actor UUID>:<operation>:<key>` tách actor/adjust/import;
 replay cùng body chỉ trả data/status đã lưu với metadata mới.
 AdminCommands theo khuôn catalog; cập nhật/ledger/outbox chung transaction khóa SKU.
-Import và internal stock API ở task sau.
+POST `/import` cần inventory.adjust/Idempotency-Key, multipart file + reason;
+CSV UTF-8 (BOM/CRLF được nhận), header sku,quantity, 1..1000 dòng,
+quantity 1..1000000, file tối đa 128 KiB, multipart tối đa 160 KiB.
+Parser gom lỗi rows[n].sku/quantity (header là dòng 1); SKU trùng/không có hoặc
+stock tràn int từ chối cả file. Import cộng INBOUND, không ghi đè on_hand.
+Hash idempotency bao gồm SHA-256 toàn bộ bytes file và reason đã strip, theo
+AdminCommands; cùng nội dung parse nhưng bytes khác vẫn là body khác.
+Mọi SKU được khóa theo thứ tự tăng, kiểm toàn bộ trước khi update/ledger/outbox.
+Internal stock API ở task sau.
