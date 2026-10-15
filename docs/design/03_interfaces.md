@@ -94,22 +94,22 @@ Contract thực thi của register/login/refresh/logout (`TASK:USR-01` phần 1a
 
 ### 2.2 Catalog, cart và tương tác Phase 2
 
-Collection public list/detail thuộc `TASK:CAT-02`, không triển khai trong CAT-01b.
+Public reads và internal quote `TASK:CAT-02a` đã hiện thực và kiểm local ngày 2026-10-11; contract thực thi tại [catalog.yaml](../../contracts/openapi/catalog.yaml), bằng chứng tại [evidence CAT-02a](../evidence/cat-02a-local-2026-10-11.md). Parent CAT-02 **In progress**, 02b còn mở. CAT-01b chỉ triển khai admin.
 Theo quyết định chủ dự án ngày 2026-10-07, chỉ trả collection `ACTIVE`, đang trong khoảng
-hiệu lực `[start_at, end_at)` và có ít nhất một product `ACTIVE`. Danh sách product của
-collection chỉ gồm product `ACTIVE`; điều kiện được kiểm ở thời điểm đọc, kể cả khi product
+hiệu lực `[start_at, end_at)` và có ít nhất một product public. Danh sách product của
+collection chỉ gồm product public (`ACTIVE`, category và parent nếu có đều ACTIVE, brand null hoặc ACTIVE, có variant ACTIVE); điều kiện được kiểm ở thời điểm đọc, kể cả khi product
 đã bị unpublish sau khi collection được kích hoạt. Không lọc collection public chỉ bằng status.
 
 | Method | Path | Auth / phase | Input → output |
 |---|---|---|---|
-| GET | /catalog/products | Public / 1 | `TASK:PLT-01` sample chỉ nhận `limit` (mặc định 20, tối đa 100), trả card ACTIVE `id,slug,name_vi,name_en,next_cursor`; filter/sort/cursor đầy đủ thuộc `CAT-02` |
-| GET | /catalog/products/{id} | Public / 1 | variants,images,size_guide,available,observed_at; review summary Phase 2 |
-| GET | /catalog/search | Public / 1 | q + filters/cursor; bounded query length |
-| GET | /catalog/categories | Public / 1 | Cây tối đa 2 cấp |
-| GET | /catalog/brands | Public / 1 | Active brands |
-| GET | /catalog/collections | Public / 1 | `TASK:CAT-02`: ACTIVE, trong [start_at, end_at), có ≥ 1 product ACTIVE |
-| GET | /catalog/collections/{slug} | Public / 1 | `TASK:CAT-02`: cùng điều kiện list; lookbook + product ACTIVE phân trang |
-| GET | /catalog/size-guides/{category_id} | Public / 1 | Locale và hướng dẫn |
+| GET | /catalog/products | Public / 1 | `CAT-02a` implemented: q/category_id/brand_id/size/color/tag/min_price/max_price/sort/limit/cursor → items card id/slug/name_vi/name_en/min_price/max_price/image + next_cursor |
+| GET | /catalog/products/{id} | Public / 1 | `CAT-02a` implemented: sanitized descriptions/tags, category/brand, min/max, variants ACTIVE, images AVAILABLE, size_guide theo locale; available/observed_at null chờ 02b; review summary Phase 2 |
+| GET | /catalog/search | Public / 1 | `CAT-02a` implemented: q bắt buộc, trim 1–100, unaccent/ILIKE; cùng filters/cursor với products, escape literal %, _, backslash |
+| GET | /catalog/categories | Public / 1 | `CAT-02a` implemented: cây ACTIVE tối đa 2 cấp, child chỉ khi root ACTIVE |
+| GET | /catalog/brands | Public / 1 | `CAT-02a` implemented: ACTIVE, id/name, không phân trang |
+| GET | /catalog/collections | Public / 1 | `CAT-02a` implemented: ACTIVE trong [start_at,end_at), có ≥1 product public; cover_asset_id AVAILABLE hoặc null; limit/cursor (created_at,id) DESC |
+| GET | /catalog/collections/{slug} | Public / 1 | `CAT-02a` implemented: cùng visibility; lookbook asset_id/caption_vi/caption_en/sort_order (caption làm alternate text, không alt), products public phân trang (sort_order,product_id) ASC |
+| GET | /catalog/size-guides/{category_id} | Public / 1 | `CAT-02a` implemented: locale vi/en ưu tiên query, fallback Accept-Language (en nếu bắt đầu en, mặc định vi); category ACTIVE, category_id/locale/guideline_html/table; thiếu hoặc ẩn →404 |
 | POST | /carts | Public/member / 1 | Guest cấp cookie; member trả ACTIVE cart |
 | GET | /carts/mine | Member / 1 | Active cart và version |
 | GET | /carts/{cart_id} | Owner / 1 | Items/version và preview có nhãn |
@@ -127,6 +127,30 @@ collection chỉ gồm product `ACTIVE`; điều kiện được kiểm ở th�
 | PUT, DELETE | /inventory/restock-subscriptions/{sku} | Member / 2 | Subscribe/unsubscribe đúng user |
 | POST | /catalog/review-images/uploads | Member eligible / 2 | filename,type,size → scoped upload |
 | POST | /notifications/unsubscribe | Scoped token / 2 | token trong body → preference, idempotent |
+
+CAT-02a: limit mặc định 20, 1–100; size/color/tag trim 1–64; UUID chuẩn cho category_id/brand_id.
+PR19 ngày 2026-10-15: public reads bỏ qua unknown; products/search/collection list/detail
+chấp nhận tham số lặp và lấy giá trị đầu tiên, vẫn kiểm định dạng/miền của giá trị được chọn.
+Limit sai định dạng/ngoài khoảng
+đều trả400 VALIDATION_ERROR / INVALID_LIMIT, errors chỉ field limit và message chung
+(không rejected_value), giữ metadata và X-Correlation-Id như lỗi filter/cursor.
+Search bind raw q đã trim, PostgreSQL lower/unaccent rồi escape backslash, %, _ trước khi
+thêm wildcard bao quanh; names và slug dùng cùng pattern literal. Detail product và collection
+dùng transaction read-only REPEATABLE_READ để mọi reads trong response cùng snapshot;
+writer commit giữa reads chỉ hiện trong request sau, không giữ giá giữa requests.
+Tiền integer VND 0..9_223_372_036_854_775_807; min_price <= max_price, lọc/sort theo
+min(coalesce(price_override,base_price)) trên variant ACTIVE. size/color phải khớp cùng variant.
+Sort NEWEST (coalesce(published_at,created_at) DESC/id DESC), BEST_SELLING (sold_quantity
+DESC/id DESC), PRICE_ASC (min_price ASC/id ASC), PRICE_DESC (min_price DESC/id DESC).
+Cursor opaque base64url JSON s/v/id/f, không padding; sort/filter hash 16 hex đầu SHA-256
+phải khớp. Timestamp NEWEST/COLLECTIONS năm UTC1–9999; giá/sold long không âm;
+COLLECTION:<slug> sort_order 0–2_147_483_647 (collection f rỗng).
+Canonicalization theo technical ruling của controller escape backslash rồi pipe từng field
+trước khi nối theo thứ tự cố định (wire hash 16 hex giữ nguyên, chống delimiter collision).
+Sai tham số →400 VALIDATION_ERROR có field; cursor sai →INVALID_CURSOR field cursor;
+detail thiếu/không public →404 NOT_FOUND. Public JSON giữ các field null (brand/image/size_guide,
+available/observed_at); chỉ ảnh AVAILABLE. Query JdbcClient bind mọi giá trị; public HTTP cache
+headers, Redis/invalidation, sold_quantity consumer và inventory observations thuộc 02b.
 
 Catalog images upload admin được mô tả ở §3. Complete kiểm bytes/type thực/size;
 attach kiểm APPROVED/ownership/target trong DB; chưa đủ validation không publish ảnh.
@@ -436,7 +460,7 @@ Report orders do order sở hữu, cash do payment, stock do inventory; dashboar
 |---|---|---|
 | GET /carts/{id}/snapshot | order → cart | Verified actor context + expected version → items/versions |
 | POST /carts/{id}/checkout-cleanup | order → cart | order_id,actor,items {item_id,version,quantity},key → removed/retained |
-| POST /catalog/variants/quote | order,cart → catalog | variant_ids → active/base/override/version/weight/snapshot |
+| POST /catalog/variants/quote | order,cart → catalog | `CAT-02a` implemented: /internal/api/v1/catalog/variants/quote; 1–100 distinct UUID → ordered snapshot; service token aud catalog-service, caller cart-service/order-service; 401 UNAUTHORIZED/INVALID_SERVICE_TOKEN, 403 FORBIDDEN/CALLER_NOT_ALLOWED, no-store mọi response |
 | GET /orders/{order_id}/snapshot | payment,shipping → order | Scoped fields; immutable snapshot/version/hash |
 | GET /orders/{order_id}/saga-status | promotion,shipping,payment → order | Intent, readiness,deadline/version; không PII dư |
 | POST /inventory/reserve | order → inventory | order_id,order_no,items,expires_at,request_hash,key → reservation |
@@ -462,6 +486,24 @@ Report orders do order sở hữu, cash do payment, stock do inventory; dashboar
 | POST /users/recipients/resolve | notification,inventory → user | Scoped IDs/purpose → minimal recipient/locale/verified |
 | GET /users/notification-secrets/{challenge_id} | notification → user | Purpose/expiry/caller check → secret tạm, no-store. Thực thi: [`user-internal.yaml`](../../contracts/openapi/user-internal.yaml) (`TASK:USR-01` phần 1b-i); service token ADR-19 gửi qua `Authorization: Bearer` |
 | GET /users/{user_id}/auth-state | gateway, các service có admin action → user | auth_version/status/permissions cho sensitive authorization |
+
+Quote CAT-02a không route qua Gateway (/internal/** →404); config fashion.catalog.internal-callers
+(`CATALOG_INTERNAL_CALLERS`, kid:base64-X.509, default rỗng/deny all). Một query cho cả batch;
+missing chỉ variant_id/found=false; found có active (quy tắc public + variant ACTIVE), sku,
+product_id/name_vi/name_en/size/color/base_price/effective_price/weight_grams/product_version.
+Chỉ record QuoteItem dùng NON_NULL: price_override và image bị bỏ khi null; nested image giữ
+đủ field asset_id/alt_vi/alt_en theo PublicCardImage. Snapshot không giữ giá; ORD-01 phải kiểm lại khi chốt đơn.
+Cache-Control no-store áp trước auth/binding, cả lỗi HTTP. Không sinh key caller thật trong local-up.
+Theo chỉ đạo owner 2026-10-13, QuoteRequest áp dụng quy tắc any-setter ở đoạn request đóng §3:
+chỉ gom tên key lạ; ServiceTokenVerifier và allowlist chạy trước đọc/bind/validate body,
+key lạ trả 400 VALIDATION_ERROR/INVALID_FIELDS,
+field bằng tên key và message cố định `unknown field`; không log/lưu/echo value lạ.
+Thiếu/sai token vẫn 401, caller ngoài allowlist vẫn 403 kể cả JSON lỗi hoặc `variant_ids` sai kiểu;
+sau auth, lỗi đọc/bind body trả 400 VALIDATION_ERROR/MALFORMED_JSON. Lỗi HTTP 415/406/405 giữ nguyên.
+Content-Type được kiểm trong controller sau auth, trước đọc body: application/json hoặc application/*+json;
+type không hỗ trợ/sai cú pháp trả 415 VALIDATION_ERROR/INVALID_HTTP_REQUEST với envelope,
+metadata/correlation/no-store và Accept quảng bá hai media types trên; không echo/log header hoặc payload.
+Request vẫn chỉ `variant_ids`; `items` là key lạ top-level, không có request item DTO trong quote.
 
 Internal stock return chỉ order; OPS dùng admin order returns để giữ evidence và orchestration. Query pure POST không cần idempotency key; mọi command còn lại cần key + stable business reference. Hash canonical tại service đích phải khớp original payload; không chỉ so chuỗi caller gửi.
 

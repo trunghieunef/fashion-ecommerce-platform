@@ -18,7 +18,8 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
-@RestControllerAdvice(basePackages = {"vn.fashion.catalog.admin", "vn.fashion.catalog.media"})
+@RestControllerAdvice(basePackages = {"vn.fashion.catalog.admin", "vn.fashion.catalog.media",
+    "vn.fashion.catalog.product", "vn.fashion.catalog.collection", "vn.fashion.catalog.internal"})
 public class ApiExceptionHandler {
   private static final Logger LOG = LoggerFactory.getLogger(ApiExceptionHandler.class);
   private final Tracer tracer;
@@ -57,7 +58,7 @@ public class ApiExceptionHandler {
       return ResponseEntity.status(error.getStatusCode()).headers(error.getHeaders()).headers(response.getHeaders())
           .contentType(MediaType.APPLICATION_JSON).body(response.getBody());
     }
-    LOG.error("Catalog admin request failed", e);
+    LOG.error("Catalog request failed", e);
     var meta = Api.metadata(tracer);
     return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).header("X-Correlation-Id", meta.traceId())
         .contentType(MediaType.APPLICATION_JSON).body(Map.of("code", "INTERNAL", "message", "INTERNAL_ERROR", "metadata", meta));

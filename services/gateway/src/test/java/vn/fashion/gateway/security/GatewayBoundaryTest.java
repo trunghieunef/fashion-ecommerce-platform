@@ -137,6 +137,15 @@ class GatewayBoundaryTest {
     assertThat(CATALOG.requestCount()).isZero();
   }
   @Test
+  void neverRoutesInternalCatalogQuote() {
+    client.post().uri("/internal/api/v1/catalog/variants/quote")
+        .header("Authorization", "Bearer synthetic")
+        .header("Content-Type", "application/json")
+        .bodyValue("{\"variant_ids\":[\"11111111-1111-1111-1111-111111111111\"]}")
+        .exchange().expectStatus().isNotFound();
+    assertThat(CATALOG.requestCount()).isZero();
+  }
+  @Test
   void routesAdminCatalogRequestsToCatalogService() {
     client.get().uri("/admin/api/v1/catalog/products?page=1")
         .header("Authorization", "Bearer synthetic")

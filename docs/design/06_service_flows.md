@@ -9,7 +9,7 @@
 | Đọc cùng | [Database Design](05_database_design.md) — D01–D12 là giả định đề xuất |
 | Bộ sơ đồ bổ sung | [07 — Use Case, Activity, Context, Component, Deployment, Class và DFD](07_diagrams.md) |
 
-Tài liệu là nguồn luồng/state machine của baseline B1 cho 9 service. Danh sách endpoint và payload ở 03 đã đồng bộ; schema tại 05. Chưa có code/migration hoặc kết quả test. D01–D12 được theo dõi ở 08.
+Tài liệu là nguồn luồng/state machine của baseline B1 cho 9 service. Danh sách endpoint và payload ở 03 đã đồng bộ; schema tại 05. Các phần đã hiện thực/kiểm local (gồm CAT-02a) được ghi tại luồng tương ứng và evidence; phần baseline còn lại chưa nghiệm thu. D01–D12 được theo dõi ở 08.
 
 ## 1. Quy tắc chung
 
@@ -112,12 +112,12 @@ flowchart LR
 | Tạo/sửa sản phẩm | OPS auth → sanitize HTML/validate giá, size, màu, weight → SKU mới strip/ASCII/uppercase Locale.ROOT trước hash → TX product/variants/images + version + audit + outbox | SKU unique không phân biệt casing, bộ product-size-color unique; conflict trả 409; SKU/event/key cũ giữ nguyên; không xóa hard SKU đã công bố |
 | Khởi tạo SKU kho | Catalog phát VARIANT_CREATED; inventory idempotently tạo stock_items số lượng 0 | Event chưa đến thì SKU được xem chưa sẵn sàng bán; nhập kho đợi đăng ký thành công |
 | Publish/unpublish | Kiểm tra có biến thể, ảnh, nội dung bắt buộc → cập nhật trạng thái/version → invalidate | Ngưng bán không phá snapshot đơn cũ; checkout quote kiểm tra trạng thái ACTIVE |
-| Danh sách/search/detail | Cache-aside → query DB phân trang → ảnh từ object storage/CDN → stock cache ngắn hạn | Cursor gồm sort value + id, không chỉ id; dữ liệu stock hiển thị không giữ hàng |
+| Danh sách/search/detail | CAT-02a implemented local: bind filters → JdbcClient/PostgreSQL query-time min/max + ACTIVE taxonomy/variant → keyset page; detail read-only TX; ảnh AVAILABLE | Cursor sort value + UUID + filter hash; unaccent và literal wildcard; available/observed_at null. 02b: cache-aside/invalidation, sold consumer, stock observation, public HTTP cache headers |
 | Collections/lookbook/size guide | OPS chỉnh bảng tương ứng, validate thời gian/locale, sanitize → invalidation | Upload giới hạn size/type, xác nhận quyền sở hữu object; text thay thế cho ảnh |
 | Review | ORDER_COMPLETED → eligibility 30 ngày + cộng sold_quantity một lần → member submit đúng variant → PENDING → OPS duyệt | UNIQUE eligibility chặn review trùng; sửa trong 7 ngày từ tạo và đưa về PENDING; tối đa 5 ảnh |
 | Wishlist | Member PUT/DELETE sản phẩm vào wishlist_items | Idempotent bằng composite PK; không tự chuyển wishlist thành restock subscription |
 
-Catalog quote nội bộ trả variants ACTIVE, phiên bản, giá cơ sở/override, tên/size/màu/ảnh/weight. Promotion chịu trách nhiệm giá campaign. Order tạo quote dùng thời hạn ngắn (baseline 2 phút) được server ký và ràng buộc actor, cart_version, items, địa chỉ, phương thức, tổng tiền; không chứa secret. Nếu giá/version thay đổi trước tạo order, trả PRICE_CHANGED kèm quote mới để khách xác nhận.
+Catalog quote nội bộ CAT-02a trả ordered snapshot found/active (variant không bán được vẫn found=true, active=false), phiên bản, giá cơ sở/override, tên/size/màu/ảnh/weight; missing chỉ variant_id/found=false. Service token cart/order, no-store kể cả auth/binding errors, Gateway chặn internal; snapshot không giữ giá. Promotion chịu trách nhiệm giá campaign. Order tạo quote dùng thời hạn ngắn (baseline 2 phút) được server ký và ràng buộc actor, cart_version, items, địa chỉ, phương thức, tổng tiền; không chứa secret. Nếu giá/version thay đổi trước tạo order, trả PRICE_CHANGED kèm quote mới để khách xác nhận.
 
 CAT-01a tạo `VARIANT_CREATED` ngay khi tạo variant (không đợi publish): khóa product → insert
 variant → tăng product version → outbox → audit → kết quả idempotency trong cùng transaction.

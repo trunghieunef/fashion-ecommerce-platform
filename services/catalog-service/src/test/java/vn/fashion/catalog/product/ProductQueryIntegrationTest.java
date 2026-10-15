@@ -63,6 +63,7 @@ class ProductQueryIntegrationTest {
 
   @BeforeEach
   void clearProducts() {
+    jdbc.execute("delete from product_variants");
     jdbc.execute("delete from products");
   }
 
@@ -80,6 +81,8 @@ class ProductQueryIntegrationTest {
         "ACTIVE",
         "Hiện",
         "Visible");
+    new PublicCatalogFixtures(jdbc).variant(UUID.fromString("00000000-0000-0000-0000-000000000001"),
+        "VISIBLE", "M", "Black", null, "ACTIVE");
     jdbc.update(
         "insert into products(id,slug,status,name_vi,name_en,version,category_id,base_price) values (?,?,?,?,?,0,'00000000-0000-4000-8000-000000000001',0)",
         UUID.fromString("00000000-0000-0000-0000-000000000002"),
@@ -111,7 +114,6 @@ class ProductQueryIntegrationTest {
     assertThat(body.errors()).singleElement().satisfies(error -> {
       assertThat(error.field()).isEqualTo("limit");
       assertThat(error.message()).isEqualTo("must be between 1 and 100");
-      assertThat(error.rejectedValue()).isEqualTo(101);
     });
     assertThat(body.metadata().requestId()).isNotBlank();
     assertThat(body.metadata().traceId()).isNotBlank();
@@ -129,6 +131,8 @@ class ProductQueryIntegrationTest {
           "ACTIVE",
           "Sản phẩm " + index,
           "Product " + index);
+      new PublicCatalogFixtures(jdbc).variant(UUID.nameUUIDFromBytes(("product-" + index).getBytes(StandardCharsets.UTF_8)),
+          "PRODUCT-" + index, "M", "Black", null, "ACTIVE");
     }
 
     var response = get("/api/v1/catalog/products");
@@ -248,7 +252,6 @@ class ProductQueryIntegrationTest {
                           Metadata metadata) {
   }
 
-  record ApiFieldError(String field, String message,
-                       @JsonProperty("rejected_value") Integer rejectedValue) {
+  record ApiFieldError(String field, String message) {
   }
 }

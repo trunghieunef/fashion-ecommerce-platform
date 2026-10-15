@@ -22,7 +22,7 @@ class AdminHttpErrorIntegrationTest extends CatalogAdminTestSupport {
           .build(), HttpResponse.BodyHandlers.ofString());
       assertHttpError(response, 415);
     }
-    assertThat(output.getAll()).doesNotContain("Catalog admin request failed");
+    assertThat(output.getAll()).doesNotContain("Catalog request failed");
     assertThat(jdbc.queryForObject("select count(*) from products", Integer.class)).isZero();
     assertThat(jdbc.queryForObject("select count(*) from audit_logs", Integer.class)).isZero();
     assertThat(jdbc.queryForObject("select count(*) from idempotency_requests", Integer.class)).isZero();
@@ -33,7 +33,7 @@ class AdminHttpErrorIntegrationTest extends CatalogAdminTestSupport {
         .header("Accept", "application/xml").header("Authorization", "Bearer " + token("catalog.write")).GET().build();
     var response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
     assertHttpError(response, 406);
-    assertThat(output.getAll()).doesNotContain("Catalog admin request failed");
+    assertThat(output.getAll()).doesNotContain("Catalog request failed");
   }
 
   private void assertHttpError(HttpResponse<String> response, int status) {

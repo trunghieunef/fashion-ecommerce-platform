@@ -408,3 +408,20 @@ Gate task là work package trong [backlog](../delivery/10_backlog.md). Mã task 
   không đổi quyền/visibility hoặc readiness. Bằng chứng tại [evidence CAT-03](../evidence/cat-03-local-2026-10-08.md).
 
 Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác và lý do; ảnh hưởng PRD/API/schema/test/task; người quyết định; ngày; link bằng chứng. Chưa có chữ ký phê duyệt giả định thương mại.
+
+## CAT-02a — quyết định chủ dự án 2026-10-11
+
+`TASK:CAT-02` phần 02a · `REQ:CAT-04`, hỗ trợ `REQ:CAT-03/05`.
+Nguồn: [spec đã duyệt](../superpowers/specs/2026-10-11-cat-02a-public-browse-design.md) §1,
+[evidence local](../evidence/cat-02a-local-2026-10-11.md); bốn nhóm quyết định:
+
+| Nhóm | Quyết định đã duyệt | Hệ quả |
+|---|---|---|
+| Phạm vi và truy vấn | Tách 02a public read/quote PostgreSQL query-time JdbcClient và 02b cache/invalidation/sold consumer/inventory/HTTP cache | Parent CAT-02 In progress; denormalize chỉ khi đo tải cần, không thêm đồng bộ write/projection |
+| Search | unaccent + ILIKE bỏ dấu tiếng Việt, bind giá trị và escape %, _, backslash | V007 append-only; literal wildcard không mở rộng query |
+| Giá đại diện | min(coalesce(variant.price_override,product.base_price)) trên variant ACTIVE, max tương tự | Dùng cho card/lọc/sort; VND integer long không âm |
+| Visibility taxonomy | Product ACTIVE chỉ public nếu category ACTIVE, brand null hoặc ACTIVE, có variant ACTIVE | Kiểm ở thời điểm đọc cho browse/detail/collection/quote active; thiếu/ẩn cùng 404 |
+
+Quyết định tương thích schema đã duyệt: lookbook V006 chỉ caption VI/EN làm alternate text;
+cursor timestamp UTC năm1–9999, numeric long không âm (sort_order int), sai miền →400
+INVALID_CURSOR trước SQL binding. Đây là các xác nhận boundary đã có, không mở thêm lựa chọn nghiệp vụ.
