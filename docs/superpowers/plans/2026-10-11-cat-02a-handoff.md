@@ -77,3 +77,33 @@ lại fixture synthetic theo policy hiện có.
 
 Bước tiếp theo: controller scoped re-review final fixes/diff/evidence trước lưu archive; parent vẫn mở.
 Push/PR/merge hoặc triển khai 02b chỉ khi chủ dự án yêu cầu; không tự provision AWS.
+
+PR19 review fixes ngày2026-10-15, base `38012fd`: findings từ chỉ đạo chính xác của chủ dự án,
+đã kiểm code, không viện dẫn GitHub review/comment chưa có. Shared public predicate + quote
+kiểm category và parent nếu có đều ACTIVE, giữ found=true/active=false cho variant ẩn.
+Regression covers products/search/detail404/filter parent, mixed/sole-hidden collections,
+no-parent và ACTIVE-parent. PublicLimit parser dùng chung products/search/collection list/detail;
+0/abc đều Api.Problem→Api.Error INVALID_LIMIT, field/message chung không rejected_value,
+metadata/correlation đầy đủ. Xóa product error/success wrappers riêng, dùng Api.ok giữ successful JSON.
+Catch-all log `Catalog request failed`, giữ exception/redaction và4xx; public POST products405.
+
+Public reads bỏ qua unknown query; products/search/collection list/detail chấp nhận repeated,
+lấy giá trị đầu tiên và vẫn validate format/domain; size-guide locale binding không đổi trong task này.
+Old HEAD HTTP products repeated200/collections repeated400/search repeated200/unknown200;
+sau rebuild cả bốn200. Spec §2/§3,03,OpenAPI/service README đồng bộ phạm vi này.
+
+Fresh verification: RED5/4 assertion failures/0 errors; connected GREEN80; explicit compile rồi
+bare `./mvnw -B test` BUILD SUCCESS466 = durability36/security38/user65/catalog295/gateway32,
+0 failures/errors/skips,49 fresh XML checked; source/tests before/after full hash khớp.
+`bash scripts/validate-contracts.sh` Redocly+43, scripts14, docs58/working+staged diff,
+pinned Gitleaks history105/staged patch PASS. `bash scripts/local-up.sh` rồi
+`bash scripts/smoke-local.sh` exit0 ngay lượt mới, CAT-02a/CAT-03/CAT-01b/S1-local PASS.
+`.env` hash khớp, giữ credentials/volumes; smoke thêm synthetic fixtures. Smoke cũ initial empty-log
+exit1/retry PASS giữ lịch sử, không coi lỗi cũ đã resolved chỉ vì lượt mới xanh.
+Npm source-map-js high advisory/JVM/compiler/LoadBalancer/Compose warnings ngoài scope, giữ nguyên.
+
+Exact commands/selectors/logs/report mới tại `.superpowers/pr19-review-fixes-2026-10-15/`,
+chi tiết trong [evidence](../../evidence/cat-02a-local-2026-10-11.md); không ghi đè historical reports.
+Một local commit subject `fix(CAT-02): align public visibility and validation after PR19 review`;
+controller review rồi push dev/chờ latest s1-local GREEN theo owner authorization, chưa báo CI GREEN.
+CAT-02 **In progress**, CAT-02b pending; không push/PR/merge/AWS/provider trong worker task.

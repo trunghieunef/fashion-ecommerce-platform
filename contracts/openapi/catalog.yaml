@@ -7,6 +7,8 @@ info:
     TASK:CAT-01b admin collection list/detail/mutations and size-guide GET/PUT are implemented, tested with PostgreSQL Testcontainers and exercised through the local Gateway with a synthetic OPS token.
     TASK:CAT-03 upload, complete, status and image attach operations and public/admin image reads are implemented and tested locally (PostgreSQL + RustFS Testcontainers, local Gateway smoke).
     TASK:CAT-02a public browse/detail/search/taxonomy/collections/size guides and internal variant quote are implemented and verified locally; parent CAT-02 remains In progress pending 02b.
+    Public reads ignore unknown query keys. Products/search/collection list/detail tolerate repeated keys and use the first value, still enforcing its normal format and domain validation.
+    Invalid limit format or values outside 1..100 return VALIDATION_ERROR / INVALID_LIMIT with field/message only (no rejected_value), metadata and X-Correlation-Id.
 servers:
   - url: http://localhost:8080
     description: Local Gateway (S1-local)
@@ -16,7 +18,7 @@ paths:
       operationId: listProducts
       summary: Browse public product cards
       x-implementation-status: implemented
-      description: 'CAT-02a implemented. PostgreSQL public products: ACTIVE product and category, brand absent or ACTIVE, at
+      description: 'CAT-02a implemented. PostgreSQL public products: ACTIVE product, category and its parent if present, brand absent or ACTIVE, at
         least one ACTIVE variant. Money min/max aggregates coalesce(price_override,base_price) over ACTIVE variants. Only AVAILABLE
         images. Public JSON HTTP cache headers deferred to CAT-02b. All user values bound; min_price <= max_price. Stable tuple
         keyset with UUID tie-break; limit+1. Empty items and null next_cursor at end.'
@@ -141,7 +143,7 @@ paths:
       operationId: searchProducts
       summary: Search public product cards without Vietnamese accents
       x-implementation-status: implemented
-      description: 'CAT-02a implemented. PostgreSQL public products: ACTIVE product and category, brand absent or ACTIVE, at
+      description: 'CAT-02a implemented. PostgreSQL public products: ACTIVE product, category and its parent if present, brand absent or ACTIVE, at
         least one ACTIVE variant. Money min/max aggregates coalesce(price_override,base_price) over ACTIVE variants. Only AVAILABLE
         images. Public JSON HTTP cache headers deferred to CAT-02b. Same filters and cursor rules as products; q required.'
       security: []
@@ -263,7 +265,7 @@ paths:
       operationId: getProduct
       summary: Get public product detail
       x-implementation-status: implemented
-      description: 'CAT-02a implemented. PostgreSQL public products: ACTIVE product and category, brand absent or ACTIVE, at
+      description: 'CAT-02a implemented. PostgreSQL public products: ACTIVE product, category and its parent if present, brand absent or ACTIVE, at
         least one ACTIVE variant. Money min/max aggregates coalesce(price_override,base_price) over ACTIVE variants. Only AVAILABLE
         images. Public JSON HTTP cache headers deferred to CAT-02b. One read-only transaction; sanitized descriptions, locale
         category and size guide; only ACTIVE variants. brand and size_guide can be null; available and observed_at are null

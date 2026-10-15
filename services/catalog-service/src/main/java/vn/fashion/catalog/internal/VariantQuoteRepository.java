@@ -30,6 +30,7 @@ public class VariantQuoteRepository {
         """ + PublicProductSql.IMAGE_COLUMNS + """
          from product_variants v join products p on p.id=v.product_id
         join categories c on c.id=p.category_id left join brands b on b.id=p.brand_id
+        left join categories cp on cp.id=c.parent_id
         where v.id = any(:ids)
         """).param("ids", ids.toArray(UUID[]::new), Types.ARRAY).query((rs, row) -> {
           UUID asset = rs.getObject("asset_id", UUID.class);

@@ -114,7 +114,6 @@ class ProductQueryIntegrationTest {
     assertThat(body.errors()).singleElement().satisfies(error -> {
       assertThat(error.field()).isEqualTo("limit");
       assertThat(error.message()).isEqualTo("must be between 1 and 100");
-      assertThat(error.rejectedValue()).isEqualTo(101);
     });
     assertThat(body.metadata().requestId()).isNotBlank();
     assertThat(body.metadata().traceId()).isNotBlank();
@@ -253,7 +252,6 @@ class ProductQueryIntegrationTest {
                           Metadata metadata) {
   }
 
-  record ApiFieldError(String field, String message,
-                       @JsonProperty("rejected_value") Integer rejectedValue) {
+  record ApiFieldError(String field, String message) {
   }
 }

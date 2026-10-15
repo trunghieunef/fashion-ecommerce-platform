@@ -147,7 +147,7 @@ class VariantAdminIntegrationTest extends CatalogAdminTestSupport {
         assertThat(error.path("metadata").path("trace_id").asText()).matches("[0-9a-f]{32}");
         assertThat(response.headers().firstValue("X-Correlation-Id")).contains(error.path("metadata").path("trace_id").asText());
         assertThat(response.body()).doesNotContain("audit_logs", "permission denied", "BadSqlGrammarException", "insert into");
-        assertThat(output.getAll()).contains("Catalog admin request failed", "BadSqlGrammarException");
+        assertThat(output.getAll()).contains("Catalog request failed", "BadSqlGrammarException");
         assertThat(jdbc.queryForObject("select count(*) from product_variants", Integer.class)).isZero(); assertThat(events()).isZero();
         assertThat(jdbc.queryForObject("select version from products where id=?", Long.class, p)).isZero();
       } finally { s.execute("grant insert on audit_logs to catalog_runtime"); }

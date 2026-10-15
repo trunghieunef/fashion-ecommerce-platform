@@ -8,12 +8,14 @@ public final class PublicProductSql {
   private PublicProductSql() {}
 
   public static final String ACTIVE_PRODUCT = "p.status='ACTIVE' and c.status='ACTIVE' "
+      + "and (c.parent_id is null or cp.status='ACTIVE') "
       + "and (p.brand_id is null or b.status='ACTIVE')";
 
   // ponytail: query-time aggregation; denormalize min_price/sizes onto products when measured load needs it (spec §1).
   public static final String FROM_PUBLIC = """
       from products p
       join categories c on c.id=p.category_id
+      left join categories cp on cp.id=c.parent_id
       left join brands b on b.id=p.brand_id
       cross join lateral (
         select min(coalesce(v.price_override,p.base_price)) min_price,

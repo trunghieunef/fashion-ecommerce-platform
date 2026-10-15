@@ -97,7 +97,7 @@ Contract thực thi của register/login/refresh/logout (`TASK:USR-01` phần 1a
 Public reads và internal quote `TASK:CAT-02a` đã hiện thực và kiểm local ngày 2026-10-11; contract thực thi tại [catalog.yaml](../../contracts/openapi/catalog.yaml), bằng chứng tại [evidence CAT-02a](../evidence/cat-02a-local-2026-10-11.md). Parent CAT-02 **In progress**, 02b còn mở. CAT-01b chỉ triển khai admin.
 Theo quyết định chủ dự án ngày 2026-10-07, chỉ trả collection `ACTIVE`, đang trong khoảng
 hiệu lực `[start_at, end_at)` và có ít nhất một product public. Danh sách product của
-collection chỉ gồm product public (`ACTIVE`, category ACTIVE, brand null hoặc ACTIVE, có variant ACTIVE); điều kiện được kiểm ở thời điểm đọc, kể cả khi product
+collection chỉ gồm product public (`ACTIVE`, category và parent nếu có đều ACTIVE, brand null hoặc ACTIVE, có variant ACTIVE); điều kiện được kiểm ở thời điểm đọc, kể cả khi product
 đã bị unpublish sau khi collection được kích hoạt. Không lọc collection public chỉ bằng status.
 
 | Method | Path | Auth / phase | Input → output |
@@ -129,6 +129,11 @@ collection chỉ gồm product public (`ACTIVE`, category ACTIVE, brand null ho�
 | POST | /notifications/unsubscribe | Scoped token / 2 | token trong body → preference, idempotent |
 
 CAT-02a: limit mặc định 20, 1–100; size/color/tag trim 1–64; UUID chuẩn cho category_id/brand_id.
+PR19 ngày 2026-10-15: public reads bỏ qua unknown; products/search/collection list/detail
+chấp nhận tham số lặp và lấy giá trị đầu tiên, vẫn kiểm định dạng/miền của giá trị được chọn.
+Limit sai định dạng/ngoài khoảng
+đều trả400 VALIDATION_ERROR / INVALID_LIMIT, errors chỉ field limit và message chung
+(không rejected_value), giữ metadata và X-Correlation-Id như lỗi filter/cursor.
 Search bind raw q đã trim, PostgreSQL lower/unaccent rồi escape backslash, %, _ trước khi
 thêm wildcard bao quanh; names và slug dùng cùng pattern literal. Detail product và collection
 dùng transaction read-only REPEATABLE_READ để mọi reads trong response cùng snapshot;

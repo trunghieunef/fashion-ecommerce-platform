@@ -34,7 +34,7 @@ Quyết định của chủ dự án trong phiên:
 - Search bỏ qua dấu tiếng Việt bằng extension `unaccent` + ILIKE.
 - Giá đại diện của product là giá thấp nhất `coalesce(price_override, base_price)` trên variant ACTIVE;
   dùng cho lọc khoảng giá, sort giá và card ("từ X đ", kèm max).
-- Ẩn product có category hoặc brand không ACTIVE (nhất quán với điều kiện publish).
+- Ẩn product có category, parent của category (nếu có) hoặc brand không ACTIVE.
 
 ## 2. API public
 
@@ -59,7 +59,14 @@ Lookbook không có `alt_vi`/`alt_en` theo schema V006; frontend dùng caption t
 
 Tham số và giới hạn:
 
-- `limit` mặc định 20, tối đa 100. `sort` ∈ `NEWEST` (mặc định), `BEST_SELLING`, `PRICE_ASC`, `PRICE_DESC`.
+- `limit` mặc định 20, trong `1..100`; sai định dạng/ngoài khoảng trả `400 VALIDATION_ERROR`,
+  message `INVALID_LIMIT`, errors chỉ `field: limit` và message chung, không `rejected_value`.
+  Products, search và collection list/detail dùng cùng parser, giữ metadata/correlation.
+- Public reads bỏ qua tham số không biết. Products/search/collection list/detail chấp nhận tham số lặp
+  và lấy giá trị đầu tiên (chủ dự án chốt PR19 ngày 2026-10-15); giá trị được chọn vẫn phải đúng
+  định dạng/miền đã quy định, không trả 400 chỉ vì unknown/duplicate trên các route này.
+- Product chỉ public khi category và parent của category (nếu có) đều ACTIVE, nhất quán cây `/categories`.
+- `sort` ∈ `NEWEST` (mặc định), `BEST_SELLING`, `PRICE_ASC`, `PRICE_DESC`.
 - `q` trim, dài 1–100 ký tự (khi có). `size`, `color`, `tag` dài 1–64. `min_price`, `max_price` là số nguyên
   `0..9_223_372_036_854_775_807`, `min_price <= max_price`. `category_id`, `brand_id` là UUID.
 - Vi phạm → `400 VALIDATION_ERROR` kèm field. Product/collection không public hoặc không tồn tại → `404 NOT_FOUND`
@@ -67,7 +74,7 @@ Tham số và giới hạn:
 
 ## 3. Quy tắc hiển thị và truy vấn
 
-Một product **public** khi tất cả đúng tại thời điểm đọc: `status = 'ACTIVE'`; category ACTIVE; brand null hoặc ACTIVE (`brand_id` nullable);
+Một product **public** khi tất cả đúng tại thời điểm đọc: `status = 'ACTIVE'`; category và parent của category (nếu có) đều ACTIVE; brand null hoặc ACTIVE (`brand_id` nullable);
 có ít nhất một variant ACTIVE. Ảnh chỉ lấy asset `availability = 'AVAILABLE'`; ảnh card là ảnh `sort_order`
 nhỏ nhất.
 

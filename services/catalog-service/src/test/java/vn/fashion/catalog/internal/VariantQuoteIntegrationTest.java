@@ -155,6 +155,20 @@ class VariantQuoteIntegrationTest extends CatalogAdminTestSupport {
     assertThat(jdbc.queryForObject("select count(*) from audit_logs", Integer.class)).isZero();
   }
 
+  @Test void parentCategoryStatusControlsQuoteActivityWithoutHidingTheVariant() {
+    UUID parent = fixtures.category(null, "quote-parent", "ACTIVE");
+    UUID child = fixtures.category(parent, "quote-child", "ACTIVE");
+    UUID product = product("child-product", child, null, "ACTIVE");
+    UUID variant = fixtures.variant(product, "CHILD", "M", "Black", null, "ACTIVE");
+    JsonNode active = data(quote(serviceToken("cart-service"), List.of(variant.toString())), 200).get(0);
+    assertThat(active.path("found").asBoolean()).isTrue();
+    assertThat(active.path("active").asBoolean()).isTrue();
+    jdbc.update("update categories set status='INACTIVE' where id=?", parent);
+    JsonNode inactive = data(quote(serviceToken("cart-service"), List.of(variant.toString())), 200).get(0);
+    assertThat(inactive.path("found").asBoolean()).isTrue();
+    assertThat(inactive.path("active").asBoolean()).isFalse();
+  }
+
   @Test void unsellableVariantIsFoundButInactive() {
     UUID inactiveCategory = fixtures.category(null, "inactive-category", "INACTIVE");
     UUID inactiveBrand = fixtures.brand("Inactive brand", "INACTIVE");

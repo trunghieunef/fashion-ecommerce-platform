@@ -48,9 +48,12 @@ Browse trả product public theo `coalesce(published_at,created_at) DESC, id DES
 `20`, tối đa `100`. Response thành công theo [contract 03 §1.2](../../docs/design/03_interfaces.md):
 `code: "OK"`, `data`, `metadata.request_id`, và `metadata.trace_id`.
 
-`limit` ngoài khoảng `1..100` trả HTTP 400 với `code: "VALIDATION_ERROR"`,
+`limit` sai định dạng hoặc ngoài khoảng `1..100` trả HTTP 400 với `code: "VALIDATION_ERROR"`,
 `message: "INVALID_LIMIT"`, một `errors` field-level (`field: "limit"`, `message`,
-`rejected_value`) và metadata đầy đủ. Header `X-Correlation-Id` bằng `trace_id` của
+không `rejected_value`) và metadata đầy đủ. Products/search/collection list/detail dùng chung parser.
+Public reads bỏ qua query unknown; products/search/collection list/detail chấp nhận tham số lặp
+và lấy giá trị đầu tiên, vẫn kiểm định dạng/miền giá trị được chọn (PR19, 2026-10-15).
+Header `X-Correlation-Id` bằng `trace_id` của
 response, kể cả lỗi validation.
 
 Product admin đã có GET list (page/size/status), POST draft, GET/PUT theo id; PUT giữ trạng thái,
@@ -240,7 +243,8 @@ giới hạn đồng thời (slot re-encode 1/instance) và heap của container
 `TASK:CAT-02` phần 02a · `REQ:CAT-04`, hỗ trợ `REQ:CAT-03/05`; phụ thuộc CAT-01/CAT-03
 và SEC-01 service token. PostgreSQL là nguồn đọc, chưa dùng Redis/Kafka/inventory.
 V007 cài unaccent/f_unaccent (append-only); query-time min/max coalesce override/base trên
-variant ACTIVE. Public product cần ACTIVE category và brand null/ACTIVE, có variant ACTIVE.
+variant ACTIVE. Public product cần category và parent của category (nếu có) đều ACTIVE,
+brand null/ACTIVE, có variant ACTIVE; internal quote dùng cùng điều kiện cho `active`.
 
 GET `/api/v1/catalog/products` và `/search` nhận q/category_id/brand_id/size/color/tag/
 min_price/max_price/sort/limit/cursor; q bắt buộc ở search, accent-insensitive/literal wildcard,
