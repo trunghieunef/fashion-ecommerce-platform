@@ -2,6 +2,8 @@ server:
   port: ${SERVER_PORT:8081}
 
 spring:
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:19092}
   task:
     scheduling:
       pool:
@@ -43,6 +45,9 @@ logging:
       customizer: vn.fashion.platform.security.PiiRedactingJsonCustomizer
 
 fashion:
+  messaging:
+    relay:
+      enabled: ${CATALOG_RELAY_ENABLED:true}
   catalog:
     internal-callers: ${CATALOG_INTERNAL_CALLERS:}
     jwt:

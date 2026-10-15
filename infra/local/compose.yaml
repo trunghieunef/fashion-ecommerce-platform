@@ -1,4 +1,33 @@
 services:
+  # TASK:INV-01: local-only combined KRaft node. No auth; only the host listener is loopback-published.
+  kafka:
+    image: apache/kafka:4.1.2@sha256:5cc2a2fd93fa2687b44015eee04fb2c3edd9e526bd64bf8bec5ff1e268772e0e
+    environment:
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk" # gitleaks:allow local cluster identity, not a credential
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:9092,HOST://0.0.0.0:19092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,HOST://localhost:19092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,HOST:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    ports:
+      - "127.0.0.1:19092:19092"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+      - ./kafka-init:/opt/fashion-kafka-init:ro
+    healthcheck:
+      test: ["CMD", "/opt/kafka/bin/kafka-topics.sh", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
   postgres:
     image: postgres:17.11@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f
     environment:
@@ -72,6 +101,7 @@ services:
   catalog:
     build: ../../services/catalog-service
     environment:
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       CATALOG_DB_URL: jdbc:postgresql://postgres:5432/${CATALOG_POSTGRES_DB:-catalog}
       CATALOG_JWT_PUBLIC_KEYS: ${USER_JWT_PUBLIC_KEYS:?run scripts/local-up.sh to generate local JWT keys}
       CATALOG_INTERNAL_CALLERS: ${CATALOG_INTERNAL_CALLERS:-}
@@ -93,6 +123,8 @@ services:
       NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
       NACOS_PASSWORD: ${NACOS_PASSWORD:-}
     depends_on:
+      kafka:
+        condition: service_healthy
       postgres:
         condition: service_healthy
       # Readiness of catalog does not depend on S3; bootstrap retries 10 x 1s.
@@ -180,6 +212,7 @@ services:
       retries: 10
 
 volumes:
+  kafka-data:
   catalog-postgres-data:
   catalog-media-data:
   nacos-data:

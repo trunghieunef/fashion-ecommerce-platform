@@ -55,6 +55,7 @@
       <artifactId>platform-durability</artifactId>
       <version>${project.version}</version>
     </dependency>
+    <dependency><groupId>com.fashion</groupId><artifactId>platform-messaging</artifactId><version>${project.version}</version></dependency>
     <dependency>
       <groupId>org.jsoup</groupId>
       <artifactId>jsoup</artifactId>
@@ -125,6 +126,7 @@
       <artifactId>testcontainers-postgresql</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency><groupId>org.testcontainers</groupId><artifactId>testcontainers-kafka</artifactId><scope>test</scope></dependency>
   </dependencies>
 
   <build>
