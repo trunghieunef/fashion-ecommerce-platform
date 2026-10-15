@@ -38,7 +38,7 @@ Audit dùng `request_id` của metadata response mutation đầu; retry giữ da
 metadata mới và không thêm audit. Lỗi nội bộ admin trả 500 `INTERNAL`/`INTERNAL_ERROR`
 với body chỉ code/message/metadata và X-Correlation-Id; exception vẫn log server qua
 logger redact PII hiện có. Advice áp dụng cho admin, product public, collection và internal quote;
-ProductQueryController giữ handler local INVALID_LIMIT với behavior cũ.
+PublicLimit dùng chung trả Api.Problem, qua ApiExceptionHandler thành Api.Error cho INVALID_LIMIT.
 Lỗi Spring ErrorResponse 4xx đến advice admin giữ status/header gốc (415 Content-Type,
 406 Accept), envelope VALIDATION_ERROR/INVALID_HTTP_REQUEST bằng application/json,
 metadata/X-Correlation-Id và không log ERROR. Lỗi còn lại mới dùng fallback 500;
