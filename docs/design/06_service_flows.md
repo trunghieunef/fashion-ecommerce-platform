@@ -427,7 +427,12 @@ INV-01, PLT-02/03 và SEC-01; phục vụ `REQ:INV-02/03/06`. Transaction khóa 
 trước SKU tăng dần, ghi ledger/outbox cùng reserved. Replay cùng order/hash đọc hiện trạng
 trước kiểm deadline theo DB clock. Acceptance Task 4 dùng PostgreSQL thật để kiểm T01/T02/T03,
 race reserve/adjust, deadline, auth và no-store; kết quả kiểm thử ghi khi bàn giao.
-Commit/release API và expire job chưa hiện thực trong Task 4; chưa nghiệm thu toàn bộ INV-02.
+Task 5 thêm commit API và nhả hàng khi commit quá hạn: ghi EXPIRED, reason `expired`,
+ledger RELEASE/outbox trong transaction rồi mới trả 409 RESERVATION_EXPIRED ngoài transaction.
+Commit còn hạn ghi COMMITTED, giảm on_hand/reserved và ledger COMMIT/outbox; retry COMMITTED
+trả hiện trạng 200 không trừ thêm. Acceptance Task 5 dùng PostgreSQL thật kiểm T09, expire
+bền vững trước 409, retry không nhả lại, query và lỗi auth/body/not-found.
+Release API và expire job chưa hiện thực; chưa nghiệm thu toàn bộ INV-02.
 
 ### 6.2 Nhập kho, điều chỉnh và restock
 

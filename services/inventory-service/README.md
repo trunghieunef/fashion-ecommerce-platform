@@ -24,11 +24,19 @@ items, ledger RESERVE và outbox INVENTORY_RESERVED/INVENTORY_UPDATED cùng tran
 SKU lạ/INACTIVE có available=0; thiếu một SKU rollback toàn bộ, trả 409 OUT_OF_STOCK.
 Retry cùng order/hash trả hiện trạng 200 trước kiểm deadline; khác hash trả 409
 RESERVATION_CONFLICT, trạng thái RELEASED/EXPIRED trả RESERVATION_CLOSED.
-Query chưa có trả 404 RESERVATION_NOT_FOUND. Commit/release API và job hết hạn chưa hiện thực;
-chưa nghiệm thu INV-02. Kiểm tra Task 4 và regression internal stock từ repo root:
+Query chưa có trả 404 RESERVATION_NOT_FOUND.
+Task 5 thêm POST `/internal/api/v1/inventory/commit`: ACTIVE còn hạn trừ on_hand/reserved,
+ghi COMMITTED, ledger COMMIT và outbox INVENTORY_DEDUCTED/INVENTORY_UPDATED cùng transaction.
+COMMITTED retry trả 200 không trừ thêm; RELEASED trả 409 RESERVATION_CLOSED.
+Commit sau hạn nhả reserved, lưu EXPIRED với reason `expired`, ledger RELEASE và outbox
+INVENTORY_RELEASED trước khi trả 409 RESERVATION_EXPIRED ngoài transaction; retry không nhả lại.
+Release API và job hết hạn chưa hiện thực; chưa nghiệm thu INV-02.
+Kiểm tra Task 4/5 và regression internal stock từ repo root:
 
 ```bash
 ./mvnw -B -pl services/inventory-service -am test -Dtest=ReserveIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false
+./mvnw -B -pl services/inventory-service -am test -Dtest=CommitIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false
+./mvnw -B -pl services/inventory-service -am test -Dtest='Reserv*Test,Commit*Test' -Dsurefire.failIfNoSpecifiedTests=false
 ./mvnw -B -pl services/inventory-service -am test -Dtest=InternalStockIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false
 ```
 

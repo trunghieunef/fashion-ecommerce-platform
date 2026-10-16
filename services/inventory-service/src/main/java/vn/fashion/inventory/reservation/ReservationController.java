@@ -32,6 +32,12 @@ public class ReservationController {
     var meta=authorize(auth,key);
     return respond(service.reserve(ReservationRequests.reserve(body(request)),meta.traceId()),meta);
   }
+  @PostMapping("/commit")
+  public ResponseEntity<?> commit(@RequestHeader(name="Authorization",required=false) String auth,
+      @RequestHeader(name="Idempotency-Key",required=false) String key,HttpServletRequest request) {
+    var meta=authorize(auth,key);
+    return respond(service.commit(ReservationRequests.commit(body(request)),meta.traceId()),meta);
+  }
   @GetMapping("/reservations/{orderId}")
   public ResponseEntity<?> get(@RequestHeader(name="Authorization",required=false) String auth,@PathVariable String orderId) {
     callers.require(auth,CALLERS);

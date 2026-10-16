@@ -49,6 +49,34 @@ public class ReservationService {
       return new Outcome(201,null,ReservationView.of(row,s.items(),false));
     });
   }
+  public Outcome commit(UUID orderId,String traceId) {
+    return tx.execute(status->{
+      var row=reservations.lock(orderId).orElseThrow(ReservationService::notFound);
+      switch(row.status()) {
+        case "COMMITTED": return new Outcome(200,null,view(row,false));
+        case "EXPIRED": return new Outcome(409,"RESERVATION_EXPIRED",null);
+        case "RELEASED": return new Outcome(409,"RESERVATION_CLOSED",null);
+        default: break;
+      }
+      // Persist expiry before the controller reports the conflict outside this transaction.
+      if(row.due()) { finish(row,"EXPIRED","expired",traceId);return new Outcome(409,"RESERVATION_EXPIRED",null); }
+      var items=reservations.items(row.id());
+      var locked=stocks.lockForUpdate(items.stream().map(ReservationSnapshot.Item::sku).toList());
+      for(var item:items) move(locked.get(item.sku()),-item.quantity(),-item.quantity(),"COMMIT",orderId,"order commit",traceId);
+      var after=reservations.transition(row.id(),"COMMITTED",null);
+      events.append("INVENTORY_DEDUCTED",after,items,traceId);
+      return new Outcome(200,null,ReservationView.of(after,items,false));
+    });
+  }
+  /** Releases reserved stock of an ACTIVE reservation; caller holds the reservation row lock. */
+  ReservationRow finish(ReservationRow row,String status,String reason,String traceId) {
+    var items=reservations.items(row.id());
+    var locked=stocks.lockForUpdate(items.stream().map(ReservationSnapshot.Item::sku).toList());
+    for(var item:items) move(locked.get(item.sku()),0,-item.quantity(),"RELEASE",row.orderId(),reason,traceId);
+    var after=reservations.transition(row.id(),status,reason);
+    events.append("INVENTORY_RELEASED",after,items,traceId);
+    return after;
+  }
   public ReservationView find(UUID orderId) {
     var row=reservations.find(orderId).orElseThrow(ReservationService::notFound);
     return ReservationView.of(row,reservations.items(row.id()),false);
