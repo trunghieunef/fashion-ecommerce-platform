@@ -1,5 +1,10 @@
 # Contracts
 
+INV-01 thêm [inventory.yaml](openapi/inventory.yaml): 4 admin operation inventory.read/adjust,
+1 internal stock read ADR-19, common envelope/key/metadata. Validator tự tìm mọi YAML trong
+openapi nên không cần thêm danh sách file vào scripts/validate-contracts.sh. Consumer/producer
+snapshot dùng registry inventory.events/key sku; integration tests kiểm broker thật.
+
 `TASK:PLT-02` · REQ: ORD-01/07, XCT-02 · dependency: PLT-01 S1-local accepted.
 Assignee: Codex (GPT-6); reviewer contract core PR #3: Codex (GPT-6), theo chỉ định chủ dự án. Parent task còn In progress.
 

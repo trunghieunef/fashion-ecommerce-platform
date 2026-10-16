@@ -8,6 +8,10 @@ Gateway route `/api/v1/catalog/**` và `/admin/api/v1/catalog/**` sang `CATALOG_
 có thể giả mạo: `X-User-Id`, `X-User-Roles`, `X-Actor-Id`, `X-Service-Name`.
 Catalog-service tự kiểm token ES256 và quyền `catalog.write`; Gateway không cấp quyền qua header.
 
+INV-01 thêm `/admin/api/v1/inventory/**` sang `INVENTORY_BASE_URL` (mặc định
+http://localhost:8083, Compose http://inventory:8083). Inventory tự kiểm inventory.read/
+inventory.adjust; `/internal/api/v1/inventory/**` không có route qua Gateway.
+
 USR-01b-ii: filter cũng xóa `Forwarded`, `X-Forwarded-For`, `X-Real-IP`, `X-Client-IP`,
 rồi đặt `X-Client-IP` bằng socket peer. Chỉ khi peer thuộc `GATEWAY_TRUSTED_PROXIES` mới
 nhận một IP literal từ `X-Forwarded-For` (header thiếu/trùng/chain/hostname sai thì dùng peer).
@@ -36,6 +40,9 @@ curl -i http://localhost:8080/internal/api/v1/platform/ping
 Public catalog request phải nhận response từ catalog; upstream không nhận các header identity
 trên. Internal path phải là HTTP 404. Gateway dùng timeout connect 500 ms và response 2 s;
 timeout không được biến mutation thành retry hay thành công giả.
+INV-01: riêng POST `/admin/api/v1/inventory/import` có response timeout30s, route đặt
+trước inventory-admin; GET/adjust inventory vẫn2s. GatewayBoundaryTest kiểm upstream
+chậm3s qua import và timeout ở các route inventory khác; không tự retry import.
 CAT-03: complete và hai route GET `/api/v1/catalog/images/{asset_id}`,
 `/admin/api/v1/catalog/images/{asset_id}` có response budget 30 s, đặt trước các route catalog chung.
 GET ảnh cần chờ timeout S3 mặc định 10 s để chuyển đúng 503 `DEPENDENCY_UNAVAILABLE` và `no-store`;

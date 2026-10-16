@@ -24,7 +24,7 @@ Sprint 1 theo ADR-18 chỉ xây local-first MVP foundation: frontend shell → G
 Cần JDK 21, Node 24.21.0/npm 11.19.0 (`.tool-versions`), Docker với Compose và Python 3.10+. Từ repo root:
 
 ```bash
-bash scripts/local-up.sh        # build JAR/dist, chạy postgres → catalog + user-service → gateway → storefront
+bash scripts/local-up.sh        # build JAR/dist, postgres + Kafka → catalog + inventory + user → gateway → storefront
 bash scripts/smoke-local.sh     # smoke xuyên chuỗi
 docker compose --env-file infra/local/.env -f infra/local/compose.yaml down   # giữ volume
 ```
@@ -38,7 +38,11 @@ ghi rõ các kiểm tra đã chạy và phần fresh-clone runtime bị mạng c
 sau khi sửa lỗi timezone; S1-local đã được Codex (GPT-6) nghiệm thu theo chỉ định
 chủ dự án ngày 2026-10-04, với CI PASS trên patch `b62f963`. Đây không phải G0/G1/G2.
 Contract core đã review; [platform-durability](services/platform-durability/README.md) được
-user-service dùng cho outbox/idempotency, nhưng chưa có relay Kafka/notification-service.
+user-service dùng cho outbox/idempotency, chưa bật relay user/notification-service.
+INV-01 thêm [platform-messaging](services/platform-messaging/README.md), Kafka local và
+[inventory-service](services/inventory-service/README.md): catalog relay → inbox đăng ký SKU,
+stock ledger, adjust/import và internal availability. [Handoff hiện hành](docs/superpowers/plans/2026-10-15-inv-01-handoff.md)
+ghi kiểm tra/giới hạn và phần chờ review; chưa nghiệm thu INV-01.
 Chi tiết phần auth đang review ở [User service](services/user-service/README.md).
 Tiến độ mới nhất và bước tiếp ở [handoff CAT-01a](docs/superpowers/plans/2026-10-07-cat-01a-handoff.md):
 PR #14 đã merge; [spec CAT-01b](docs/superpowers/specs/2026-10-07-cat-01b-design.md)

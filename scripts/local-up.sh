@@ -12,6 +12,13 @@ while IFS= read -r line; do
   grep -q "^${BASH_REMATCH[1]}=" "$ENV_FILE" || printf '%s\n' "$line" >> "$ENV_FILE"
 done < infra/local/.env.example
 
+# TASK:INV-01: preserve generated inventory role credentials across restarts.
+for inventory_key in INVENTORY_MIGRATION_DB_PASSWORD INVENTORY_DB_PASSWORD; do
+  if ! grep -q "^${inventory_key}=." "$ENV_FILE"; then
+    sed -i "s|^${inventory_key}=.*|${inventory_key}=$(openssl rand -hex 32)|" "$ENV_FILE"
+  fi
+done
+
 # TASK:CAT-03: local-only S3 credentials; keep existing values across restarts.
 for s3_key in CATALOG_S3_ACCESS_KEY CATALOG_S3_SECRET_KEY; do
   if ! grep -q "^${s3_key}=." "$ENV_FILE"; then
@@ -46,7 +53,8 @@ npm ci
 npm run build --workspace @fashion/storefront
 
 C=(docker compose --env-file "$ENV_FILE" -f infra/local/compose.yaml)
-"${C[@]}" up --wait -d postgres
+"${C[@]}" up --wait -d postgres kafka
 # Re-apply the idempotent database/role scripts so existing volumes get databases added later.
 "${C[@]}" exec -T postgres sh -c 'for f in /docker-entrypoint-initdb.d/*.sh; do bash "$f"; done' >/dev/null
+MSYS_NO_PATHCONV=1 "${C[@]}" exec -T kafka bash /opt/fashion-kafka-init/create-topics.sh
 "${C[@]}" up --build --wait -d

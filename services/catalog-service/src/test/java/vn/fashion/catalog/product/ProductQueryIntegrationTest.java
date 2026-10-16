@@ -47,6 +47,9 @@ class ProductQueryIntegrationTest {
   @Autowired
   private ObjectMapper objectMapper;
 
+  @Autowired
+  private org.springframework.context.ApplicationContext context;
+
   @LocalServerPort
   private int port;
 
@@ -65,6 +68,21 @@ class ProductQueryIntegrationTest {
   void clearProducts() {
     jdbc.execute("delete from product_variants");
     jdbc.execute("delete from products");
+  }
+
+  @Test
+  void legacyReadContextDoesNotStartRelay() {
+    assertThat(context.getBeansOfType(vn.fashion.platform.messaging.OutboxRelay.class)).isEmpty();
+  }
+
+  @Test
+  void disabledRelayAndMediaJobsDoNotActivateScheduling() {
+    assertThat(context.getEnvironment().getProperty("fashion.messaging.relay.enabled")).isEqualTo("false");
+    assertThat(context.getEnvironment().getProperty("fashion.catalog.media.jobs-enabled")).isEqualTo("false");
+    assertThat(context.getBeansOfType(
+        org.springframework.scheduling.annotation.ScheduledAnnotationBeanPostProcessor.class)).isEmpty();
+    // Without a scheduled-method processor, MediaJobs remains available only for explicit calls.
+    assertThat(context.getBeansOfType(vn.fashion.catalog.media.MediaJobs.class)).hasSize(1);
   }
 
   @Test

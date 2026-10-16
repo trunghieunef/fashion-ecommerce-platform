@@ -4,6 +4,14 @@ B1 · 2026-09-19 · Work package mặc định: **Planned; Assignee TBD; Reviewe
 
 ## 1. Cách nhận việc
 
+Update 2026-10-16 — `TASK:INV-01`: Task1–8 hiện thực/kiểm local trên dev;
+whole-branch review F17 đã sửa, verify536 và smoke mới PASS; F18 đã chốt smoke admin,
+internal caller Compose để CART-01 kiểm với caller thật đầu tiên.
+Chưa Done/chưa push/PR/chưa nghiệm thu G0/G1.
+Khung stock/ledger, catalog Kafka relay → inventory inbox, admin read/adjust/import,
+internal availability và Gateway admin đã có. Theo [evidence](../evidence/inv-01-local-2026-10-15.md)
+và [handoff INV-01](../superpowers/plans/2026-10-15-inv-01-handoff.md).
+
 Mã trong cột Task là namespace TASK (ví dụ TASK:PAY-01); mã trong cột REQ là yêu cầu trong 02. Hai namespace độc lập, không coi task và requirement cùng hậu tố là cùng việc. Cột phụ thuộc chứa task ID, không phải REQ. “—” nghĩa không có dependency task; các gate D/O vẫn áp dụng theo 08.
 
 Số ngày là khoảng person-day dự kiến, không phải cam kết deadline. Package > 3 ngày phải tách subtasks khi planning. Mỗi package gồm migration nếu có, contract, xử lý nghiệp vụ, API/event, test và tài liệu liên quan; acceptance dưới đây là điều kiện tối thiểu bổ sung DoD ở 09.

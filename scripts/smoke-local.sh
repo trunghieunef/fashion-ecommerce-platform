@@ -4,6 +4,7 @@ set -euo pipefail
 
 GATEWAY_URL="${GATEWAY_URL:-http://localhost:8080}"
 STOREFRONT_URL="${STOREFRONT_URL:-http://localhost:4173}"
+C=(docker compose --env-file "${ENV_FILE:-infra/local/.env}" -f infra/local/compose.yaml)
 
 check_page() {
   python3 -c '
@@ -66,18 +67,21 @@ test "$(status "$GATEWAY_URL/admin/api/v1/catalog/products")" = 401
 test "$(status -H "Authorization: Bearer $access" "$GATEWAY_URL/admin/api/v1/catalog/products")" = 403
 # Local-only synthetic OPS token; this does not prove login -> OPS token issuance.
 # Node reads the local .env; key and token stay in process memory and are never logged.
-catalog_access="$(node --env-file="${ENV_FILE:-infra/local/.env}" <<'NODE'
+local_ops_token() {
+node --env-file="${ENV_FILE:-infra/local/.env}" - "$@" <<'NODE'
 const { createPrivateKey, randomUUID, sign } = require('node:crypto');
 const encode = value => Buffer.from(JSON.stringify(value)).toString('base64url');
 const now = Math.floor(Date.now() / 1000);
 const header = encode({alg: 'ES256', typ: 'JWT', kid: process.env.USER_JWT_KEY_ID});
 const payload = encode({iss: 'user-service', aud: 'fashion-api', sub: randomUUID(),
-  auth_version: 0, permissions: ['catalog.write'], iat: now, exp: now + 300});
+  auth_version: 0, permissions: process.argv.slice(2), iat: now, exp: now + 300});
 const key = createPrivateKey({key: Buffer.from(process.env.USER_JWT_PRIVATE_KEY, 'base64'), type: 'pkcs8', format: 'der'});
 const input = `${header}.${payload}`;
 process.stdout.write(`${input}.${sign('sha256', Buffer.from(input), {key, dsaEncoding: 'ieee-p1363'}).toString('base64url')}`);
 NODE
-)"
+}
+catalog_access="$(local_ops_token catalog.write)"
+inventory_access="$(local_ops_token inventory.read inventory.adjust)"
 # No DELETE endpoint: each run leaves uniquely named fixtures on the local volume.
 catalog_suffix="$(node -e 'process.stdout.write(require("node:crypto").randomUUID())')"
 catalog_post() {
@@ -95,6 +99,54 @@ variant_id="$(catalog_post variant "/products/$product_id/variants" \
   "{\"sku\":\" smoke-$catalog_suffix \",\"size\":\"M\",\"color\":\"black\",\"weight_grams\":100}" | \
   python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["status"] == "ACTIVE" and d["version"] == 0 and d["sku"] == sys.argv[1].upper(); print(d["id"])' "SMOKE-$catalog_suffix")"
 # Same key after changing casing must replay, so publish still expects product version 1.
+inventory_sku="SMOKE-${catalog_suffix^^}"
+inventory_seen=false
+if INVENTORY_SMOKE_TOKEN="$inventory_access" node --input-type=module - "$GATEWAY_URL" "$inventory_sku" <<'NODE'
+import {setTimeout as delay} from 'node:timers/promises';
+const [base, sku] = process.argv.slice(2);
+const deadline = performance.now() + 10000;
+let seen = false;
+while (performance.now() < deadline) {
+  try {
+    const response = await fetch(`${base}/admin/api/v1/inventory/skus?sku_prefix=${encodeURIComponent(sku)}`, {
+      headers: {Authorization: `Bearer ${process.env.INVENTORY_SMOKE_TOKEN}`},
+      signal: AbortSignal.timeout(Math.max(1, Math.ceil(deadline - performance.now())))
+    });
+    if (response.ok && (await response.json()).data.items.some(item => item.sku === sku)
+        && performance.now() < deadline) { seen = true; break; }
+  } catch { /* Retry transient startup failures within the same deadline. */ }
+  const left = deadline - performance.now();
+  if (left > 0) await delay(Math.min(250, left));
+}
+if (!seen) console.error('Inventory SKU registration deadline exceeded');
+process.exitCode = seen ? 0 : 1;
+NODE
+then inventory_seen=true
+fi
+test "$inventory_seen" = true
+curl --fail --silent --show-error -H "Authorization: Bearer $inventory_access" \
+  -H 'Content-Type: application/json' -H "Idempotency-Key: smoke-$catalog_suffix-adjust" \
+  -d "{\"sku\":\"$inventory_sku\",\"delta\":5,\"reason\":\"smoke\"}" \
+  "$GATEWAY_URL/admin/api/v1/inventory/adjust" | \
+  python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["available"]==5 and d["version"]==1'
+curl --fail --silent --show-error -H "Authorization: Bearer $inventory_access" \
+  "$GATEWAY_URL/admin/api/v1/inventory/skus?sku_prefix=$inventory_sku" | \
+  python3 -c 'import json,sys; items=json.load(sys.stdin)["data"]["items"]; assert len(items)==1; d=items[0]; assert d["sku"]==sys.argv[1] and d["available"]==5 and d["version"]==1' "$inventory_sku"
+# Console consumer exits 1 on idle timeout; the scan must still find the adjusted snapshot.
+set +e
+MSYS_NO_PATHCONV=1 "${C[@]}" exec -T kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 \
+  --topic inventory.events --from-beginning --timeout-ms 10000 2>/dev/null | python3 -c '
+import json,sys
+found=False
+for line in sys.stdin:
+    e=json.loads(line)
+    if e["event_type"]=="INVENTORY_UPDATED" and e["payload"]["sku"]==sys.argv[1] and e["payload"]["available"]==5:
+        found=True
+assert found, "inventory adjusted snapshot missing"' "$inventory_sku"
+inventory_codes=("${PIPESTATUS[@]}")
+set -e
+test "${inventory_codes[1]}" = 0
+[[ "${inventory_codes[0]}" = 0 || "${inventory_codes[0]}" = 1 ]]
 catalog_post variant "/products/$product_id/variants" \
   "{\"sku\":\"SMOKE-${catalog_suffix^^}\",\"size\":\"M\",\"color\":\"black\",\"weight_grams\":100}" | \
   python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["id"] == sys.argv[1] and d["sku"] == sys.argv[2].upper()' "$variant_id" "SMOKE-$catalog_suffix"
