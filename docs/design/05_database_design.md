@@ -317,7 +317,7 @@ erDiagram
 | Bảng | Cột | Constraints / index |
 |---|---|---|
 | `stock_items` (T) | `sku varchar(64) PK`, `product_id uuid`, `variant_id uuid`, `on_hand int = 0`, `reserved int = 0`, `min_stock int = 0`, `status varchar(32) = 'ACTIVE'`, `version bigint = 0` | UNIQUE variant_id; CHECK 0 <= reserved AND reserved <= on_hand; on_hand/min_stock >= 0; ACTIVE/INACTIVE |
-| `stock_reservations` (T) | `id`, `order_id uuid`, `order_no varchar(32)`, `request_hash char(64)`, `status varchar(32) = 'ACTIVE'`, `expires_at timestamptz`, `committed_at timestamptz?`, `released_at timestamptz?` | UNIQUE order_id; ACTIVE/COMMITTED/RELEASED/EXPIRED; partial index expires_at WHERE status='ACTIVE' |
+| `stock_reservations` (T) | `id`, `order_id uuid`, `order_no varchar(32)`, `request_hash char(64)`, `status varchar(16)`, `expires_at timestamptz`, `committed_at timestamptz?`, `released_at timestamptz?`, `release_reason text?`, `version bigint` | UNIQUE order_id; order_no 1–32 ký tự; ACTIVE/COMMITTED/RELEASED/EXPIRED; version >= 1; committed_at có khi và chỉ khi COMMITTED; released_at có khi và chỉ khi RELEASED/EXPIRED; release_reason NULL hoặc 1–500 ký tự; partial index expires_at WHERE status='ACTIVE' |
 | `stock_reservation_items` | `reservation_id uuid FK stock_reservations`, `sku varchar(64) FK stock_items`, `quantity int` | PK `(reservation_id, sku)`; quantity 1–99 |
 | `stock_transactions` (C) | `id`, `sku varchar(64) FK stock_items`, `operation_key text`, `type varchar(16)`, `on_hand_delta int`, `reserved_delta int`, `order_id uuid?`, `reason text`, `actor_id uuid?` | UNIQUE `(operation_key, sku)`; type INBOUND/RESERVE/COMMIT/RELEASE/ADJUST/RETURN; index `(sku, created_at, id)` |
 | `stock_returns` (C) | `id`, `reservation_id uuid FK stock_reservations`, `sku varchar(64) FK stock_items`, `operation_key text`, `quantity int`, `reason text`, `actor_id uuid?` | UNIQUE `(operation_key, sku)`; quantity > 0; transaction khóa reservation và kiểm tra tổng trả <= quantity đã commit |
@@ -327,7 +327,10 @@ erDiagram
 
 INV-01 Task 3 hiện thực V001 stock_items/stock_transactions và durability trong inventory-service.
 inventory_runtime chỉ SELECT/INSERT ledger (thu hồi UPDATE/DELETE/TRUNCATE);
-stock_items SELECT/INSERT/UPDATE. Các bảng reservation/return/subscription vẫn thuộc task sau.
+stock_items SELECT/INSERT/UPDATE. INV-02 Task 2 thêm V002 append-only cho
+stock_reservations/stock_reservation_items; runtime không DELETE/TRUNCATE hai bảng này.
+Reservation version bắt đầu từ 1, tăng mỗi lần chuyển trạng thái; terminal giữ làm tombstone.
+Schema có trước API/job reservation; return/subscription vẫn thuộc task sau.
 Chủ dự án duyệt 2026-10-16: ledger adjust/import dùng operation_key ghép
 `user:<actor UUID>:<operation>:<Idempotency-Key>` để UNIQUE không va chạm giữa actor hoặc
 operation; operation inventory.adjust/inventory.import, header và phạm vi replay giữ nguyên.

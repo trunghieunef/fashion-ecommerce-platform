@@ -6,6 +6,18 @@ Port 8083, PostgreSQL inventory là nguồn sự thật tồn kho. V001 tạo st
 stock_transactions và ba bảng durability. Runtime chỉ SELECT/INSERT ledger;
 stock_items SELECT/INSERT/UPDATE. Không tạo reservation/return trong INV-01.
 
+`TASK:INV-02` Task 2 · `REQ:INV-02/03/06`, phụ thuộc INV-01 và PLT-02:
+V002 thêm stock_reservations/stock_reservation_items, UNIQUE order_id, CHECK trạng thái/
+timestamp và quantity 1..99, FK SKU, partial index ACTIVE theo expires_at. Runtime không
+DELETE/TRUNCATE reservation/items; terminal được giữ làm tombstone. Task này chỉ thêm
+schema, chưa có API hay job reservation; chưa nghiệm thu toàn bộ INV-02.
+Kiểm tra schema và regression INV-01 từ repo root:
+
+```bash
+./mvnw -B -pl services/inventory-service -am test -Dtest=ReservationSchemaIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false
+./mvnw -B -pl services/inventory-service -am test -Dtest='Stock*IntegrationTest' -Dsurefire.failIfNoSpecifiedTests=false
+```
+
 Chạy từ repo root với Java 21 và Docker đang hoạt động:
 
 ```bash

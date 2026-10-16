@@ -73,7 +73,7 @@ public abstract class InventoryTestSupport {
   }
   @BeforeEach void clearInventory() throws Exception {
     try (var c = DriverManager.getConnection(postgres.getJdbcUrl(), "postgres", "postgres"); var s = c.createStatement()) {
-      s.execute("delete from stock_transactions; delete from stock_items; delete from outbox_events; delete from processed_events; delete from idempotency_requests");
+      s.execute("delete from stock_reservation_items; delete from stock_reservations; delete from stock_transactions; delete from stock_items; delete from outbox_events; delete from processed_events; delete from idempotency_requests");
     }
   }
   protected String token(String... permissions) { return signed(KEY, Instant.now(), permissions); }
