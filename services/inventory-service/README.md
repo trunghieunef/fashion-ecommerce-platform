@@ -52,7 +52,8 @@ quantity 1..1000000, file tối đa 128 KiB, multipart tối đa 160 KiB.
 Parser gom lỗi rows[n].sku/quantity (header là dòng 1); SKU trùng/không có hoặc
 stock tràn int từ chối cả file. Import cộng INBOUND, không ghi đè on_hand.
 Hash idempotency bao gồm SHA-256 toàn bộ bytes file và reason đã strip, theo
-AdminCommands; cùng nội dung parse nhưng bytes khác vẫn là body khác.
+AdminCommands, serialize record ImportRequest(fileSha256, reason) theo thứ tự field cố định;
+không dùng iteration order của Map.of. Cùng nội dung parse nhưng bytes khác vẫn là body khác.
 Mọi SKU được khóa theo thứ tự tăng, kiểm toàn bộ trước khi update/ledger/outbox.
 GET `/internal/api/v1/inventory/skus/{sku}` trả sku/variant_id/available/version/observed_at,
 Cache-Control no-store cả lỗi; observed_at là updated_at cùng snapshot stock.

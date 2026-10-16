@@ -21,6 +21,7 @@ import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.kafka.annotation.EnableKafka;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
@@ -36,7 +37,6 @@ import vn.fashion.platform.outbox.OutboxRepository;
 
 @AutoConfiguration
 @EnableKafka
-@EnableScheduling
 public class MessagingAutoConfiguration {
   private static final LogAccessor LOG = new LogAccessor(MessagingAutoConfiguration.class);
 
@@ -107,11 +107,15 @@ public class MessagingAutoConfiguration {
     return factory;
   }
 
-  @Bean @ConditionalOnProperty(name="fashion.messaging.relay.enabled", havingValue="true")
-  OutboxRelay outboxRelay(OutboxRepository outbox,
-      @Qualifier("kafkaTemplate") KafkaTemplate<String, String> kafka, MeterRegistry meters,
-      @Value("${fashion.messaging.relay.send-timeout:5s}") Duration timeout) {
-    var relay = new OutboxRelay(outbox, kafka, timeout); relay.metrics(meters); return relay;
+  @Configuration(proxyBeanMethods=false)
+  @EnableScheduling
+  @ConditionalOnProperty(name="fashion.messaging.relay.enabled", havingValue="true")
+  static class RelayConfiguration {
+    @Bean OutboxRelay outboxRelay(OutboxRepository outbox,
+        @Qualifier("kafkaTemplate") KafkaTemplate<String, String> kafka, MeterRegistry meters,
+        @Value("${fashion.messaging.relay.send-timeout:5s}") Duration timeout) {
+      var relay = new OutboxRelay(outbox, kafka, timeout); relay.metrics(meters); return relay;
+    }
   }
 
   @Bean MeterBinder outboxMetrics(JdbcClient jdbc) {

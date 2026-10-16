@@ -76,6 +76,16 @@ class ProductQueryIntegrationTest {
   }
 
   @Test
+  void disabledRelayAndMediaJobsDoNotActivateScheduling() {
+    assertThat(context.getEnvironment().getProperty("fashion.messaging.relay.enabled")).isEqualTo("false");
+    assertThat(context.getEnvironment().getProperty("fashion.catalog.media.jobs-enabled")).isEqualTo("false");
+    assertThat(context.getBeansOfType(
+        org.springframework.scheduling.annotation.ScheduledAnnotationBeanPostProcessor.class)).isEmpty();
+    // Without a scheduled-method processor, MediaJobs remains available only for explicit calls.
+    assertThat(context.getBeansOfType(vn.fashion.catalog.media.MediaJobs.class)).hasSize(1);
+  }
+
+  @Test
   void databaseSessionUsesUtc() {
     assertThat(jdbc.queryForObject("show timezone", String.class)).isEqualTo("UTC");
   }

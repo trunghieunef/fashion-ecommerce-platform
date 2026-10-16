@@ -31,6 +31,21 @@ class StockImportIntegrationTest extends InventoryTestSupport {
     assertThat(jdbc.queryForObject("select count(*) from stock_transactions",Integer.class)).isEqualTo(1);
     assertThat(upload(file.replace("5","6"),"in","same").statusCode()).isEqualTo(409);
   }
+  @Test void importHashHasStableFieldOrderAndReplay() throws Exception {
+    seedStock("A",0,0);String file="sku,quantity\nA,5\n";
+    var first=data(upload(file," in ","stable-hash"),200);
+    String fileHash=sha256(file);
+    String canonical="{\"file_sha256\":\""+fileHash+"\",\"reason\":\"in\"}";
+    assertThat(jdbc.queryForObject("select request_hash from idempotency_requests where key='stable-hash'",String.class))
+        .isEqualTo(sha256(canonical));
+    assertThat(data(upload(file,"in","stable-hash"),200)).isEqualTo(first);
+    assertThat(jdbc.queryForObject("select on_hand from stock_items where sku='A'",Integer.class)).isEqualTo(5);
+    assertThat(jdbc.queryForObject("select count(*) from stock_transactions",Integer.class)).isEqualTo(1);
+  }
+  static String sha256(String value) throws Exception {
+    return HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+        .digest(value.getBytes(StandardCharsets.UTF_8)));
+  }
   @Test void oversizedFileIs400Or413() {
     var r=upload("x".repeat(129*1024),"in","oversize");
     assertThat(r.statusCode()).isEqualTo(413);assertNoWrites();

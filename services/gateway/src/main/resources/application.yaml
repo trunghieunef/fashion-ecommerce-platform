@@ -47,6 +47,13 @@ spring:
               uri: ${CATALOG_BASE_URL:http://localhost:8081}
               predicates:
                 - Path=/admin/api/v1/catalog/**
+            - id: inventory-import
+              uri: ${INVENTORY_BASE_URL:http://localhost:8083}
+              predicates:
+                - Path=/admin/api/v1/inventory/import
+                - Method=POST
+              metadata:
+                response-timeout: 30000
             - id: inventory-admin
               uri: ${INVENTORY_BASE_URL:http://localhost:8083}
               predicates:

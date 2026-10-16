@@ -85,6 +85,17 @@ class GatewayBoundaryTest {
   }
 
   @Test
+  void inventoryImportAllowsSlowProcessingWhileOtherRoutesKeepDefaultTimeout() {
+    CATALOG.delayMillis = 3000;
+    var slowClient = client.mutate().responseTimeout(java.time.Duration.ofSeconds(10)).build();
+    slowClient.post().uri("/admin/api/v1/inventory/import").exchange().expectStatus().isOk();
+    assertThat(CATALOG.path()).isEqualTo("/admin/api/v1/inventory/import");
+    slowClient.get().uri("/admin/api/v1/inventory/skus").exchange().expectStatus().isEqualTo(504);
+    slowClient.post().uri("/admin/api/v1/inventory/adjust").exchange().expectStatus().isEqualTo(504);
+    slowClient.get().uri("/admin/api/v1/inventory/import").exchange().expectStatus().isEqualTo(504);
+  }
+
+  @Test
   void removesBrowserIdentityHeadersBeforeForwardingCatalogRequest() {
     client.get()
         .uri("/api/v1/catalog/products?limit=1")

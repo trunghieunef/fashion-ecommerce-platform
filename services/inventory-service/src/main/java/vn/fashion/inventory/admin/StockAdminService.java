@@ -10,6 +10,7 @@ import vn.fashion.inventory.web.Api;
 @Service
 public class StockAdminService {
   public record AdjustRequest(String sku,Integer delta,String reason) { }
+  public record ImportRequest(String fileSha256,String reason) { }
   private final JdbcClient jdbc;
   private final AdminCommands commands;
   private final StockEvents events;
@@ -41,7 +42,7 @@ public class StockAdminService {
     String fileHash;
     try { fileHash=HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(file)); }
     catch(java.security.NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
-    return commands.create(actor,"inventory.import",key,Map.of("file_sha256",fileHash,"reason",reason),()->{
+    return commands.create(actor,"inventory.import",key,new ImportRequest(fileHash,reason),()->{
       var stocks=lockForUpdate(rows.stream().map(InboundCsv.Row::sku).sorted().toList());
       var errors=new ArrayList<Api.FieldError>();
       for(var row:rows) {

@@ -12,6 +12,9 @@ durability trong database riêng. Boot tự nạp `MessagingAutoConfiguration`.
 chờ broker ACK rồi mới cho `OutboxRepository.relay` mark SENT. Claim/publish ngoài
 business transaction, không giữ row lock trong lúc gọi Kafka. Kafka lỗi giữ event
 chưa SENT tới khi lease hết hạn; crash sau publish có thể gửi trùng cùng event_id.
+Scheduling và bean OutboxRelay chỉ bật trong cấu hình con khi relay.enabled=true;
+tắt relay không kích hoạt scheduler của MediaJobs hay component khác. Catalog muốn
+tắt mọi scheduled method phải đồng thời đặt media.jobs-enabled=false.
 
 Consumer gọi `new InboxListenerSupport(inbox, mapper, consumerName).handle(record,
 ack, handlers)` trong listener. Handler ghi DB trong transaction do InboxGuard sở hữu;
