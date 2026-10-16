@@ -327,10 +327,14 @@ erDiagram
 
 INV-01 Task 3 hiện thực V001 stock_items/stock_transactions và durability trong inventory-service.
 inventory_runtime chỉ SELECT/INSERT ledger (thu hồi UPDATE/DELETE/TRUNCATE);
-stock_items SELECT/INSERT/UPDATE. INV-02 Task 2 thêm V002 append-only cho
+stock_items SELECT/INSERT/UPDATE. INV-02 thêm migration append-only
+`V002__stock_reservations.sql` cho
 stock_reservations/stock_reservation_items; runtime không DELETE/TRUNCATE hai bảng này.
 Reservation version bắt đầu từ 1, tăng mỗi lần chuyển trạng thái; terminal giữ làm tombstone.
-Schema có trước API/job reservation; return/subscription vẫn thuộc task sau.
+V002 không đặt DEFAULT cho status hoặc version; service ghi version=1 khi tạo, +1 mỗi transition.
+Runtime SELECT/INSERT/UPDATE reservation; items SELECT/INSERT và quyền UPDATE kế thừa
+từ default privileges của migration role; không có DELETE/TRUNCATE trên cả hai bảng.
+INV-02 đã hiện thực API/job local; return/subscription vẫn thuộc task sau.
 Chủ dự án duyệt 2026-10-16: ledger adjust/import dùng operation_key ghép
 `user:<actor UUID>:<operation>:<Idempotency-Key>` để UNIQUE không va chạm giữa actor hoặc
 operation; operation inventory.adjust/inventory.import, header và phạm vi replay giữ nguyên.

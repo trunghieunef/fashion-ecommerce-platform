@@ -45,6 +45,9 @@ stock ledger, adjust/import và internal availability. [Handoff hiện hành](do
 ghi kiểm tra/giới hạn và follow-up; INV-01 đã merge PR #20/#21 và
 [nghiệm thu Done (local)](docs/evidence/acceptance-2026-10-16.md) ngày 2026-10-16.
 Chi tiết phần auth đang review ở [User service](services/user-service/README.md).
+INV-02 đã hiện thực local reservation đa SKU, commit/release/expiry và tombstone;
+xem [evidence](docs/evidence/inv-02-local-2026-10-16.md) và
+[handoff INV-02](docs/superpowers/plans/2026-10-16-inv-02-handoff.md). Chưa nghiệm thu Done.
 Tiến độ mới nhất và bước tiếp ở [handoff CAT-01a](docs/superpowers/plans/2026-10-07-cat-01a-handoff.md):
 PR #14 đã merge; [spec CAT-01b](docs/superpowers/specs/2026-10-07-cat-01b-design.md)
 collection/items và size guide admin đã được duyệt;

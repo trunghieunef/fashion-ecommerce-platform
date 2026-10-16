@@ -78,6 +78,13 @@ class GatewayBoundaryTest {
   }
 
   @Test
+  void inventoryReservationInternalIsNotRouted() {
+    client.get().uri("/internal/api/v1/inventory/reservations/4c8a1f2e-0000-4000-8000-000000000010")
+        .exchange().expectStatus().isNotFound();
+    assertThat(CATALOG.requestCount()).isZero();
+  }
+
+  @Test
   void inventoryAdminIsRouted() {
     client.get().uri("/admin/api/v1/inventory/skus").exchange().expectStatus().isOk();
     assertThat(CATALOG.requestCount()).isEqualTo(1);

@@ -28,6 +28,19 @@ chờ đăng ký SKU, adjust +5 qua Gateway và kiểm event snapshot. JWT synth
 chỉ inventory.read/adjust, token catalog vẫn chỉ catalog.write; không chứng minh login OPS.
 `./mvnw -B -pl services/inventory-service -am test` cần Docker PostgreSQL17.11/Kafka4.1.2.
 Readiness inventory chỉ DB, kafka health riêng. Chi tiết [evidence INV-01](../evidence/inv-01-local-2026-10-15.md).
+
+INV-02 hiện thực local reserve/commit/release/query và expiry sweep; parent ở Review.
+Chạy regression PostgreSQL/Kafka thật (Git Bash trên Windows, Java 21, Docker Desktop):
+
+```bash
+./mvnw -B -pl services/inventory-service -am test -Dtest='Reserv*Test,Commit*Test,Release*Test' -Dsurefire.failIfNoSpecifiedTests=false
+./mvnw -B -pl services/gateway -am test -Dtest=GatewayBoundaryTest -Dsurefire.failIfNoSpecifiedTests=false
+```
+
+Contract hash ở 03 §1.3; [evidence INV-02](../evidence/inv-02-local-2026-10-16.md)
+ghi đủ full verify và sáu mutation guard. Testcontainers dùng PostgreSQL 17.11/Kafka 4.1.2;
+không thay bằng H2/mock để nghiệm thu race.
+
 Quota namespace lấy từ `FASHION_ENV` (local mặc định); HMAC identity dùng khóa dẫn xuất từ
 master sẵn có. Allowlist rỗng phát WARN để tránh quên config khi chạy sau Gateway; header
 không được lookup DNS. Readiness/subnet IPv6 staging còn cần chốt ở 08.

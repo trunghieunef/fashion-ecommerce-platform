@@ -32,7 +32,14 @@ class CommitIntegrationTest extends ReservationTestSupport {
     assertThat(jdbc.queryForObject("select release_reason from stock_reservations",String.class)).isEqualTo("expired");
     assertThat(onHand("SKU-A")).isEqualTo(5);assertThat(reserved("SKU-A")).isZero();
     assertThat(ledger("RELEASE")).isEqualTo(1);assertThat(ledger("COMMIT")).isZero();
+    var expired=jdbc.queryForMap("select version,released_at,release_reason,status from stock_reservations");
+    assertThat(expired).containsEntry("version",2L);
+    assertThat(expired.get("released_at")).isNotNull();
+    assertThat(outbox("INVENTORY_RELEASED")).isEqualTo(1);
     assertThat(problem(commit(s.orderId()),409)).isEqualTo("RESERVATION_EXPIRED");assertThat(ledger("RELEASE")).isEqualTo(1);
+    assertThat(jdbc.queryForMap("select version,released_at,release_reason,status from stock_reservations")).isEqualTo(expired);
+    assertThat(onHand("SKU-A")).isEqualTo(5);assertThat(reserved("SKU-A")).isZero();
+    assertThat(ledger("COMMIT")).isZero();assertThat(outbox("INVENTORY_RELEASED")).isEqualTo(1);
   }
   @Test void unknownOrderIs404AndBadBodyIs400() {
     assertThat(problem(commit(UUID.randomUUID()),404)).isEqualTo("RESERVATION_NOT_FOUND");

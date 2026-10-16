@@ -50,5 +50,9 @@ class ReservationSchemaIntegrationTest extends InventoryTestSupport {
         .isInstanceOf(DataAccessException.class);
     assertThatThrownBy(() -> jdbc.update("delete from stock_reservation_items"))
         .isInstanceOf(DataAccessException.class);
+    assertThatThrownBy(() -> jdbc.execute("truncate stock_reservation_items, stock_reservations"))
+        .isInstanceOf(DataAccessException.class)
+        .rootCause().isInstanceOf(java.sql.SQLException.class)
+        .extracting(e -> ((java.sql.SQLException)e).getSQLState()).isEqualTo("42501");
   }
 }

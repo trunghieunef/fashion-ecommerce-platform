@@ -49,9 +49,12 @@ class ReserveIntegrationTest extends ReservationTestSupport {
     assertThat(again.path("reservation_id")).isEqualTo(first.path("reservation_id"));
     var gate=new CountDownLatch(1);var codes=new ConcurrentLinkedQueue<Integer>();var t=snapshot(UUID.randomUUID(),in(15),"SKU-A",1);
     try(var pool=Executors.newFixedThreadPool(6)) {
-      for(int i=0;i<6;i++) pool.submit(()->{gate.await();codes.add(reserve(t).statusCode());return null;});
+      var futures=new ArrayList<Future<?>>();
+      for(int i=0;i<6;i++) futures.add(pool.submit(()->{gate.await();codes.add(reserve(t).statusCode());return null;}));
       gate.countDown();
+      for(var future:futures) future.get(30,TimeUnit.SECONDS);
     }
+    assertThat(codes).hasSize(6);
     assertThat(codes).containsOnly(200,201).filteredOn(c->c==201).hasSize(1);
     assertThat(reserved("SKU-A")).isEqualTo(3);assertThat(ledger("RESERVE")).isEqualTo(2);
   }

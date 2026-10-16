@@ -8,6 +8,22 @@ import java.util.concurrent.*;
 import org.junit.jupiter.api.Test;
 
 class ReleaseIntegrationTest extends ReservationTestSupport {
+  @Test void releaseExistingExpiredIsNoop() {
+    seedStock("SKU-A",5,0);var s=snapshot(UUID.randomUUID(),in(15),"SKU-A",2);data(reserve(s),201);
+    jdbc.update("update stock_reservations set expires_at=now()-interval '1 second'");
+    assertThat(problem(commit(s.orderId()),409)).isEqualTo("RESERVATION_EXPIRED");
+    var before=jdbc.queryForMap("select version,released_at,release_reason,status from stock_reservations");
+    var ledgerBefore=jdbc.queryForList("select * from stock_transactions order by id");
+    var outboxBefore=jdbc.queryForList("select * from outbox_events order by id");
+    var d=data(release(s,"must not replace expired reason"),200);
+    assertThat(d.path("status").asString()).isEqualTo("EXPIRED");
+    assertThat(d.path("release_reason").asString()).isEqualTo("expired");
+    assertThat(d.path("version").asLong()).isEqualTo(2);
+    assertThat(jdbc.queryForMap("select version,released_at,release_reason,status from stock_reservations")).isEqualTo(before);
+    assertThat(onHand("SKU-A")).isEqualTo(5);assertThat(reserved("SKU-A")).isZero();
+    assertThat(jdbc.queryForList("select * from stock_transactions order by id")).isEqualTo(ledgerBefore);
+    assertThat(jdbc.queryForList("select * from outbox_events order by id")).isEqualTo(outboxBefore);
+  }
   @Test void releaseWaitsForReservationInsertBeforeTakingSkuLock() throws Exception {
     seedStock("SKU-A",5,0);var s=snapshot(UUID.randomUUID(),in(15),"SKU-A",2);
     var started=new CountDownLatch(1);

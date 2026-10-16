@@ -2,6 +2,8 @@
 
 **Trạng thái: đã duyệt ngày 2026-10-16** (phương án A). Plan:
 [INV-02](../plans/2026-10-16-inv-02-reservations.md); làm trên `dev`, chỉ push/mở PR khi chủ dự án yêu cầu.
+Đã hiện thực local; TASK:INV-02 ở Review, chưa nghiệm thu Done. Xem
+[evidence](../../evidence/inv-02-local-2026-10-16.md) và [handoff](../plans/2026-10-16-inv-02-handoff.md).
 Khi lập plan chốt cách biểu diễn trong envelope `ApiError` chung: OUT_OF_STOCK dùng
 `errors[{field: "items[<SKU>]", message: "requested=<n> available=<m>"}]`; "409 CONFLICT" khác hash có
 message `RESERVATION_CONFLICT`; mảng items thô tối đa 100 phần tử; body có field lạ → 400.
@@ -32,7 +34,8 @@ Quyết định trong phiên 2026-10-16:
 - **Thiếu hàng:** `409 OUT_OF_STOCK` kèm từng SKU `{sku, requested, available}`; SKU không tồn tại
   hoặc `INACTIVE` tính là thiếu với `available = 0`.
 - **Caller:** chỉ `order-service`. Order-service chưa tồn tại nên kiểm bằng integration test với
-  service token synthetic; Compose khai báo sẵn caller cho ORD-02.
+  service token synthetic; Compose chuyển `INVENTORY_INTERNAL_CALLERS` (mặc định rỗng),
+  ORD-02 phải cung cấp public key caller và kiểm integration thật.
 
 Không thuộc INV-02: return/restore (INV-03), gia hạn reservation, UI admin xem reservation,
 consumer phía order, alert theo ngưỡng (chỉ có metric), Kafka SASL/TLS staging (PLT-04).
@@ -46,10 +49,11 @@ consumer phía order, alert theo ngưỡng (chỉ có metric), Kafka SASL/TLS st
 | `stock_reservations` | `id uuid PK`, `order_id uuid`, `order_no varchar(32)`, `request_hash char(64)`, `status varchar(16)`, `expires_at timestamptz`, `committed_at timestamptz?`, `released_at timestamptz?`, `release_reason text?`, `version bigint`, `created_at`, `updated_at` | UNIQUE `order_id`; status ACTIVE/COMMITTED/RELEASED/EXPIRED; `version >= 1`; `committed_at` có khi và chỉ khi COMMITTED; `released_at` có khi RELEASED/EXPIRED; partial index `(expires_at) WHERE status='ACTIVE'` |
 | `stock_reservation_items` | `reservation_id uuid FK`, `sku varchar(64) FK stock_items`, `quantity int` | PK `(reservation_id, sku)`; quantity 1–99 |
 
-Khác 05: thêm `version` (03 §5 yêu cầu event reservation có version theo reservation) và
+Đã đồng bộ 05: thêm `version` (03 §5 yêu cầu event reservation có version theo reservation) và
 `release_reason`. `version` = 1 khi reserve hoặc tạo tombstone, +1 mỗi lần chuyển trạng thái.
 Tombstone giữ items từ snapshot gốc; FK tới `stock_items` vẫn áp dụng nên SKU lạ trong snapshot
-release → 400. Quyền runtime: SELECT/INSERT/UPDATE, không DELETE/TRUNCATE. Cập nhật 05 cùng thay đổi.
+release → 400. Quyền runtime: SELECT/INSERT/UPDATE, không DELETE/TRUNCATE; items cũng có
+UPDATE kế thừa default privileges, dù service chỉ SELECT/INSERT. V002 không đặt DEFAULT status/version.
 
 ## 3. Internal API
 
@@ -151,8 +155,9 @@ release/expire làm hàng có lại cũng phát RESTOCKED. Registry thêm ba dò
   released/tombstone/noop/restore_required; expire expired); gauge số reservation ACTIVE đã quá hạn
   chưa quét để phát hiện job kẹt.
 - Log JSON không chứa token; chỉ order_id/order_no/reservation_id và SKU.
-- Compose/local-up: thêm public key caller `order-service` vào `INVENTORY_INTERNAL_CALLERS` theo
-  mẫu `cart-service`. Smoke chưa gọi reservation vì chưa có caller thật; ORD-02 bổ sung.
+- Compose chuyển `INVENTORY_INTERNAL_CALLERS`; `.env.example` ghi mẫu `order-service:<base64>`.
+  Local-up không sinh private key/service token caller. Smoke chưa gọi reservation vì chưa
+  có caller thật; ORD-02 cấu hình public key và bổ sung kiểm integration.
 
 ## 7. Kiểm thử
 

@@ -450,7 +450,12 @@ lỗi một id không chặn id khác, lần quét sau thử lại. Counter oper
 ACTIVE quá hạn hỗ trợ phát hiện job kẹt, gauge vẫn có khi trigger tắt.
 Acceptance Task 7 dùng PostgreSQL thật: due/fresh, retry sweep, T05 10 vòng,
 row bị khóa được bỏ qua và COMMITTED không bị expire; test gọi thẳng lockDue trong transaction
-để kiểm guard ACTIVE với candidate đã cũ. Chưa nghiệm thu toàn bộ INV-02.
+để kiểm guard ACTIVE với candidate đã cũ.
+INV-02 hiện thực local 2026-10-16: sweep mặc định 5 s dùng SKIP LOCKED, commit tự kiểm hạn;
+Prometheus counter `inventory_reservations_total{operation,outcome}` và gauge
+`inventory_reservations_overdue`. Gateway boundary và relay Kafka thật có regression;
+[evidence INV-02](../evidence/inv-02-local-2026-10-16.md) ghi kết quả verify/mutation.
+Trạng thái Review, chưa nghiệm thu toàn bộ INV-02 hoặc G0/G1/G2.
 
 ### 6.2 Nhập kho, điều chỉnh và restock
 
