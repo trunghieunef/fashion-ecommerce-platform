@@ -1,7 +1,10 @@
 # INV-02 — reservation đa SKU: reserve, commit, release, expire và tombstone
 
-**Trạng thái: bản nháp chờ chủ dự án review (2026-10-16).** Thiết kế đã được duyệt từng phần trong
-phiên ngày 2026-10-16 (phương án A). Chưa có plan; làm trên `dev`, chỉ push/mở PR khi chủ dự án yêu cầu.
+**Trạng thái: đã duyệt ngày 2026-10-16** (phương án A). Plan:
+[INV-02](../plans/2026-10-16-inv-02-reservations.md); làm trên `dev`, chỉ push/mở PR khi chủ dự án yêu cầu.
+Khi lập plan chốt cách biểu diễn trong envelope `ApiError` chung: OUT_OF_STOCK dùng
+`errors[{field: "items[<SKU>]", message: "requested=<n> available=<m>"}]`; "409 CONFLICT" khác hash có
+message `RESERVATION_CONFLICT`; mảng items thô tối đa 100 phần tử; body có field lạ → 400.
 
 `TASK:INV-02` · `REQ:INV-02`, `REQ:INV-03`, `REQ:INV-06`.
 Dependency: INV-01 (Done local 2026-10-16), PLT-02 (contract core), PLT-03 (outbox), SEC-01
