@@ -422,6 +422,13 @@ stateDiagram-v2
 
 Không giữ một phần các SKU của đơn. Không giữ row lock khi gọi service khác. Stock constraint `0 <= reserved <= on_hand` là lớp bảo vệ cuối; không thay bằng Redis distributed lock.
 
+`TASK:INV-02` Task 4 hiện thực reserve all-or-nothing và query reservation, phụ thuộc
+INV-01, PLT-02/03 và SEC-01; phục vụ `REQ:INV-02/03/06`. Transaction khóa reservation
+trước SKU tăng dần, ghi ledger/outbox cùng reserved. Replay cùng order/hash đọc hiện trạng
+trước kiểm deadline theo DB clock. Acceptance Task 4 dùng PostgreSQL thật để kiểm T01/T02/T03,
+race reserve/adjust, deadline, auth và no-store; kết quả kiểm thử ghi khi bàn giao.
+Commit/release API và expire job chưa hiện thực trong Task 4; chưa nghiệm thu toàn bộ INV-02.
+
 ### 6.2 Nhập kho, điều chỉnh và restock
 
 - **Nhập/điều chỉnh:** OPS cung cấp lý do + key; CSV validate toàn bộ trước ghi, giới hạn đề xuất 1.000 dòng/lần, transaction khóa SKU thứ tự. Nhập cộng on_hand; điều chỉnh không được giảm on_hand dưới reserved. Lưu actor, ledger và audit.

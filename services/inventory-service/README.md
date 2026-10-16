@@ -14,7 +14,24 @@ schema; chưa nghiệm thu toàn bộ INV-02.
 Task 3 thêm `ReservationSnapshot` canonical/hash và `ReservationRequests` parse reserve/commit/release:
 body đóng, normalize/gộp/sắp xếp SKU, đối chiếu SHA-256 theo 03; lỗi 400 nêu field.
 Parser chỉ kiểm hình dạng timestamp (UTC `Z`, năm 0001..9999 theo OpenAPI date-time,
-tối đa mili giây), chưa kiểm deadline theo DB clock. Chưa có API hay job reservation.
+tối đa mili giây); deadline của reserve được kiểm bằng DB clock trong Task 4.
+Task 4 hiện thực POST `/internal/api/v1/inventory/reserve` và GET
+`/internal/api/v1/inventory/reservations/{order_id}`, chỉ caller `order-service`.
+Kiểm token → caller → Idempotency-Key (mutation, 1–128 ký tự) → body;
+filter đặt `Cache-Control: no-store` cho mọi `/internal/**`, kể cả lỗi trước controller.
+Reserve khóa reservation trước, SKU tăng dần sau; kiểm toàn bộ hàng rồi ghi reserved,
+items, ledger RESERVE và outbox INVENTORY_RESERVED/INVENTORY_UPDATED cùng transaction.
+SKU lạ/INACTIVE có available=0; thiếu một SKU rollback toàn bộ, trả 409 OUT_OF_STOCK.
+Retry cùng order/hash trả hiện trạng 200 trước kiểm deadline; khác hash trả 409
+RESERVATION_CONFLICT, trạng thái RELEASED/EXPIRED trả RESERVATION_CLOSED.
+Query chưa có trả 404 RESERVATION_NOT_FOUND. Commit/release API và job hết hạn chưa hiện thực;
+chưa nghiệm thu INV-02. Kiểm tra Task 4 và regression internal stock từ repo root:
+
+```bash
+./mvnw -B -pl services/inventory-service -am test -Dtest=ReserveIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false
+./mvnw -B -pl services/inventory-service -am test -Dtest=InternalStockIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false
+```
+
 Unit test parser (không cần Spring/Docker):
 
 ```bash
