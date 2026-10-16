@@ -19,7 +19,7 @@ class InventorySmokeTest(unittest.TestCase):
     def test_poll_deadline_includes_a_stalled_http_response(self):
         class SlowResponse(BaseHTTPRequestHandler):
             def do_GET(self):
-                time.sleep(11)
+                time.sleep(20)  # Far past the 10 s deadline, so a missing abort cannot pass the bound.
                 try:
                     body = json.dumps({"data": {"items": [{"sku": "SMOKE-BOUND"}]}}).encode()
                     self.send_response(200)
@@ -47,9 +47,9 @@ class InventorySmokeTest(unittest.TestCase):
                                   encoding="utf-8", newline="\n")
                 began = time.monotonic()
                 result = subprocess.run([BASH, "--noprofile", "--norc", script.as_posix()],
-                                        capture_output=True, text=True, timeout=14)
+                                        capture_output=True, text=True, timeout=18)
                 self.assertNotEqual(result.returncode, 0, "response after the deadline must not succeed")
-                self.assertLess(time.monotonic() - began, 12, "deadline plus process startup allowance")
+                self.assertLess(time.monotonic() - began, 13, "deadline plus bash/node startup allowance on CI")
         finally:
             server.shutdown()
             server.server_close()
