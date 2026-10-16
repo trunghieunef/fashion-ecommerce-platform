@@ -441,7 +441,16 @@ vẫn hợp lệ nếu đúng hình dạng/hash. Tombstone giữ items và ghi I
 đổi stock/ledger; reserve đến muộn trả RESERVATION_CLOSED. Acceptance Task 6 dùng PostgreSQL
 thật kiểm T04, retry, restore_required, input lỗi và race: release chờ unique insert reservation
 không giữ SKU lock, competing reserve vẫn khóa được SKU trước khi rollback.
-Expire job chưa hiện thực; chưa nghiệm thu toàn bộ INV-02.
+Task 7 thêm expire job (cùng dependency và REQ trên): mặc định mỗi 5s, batch 100,
+cấu hình `fashion.inventory.reservation-sweep.enabled/interval/batch`; test tắt trigger.
+Chọn ACTIVE có expires_at <= DB now, rồi mỗi id một transaction khóa reservation bằng
+`FOR UPDATE SKIP LOCKED` và kiểm lại ACTIVE/deadline trước khi khóa SKU tăng dần.
+Nhả reserved, ghi EXPIRED với reason `expired`, ledger RELEASE và outbox cùng transaction;
+lỗi một id không chặn id khác, lần quét sau thử lại. Counter operation/outcome và gauge
+ACTIVE quá hạn hỗ trợ phát hiện job kẹt, gauge vẫn có khi trigger tắt.
+Acceptance Task 7 dùng PostgreSQL thật: due/fresh, retry sweep, T05 10 vòng,
+row bị khóa được bỏ qua và COMMITTED không bị expire; test gọi thẳng lockDue trong transaction
+để kiểm guard ACTIVE với candidate đã cũ. Chưa nghiệm thu toàn bộ INV-02.
 
 ### 6.2 Nhập kho, điều chỉnh và restock
 

@@ -12,6 +12,7 @@ import vn.fashion.inventory.web.Api;
 /** 06 section 6.1: lock the reservation, then SKUs in sku order; no HTTP inside a transaction. */
 @Service
 public class ReservationService {
+  private static final org.slf4j.Logger LOG=org.slf4j.LoggerFactory.getLogger(ReservationService.class);
   public record Outcome(int status,String error,ReservationView view) { }
   private final JdbcClient jdbc;
   private final TransactionTemplate tx;
@@ -19,9 +20,11 @@ public class ReservationService {
   private final StockAdminService stocks;
   private final StockEvents stockEvents;
   private final ReservationEvents events;
+  private final io.micrometer.core.instrument.MeterRegistry meters;
   public ReservationService(JdbcClient jdbc,TransactionTemplate tx,ReservationRepository reservations,StockAdminService stocks,
-      StockEvents stockEvents,ReservationEvents events) {
+      StockEvents stockEvents,ReservationEvents events,io.micrometer.core.instrument.MeterRegistry meters) {
     this.jdbc=jdbc;this.tx=tx;this.reservations=reservations;this.stocks=stocks;this.stockEvents=stockEvents;this.events=events;
+    this.meters=meters;
   }
 
   public Outcome reserve(ReservationRequests.ReserveCommand c,String traceId) {
@@ -41,11 +44,12 @@ public class ReservationService {
         int available=row==null || !"ACTIVE".equals(row.status())?0:row.available();
         if(available<item.quantity()) shortages.add(new Api.FieldError("items["+item.sku()+"]","requested="+item.quantity()+" available="+available));
       }
-      if(!shortages.isEmpty()) throw new Api.Problem(HttpStatus.CONFLICT,"OUT_OF_STOCK","OUT_OF_STOCK",shortages);
+      if(!shortages.isEmpty()) { count("reserve","out_of_stock");throw new Api.Problem(HttpStatus.CONFLICT,"OUT_OF_STOCK","OUT_OF_STOCK",shortages); }
       reservations.insertItems(id,s.items());
       for(var item:s.items()) move(locked.get(item.sku()),0,item.quantity(),"RESERVE",s.orderId(),"order reserve",traceId);
       var row=reservations.lock(s.orderId()).orElseThrow();
       events.append("INVENTORY_RESERVED",row,s.items(),traceId);
+      count("reserve","created");
       return new Outcome(201,null,ReservationView.of(row,s.items(),false));
     });
   }
@@ -53,18 +57,19 @@ public class ReservationService {
     return tx.execute(status->{
       var row=reservations.lock(orderId).orElseThrow(ReservationService::notFound);
       switch(row.status()) {
-        case "COMMITTED": return new Outcome(200,null,view(row,false));
-        case "EXPIRED": return new Outcome(409,"RESERVATION_EXPIRED",null);
-        case "RELEASED": return new Outcome(409,"RESERVATION_CLOSED",null);
+        case "COMMITTED": count("commit","replayed");return new Outcome(200,null,view(row,false));
+        case "EXPIRED": count("commit","expired");return new Outcome(409,"RESERVATION_EXPIRED",null);
+        case "RELEASED": count("commit","closed");return new Outcome(409,"RESERVATION_CLOSED",null);
         default: break;
       }
       // Persist expiry before the controller reports the conflict outside this transaction.
-      if(row.due()) { finish(row,"EXPIRED","expired",traceId);return new Outcome(409,"RESERVATION_EXPIRED",null); }
+      if(row.due()) { finish(row,"EXPIRED","expired",traceId);count("commit","expired");return new Outcome(409,"RESERVATION_EXPIRED",null); }
       var items=reservations.items(row.id());
       var locked=stocks.lockForUpdate(items.stream().map(ReservationSnapshot.Item::sku).toList());
       for(var item:items) move(locked.get(item.sku()),-item.quantity(),-item.quantity(),"COMMIT",orderId,"order commit",traceId);
       var after=reservations.transition(row.id(),"COMMITTED",null);
       events.append("INVENTORY_DEDUCTED",after,items,traceId);
+      count("commit","committed");
       return new Outcome(200,null,ReservationView.of(after,items,false));
     });
   }
@@ -83,6 +88,7 @@ public class ReservationService {
           reservations.insertItems(id,s.items());
           var tombstone=reservations.lock(c.orderId()).orElseThrow();
           events.append("INVENTORY_RELEASED",tombstone,s.items(),traceId);
+          count("release","tombstone");
           return new Outcome(200,null,ReservationView.of(tombstone,s.items(),false));
         }
         existing=reservations.lock(c.orderId());
@@ -90,11 +96,27 @@ public class ReservationService {
       var row=existing.orElseThrow();
       if(!row.requestHash().equals(c.originalRequestHash())) throw conflict("RESERVATION_CONFLICT");
       return switch(row.status()) {
-        case "ACTIVE" -> new Outcome(200,null,view(finish(row,"RELEASED",c.reason(),traceId),false));
-        case "COMMITTED" -> new Outcome(200,null,view(row,true));
-        default -> new Outcome(200,null,view(row,false));
+        case "ACTIVE" -> { count("release","released");yield new Outcome(200,null,view(finish(row,"RELEASED",c.reason(),traceId),false)); }
+        case "COMMITTED" -> { count("release","restore_required");yield new Outcome(200,null,view(row,true)); }
+        default -> { count("release","noop");yield new Outcome(200,null,view(row,false)); }
       };
     });
+  }
+  /** One transaction per reservation; SKIP LOCKED leaves rows a commit holds. */
+  public int expireDue(int batch) {
+    int expired=0;
+    for(UUID id:reservations.dueIds(batch)) {
+      try {
+        Boolean done=tx.execute(status->reservations.lockDue(id)
+            .map(row->{finish(row,"EXPIRED","expired","reservation-sweep-"+UUID.randomUUID());return true;}).orElse(false));
+        if(Boolean.TRUE.equals(done)) { expired++;count("expire","expired"); }
+      } catch(RuntimeException e) { LOG.warn("Reservation expiry failed for reservation_id={}",id,e); }
+    }
+    return expired;
+  }
+
+  void count(String operation,String outcome) {
+    meters.counter("inventory.reservations","operation",operation,"outcome",outcome).increment();
   }
   /** Releases reserved stock of an ACTIVE reservation; caller holds the reservation row lock. */
   ReservationRow finish(ReservationRow row,String status,String reason,String traceId) {
@@ -111,8 +133,9 @@ public class ReservationService {
   }
 
   private Outcome replay(ReservationRow row,String hash) {
-    if(!row.requestHash().equals(hash)) throw conflict("RESERVATION_CONFLICT");
-    if(row.status().equals("ACTIVE") || row.status().equals("COMMITTED")) return new Outcome(200,null,view(row,false));
+    if(!row.requestHash().equals(hash)) { count("reserve","conflict");throw conflict("RESERVATION_CONFLICT"); }
+    if(row.status().equals("ACTIVE") || row.status().equals("COMMITTED")) { count("reserve","replayed");return new Outcome(200,null,view(row,false)); }
+    count("reserve","closed");
     throw conflict("RESERVATION_CLOSED");
   }
   ReservationView view(ReservationRow row,boolean restoreRequired) { return ReservationView.of(row,reservations.items(row.id()),restoreRequired); }

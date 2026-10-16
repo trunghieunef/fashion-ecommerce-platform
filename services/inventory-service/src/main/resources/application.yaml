@@ -55,6 +55,10 @@ fashion:
     relay:
       enabled: ${INVENTORY_RELAY_ENABLED:true}
   inventory:
+    reservation-sweep:
+      enabled: ${INVENTORY_RESERVATION_SWEEP_ENABLED:true}
+      interval: ${INVENTORY_RESERVATION_SWEEP_INTERVAL:5s}
+      batch: ${INVENTORY_RESERVATION_SWEEP_BATCH:100}
     internal-callers: ${INVENTORY_INTERNAL_CALLERS:}
     jwt:
       public-keys: ${INVENTORY_JWT_PUBLIC_KEYS}

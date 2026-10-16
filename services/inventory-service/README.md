@@ -39,13 +39,30 @@ Tombstone insert theo order_id trước khi khóa SKU tăng dần để giữ c�
 SKU lạ trả 400 field original_reservation.items[SKU] và rollback cả tombstone.
 Release chỉ kiểm hình dạng deadline, chấp nhận snapshot đã quá hạn; khác hash đã lưu trả 409.
 Acceptance Task 6 kiểm T04, retry, release sau commit, hash/reason/SKU lỗi và race reservation→SKU
-bằng PostgreSQL thật; job hết hạn chưa hiện thực, chưa nghiệm thu INV-02.
+bằng PostgreSQL thật.
+Task 7 thêm expiry sweep: chọn ACTIVE quá hạn bằng DB clock, mỗi id một transaction,
+khóa `FOR UPDATE SKIP LOCKED` và kiểm lại ACTIVE/deadline trước khi nhả hàng qua `finish`.
+Ghi EXPIRED, reason `expired`, ledger RELEASE và outbox cùng transaction; lỗi một id được log
+và không chặn id khác. Cấu hình `fashion.inventory.reservation-sweep.*` qua
+`INVENTORY_RESERVATION_SWEEP_ENABLED` (true), `INVENTORY_RESERVATION_SWEEP_INTERVAL` (5s),
+`INVENTORY_RESERVATION_SWEEP_BATCH` (100); test tắt trigger để gọi sweep trực tiếp.
+Counter `inventory.reservations` có tags operation/outcome; gauge
+`inventory.reservations.overdue` đếm ACTIVE quá hạn kể cả khi trigger tắt.
+Acceptance Task 7 kiểm PostgreSQL thật: chỉ expire hàng đến hạn, T05 commit/sweep 10 vòng,
+SKIP LOCKED khi reservation đang bị giữ, COMMITTED thắng trước deadline.
+Test cuối gọi trực tiếp `lockDue` trong transaction để bảo vệ lần kiểm ACTIVE sau chọn candidate;
+đây là tăng độ mạnh kiểm thử, không đổi nghiệp vụ. Chưa nghiệm thu toàn bộ INV-02.
+Helper `clearInventory` có phạm vi protected để race test trong package con dọn fixture giữa các vòng;
+giữ nguyên `@BeforeEach` và logic dọn dữ liệu test.
+Counter tích lũy giữa các test method trong cùng registry: assertion đo baseline trước thao tác
+và đòi tăng đúng 1, không reset metric; gauge vẫn kiểm giá trị tuyệt đối theo dữ liệu PostgreSQL.
 Kiểm tra Task 4/5/6 và regression internal stock từ repo root:
 
 ```bash
 ./mvnw -B -pl services/inventory-service -am test -Dtest=ReserveIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false
 ./mvnw -B -pl services/inventory-service -am test -Dtest=CommitIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false
 ./mvnw -B -pl services/inventory-service -am test -Dtest=ReleaseIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false
+./mvnw -B -pl services/inventory-service -am test -Dtest=ReservationSweepIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false
 ./mvnw -B -pl services/inventory-service -am test -Dtest='Reserv*Test,Commit*Test,Release*Test' -Dsurefire.failIfNoSpecifiedTests=false
 ./mvnw -B -pl services/inventory-service -am test -Dtest=InternalStockIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false
 ```
