@@ -37,6 +37,16 @@ class CatalogRelayIntegrationTest extends CatalogAdminTestSupport {
     }
   }
 
+  @org.springframework.beans.factory.annotation.Autowired
+  org.springframework.scheduling.annotation.ScheduledAnnotationBeanPostProcessor scheduler;
+
+  @Test void enabledRelaySchedulesOnlyTheRelayWhileMediaJobsAreDisabled() {
+    assertThat(environment.getProperty("fashion.catalog.media.jobs-enabled")).isEqualTo("false");
+    // ScheduledTask.toString() is the scheduled method's "Class.method" name.
+    assertThat(scheduler.getScheduledTasks()).isNotEmpty().allSatisfy(task ->
+        assertThat(task.toString()).contains("OutboxRelay").doesNotContain("Media"));
+  }
+
   @Test void variantCreatedReachesCatalogEvents() throws Exception {
     UUID product=createProduct("relay"); createVariant(product,"relay-1");
     var records=poll(product,1); var record=records.getFirst();

@@ -6,7 +6,9 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import java.util.concurrent.TimeUnit;
 import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.transaction.support.TransactionTemplate;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
@@ -48,9 +50,17 @@ public class MediaConfig {
     return new LeaseRepository(jdbc, tx, "media_job_leases");
   }
 
-  /** MediaJobs' @Scheduled methods only fire when jobs are enabled; tests call them directly. */
+  /**
+   * Triggers live here, not on MediaJobs: @EnableScheduling is app-wide (the messaging relay turns it on too),
+   * so only this conditional bean may carry the @Scheduled methods. Tests call MediaJobs directly.
+   */
   @Configuration @EnableScheduling @ConditionalOnBooleanProperty("fashion.catalog.media.jobs-enabled")
-  static class Jobs { }
+  static class Jobs {
+    private final MediaJobs jobs;
+    Jobs(MediaJobs jobs) { this.jobs = jobs; }
+    @Scheduled(fixedDelay = 60, timeUnit = TimeUnit.SECONDS) void sweepQuarantine() { jobs.sweepQuarantine(); }
+    @Scheduled(fixedDelay = 1, timeUnit = TimeUnit.HOURS) void collectGarbage() { jobs.collectGarbage(); }
+  }
 
   @Bean ApplicationRunner ensureMediaBucket(MediaStorage storage, MediaProperties p) {
     return args -> {

@@ -4,11 +4,9 @@ import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 import vn.fashion.platform.work.LeaseRepository;
@@ -45,7 +43,6 @@ public class MediaJobs {
   }
 
   /** Returns the number of upload rows claimed. */
-  @Scheduled(fixedDelay = 60, timeUnit = TimeUnit.SECONDS)
   public int sweepQuarantine() {
     UUID token = UUID.randomUUID();
     // Claim commits before any DeleteObject; expired-lease PROCESSING and stale PENDING become EXPIRED here.
@@ -90,7 +87,6 @@ public class MediaJobs {
   }
 
   /** Returns assets plus partial uploads handled; 0 when another instance holds the GC lease. */
-  @Scheduled(fixedDelay = 1, timeUnit = TimeUnit.HOURS)
   public int collectGarbage() {
     // ponytail: 30 min lease vs batch 100 x 2 deletes x 10s S3 timeout (~33 min worst case); a takeover only repeats idempotent deletes.
     var token = leases.claim(GC_ID, Duration.ofMinutes(30));
