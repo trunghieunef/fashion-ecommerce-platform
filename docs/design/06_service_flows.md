@@ -122,7 +122,8 @@ Catalog quote nội bộ CAT-02a trả ordered snapshot found/active (variant kh
 CAT-01a tạo `VARIANT_CREATED` ngay khi tạo variant (không đợi publish): khóa product → insert
 variant → tăng product version → outbox → audit → kết quả idempotency trong cùng transaction.
 Payload giữ contract hiện có, `version` là version variant (0), aggregate_version là product
-version mới; retry cùng key không tạo event khác. Hiện intent PENDING, relay và INV-01 chưa có.
+version mới; retry cùng key không tạo event khác. Từ INV-01, catalog relay phát event lên Kafka và
+inventory-service tiêu thụ qua inbox để đăng ký SKU.
 
 Publish CAT-01a kiểm category/brand ACTIVE và ít nhất một variant ACTIVE, tên VI/EN bắt buộc,
 dưới khóa product + version guard; key/reason/idempotency và audit theo spec đã duyệt.

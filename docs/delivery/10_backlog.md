@@ -4,13 +4,13 @@ B1 · 2026-09-19 · Work package mặc định: **Planned; Assignee TBD; Reviewe
 
 ## 1. Cách nhận việc
 
-Update 2026-10-16 — `TASK:INV-01`: Task1–8 hiện thực/kiểm local trên dev;
-whole-branch review F17 đã sửa, verify536 và smoke mới PASS; F18 đã chốt smoke admin,
-internal caller Compose để CART-01 kiểm với caller thật đầu tiên.
-Chưa Done/chưa push/PR/chưa nghiệm thu G0/G1.
-Khung stock/ledger, catalog Kafka relay → inventory inbox, admin read/adjust/import,
-internal availability và Gateway admin đã có. Theo [evidence](../evidence/inv-01-local-2026-10-15.md)
-và [handoff INV-01](../superpowers/plans/2026-10-15-inv-01-handoff.md).
+Update 2026-10-16 — `TASK:INV-01` **Done (local, trước G0)**: merge vào `main` qua PR #20/#21
+(`a76442e`); chủ dự án chỉ định Claude Code nghiệm thu (không độc lập, cùng tác giả) sau khi chạy
+lại verify 540 test và local-up/smoke PASS. Khung stock/ledger, catalog Kafka relay → inventory
+inbox, admin read/adjust/import, internal availability và Gateway admin đã có. Follow-up PR20 còn
+mở; chưa nghiệm thu G0/G1. Theo [nghiệm thu](../evidence/acceptance-2026-10-16.md),
+[evidence](../evidence/inv-01-local-2026-10-15.md) và
+[handoff INV-01](../superpowers/plans/2026-10-15-inv-01-handoff.md).
 
 Mã trong cột Task là namespace TASK (ví dụ TASK:PAY-01); mã trong cột REQ là yêu cầu trong 02. Hai namespace độc lập, không coi task và requirement cùng hậu tố là cùng việc. Cột phụ thuộc chứa task ID, không phải REQ. “—” nghĩa không có dependency task; các gate D/O vẫn áp dụng theo 08.
 
