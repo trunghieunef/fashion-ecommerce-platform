@@ -136,6 +136,7 @@ Expected: FAIL — `test_nine_implemented_operations_and_permissions` thiếu 4 
 - [ ] **Step 3: Event schema** — thêm vào `$defs` của `contracts/events/stock-events.schema.json` (sau `StockSnapshot`):
 
 ```json
+{
     "ReservationLifecycle": {
       "description": "INVENTORY_RESERVED, INVENTORY_DEDUCTED, INVENTORY_RELEASED (release, expire or tombstone; see status)",
       "type": "object",
@@ -163,15 +164,22 @@ Expected: FAIL — `test_nine_implemented_operations_and_permissions` thiếu 4 
       },
       "additionalProperties": false
     }
+}
 ```
+
+(Ngoặc `{}` ngoài cùng chỉ để khối trên là JSON hợp lệ; chỉ chèn cặp `"ReservationLifecycle": {...}` vào `$defs`.)
 
 - [ ] **Step 4: Registry** — thêm vào `contracts/events/registry.json` sau `INVENTORY_RESTOCKED`:
 
 ```json
+{
   "INVENTORY_RESERVED": {"schema": "stock-events.schema.json#/$defs/ReservationLifecycle", "topic": "inventory.events", "partition_key": "order_no", "aggregate_id": "reservation_id"},
   "INVENTORY_DEDUCTED": {"schema": "stock-events.schema.json#/$defs/ReservationLifecycle", "topic": "inventory.events", "partition_key": "order_no", "aggregate_id": "reservation_id"},
-  "INVENTORY_RELEASED": {"schema": "stock-events.schema.json#/$defs/ReservationLifecycle", "topic": "inventory.events", "partition_key": "order_no", "aggregate_id": "reservation_id"},
+  "INVENTORY_RELEASED": {"schema": "stock-events.schema.json#/$defs/ReservationLifecycle", "topic": "inventory.events", "partition_key": "order_no", "aggregate_id": "reservation_id"}
+}
 ```
+
+(Chèn ba dòng vào object registry, thêm dấu phẩy phân cách đúng chỗ.)
 
 - [ ] **Step 5: 03 §5.2** — `test_event_routing.py` lấy partition key là từ đầu tiên sau `/`, nên dòng hiện tại `| inventory.events / sku cho snapshot; order_no cho reservation | ...` sẽ gán `sku` cho reservation. Thay bằng hai dòng:
 
@@ -211,9 +219,13 @@ Expected: FAIL — `test_nine_implemented_operations_and_permissions` thiếu 4 
 Thêm vào mảng `contracts/fixtures/invalid/payload-cases.json`:
 
 ```json
+[
   {"name": "reservation item quantity above 99", "fixture": "inventory-reserved.json", "changes": {"items": [{"sku": "SYNTH-TEE-M-BLK", "quantity": 100}]}, "validator": "maximum", "path": ["items", 0, "quantity"]},
   {"name": "reservation version starts at 1", "fixture": "inventory-reserved.json", "changes": {"version": 0}, "validator": "minimum", "path": ["version"]}
+]
 ```
+
+(Nối hai phần tử vào cuối mảng hiện có.)
 
 - [ ] **Step 7: OpenAPI** — trong `contracts/openapi/inventory.yaml`, sau path `/internal/api/v1/inventory/skus/{sku}` (trước `components:`), thêm 4 operation. Anchor YAML giữ header/response chung (yaml.safe_load và Redocly đều resolve anchor):
 
