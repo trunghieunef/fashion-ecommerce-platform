@@ -3,7 +3,7 @@ info:
   title: Inventory API
   version: 0.1.0
   description: TASK:INV-01 stock authority and immutable ledger; admin ES256 permissions checked at service, internal ADR-19
-    service tokens. Local implementation, not reserve/commit/release (INV-02).
+    service tokens. INV-02 reservation contracts; runtime implementation is verified separately.
 servers:
 - url: http://localhost:8080
   description: Local Gateway (admin only)
@@ -12,6 +12,8 @@ tags:
   description: OPS stock and ledger
 - name: Internal stock
   description: Private service-to-service stock reads
+- name: Internal reservations
+  description: Private order-service reservation commands and reads
 paths:
   /admin/api/v1/inventory/skus:
     get:
@@ -760,6 +762,311 @@ paths:
       servers:
       - url: http://localhost:8083
         description: Private inventory service; bypasses public Gateway
+  /internal/api/v1/inventory/reserve:
+    post:
+      operationId: reserveStock
+      summary: Reserve every SKU of one order (all-or-nothing)
+      description: >-
+        TASK:INV-02. ADR-19 service token audience inventory-service; caller order-service only. Token and caller are
+        checked before headers and body. Dedupe by order_id + request_hash, the lowercase SHA-256 hex of
+        order_id|order_no|expires_at|SKU1:q1,SKU2:q2 (order_no escapes backslash then pipe; expires_at
+        yyyy-MM-ddTHH:mm:ss.SSSZ; SKUs trimmed, uppercased, merged and sorted). 1-100 items, quantity 1-99 before and after
+        merge, now < expires_at <= now + 24h (database clock, at most millisecond precision). Same order and hash returns the
+        existing ACTIVE/COMMITTED reservation (200); RELEASED/EXPIRED or tombstone returns 409 RESERVATION_CLOSED; another
+        hash 409 RESERVATION_CONFLICT. OUT_OF_STOCK rolls back every SKU and lists errors field items[SKU], message
+        requested=N available=M; unknown or INACTIVE SKUs count as available=0. Not routed by Gateway.
+      tags:
+      - Internal reservations
+      x-implementation-status: implemented
+      security:
+      - serviceToken: []
+      parameters:
+      - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReserveRequest'
+      responses:
+        '200':
+          description: Existing reservation for the same order and request hash
+          headers: &reservationHeaders
+            X-Correlation-Id:
+              $ref: ./common.yaml#/components/headers/CorrelationId
+            Cache-Control:
+              description: Never cache reservations or their errors
+              schema:
+                type: string
+                const: no-store
+          content: &reservationContent
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservationResponse'
+              example:
+                code: OK
+                data:
+                  reservation_id: 88888888-8888-4888-8888-888888888881
+                  order_id: 99999999-9999-4999-8999-999999999991
+                  order_no: ORD202610000001
+                  status: ACTIVE
+                  expires_at: '2026-10-16T03:15:00.000Z'
+                  items:
+                  - sku: SKU-1
+                    quantity: 2
+                  version: 1
+                  committed_at: null
+                  released_at: null
+                  release_reason: null
+                  restore_required: false
+                metadata: &reservationMetadata
+                  request_id: 4c8a1f2e-0000-4000-8000-000000000001
+                  trace_id: 4bf92f3577b34da6a3ce929d0e0e4736
+        '201':
+          description: Reservation created
+          headers: *reservationHeaders
+          content: *reservationContent
+        '400': &reservation400
+          description: VALIDATION_ERROR (INVALID_INPUT, INVALID_KEY, MALFORMED_JSON, REQUEST_HASH_MISMATCH)
+          headers: *reservationHeaders
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: VALIDATION_ERROR
+                message: REQUEST_HASH_MISMATCH
+                metadata: *reservationMetadata
+        '401': &reservation401
+          description: INVALID_SERVICE_TOKEN
+          headers: *reservationHeaders
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: UNAUTHORIZED
+                message: INVALID_SERVICE_TOKEN
+                metadata: *reservationMetadata
+        '403': &reservation403
+          description: CALLER_NOT_ALLOWED
+          headers: *reservationHeaders
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: FORBIDDEN
+                message: CALLER_NOT_ALLOWED
+                metadata: *reservationMetadata
+        '409':
+          description: OUT_OF_STOCK, RESERVATION_CONFLICT or RESERVATION_CLOSED
+          headers: *reservationHeaders
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: OUT_OF_STOCK
+                message: OUT_OF_STOCK
+                errors:
+                - field: items[SKU-1]
+                  message: requested=2 available=1
+                metadata: *reservationMetadata
+        '500': &reservation500
+          description: Safe error envelope
+          headers: *reservationHeaders
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: INTERNAL
+                message: INTERNAL
+                metadata: *reservationMetadata
+        '503': &reservation503
+          description: Database unavailable
+          headers: *reservationHeaders
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: TEMPORARILY_UNAVAILABLE
+                message: DEPENDENCY_UNAVAILABLE
+                metadata: *reservationMetadata
+      servers: &privateInventory
+      - url: http://localhost:8083
+        description: Private inventory service; bypasses public Gateway
+  /internal/api/v1/inventory/commit:
+    post:
+      operationId: commitReservation
+      summary: Deduct a reserved order
+      description: >-
+        TASK:INV-02. order-service only. ACTIVE and database now < expires_at deducts on_hand and reserved once; a repeated
+        commit of a COMMITTED reservation returns 200 without deducting again. An ACTIVE reservation past its deadline is
+        expired and released in the same transaction, which is committed before 409 RESERVATION_EXPIRED is returned.
+        RELEASED returns 409 RESERVATION_CLOSED.
+      tags:
+      - Internal reservations
+      x-implementation-status: implemented
+      security:
+      - serviceToken: []
+      parameters:
+      - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommitRequest'
+      responses:
+        '200':
+          description: COMMITTED (first or repeated)
+          headers: *reservationHeaders
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservationResponse'
+              example:
+                code: OK
+                data:
+                  reservation_id: 88888888-8888-4888-8888-888888888881
+                  order_id: 99999999-9999-4999-8999-999999999991
+                  order_no: ORD202610000001
+                  status: COMMITTED
+                  expires_at: '2026-10-16T03:15:00.000Z'
+                  items:
+                  - sku: SKU-1
+                    quantity: 2
+                  version: 2
+                  committed_at: '2026-10-16T03:05:00.000Z'
+                  released_at: null
+                  release_reason: null
+                  restore_required: false
+                metadata: *reservationMetadata
+        '400': *reservation400
+        '401': *reservation401
+        '403': *reservation403
+        '404': &reservation404
+          description: RESERVATION_NOT_FOUND
+          headers: *reservationHeaders
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: NOT_FOUND
+                message: RESERVATION_NOT_FOUND
+                metadata: *reservationMetadata
+        '409':
+          description: RESERVATION_EXPIRED or RESERVATION_CLOSED
+          headers: *reservationHeaders
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: CONFLICT
+                message: RESERVATION_EXPIRED
+                metadata: *reservationMetadata
+        '500': *reservation500
+        '503': *reservation503
+      servers: *privateInventory
+  /internal/api/v1/inventory/release:
+    post:
+      operationId: releaseReservation
+      summary: Release a reservation or record a tombstone
+      description: >-
+        TASK:INV-02. order-service only. original_request_hash must equal the hash recomputed from original_reservation
+        (only its shape is validated, not the deadline). No reservation yet stores a RELEASED tombstone so a late reserve
+        is refused. ACTIVE releases reserved stock; RELEASED/EXPIRED is a no-op; COMMITTED returns 200 with
+        restore_required true and changes no stock (restore is INV-03). A stored reservation with another hash returns
+        409 RESERVATION_CONFLICT.
+      tags:
+      - Internal reservations
+      x-implementation-status: implemented
+      security:
+      - serviceToken: []
+      parameters:
+      - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReleaseRequest'
+      responses:
+        '200':
+          description: RELEASED, EXPIRED or COMMITTED (restore_required)
+          headers: *reservationHeaders
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservationResponse'
+              example:
+                code: OK
+                data:
+                  reservation_id: 88888888-8888-4888-8888-888888888881
+                  order_id: 99999999-9999-4999-8999-999999999991
+                  order_no: ORD202610000001
+                  status: RELEASED
+                  expires_at: '2026-10-16T03:15:00.000Z'
+                  items:
+                  - sku: SKU-1
+                    quantity: 2
+                  version: 2
+                  committed_at: null
+                  released_at: '2026-10-16T03:05:00.000Z'
+                  release_reason: order_cancelled
+                  restore_required: false
+                metadata: *reservationMetadata
+        '400': *reservation400
+        '401': *reservation401
+        '403': *reservation403
+        '409':
+          description: RESERVATION_CONFLICT
+          headers: *reservationHeaders
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: CONFLICT
+                message: RESERVATION_CONFLICT
+                metadata: *reservationMetadata
+        '500': *reservation500
+        '503': *reservation503
+      servers: *privateInventory
+  /internal/api/v1/inventory/reservations/{order_id}:
+    get:
+      operationId: getReservation
+      summary: Read a reservation by order
+      description: TASK:INV-02. order-service only; token and caller are checked before order_id validation.
+      tags:
+      - Internal reservations
+      x-implementation-status: implemented
+      security:
+      - serviceToken: []
+      parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Current reservation
+          headers: *reservationHeaders
+          content: *reservationContent
+        '400': *reservation400
+        '401': *reservation401
+        '403': *reservation403
+        '404': *reservation404
+        '500': *reservation500
+        '503': *reservation503
+      servers: *privateInventory
 components:
   securitySchemes:
     bearerAuth:
@@ -996,6 +1303,196 @@ components:
           const: OK
         data:
           $ref: '#/components/schemas/InternalStock'
+        metadata:
+          $ref: ./common.yaml#/components/schemas/Metadata
+    ReservationItem:
+      type: object
+      required:
+      - sku
+      - quantity
+      additionalProperties: false
+      properties:
+        sku:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: ASCII SKU; trimmed, uppercased and merged when repeated
+        quantity:
+          type: integer
+          minimum: 1
+          maximum: 99
+    ReservationSnapshot:
+      type: object
+      required:
+      - order_no
+      - items
+      - expires_at
+      additionalProperties: false
+      properties:
+        order_no:
+          type: string
+          minLength: 1
+          maxLength: 32
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/ReservationItem'
+        expires_at:
+          type: string
+          format: date-time
+          pattern: Z$
+    ReserveRequest:
+      type: object
+      required:
+      - order_id
+      - order_no
+      - items
+      - expires_at
+      - request_hash
+      additionalProperties: false
+      properties:
+        order_id:
+          type: string
+          format: uuid
+        order_no:
+          type: string
+          minLength: 1
+          maxLength: 32
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/ReservationItem'
+        expires_at:
+          type: string
+          format: date-time
+          pattern: Z$
+        request_hash:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+    CommitRequest:
+      type: object
+      required:
+      - order_id
+      additionalProperties: false
+      properties:
+        order_id:
+          type: string
+          format: uuid
+    ReleaseRequest:
+      type: object
+      required:
+      - order_id
+      - original_reservation
+      - original_request_hash
+      - reason
+      additionalProperties: false
+      properties:
+        order_id:
+          type: string
+          format: uuid
+        original_reservation:
+          $ref: '#/components/schemas/ReservationSnapshot'
+        original_request_hash:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+    Reservation:
+      type: object
+      required:
+      - reservation_id
+      - order_id
+      - order_no
+      - status
+      - expires_at
+      - items
+      - version
+      - committed_at
+      - released_at
+      - release_reason
+      - restore_required
+      additionalProperties: false
+      properties:
+        reservation_id:
+          type: string
+          format: uuid
+        order_id:
+          type: string
+          format: uuid
+        order_no:
+          type: string
+          minLength: 1
+          maxLength: 32
+        status:
+          type: string
+          enum:
+          - ACTIVE
+          - COMMITTED
+          - RELEASED
+          - EXPIRED
+        expires_at:
+          type: string
+          format: date-time
+          pattern: Z$
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            type: object
+            required:
+            - sku
+            - quantity
+            additionalProperties: false
+            properties:
+              sku:
+                type: string
+                pattern: ^[A-Z0-9][A-Z0-9._-]{0,63}$
+              quantity:
+                type: integer
+                minimum: 1
+                maximum: 99
+        version:
+          type: integer
+          minimum: 1
+          maximum: 9223372036854775807
+        committed_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        released_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        release_reason:
+          type:
+          - string
+          - 'null'
+          maxLength: 500
+        restore_required:
+          type: boolean
+          description: true only when release finds a COMMITTED reservation
+    ReservationResponse:
+      type: object
+      required:
+      - code
+      - data
+      - metadata
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          const: OK
+        data:
+          $ref: '#/components/schemas/Reservation'
         metadata:
           $ref: ./common.yaml#/components/schemas/Metadata
     StockPageResponse:
