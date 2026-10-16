@@ -68,6 +68,34 @@ public class ReservationService {
       return new Outcome(200,null,ReservationView.of(after,items,false));
     });
   }
+  public Outcome release(ReservationRequests.ReleaseCommand c,String traceId) {
+    var s=c.snapshot();
+    return tx.execute(status->{
+      var existing=reservations.lock(c.orderId());
+      if(existing.isEmpty()) {
+        UUID id=UUID.randomUUID();
+        // Serialize on order_id before locking any SKU, as reserve does. An unknown SKU rolls back the tombstone.
+        if(reservations.insertIfAbsent(id,s,c.originalRequestHash(),"RELEASED",c.reason())) {
+          var known=stocks.lockForUpdate(s.skus()).keySet();
+          var unknown=s.skus().stream().filter(sku->!known.contains(sku))
+              .map(sku->new Api.FieldError("original_reservation.items["+sku+"]","unknown sku")).toList();
+          if(!unknown.isEmpty()) throw new Api.Problem(HttpStatus.BAD_REQUEST,"VALIDATION_ERROR","INVALID_INPUT",unknown);
+          reservations.insertItems(id,s.items());
+          var tombstone=reservations.lock(c.orderId()).orElseThrow();
+          events.append("INVENTORY_RELEASED",tombstone,s.items(),traceId);
+          return new Outcome(200,null,ReservationView.of(tombstone,s.items(),false));
+        }
+        existing=reservations.lock(c.orderId());
+      }
+      var row=existing.orElseThrow();
+      if(!row.requestHash().equals(c.originalRequestHash())) throw conflict("RESERVATION_CONFLICT");
+      return switch(row.status()) {
+        case "ACTIVE" -> new Outcome(200,null,view(finish(row,"RELEASED",c.reason(),traceId),false));
+        case "COMMITTED" -> new Outcome(200,null,view(row,true));
+        default -> new Outcome(200,null,view(row,false));
+      };
+    });
+  }
   /** Releases reserved stock of an ACTIVE reservation; caller holds the reservation row lock. */
   ReservationRow finish(ReservationRow row,String status,String reason,String traceId) {
     var items=reservations.items(row.id());

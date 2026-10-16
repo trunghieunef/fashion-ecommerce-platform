@@ -432,7 +432,16 @@ ledger RELEASE/outbox trong transaction rồi mới trả 409 RESERVATION_EXPIRE
 Commit còn hạn ghi COMMITTED, giảm on_hand/reserved và ledger COMMIT/outbox; retry COMMITTED
 trả hiện trạng 200 không trừ thêm. Acceptance Task 5 dùng PostgreSQL thật kiểm T09, expire
 bền vững trước 409, retry không nhả lại, query và lỗi auth/body/not-found.
-Release API và expire job chưa hiện thực; chưa nghiệm thu toàn bộ INV-02.
+Task 6 thêm release API: ACTIVE nhả reserved, ghi RELEASED cùng ledger RELEASE/outbox;
+RELEASED/EXPIRED retry no-op, COMMITTED trả 200 restore_required=true không đổi kho.
+Release chưa có reservation insert tombstone RELEASED version=1 theo order_id **trước** khi
+khóa SKU tăng dần để kiểm tồn tại, tránh đảo thứ tự khóa với reserve đang insert cùng order.
+SKU lạ trả 400 tại original_reservation.items[SKU], rollback tombstone; snapshot quá hạn
+vẫn hợp lệ nếu đúng hình dạng/hash. Tombstone giữ items và ghi INVENTORY_RELEASED, không
+đổi stock/ledger; reserve đến muộn trả RESERVATION_CLOSED. Acceptance Task 6 dùng PostgreSQL
+thật kiểm T04, retry, restore_required, input lỗi và race: release chờ unique insert reservation
+không giữ SKU lock, competing reserve vẫn khóa được SKU trước khi rollback.
+Expire job chưa hiện thực; chưa nghiệm thu toàn bộ INV-02.
 
 ### 6.2 Nhập kho, điều chỉnh và restock
 

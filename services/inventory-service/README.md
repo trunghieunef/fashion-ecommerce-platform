@@ -30,13 +30,23 @@ ghi COMMITTED, ledger COMMIT và outbox INVENTORY_DEDUCTED/INVENTORY_UPDATED cù
 COMMITTED retry trả 200 không trừ thêm; RELEASED trả 409 RESERVATION_CLOSED.
 Commit sau hạn nhả reserved, lưu EXPIRED với reason `expired`, ledger RELEASE và outbox
 INVENTORY_RELEASED trước khi trả 409 RESERVATION_EXPIRED ngoài transaction; retry không nhả lại.
-Release API và job hết hạn chưa hiện thực; chưa nghiệm thu INV-02.
-Kiểm tra Task 4/5 và regression internal stock từ repo root:
+Task 6 thêm POST `/internal/api/v1/inventory/release`: ACTIVE nhả reserved qua ledger RELEASE,
+ghi RELEASED và outbox cùng transaction; retry RELEASED/EXPIRED không ghi lại.
+COMMITTED trả 200 với restore_required=true, không đổi kho (restore thuộc INV-03).
+Chưa có reservation thì tạo tombstone RELEASED version=1 với items snapshot và outbox
+INVENTORY_RELEASED, không đổi stock/ledger; reserve đến muộn trả RESERVATION_CLOSED.
+Tombstone insert theo order_id trước khi khóa SKU tăng dần để giữ cùng lock order với reserve;
+SKU lạ trả 400 field original_reservation.items[SKU] và rollback cả tombstone.
+Release chỉ kiểm hình dạng deadline, chấp nhận snapshot đã quá hạn; khác hash đã lưu trả 409.
+Acceptance Task 6 kiểm T04, retry, release sau commit, hash/reason/SKU lỗi và race reservation→SKU
+bằng PostgreSQL thật; job hết hạn chưa hiện thực, chưa nghiệm thu INV-02.
+Kiểm tra Task 4/5/6 và regression internal stock từ repo root:
 
 ```bash
 ./mvnw -B -pl services/inventory-service -am test -Dtest=ReserveIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false
 ./mvnw -B -pl services/inventory-service -am test -Dtest=CommitIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false
-./mvnw -B -pl services/inventory-service -am test -Dtest='Reserv*Test,Commit*Test' -Dsurefire.failIfNoSpecifiedTests=false
+./mvnw -B -pl services/inventory-service -am test -Dtest=ReleaseIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false
+./mvnw -B -pl services/inventory-service -am test -Dtest='Reserv*Test,Commit*Test,Release*Test' -Dsurefire.failIfNoSpecifiedTests=false
 ./mvnw -B -pl services/inventory-service -am test -Dtest=InternalStockIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false
 ```
 
