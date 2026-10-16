@@ -10,7 +10,17 @@ stock_items SELECT/INSERT/UPDATE. Không tạo reservation/return trong INV-01.
 V002 thêm stock_reservations/stock_reservation_items, UNIQUE order_id, CHECK trạng thái/
 timestamp và quantity 1..99, FK SKU, partial index ACTIVE theo expires_at. Runtime không
 DELETE/TRUNCATE reservation/items; terminal được giữ làm tombstone. Task này chỉ thêm
-schema, chưa có API hay job reservation; chưa nghiệm thu toàn bộ INV-02.
+schema; chưa nghiệm thu toàn bộ INV-02.
+Task 3 thêm `ReservationSnapshot` canonical/hash và `ReservationRequests` parse reserve/commit/release:
+body đóng, normalize/gộp/sắp xếp SKU, đối chiếu SHA-256 theo 03; lỗi 400 nêu field.
+Parser chỉ kiểm hình dạng timestamp (UTC `Z`, năm 0001..9999 theo OpenAPI date-time,
+tối đa mili giây), chưa kiểm deadline theo DB clock. Chưa có API hay job reservation.
+Unit test parser (không cần Spring/Docker):
+
+```bash
+./mvnw -B -pl services/inventory-service -am test -Dtest=ReservationRequestsTest -Dsurefire.failIfNoSpecifiedTests=false
+```
+
 Kiểm tra schema và regression INV-01 từ repo root:
 
 ```bash
