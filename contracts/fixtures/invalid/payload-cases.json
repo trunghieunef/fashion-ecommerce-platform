@@ -223,5 +223,7 @@
   },
   {"name": "reset notification carries the token instead of a reference", "fixture": "notify-reset-password.json", "changes": {"token": "synthetic-reset-token"}, "validator": "additionalProperties", "path": []},
   {"name": "reservation item quantity above 99", "fixture": "inventory-reserved.json", "changes": {"items": [{"sku": "SYNTH-TEE-M-BLK", "quantity": 100}]}, "validator": "maximum", "path": ["items", 0, "quantity"]},
-  {"name": "reservation version starts at 1", "fixture": "inventory-reserved.json", "changes": {"version": 0}, "validator": "minimum", "path": ["version"]}
+  {"name": "reservation version starts at 1", "fixture": "inventory-reserved.json", "changes": {"version": 0}, "validator": "minimum", "path": ["version"]},
+  {"name": "order completed without delivered_at", "fixture": "order-completed.json", "changes": {}, "remove": ["delivered_at"], "validator": "required", "path": []},
+  {"name": "order completed item quantity 0", "fixture": "order-completed.json", "changes": {"items": [{"variant_id": "66666666-6666-4666-8666-666666666666", "sku": "SYNTH-TEE-M-BLK", "quantity": 0}]}, "validator": "minimum", "path": ["items", 0, "quantity"]}
 ]
