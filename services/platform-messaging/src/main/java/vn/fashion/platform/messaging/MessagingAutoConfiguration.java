@@ -104,6 +104,8 @@ public class MessagingAutoConfiguration {
     factory.setConsumerFactory(new DefaultKafkaConsumerFactory<>(props));
     factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL);
     factory.setCommonErrorHandler(errorHandler);
+    // PLT-05: consumer span continues the record's traceparent; outbox writes inside it carry the trace on.
+    factory.getContainerProperties().setObservationEnabled(true);
     return factory;
   }
 

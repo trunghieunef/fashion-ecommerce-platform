@@ -11,6 +11,8 @@ import vn.fashion.platform.outbox.OutboxRepository;
 @Configuration
 public class CatalogBeans {
   @Bean IdempotencyStore idempotencyStore(JdbcClient jdbc) { return new IdempotencyStore(jdbc); }
-  @Bean OutboxRepository outboxRepository(JdbcClient jdbc) { return new OutboxRepository(jdbc); }
+  @Bean OutboxRepository outboxRepository(JdbcClient jdbc, io.micrometer.tracing.Tracer tracer) {
+    return new OutboxRepository(jdbc, vn.fashion.platform.messaging.TraceParents.current(tracer));
+  }
   @Bean InboxGuard inboxGuard(JdbcClient jdbc, TransactionTemplate tx) { return new InboxGuard(jdbc, tx); }
 }
