@@ -72,6 +72,8 @@ class PublicCacheIntegrationTest extends RedisCacheTestSupport {
   @Test void staleReaderWritesOnlyOldGeneration() throws Exception {
     var entered = new CountDownLatch(1); var release = new CountDownLatch(1);
     var type = new TypeReference<String>() { };
+    // Warm the lazy Lettuce connection: a cold connect over 200 ms falls back without caching and proves nothing.
+    cache.read("warm", Duration.ofSeconds(5), type, () -> Optional.of("w"));
     var stale = CompletableFuture.supplyAsync(() -> cache.read("race", Duration.ofSeconds(300), type, () -> {
       entered.countDown();
       try { release.await(10, TimeUnit.SECONDS); } catch (InterruptedException e) { throw new IllegalStateException(e); }
@@ -81,6 +83,7 @@ class PublicCacheIntegrationTest extends RedisCacheTestSupport {
     cache.bumpGeneration();
     release.countDown();
     assertThat(stale.get(10, TimeUnit.SECONDS)).contains("old");
+    assertThat(keys("local:catalog:v1:g0:race:*")).as("stale value written under the generation read before load").hasSize(1);
     assertThat(cache.read("race", Duration.ofSeconds(300), type, () -> Optional.of("new"), "k")).contains("new");
   }
 
