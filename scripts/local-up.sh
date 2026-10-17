@@ -19,8 +19,8 @@ for inventory_key in INVENTORY_MIGRATION_DB_PASSWORD INVENTORY_DB_PASSWORD; do
   fi
 done
 
-# TASK:CAT-03: local-only S3 credentials; keep existing values across restarts.
-for s3_key in CATALOG_S3_ACCESS_KEY CATALOG_S3_SECRET_KEY; do
+# TASK:CAT-03/CAT-02b: local-only S3 and catalog Redis credentials; keep existing values across restarts.
+for s3_key in CATALOG_S3_ACCESS_KEY CATALOG_S3_SECRET_KEY CATALOG_REDIS_PASSWORD; do
   if ! grep -q "^${s3_key}=." "$ENV_FILE"; then
     sed -i "s|^${s3_key}=.*|${s3_key}=$(openssl rand -hex 32)|" "$ENV_FILE"
   fi

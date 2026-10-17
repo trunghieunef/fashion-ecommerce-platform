@@ -59,7 +59,10 @@ services:
     image: redis:8.2.9@sha256:66b7f4c2f3c6ef1b298bbd7b13c806bc6f71e61f1136a4f58710daf2cb053b21
     environment:
       REDISCLI_AUTH: ${USER_REDIS_PASSWORD:?set USER_REDIS_PASSWORD}
-    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDISCLI_AUTH\" --save '' --appendonly no"]
+      # TASK:CAT-02b: catalog has its own ACL user limited to its key prefix (spec section 2).
+      CATALOG_REDIS_PASSWORD: ${CATALOG_REDIS_PASSWORD:?run scripts/local-up.sh to generate CATALOG_REDIS_PASSWORD}
+      FASHION_ENV: ${FASHION_ENV:-local}
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDISCLI_AUTH\" --save '' --appendonly no --user catalog on \">$$CATALOG_REDIS_PASSWORD\" \"~$${FASHION_ENV}:catalog:*\" +@connection -@dangerous +get +set +incr"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -121,6 +124,9 @@ services:
       CATALOG_S3_QUARANTINE_RETENTION_DAYS: ${CATALOG_S3_QUARANTINE_RETENTION_DAYS:-2}
       CATALOG_S3_BOOTSTRAP_BUCKET: "true"
       CATALOG_S3_CORS_ORIGINS: http://localhost:${STOREFRONT_PORT:-4173}
+      CATALOG_REDIS_HOST: redis
+      CATALOG_REDIS_PASSWORD: ${CATALOG_REDIS_PASSWORD:?run scripts/local-up.sh to generate CATALOG_REDIS_PASSWORD}
+      FASHION_ENV: ${FASHION_ENV:-local}
       SPRING_PROFILES_ACTIVE: ${APP_PROFILES:-}
       NACOS_SERVER_ADDR: nacos:8848
       NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
@@ -132,6 +138,9 @@ services:
         condition: service_healthy
       # Readiness of catalog does not depend on S3; bootstrap retries 10 x 1s.
       rustfs:
+        condition: service_started
+      # Cache only: catalog serves from PostgreSQL while Redis is down.
+      redis:
         condition: service_started
       nacos:
         condition: service_healthy

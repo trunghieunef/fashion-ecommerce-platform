@@ -207,6 +207,9 @@ curl --fail --silent --show-error "$GATEWAY_URL/api/v1/catalog/products/$product
 curl --fail --silent --show-error "$GATEWAY_URL/api/v1/catalog/search?q=Smoke&limit=100" | \
   python3 -c 'import json,sys; assert any(p["id"] == sys.argv[1] for p in json.load(sys.stdin)["data"]["items"])' "$product_id"
 echo 'CAT-02a browse/detail/search PASS'
+# TASK:CAT-02b: public detail is cacheable for 5 s (Redis keeps it 300 s until invalidated).
+curl -sS -o /dev/null -D "$headers" "$GATEWAY_URL/api/v1/catalog/products/$product_id"
+grep -qi '^cache-control: public, max-age=5' "$headers"
 test "$(curl -sS -o /dev/null -D "$headers" -w '%{http_code}' "$image_url")" = 200
 etag="$(grep -i '^etag:' "$headers" | cut -d' ' -f2- | tr -d '\r')"
 test -n "$etag"
@@ -215,6 +218,13 @@ test "$(status -H "If-None-Match: $etag" "$image_url")" = 304
 catalog_request 200 POST "/products/$product_id/unpublish" '{"expected_version":3}' "smoke-$catalog_suffix-unpublish" |   python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["status"] != "ACTIVE", d'
 test "$(status "$image_url")" = 404
 test "$(status -H "If-None-Match: $etag" "$image_url")" = 404
+# TASK:CAT-02b: the cached detail disappears once the durable invalidation task runs (worker every 1 s).
+for _ in $(seq 1 20); do
+  [[ "$(status "$GATEWAY_URL/api/v1/catalog/products/$product_id")" = 404 ]] && break
+  sleep 0.5
+done
+test "$(status "$GATEWAY_URL/api/v1/catalog/products/$product_id")" = 404
+echo 'CAT-02b cache invalidation PASS'
 echo 'CAT-03 publish/public read/304/unpublish PASS'
 # TASK:CAT-01b: retain 401 and real-member 403 before the synthetic OPS flow.
 for route in /collections "/size-guides/$category_id/vi"; do

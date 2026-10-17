@@ -424,10 +424,23 @@ Nguồn: [spec đã duyệt](../superpowers/specs/2026-10-11-cat-02a-public-brow
 
 | Nhóm | Quyết định đã duyệt | Hệ quả |
 |---|---|---|
-| Phạm vi và truy vấn | Tách 02a public read/quote PostgreSQL query-time JdbcClient và 02b cache/invalidation/sold consumer/inventory/HTTP cache | Parent CAT-02 In progress; denormalize chỉ khi đo tải cần, không thêm đồng bộ write/projection |
+| Phạm vi và truy vấn | Tách 02a public read/quote PostgreSQL query-time JdbcClient và 02b cache/invalidation/sold consumer/inventory/HTTP cache | Parent CAT-02 Done (local) 2026-10-17 sau 02b; denormalize chỉ khi đo tải cần, không thêm đồng bộ write/projection |
 | Search | unaccent + ILIKE bỏ dấu tiếng Việt, bind giá trị và escape %, _, backslash | V007 append-only; literal wildcard không mở rộng query |
 | Giá đại diện | min(coalesce(variant.price_override,product.base_price)) trên variant ACTIVE, max tương tự | Dùng cho card/lọc/sort; VND integer long không âm |
 | Visibility taxonomy | Product ACTIVE chỉ public nếu category ACTIVE, brand null hoặc ACTIVE, có variant ACTIVE | Kiểm ở thời điểm đọc cho browse/detail/collection/quote active; thiếu/ẩn cùng 404 |
+
+`TASK:CAT-02` phần 02b · `REQ:CAT-04/05/09`. Chủ dự án giao agent tự chốt mặc định và duyệt
+[spec](../superpowers/specs/2026-10-17-cat-02b-cache-projections-design.md) ngày 2026-10-17:
+
+| Quyết định | Hệ quả |
+|---|---|
+| Một generation toàn cục thay xóa từng khóa | Đọc gen trước DB nên reader chậm không ghi đè; mọi thay đổi admin làm toàn bộ cache public miss |
+| Invalidation qua `background_tasks` nội bộ, chưa phát CATALOG_CHANGED | Durable cùng transaction admin; Redis lỗi → retry/MANUAL, TTL giới hạn trễ |
+| Không cache tồn; projection PostgreSQL theo SKU | Detail đọc observation mỗi request; event cũ không làm lùi |
+| Thêm `available`/`observed_at` theo variant, top-level = tổng/cũ nhất | Tương thích thêm field; client không coi tồn là giữ hàng |
+| Contract ORDER_COMPLETED định nghĩa trước order-service | Consumer nghiệm thu bằng event tổng hợp; ORD-03 kiểm E2E |
+| Redis ACL user riêng cho catalog | Không dùng credential user-service; staging cần ACL tương ứng khi có Redis catalog |
+| Header 30/5/60 s, lỗi no-store, Vary detail + size guide | Browser có thể giữ detail ≤ 5 s sau thay đổi |
 
 Quyết định tương thích schema đã duyệt: lookbook V006 chỉ caption VI/EN làm alternate text;
 cursor timestamp UTC năm1–9999, numeric long không âm (sort_order int), sai miền →400

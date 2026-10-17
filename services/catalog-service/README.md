@@ -89,7 +89,7 @@ Product ACTIVE từ V001 có thể còn `published_at` null: unpublish giữ nul
 timestamp. CAT-02a sort NEWEST dùng coalesce(published_at,created_at), không backfill.
 
 CAT-01/CAT-03 Done local theo evidence nghiệm thu. CAT-02a có filter/search/cursor thật;
-next_cursor null ở trang cuối. Parent CAT-02 In progress, cache/sold consumer/inventory thuộc 02b;
+next_cursor null ở trang cuối. CAT-02b local: cache, tồn hiển thị và sold (mục bên dưới);
 producer intent `catalog.events` trong outbox chưa relay; consumer: none.
 
 ## Chạy local
@@ -273,8 +273,28 @@ không bearer; collection ACTIVE trong [start,end) và ≥1 product public, look
 Contract đầy đủ: [catalog.yaml](../../contracts/openapi/catalog.yaml),
 [evidence](../../docs/evidence/cat-02a-local-2026-10-11.md),
 [handoff](../../docs/superpowers/plans/2026-10-11-cat-02a-handoff.md).
-CAT-02 **In progress**; 02b còn cache/invalidation, replay-safe ORDER_COMPLETED sold_quantity,
-inventory observations và public JSON HTTP cache headers. BEST_SELLING dùng giá trị hiện có.
+CAT-02 **Done (local)** 2026-10-17 theo [nghiệm thu](../../docs/evidence/acceptance-2026-10-17.md); xem mục cache/projection bên dưới.
+
+## Cache, tồn hiển thị và sold (CAT-02b)
+
+[Spec](../../docs/superpowers/specs/2026-10-17-cat-02b-cache-projections-design.md),
+[evidence](../../docs/evidence/cat-02b-local-2026-10-17.md).
+
+- Redis: `CATALOG_REDIS_HOST/PORT`, user `CATALOG_REDIS_USERNAME` (mặc định `catalog`),
+  `CATALOG_REDIS_PASSWORD` (local-up sinh); ACL chỉ `<FASHION_ENV>:catalog:*`, lệnh GET/SET/INCR + connection không gồm @dangerous.
+  Timeout 200 ms; lỗi Redis → đọc PostgreSQL. `CATALOG_CACHE_ENABLED=false` tắt cache.
+  Readiness không gồm Redis (`management.health.redis.enabled=false`).
+- Invalidation: `AdminCommands` enqueue `background_tasks` kind `catalog.cache.invalidate`;
+  worker 1 s (`fashion.catalog.cache.invalidation-enabled`) INCR `<env>:catalog:gen`; lỗi Redis
+  retry backoff tới 60 s, MANUAL sau 10 lần.
+- Consumer group `catalog-service`: `inventory.events` (INVENTORY_UPDATED/RESTOCKED →
+  `variant_stock_observations`) và `order.events` (ORDER_COMPLETED → `sold_quantity`, dedupe
+  `product_sales_applied`); lỗi vĩnh viễn → `<topic>.DLT`. Local-up tạo `inventory.events.DLT`,
+  `order.events`, `order.events.DLT`.
+- Metric: `catalog_cache_total{route,outcome=hit|miss|error}`,
+  `catalog_cache_invalidation_total{outcome=done|error|manual}`.
+- Giới hạn: chưa có producer ORDER_COMPLETED thật (ORD-03); task DONE chưa purge; staging chưa
+  có Redis catalog/ACL.
 
 ## Internal variant quote (CAT-02a)
 
@@ -303,7 +323,7 @@ trả 415 generic, không echo/log header hoặc payload; không dùng mapping `
 `CATALOG_INTERNAL_CALLERS` rỗng theo mặc định (deny all); Compose chỉ truyền public keys
 được cấu hình. Không sinh key cart/order trong `local-up.sh` khi service chưa tồn tại.
 OpenAPI và tài liệu CAT-02a đã đồng bộ ở Task 7. QuoteItem NON_NULL bỏ price_override/image khi null;
-nested image giữ đủ field PublicCardImage. Parent CAT-02 In progress, còn phần 02b.
+nested image giữ đủ field PublicCardImage. CAT-02 Done (local) 2026-10-17.
 
 ## Test và health
 

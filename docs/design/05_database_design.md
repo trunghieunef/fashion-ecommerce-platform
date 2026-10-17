@@ -251,7 +251,14 @@ EXISTS unaccent và hàm f_unaccent(text) IMMUTABLE bọc unaccent('unaccent', $
 có CREATE database/schema; runtime gọi hàm để tìm kiếm bỏ dấu, không cần quyền tạo extension.
 Đã kiểm PostgreSQL 17.11 Testcontainers và volume local qua local-up; V001–V006 giữ nguyên.
 Min/max price aggregate lúc query trên variant ACTIVE; không thêm cột projection/trigram/index
-hoặc backfill. Price/sold_quantity optimization đo tải sau; sold consumer/cache/inventory thuộc 02b.
+hoặc backfill. Price/sold_quantity optimization đo tải sau.
+
+`TASK:CAT-02b` thêm append-only `V008__catalog_projections.sql`: `processed_events` (inbox) và
+`background_tasks` (bản sao DDL platform-durability), `variant_stock_observations(sku PK, available
+≥ 0, stock_version ≥ 1, observed_at)` chỉ ghi khi `stock_version` lớn hơn, và
+`product_sales_applied(order_id PK)` chặn ORDER_COMPLETED áp dụng lại (runtime không UPDATE/DELETE).
+`products.sold_quantity` cộng theo product của variant trong cùng transaction inbox; không đổi
+`version`/`updated_at`. Task DONE chưa có purge (theo dõi kích thước bảng).
 
 `TASK:PLT-01` có `V001` làm read sample tối thiểu: `products` chỉ gồm `id`,
 `slug`, `status`, tên VI/EN, `version` và timestamps, cùng index public ACTIVE.

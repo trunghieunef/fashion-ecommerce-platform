@@ -111,7 +111,7 @@ collection chỉ gồm product public (`ACTIVE`, category và parent nếu có �
 | Method | Path | Auth / phase | Input → output |
 |---|---|---|---|
 | GET | /catalog/products | Public / 1 | `CAT-02a` implemented: q/category_id/brand_id/size/color/tag/min_price/max_price/sort/limit/cursor → items card id/slug/name_vi/name_en/min_price/max_price/image + next_cursor |
-| GET | /catalog/products/{id} | Public / 1 | `CAT-02a` implemented: sanitized descriptions/tags, category/brand, min/max, variants ACTIVE, images AVAILABLE, size_guide theo locale; available/observed_at null chờ 02b; review summary Phase 2 |
+| GET | /catalog/products/{id} | Public / 1 | `CAT-02a` implemented: sanitized descriptions/tags, category/brand, min/max, variants ACTIVE, images AVAILABLE, size_guide theo locale; `CAT-02b`: variants[].available/observed_at từ projection inventory (null khi chưa quan sát), top-level = tổng/observed_at cũ nhất; review summary Phase 2 |
 | GET | /catalog/search | Public / 1 | `CAT-02a` implemented: q bắt buộc, trim 1–100, unaccent/ILIKE; cùng filters/cursor với products, escape literal %, _, backslash |
 | GET | /catalog/categories | Public / 1 | `CAT-02a` implemented: cây ACTIVE tối đa 2 cấp, child chỉ khi root ACTIVE |
 | GET | /catalog/brands | Public / 1 | `CAT-02a` implemented: ACTIVE, id/name, không phân trang |
@@ -157,8 +157,14 @@ Canonicalization theo technical ruling của controller escape backslash rồi p
 trước khi nối theo thứ tự cố định (wire hash 16 hex giữ nguyên, chống delimiter collision).
 Sai tham số →400 VALIDATION_ERROR có field; cursor sai →INVALID_CURSOR field cursor;
 detail thiếu/không public →404 NOT_FOUND. Public JSON giữ các field null (brand/image/size_guide,
-available/observed_at); chỉ ảnh AVAILABLE. Query JdbcClient bind mọi giá trị; public HTTP cache
-headers, Redis/invalidation, sold_quantity consumer và inventory observations thuộc 02b.
+available/observed_at); chỉ ảnh AVAILABLE. Query JdbcClient bind mọi giá trị.
+`TASK:CAT-02b` (local 2026-10-17, [spec](../superpowers/specs/2026-10-17-cat-02b-cache-projections-design.md), [evidence](../evidence/cat-02b-local-2026-10-17.md)):
+200 public có `Cache-Control: public, max-age=30` (products/search/categories/brands/collections),
+`max-age=5` (product detail, có tồn) và `max-age=60` (collection detail, size guide); detail và size
+guide thêm `Vary: Accept-Language`; mọi lỗi public `no-store`. Redis cache-aside phần catalog theo
+generation (TTL 300 s detail/taxonomy/collection detail/size guide, 30 s list); collection có thể
+hiện/ẩn trễ tới TTL so với [start_at,end_at). Tồn hiển thị không giữ hàng, không cache.
+`sold_quantity` (BEST_SELLING) cập nhật từ ORDER_COMPLETED một lần mỗi order_id.
 
 Catalog images upload admin được mô tả ở §3. Complete kiểm bytes/type thực/size;
 attach kiểm APPROVED/ownership/target trong DB; chưa đủ validation không publish ảnh.

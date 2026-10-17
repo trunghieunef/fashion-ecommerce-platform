@@ -71,6 +71,12 @@ Trước manifest user-service staging, PO/TL phải chốt readiness khi Redis 
 DOWN sẽ rút cả pod khỏi Kubernetes Service, ảnh hưởng cả refresh/profile/admin dù chúng không
 cần Redis. Local dùng URL tĩnh; chưa đổi quyết định đã duyệt. Theo dõi mục mở tại 08.
 
+`TASK:CAT-02b` hiện thực catalog local: khóa `<env>:catalog:v1:g<gen>:<route>:<sha256>`, đọc
+generation trước DB, mọi thay đổi admin enqueue `background_tasks` trong cùng transaction và
+worker 1 s `INCR` generation; Redis timeout 200 ms, lỗi → đọc PostgreSQL, readiness không gồm
+Redis; ACL user `catalog` chỉ khóa `<env>:catalog:*`. Tồn hiển thị là projection PostgreSQL từ
+INVENTORY_UPDATED/RESTOCKED (không lùi `stock_version`), không lưu Redis.
+
 Namespace Redis theo env + service; không đọc key của service khác để thay API. Stock/cache payload có version và observed_at; event cũ không làm lùi. Invalidation task phải durable; nếu TTL hết mà projection chưa cập nhật, query nguồn hoặc hiển thị unknown. Consumer không ACK rồi bỏ mất effect Redis.
 
 PostgreSQL mỗi DB một credential và Flyway history riêng; có thể dùng chung cluster. Backup base + WAL/PITR; restore từng DB phải đối soát saga/payment/outbox trước mở traffic. Query plan/index dựa workload thực; chưa sharding. Search ILIKE ban đầu, search nâng cao Phase 3.

@@ -86,6 +86,9 @@ paths:
           description: CAT-02a implemented response
           headers:
             X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+            Cache-Control:
+              schema: {type: string, const: 'public, max-age=30'}
+              description: CAT-02b; Redis TTL is separate (04 section 4).
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ProductPageResponse'}
@@ -113,6 +116,9 @@ paths:
           description: INVALID_FILTER
           headers:
             X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+            Cache-Control:
+              schema: {type: string, const: no-store}
+              description: Errors are never cached (CAT-02b).
           content:
             application/json:
               schema: {$ref: ./common.yaml#/components/schemas/ApiError}
@@ -210,6 +216,9 @@ paths:
           description: CAT-02a implemented response
           headers:
             X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+            Cache-Control:
+              schema: {type: string, const: 'public, max-age=30'}
+              description: CAT-02b; Redis TTL is separate (04 section 4).
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ProductPageResponse'}
@@ -235,6 +244,9 @@ paths:
           description: INVALID_FILTER
           headers:
             X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+            Cache-Control:
+              schema: {type: string, const: no-store}
+              description: Errors are never cached (CAT-02b).
           content:
             application/json:
               schema: {$ref: ./common.yaml#/components/schemas/ApiError}
@@ -267,9 +279,9 @@ paths:
       x-implementation-status: implemented
       description: 'CAT-02a implemented. PostgreSQL public products: ACTIVE product, category and its parent if present, brand absent or ACTIVE, at
         least one ACTIVE variant. Money min/max aggregates coalesce(price_override,base_price) over ACTIVE variants. Only AVAILABLE
-        images. Public JSON HTTP cache headers deferred to CAT-02b. One read-only transaction; sanitized descriptions, locale
-        category and size guide; only ACTIVE variants. brand and size_guide can be null; available and observed_at are null
-        until CAT-02b.'
+        images. CAT-02b: Cache-Control public, max-age=5 and Vary Accept-Language; catalog part cached in Redis, stock per variant
+        read from the inventory projection on every request. One read-only transaction; sanitized descriptions, locale
+        category and size guide; only ACTIVE variants. brand and size_guide can be null; available/observed_at null until observed.'
       security: []
       parameters:
       - name: id
@@ -287,6 +299,12 @@ paths:
           description: CAT-02a implemented response
           headers:
             X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+            Cache-Control:
+              schema: {type: string, const: 'public, max-age=5'}
+              description: CAT-02b; Redis TTL is separate (04 section 4).
+            Vary:
+              schema: {type: string, const: Accept-Language}
+              description: Size guide locale falls back to Accept-Language.
           content:
             application/json:
               schema: {$ref: '#/components/schemas/PublicProductResponse'}
@@ -307,7 +325,8 @@ paths:
                       min_price: 100000
                       max_price: 120000
                       variants:
-                      - {id: 11111111-1111-4111-8111-111111111111, sku: TEE-M, size: M, color: Blue, effective_price: 100000}
+                      - {id: 11111111-1111-4111-8111-111111111111, sku: TEE-M, size: M, color: Blue, effective_price: 100000, available: 3,
+                        observed_at: '2026-10-17T03:00:00.000Z'}
                       images:
                       - {asset_id: 66666666-6666-4666-8666-666666666666, alt_vi: Áo, alt_en: Shirt, variant_color: null, sort_order: 0}
                       size_guide:
@@ -318,8 +337,8 @@ paths:
                           columns: [Size]
                           rows:
                           - [M]
-                      available: null
-                      observed_at: null
+                      available: 3
+                      observed_at: '2026-10-17T03:00:00.000Z'
                     metadata: {request_id: cat02a-synthetic-request, trace_id: cat02a-synthetic-trace}
         '406': {$ref: '#/components/responses/HttpRequestError'}
         '500': {$ref: '#/components/responses/Error500'}
@@ -328,6 +347,9 @@ paths:
           description: PRODUCT_NOT_FOUND
           headers:
             X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+            Cache-Control:
+              schema: {type: string, const: no-store}
+              description: Errors are never cached (CAT-02b).
           content:
             application/json:
               schema: {$ref: ./common.yaml#/components/schemas/ApiError}
@@ -351,6 +373,9 @@ paths:
           description: CAT-02a implemented response
           headers:
             X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+            Cache-Control:
+              schema: {type: string, const: 'public, max-age=30'}
+              description: CAT-02b; Redis TTL is separate (04 section 4).
           content:
             application/json:
               schema: {$ref: '#/components/schemas/PublicCategoriesResponse'}
@@ -381,6 +406,9 @@ paths:
           description: CAT-02a implemented response
           headers:
             X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+            Cache-Control:
+              schema: {type: string, const: 'public, max-age=30'}
+              description: CAT-02b; Redis TTL is separate (04 section 4).
           content:
             application/json:
               schema: {$ref: '#/components/schemas/PublicBrandsResponse'}
@@ -416,6 +444,9 @@ paths:
           description: CAT-02a implemented response
           headers:
             X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+            Cache-Control:
+              schema: {type: string, const: 'public, max-age=30'}
+              description: CAT-02b; Redis TTL is separate (04 section 4).
           content:
             application/json:
               schema: {$ref: '#/components/schemas/PublicCollectionsResponse'}
@@ -436,6 +467,9 @@ paths:
           description: INVALID_CURSOR
           headers:
             X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+            Cache-Control:
+              schema: {type: string, const: no-store}
+              description: Errors are never cached (CAT-02b).
           content:
             application/json:
               schema: {$ref: ./common.yaml#/components/schemas/ApiError}
@@ -475,6 +509,9 @@ paths:
           description: CAT-02a implemented response
           headers:
             X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+            Cache-Control:
+              schema: {type: string, const: 'public, max-age=60'}
+              description: CAT-02b; Redis TTL is separate (04 section 4).
           content:
             application/json:
               schema: {$ref: '#/components/schemas/PublicCollectionResponse'}
@@ -504,6 +541,9 @@ paths:
           description: INVALID_CURSOR
           headers:
             X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+            Cache-Control:
+              schema: {type: string, const: no-store}
+              description: Errors are never cached (CAT-02b).
           content:
             application/json:
               schema: {$ref: ./common.yaml#/components/schemas/ApiError}
@@ -519,6 +559,9 @@ paths:
           description: COLLECTION_NOT_FOUND
           headers:
             X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+            Cache-Control:
+              schema: {type: string, const: no-store}
+              description: Errors are never cached (CAT-02b).
           content:
             application/json:
               schema: {$ref: ./common.yaml#/components/schemas/ApiError}
@@ -560,6 +603,12 @@ paths:
           description: CAT-02a implemented response
           headers:
             X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+            Cache-Control:
+              schema: {type: string, const: 'public, max-age=60'}
+              description: CAT-02b; Redis TTL is separate (04 section 4).
+            Vary:
+              schema: {type: string, const: Accept-Language}
+              description: Size guide locale falls back to Accept-Language.
           content:
             application/json:
               schema: {$ref: '#/components/schemas/PublicSizeGuideResponse'}
@@ -583,6 +632,9 @@ paths:
           description: INVALID_FIELDS
           headers:
             X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+            Cache-Control:
+              schema: {type: string, const: no-store}
+              description: Errors are never cached (CAT-02b).
           content:
             application/json:
               schema: {$ref: ./common.yaml#/components/schemas/ApiError}
@@ -598,6 +650,9 @@ paths:
           description: SIZE_GUIDE_NOT_FOUND
           headers:
             X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+            Cache-Control:
+              schema: {type: string, const: no-store}
+              description: Errors are never cached (CAT-02b).
           content:
             application/json:
               schema: {$ref: ./common.yaml#/components/schemas/ApiError}
@@ -2026,13 +2081,22 @@ components:
     PublicVariant:
       type: object
       additionalProperties: false
-      required: [id, sku, size, color, effective_price]
+      required: [id, sku, size, color, effective_price, available, observed_at]
       properties:
         id: {type: string, format: uuid}
         sku: {type: string}
         size: {type: string}
         color: {type: string}
         effective_price: {type: integer, format: int64, minimum: 0, maximum: 9223372036854775807}
+        available:
+          description: CAT-02b display-only stock from INVENTORY_UPDATED/RESTOCKED; null until observed. Not a reservation.
+          anyOf:
+          - {type: integer, minimum: 0}
+          - {type: 'null'}
+        observed_at:
+          anyOf:
+          - {type: string, format: date-time}
+          - {type: 'null'}
     PublicProductImage:
       type: object
       additionalProperties: false
@@ -2087,8 +2151,16 @@ components:
           anyOf:
           - {$ref: '#/components/schemas/PublicSizeGuide'}
           - {type: 'null'}
-        available: {type: 'null', description: Inventory observation deferred to CAT-02b.}
-        observed_at: {type: 'null', description: Inventory observation deferred to CAT-02b.}
+        available:
+          description: CAT-02b sum of available over variants that have an observation; null when none has.
+          anyOf:
+          - {type: integer, minimum: 0}
+          - {type: 'null'}
+        observed_at:
+          description: CAT-02b oldest observed_at among those variants; null when none has.
+          anyOf:
+          - {type: string, format: date-time}
+          - {type: 'null'}
     PublicCategory:
       type: object
       additionalProperties: false

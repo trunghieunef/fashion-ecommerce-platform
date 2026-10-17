@@ -69,6 +69,37 @@ class CatalogPublicContractTest(unittest.TestCase):
         for response in quote["responses"].values():
             self.assertEqual(self.resolve(response)["headers"]["Cache-Control"]["schema"]["const"], "no-store")
 
+    def test_public_reads_declare_cache_headers(self):
+        # TASK:CAT-02b spec section 6: success max-age per route, every inline error no-store.
+        expected = {"listProducts": 30, "searchProducts": 30, "getProduct": 5, "listCategories": 30,
+                    "listBrands": 30, "listCollections": 30, "getCollection": 60, "getSizeGuide": 60}
+        for name, seconds in expected.items():
+            with self.subTest(operation=name):
+                responses = self.operation(name)["responses"]
+                headers = self.resolve(responses["200"])["headers"]
+                self.assertEqual(headers["Cache-Control"]["schema"]["const"], f"public, max-age={seconds}")
+                if name in ("getProduct", "getSizeGuide"):
+                    self.assertEqual(headers["Vary"]["schema"]["const"], "Accept-Language")
+                for status, response in responses.items():
+                    if status != "200" and "$ref" not in response:
+                        self.assertEqual(response["headers"]["Cache-Control"]["schema"]["const"], "no-store", status)
+
+    def test_detail_reports_stock_per_variant(self):
+        validator = self.validator("PublicVariant")
+        variant = {"id": "11111111-1111-4111-8111-111111111111", "sku": "TEE-M", "size": "M", "color": "Blue",
+                   "effective_price": 100000, "available": 3, "observed_at": "2026-10-17T03:00:00.000Z"}
+        self.assertEqual(list(validator.iter_errors(variant)), [])
+        for field, value in (("available", -1), ("available", True), ("observed_at", "yesterday")):
+            with self.subTest(field=field, value=value):
+                self.assertTrue(list(validator.iter_errors({**variant, field: value})))
+        unknown = {**variant, "available": None, "observed_at": None}
+        self.assertEqual(list(validator.iter_errors(unknown)), [])
+        missing = {k: v for k, v in variant.items() if k != "available"}
+        self.assertTrue(list(validator.iter_errors(missing)))
+        detail = self.doc["components"]["schemas"]["PublicProductDetail"]["properties"]
+        self.assertTrue(list(Draft202012Validator(detail["available"]).iter_errors(-1)))
+        self.assertEqual(list(Draft202012Validator(detail["available"]).iter_errors(5)), [])
+
     def test_browse_filter_domains_and_search_requirement(self):
         expected = {"q", "category_id", "brand_id", "size", "color", "tag", "min_price", "max_price", "sort", "limit", "cursor"}
         for name in ("listProducts", "searchProducts"):

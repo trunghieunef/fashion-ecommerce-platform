@@ -42,6 +42,12 @@ public record BrowseFilters(String q, UUID categoryId, UUID brandId, String size
     return new BrowseFilters(q, category, brand, size, color, tag, min, max, sort);
   }
 
+  /** Exact validated values for the cache key; unlike hash(), case is kept because size/color/tag match exactly. */
+  public String cacheKey() {
+    return String.join("|", sort.name(), canonical(q), canonical(categoryId), canonical(brandId), canonical(size),
+        canonical(color), canonical(tag), canonical(minPrice), canonical(maxPrice));
+  }
+
   public String hash() {
     String fields = String.join("|", sort.name(), canonical(lower(q)), canonical(categoryId),
         canonical(brandId), canonical(lower(size)), canonical(lower(color)), canonical(tag),
