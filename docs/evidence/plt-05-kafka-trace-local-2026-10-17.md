@@ -47,6 +47,21 @@ Trace mẫu trong Tempo (smoke, một `trace_id`), các span theo thời gian tr
 
 Tempo dừng: smoke dừng đúng ở bước trace với `PLT-05 Kafka trace FAIL …`, các bước trước PASS.
 
+## Review toàn nhánh và fix pass
+
+Reviewer độc lập (f5b248f..ec4cb36): 0 Critical, 1 Important, 9 Minor. Đã sửa (test RED→GREEN):
+
+| Finding | Sửa | Test |
+|---|---|---|
+| Boot tự tạo span cho mọi `@Scheduled` → sweep/relay/worker có `trace_parent`, ~5 trace nhiễu/giây | `management.observations.enable.tasks.scheduled=false` ở 4 ứng dụng | `ScheduledSweepTraceIntegrationTest`; Tempo không còn trace `tasks.scheduled.execution` |
+| Span relay báo OK khi publish lỗi (nâng từ Minor) | `span.error(e)` rồi ném lại | `OutboxRelayTraceIntegrationTest#failedPublishMarksSpanAsError` |
+| Comment pom ghi `OTEL_EXPORTER_OTLP_ENDPOINT` | sửa theo biến thật | — |
+
+Sau fix: `./mvnw -B verify` **638 test** 0 failure; local-up + smoke PASS (`PLT-05 Kafka trace PASS`).
+Minor để sau: inject lỗi sau `start()` để span chưa end; chưa có test relay cho hàng `-00`; hàng cũ
+không `trace_parent` vẫn nhận header `-01` dựng tay (ép sample); Grafana vẫn nhận basic auth
+`admin:admin` trên loopback; test traceparent hỏng chưa assert DLT trống; test republish ép PENDING bằng SQL.
+
 ## Sai khác so với plan (ruling)
 
 - Endpoint không khai báo trong `application.yaml`: Boot 4 coi

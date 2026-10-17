@@ -98,6 +98,26 @@ class OutboxRelayTraceIntegrationTest extends MessagingTestSupport {
         .allMatch(h -> h.startsWith("00-" + TRACE_ID + "-")).doesNotHaveDuplicates();
   }
 
+  @Test void failedPublishMarksSpanAsError() {
+    // Review M1: a publish that never reached the broker must not show as a successful span.
+    appendTraced(STORED);
+    var props = new java.util.HashMap<String, Object>(java.util.Map.of(
+        org.apache.kafka.clients.producer.ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "127.0.0.1:1",
+        org.apache.kafka.clients.producer.ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, org.apache.kafka.common.serialization.StringSerializer.class,
+        org.apache.kafka.clients.producer.ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, org.apache.kafka.common.serialization.StringSerializer.class,
+        org.apache.kafka.clients.producer.ProducerConfig.MAX_BLOCK_MS_CONFIG, 500,
+        org.apache.kafka.clients.producer.ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, 500,
+        org.apache.kafka.clients.producer.ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, 1000));
+    var factory = new org.springframework.kafka.core.DefaultKafkaProducerFactory<String, String>(props);
+    try {
+      var bad = new org.springframework.kafka.core.KafkaTemplate<>(factory); bad.setProducerListener(null);
+      var failed = new OutboxRelay(outbox, bad, Duration.ofSeconds(1), tracer, propagator); failed.metrics(meters);
+      assertThat(failed.relayOnce()).isZero();
+    } finally { factory.destroy(); }
+    assertThat(exported.spans).hasSize(1);
+    assertThat(exported.spans.getFirst().getStatus().getStatusCode()).isEqualTo(io.opentelemetry.api.trace.StatusCode.ERROR);
+  }
+
   @Test void currentTraceParentFollowsTheActiveSpan() {
     var supplier = TraceParents.current(tracer);
     assertThat(supplier.get()).isNull();

@@ -92,6 +92,11 @@ management:
   tracing:
     sampling:
       probability: ${TRACING_SAMPLING_PROBABILITY:0.1}
+  observations:
+    enable:
+      # Scheduler runs (relay, sweeps, cache worker, media jobs) are not requests: no trace per run, and
+      # outbox rows they write keep trace_parent null (PLT-05 spec section 3).
+      tasks.scheduled: false
   # Actuator on its own port, never published or routed (SEC-01, before PLT-04).
   server:
     port: ${GATEWAY_MANAGEMENT_PORT:9080}

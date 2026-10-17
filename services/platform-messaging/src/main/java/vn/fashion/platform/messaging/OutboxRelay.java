@@ -53,6 +53,7 @@ public class OutboxRelay {
         }
         Span span = publishSpan(message, envelope, record);
         try { kafka.send(record).get(sendTimeout.toMillis(), TimeUnit.MILLISECONDS); }
+        catch (Exception e) { if (span != null) span.error(e); throw e; }
         finally { if (span != null) span.end(); }
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
