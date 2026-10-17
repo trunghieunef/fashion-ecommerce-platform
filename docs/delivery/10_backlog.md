@@ -5,7 +5,7 @@ B1 · 2026-09-19 · Work package mặc định: **Planned; Assignee TBD; Reviewe
 ## 1. Cách nhận việc
 
 Update 2026-10-17 — `TASK:CAT-02` **Done (local, trước G0)** theo
-[nghiệm thu 2026-10-17](../evidence/acceptance-2026-10-17.md) (02a PR #19 + 02b `da6d3af`, PR #23 chờ merge `main`;
+[nghiệm thu 2026-10-17](../evidence/acceptance-2026-10-17.md) (02a PR #19 + 02b `da6d3af`, merge `main` qua PR #23 `0a6928e`;
 CI PASS). 02b: (Redis cache-aside +
 invalidation bền vững, tồn hiển thị từ inventory, sold từ ORDER_COMPLETED, Cache-Control);
 `REQ:CAT-04/05/09`; [spec](../superpowers/specs/2026-10-17-cat-02b-cache-projections-design.md),
