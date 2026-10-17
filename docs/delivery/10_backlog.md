@@ -5,8 +5,8 @@ B1 · 2026-09-19 · Work package mặc định: **Planned; Assignee TBD; Reviewe
 ## 1. Cách nhận việc
 
 Update 2026-10-17 — `TASK:INV-02` **Done (local, trước G0)** theo
-[nghiệm thu 2026-10-17](../evidence/acceptance-2026-10-17.md) trên `dev` `e73ec5d` (PR #22, chờ merge
-`main`); review PR #22 đã sửa, verify 587 test, smoke và CI PASS; evidence tại
+[nghiệm thu 2026-10-17](../evidence/acceptance-2026-10-17.md) trên `dev` `e73ec5d` (merge vào
+`main` qua PR #22 `abd5cfb`); review PR #22 đã sửa, verify 587 test, smoke và CI PASS; evidence tại
 [evidence INV-02](../evidence/inv-02-local-2026-10-16.md).
 `REQ:INV-02`, `REQ:INV-03`, `REQ:INV-06`; dependency INV-01, PLT-02/03, SEC-01.
 Acceptance: reserve all-or-nothing, commit/release/expiry, tombstone/query, T01–T05/T09

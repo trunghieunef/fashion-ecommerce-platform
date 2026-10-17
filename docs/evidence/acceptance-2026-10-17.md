@@ -11,7 +11,7 @@ Không nghiệm thu G0–G2, staging/AWS hay production.
 
 ## Bằng chứng chung
 
-- Code trên `dev` `e73ec5d` (PR #22, chưa merge vào `main`). Review PR #22 đăng 7 điểm, cả 7 đã
+- Code trên `dev` `e73ec5d` ; merge vào `main` qua PR #22 (`abd5cfb`, 2026-10-17), tree trùng `dev` `635aba9`. Review PR #22 đăng 7 điểm, cả 7 đã
   sửa trong `e73ec5d`; chi tiết ở [evidence INV-02](inv-02-local-2026-10-16.md).
 - Application CI (pull_request) trên `e73ec5d` SUCCESS (run 39025098727: `./mvnw -B test`,
   `validate-contracts.sh` gồm unittest contract Python, smoke local/auth/browser); Documentation
@@ -41,7 +41,7 @@ Không nghiệm thu G0–G2, staging/AWS hay production.
 | Schema/constraint, runtime không xóa reservation | `orderIdIsUnique`, `statusAndTimestampsAreConsistent`, `itemQuantityAndSkuAreConstrained`, `runtimeCannotDeleteReservations` | Pass |
 | Outbox đúng loại/key và tới Kafka thật | `reservesAllSkusWithLedgerAndEvents` (aggregate/partition), `reservedEventReachesKafkaKeyedByOrderNo` | Pass |
 
-**`TASK:INV-02`: Done (local, trước G0)**; còn bước merge PR #22 vào `main` do chủ dự án thực hiện.
+**`TASK:INV-02`: Done (local, trước G0).**
 
 ## Ngoại lệ và việc còn lại (không chặn Done local)
 
