@@ -53,8 +53,9 @@ envelope/contract event; đổi thứ tự hoặc độ bền của outbox.
 
 ## 5. Xuất trace và hạ tầng local
 
-- Mọi service + Gateway: exporter OTLP HTTP tới `${OTEL_EXPORTER_OTLP_ENDPOINT}` (mặc định trống =
-  không xuất; Compose đặt `http://tempo:4318/v1/traces`). Sampling local 1.0 qua biến
+- Mọi service + Gateway: exporter OTLP HTTP khi đặt `MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT`
+  (Compose đặt `http://tempo:4318/v1/traces`; không đặt = không xuất). Sửa khi hiện thực: Boot 4 coi
+  endpoint rỗng là đã cấu hình nên yaml không khai báo mặc định. Sampling local 1.0 qua biến
   `TRACING_SAMPLING_PROBABILITY` (mặc định 1.0 ở compose, giữ mặc định Boot khi không đặt).
 - Export bất đồng bộ (batch); Tempo down → span bị bỏ, request không chậm/không lỗi. Readiness không
   phụ thuộc Tempo.

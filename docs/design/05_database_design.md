@@ -253,6 +253,10 @@ có CREATE database/schema; runtime gọi hàm để tìm kiếm bỏ dấu, kh�
 Min/max price aggregate lúc query trên variant ACTIVE; không thêm cột projection/trigram/index
 hoặc backfill. Price/sold_quantity optimization đo tải sau.
 
+`TASK:PLT-05` thêm cột nullable `outbox_events.trace_parent varchar(55)` (W3C traceparent của span
+ghi event; sai định dạng → null) qua catalog V009, inventory V003, user-service V005 và
+`platform-durability/db/platform/durability.sql`; dòng cũ giữ null.
+
 `TASK:CAT-02b` thêm append-only `V008__catalog_projections.sql`: `processed_events` (inbox) và
 `background_tasks` (bản sao DDL platform-durability), `variant_stock_observations(sku PK, available
 ≥ 0, stock_version ≥ 1, observed_at)` chỉ ghi khi `stock_version` lớn hơn, và

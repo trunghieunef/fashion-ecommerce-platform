@@ -22,6 +22,11 @@ User-service chưa bật relay; notification-service/UI auth/admin chưa có.
 Catalog admin CAT-01a dùng cùng ES256 verifier, JdbcClient và durability, có catalog.write,
 version/key/audit; [evidence local](../evidence/cat-01a-local-2026-10-07.md) ghi số test và mutation.
 
+PLT-05: `local-up` bật thêm Tempo (`127.0.0.1:3200`) và Grafana (`http://127.0.0.1:3000`, anonymous
+viewer). Xem trace: lấy `metadata.trace_id` của response → Grafana Explore → Tempo → dán trace id.
+Smoke kiểm trace tạo variant đủ span gateway/catalog/inventory (`PLT-05 Kafka trace PASS`); Tempo dừng
+thì chỉ bước này fail.
+
 INV-01: `bash scripts/local-up.sh` khởi động PostgreSQL/Kafka, chạy init DB inventory/topic
 idempotent rồi build/start stack; giữ volume. `bash scripts/smoke-local.sh` tạo variant,
 chờ đăng ký SKU, adjust +5 qua Gateway và kiểm event snapshot. JWT synthetic inventory

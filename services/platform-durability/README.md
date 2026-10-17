@@ -53,5 +53,6 @@ dùng đồng hồ DB `now()`; test giả lập lease hết hạn bằng SQL, kh
 - Relay chỉ retry khi lease hết hạn; chưa có backoff qua `next_attempt_at`, chưa có
   worker/scheduler. Service tự gọi `relay` và tự viết publisher Kafka (`acks=all`, `send().get()`).
 - Consumer tiền viết bằng Java phải tắt `ACCEPT_FLOAT_AS_INT` của Jackson (xem contracts README).
-- Chưa có metrics/log correlation (PLT-05), chưa dọn `processed_events`/`idempotency_requests`
+- `OutboxRepository(jdbc, traceParent)` lưu W3C `traceparent` hợp lệ vào `trace_parent` (PLT-05);
+  constructor một tham số ghi null. Metrics nằm ở platform-messaging. Chưa dọn `processed_events`/`idempotency_requests`
   theo retention, chưa có `audit_logs` (thuộc task admin/SEC).

@@ -374,5 +374,7 @@ W3C của request (tiếp nối `traceparent` từ Gateway; không có span thì
 `request_id` vẫn là UUID riêng của mỗi response. Log JSON dạng ECS qua
 `PiiRedactingJsonCustomizer` ([platform-security](../platform-security/README.md)). Actuator
 expose `health`, `info`, `metrics`, `prometheus` trên port 8081; port này không publish ra ngoài,
-label metrics dùng URI template. Chưa có tracing exporter, dashboard, alert hay retention policy
-(phần staging của PLT-05, sau PLT-04).
+label metrics dùng URI template. Trace xuất OTLP tới Tempo khi đặt
+`MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT` (compose local), sampling
+`TRACING_SAMPLING_PROBABILITY` (mặc định 0.1, compose 1.0); outbox lưu `trace_parent`, consumer Kafka
+nối trace. Chưa có dashboard, alert hay cấu hình staging (sau PLT-04).

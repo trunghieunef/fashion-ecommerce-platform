@@ -429,6 +429,18 @@ Nguồn: [spec đã duyệt](../superpowers/specs/2026-10-11-cat-02a-public-brow
 | Giá đại diện | min(coalesce(variant.price_override,product.base_price)) trên variant ACTIVE, max tương tự | Dùng cho card/lọc/sort; VND integer long không âm |
 | Visibility taxonomy | Product ACTIVE chỉ public nếu category ACTIVE, brand null hoặc ACTIVE, có variant ACTIVE | Kiểm ở thời điểm đọc cho browse/detail/collection/quote active; thiếu/ẩn cùng 404 |
 
+`TASK:PLT-05` (local) · `REQ:NFR-01/03/04`. Chủ dự án chọn xem trace trong Grafana và giao agent tự chốt;
+[spec](../superpowers/specs/2026-10-17-plt-05-kafka-trace-design.md) duyệt 2026-10-17:
+
+| Quyết định | Hệ quả |
+|---|---|
+| Lưu W3C `traceparent` vào cột outbox | Parent/child chính xác qua relay bất đồng bộ; thêm cột ở mọi DB có outbox |
+| Supplier truyền vào `OutboxRepository` | platform-durability không phụ thuộc thư viện tracing |
+| Relay tự mở span PRODUCER; consumer dùng observation Spring Kafka | Không đổi envelope/contract event |
+| OTLP HTTP thẳng tới Tempo, không Collector | Tempo down chỉ mất span; staging cần quyết định lại |
+| Endpoint qua `MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT`, sampling 1.0 chỉ local | Boot 4 coi endpoint rỗng là đã cấu hình nên không khai báo mặc định trong yaml |
+| Grafana anonymous Viewer (Explore), loopback, chỉ local | Không dùng cấu hình này ngoài máy dev |
+
 `TASK:CAT-02` phần 02b · `REQ:CAT-04/05/09`. Chủ dự án giao agent tự chốt mặc định và duyệt
 [spec](../superpowers/specs/2026-10-17-cat-02b-cache-projections-design.md) ngày 2026-10-17:
 

@@ -115,7 +115,10 @@ Readiness phản ánh khả năng nhận request của pod, không buộc mọi 
 
 ## 7. Observability và bảo mật
 
-Prometheus/Grafana metrics, JSON logs/Loki, OTel/Tempo traces. Correlation xuyên HTTP/Kafka; không đưa user_id/order_no làm metric label cardinality cao. Theo dõi riêng checkout acceptance, payment readiness, age UNKNOWN, lease expiry, outbox lag, refund pending, COD outstanding.
+Prometheus/Grafana metrics, JSON logs/Loki, OTel/Tempo traces. Correlation xuyên HTTP/Kafka
+(`TASK:PLT-05` local 2026-10-18: outbox `trace_parent` → span relay PRODUCER → consumer observation;
+service xuất OTLP HTTP thẳng tới Tempo khi đặt `MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT`;
+Tempo down chỉ làm mất span); không đưa user_id/order_no làm metric label cardinality cao. Theo dõi riêng checkout acceptance, payment readiness, age UNKNOWN, lease expiry, outbox lag, refund pending, COD outstanding.
 
 JWT verify và ownership tại service; Gateway strip header danh tính của client; service token kiểm tra caller/expiry/audience theo ADR-19 (JWT ES256 tự ký, allowlist key theo caller; [platform-security](../../services/platform-security/README.md)). Cookie auth cần CSRF/origin theo ADR-20 (Gateway `CsrfOriginFilter`); admin sensitive kiểm tra auth_version hiện hành. Secret, token, OTP và payment URL nhạy cảm không vào log/cache response công khai.
 
