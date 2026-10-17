@@ -1,7 +1,7 @@
 # CAT-02b — cache public read, tồn hiển thị và sold_quantity
 
 `TASK:CAT-02` phần 02b · `REQ:CAT-04`, `REQ:CAT-05`, `REQ:CAT-09` · dependency CAT-01, CAT-02a,
-INV-01, PLT-03 (đều Done local). Trạng thái: **bản nháp chờ chủ dự án duyệt**, 2026-10-17.
+INV-01, PLT-03 (đều Done local). Trạng thái: **đã duyệt** 2026-10-17; plan [CAT-02b](../plans/2026-10-17-cat-02b-cache-projections.md).
 Chủ dự án giao agent tự chốt mặc định; mọi lựa chọn dưới đây là **quyết định của agent**, ghi lại
 ở §8 để duyệt. Parent CAT-02 chỉ Done khi 02a + 02b đạt acceptance ở §7.
 
@@ -99,7 +99,8 @@ user-service.
 
 - Public read `200`: `Cache-Control: public, max-age=30` cho list/search/collection list/categories/
   brands; `public, max-age=5` cho product detail (vì có tồn); `public, max-age=60` cho collection detail
-  và size guide. Size guide thêm `Vary: Accept-Language` (locale fallback theo header).
+  và size guide. Size guide và product detail thêm `Vary: Accept-Language` (locale fallback theo header; detail
+  chọn size guide theo locale — bổ sung khi lập plan).
 - Mọi lỗi public (400/404/406/429/5xx): `Cache-Control: no-store`. Internal quote giữ `no-store`.
 - Gateway chuyển nguyên header; không thêm cache tại Gateway.
 
