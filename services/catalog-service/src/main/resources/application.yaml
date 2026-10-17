@@ -78,6 +78,11 @@ fashion:
       s3-timeout: 10s
 
 management:
+  # PLT-05: no OTLP endpoint here on purpose: an empty value still creates the exporter. Traces leave
+  # the process only when MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT is set (local compose: Tempo).
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:0.1}
   health:
     # Readiness must not depend on the cache (CAT-02b spec section 2).
     redis:
