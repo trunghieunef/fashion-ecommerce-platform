@@ -4,12 +4,14 @@ B1 · 2026-09-19 · Work package mặc định: **Planned; Assignee TBD; Reviewe
 
 ## 1. Cách nhận việc
 
-Update 2026-10-16 — `TASK:INV-02` **Review** sau full verification local
-ghi trong [evidence INV-02](../evidence/inv-02-local-2026-10-16.md).
+Update 2026-10-17 — `TASK:INV-02` **Done (local, trước G0)** theo
+[nghiệm thu 2026-10-17](../evidence/acceptance-2026-10-17.md) trên `dev` `e73ec5d` (PR #22, chờ merge
+`main`); review PR #22 đã sửa, verify 587 test, smoke và CI PASS; evidence tại
+[evidence INV-02](../evidence/inv-02-local-2026-10-16.md).
 `REQ:INV-02`, `REQ:INV-03`, `REQ:INV-06`; dependency INV-01, PLT-02/03, SEC-01.
 Acceptance: reserve all-or-nothing, commit/release/expiry, tombstone/query, T01–T05/T09
-trên PostgreSQL thật, relay Kafka và 6 guard mutants. Review/local proof không thay
-nghiệm thu Done hoặc gate G0/G1/G2; ORD-01/02 chưa có caller thật, INV-03 còn sau.
+trên PostgreSQL thật, relay Kafka và 6 guard mutants. Done local không thay gate G0/G1/G2;
+ORD-01/02 chưa có caller thật, INV-03 còn sau.
 
 Update 2026-10-16 — `TASK:INV-01` **Done (local, trước G0)**: merge vào `main` qua PR #20/#21
 (`a76442e`); chủ dự án chỉ định Claude Code nghiệm thu (không độc lập, cùng tác giả) sau khi chạy

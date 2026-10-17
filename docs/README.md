@@ -4,7 +4,8 @@ INV-01 đã merge (PR #20/#21) và Done (local) ngày 2026-10-16:
 [nghiệm thu](evidence/acceptance-2026-10-16.md), [evidence](evidence/inv-01-local-2026-10-15.md),
 [handoff](superpowers/plans/2026-10-15-inv-01-handoff.md).
 
-INV-02 đã hiện thực local reserve/commit/release/expiry và tombstone, chưa nghiệm thu Done:
+INV-02 reserve/commit/release/expiry và tombstone Done (local) theo
+[nghiệm thu 2026-10-17](evidence/acceptance-2026-10-17.md):
 [evidence](evidence/inv-02-local-2026-10-16.md),
 [handoff](superpowers/plans/2026-10-16-inv-02-handoff.md).
 

@@ -456,7 +456,7 @@ INV-02 hiện thực local 2026-10-16: sweep mặc định 5 s dùng SKIP LOCKED
 Prometheus counter `inventory_reservations_total{operation,outcome}` và gauge
 `inventory_reservations_overdue`. Gateway boundary và relay Kafka thật có regression;
 [evidence INV-02](../evidence/inv-02-local-2026-10-16.md) ghi kết quả verify/mutation.
-Trạng thái Review, chưa nghiệm thu toàn bộ INV-02 hoặc G0/G1/G2.
+INV-02 Done (local) theo [nghiệm thu 2026-10-17](../evidence/acceptance-2026-10-17.md); chưa phải G0/G1/G2.
 
 ### 6.2 Nhập kho, điều chỉnh và restock
 
