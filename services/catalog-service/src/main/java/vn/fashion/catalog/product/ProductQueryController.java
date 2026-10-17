@@ -9,6 +9,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import jakarta.servlet.http.HttpServletResponse;
+import java.time.Duration;
+import java.util.Optional;
+import tools.jackson.core.type.TypeReference;
+import vn.fashion.catalog.cache.PublicCache;
 import vn.fashion.catalog.web.Api;
 import vn.fashion.catalog.web.PublicCacheHeaders;
 import vn.fashion.catalog.web.PublicLimit;
@@ -17,10 +21,12 @@ import vn.fashion.catalog.web.PublicLimit;
 @RequestMapping("/api/v1/catalog")
 public class ProductQueryController {
   private final ProductBrowseRepository products;
+  private final PublicCache cache;
   private final Tracer tracer;
 
-  public ProductQueryController(ProductBrowseRepository products, Tracer tracer) {
+  public ProductQueryController(ProductBrowseRepository products, PublicCache cache, Tracer tracer) {
     this.products = products;
+    this.cache = cache;
     this.tracer = tracer;
   }
 
@@ -41,7 +47,9 @@ public class ProductQueryController {
     int limit = PublicLimit.parse(params.get("limit"));
     BrowseFilters filters = BrowseFilters.parse(params, requireQ);
     ProductCursor after = params.containsKey("cursor") ? ProductCursor.decode(params.get("cursor"), filters) : null;
-    var page = products.browse(filters, after, limit);
+    var page = cache.read(requireQ ? "search" : "products", Duration.ofSeconds(30), new TypeReference<ProductPage>() { },
+        () -> Optional.of(products.browse(filters, after, limit)), filters.cacheKey(), params.getOrDefault("cursor", ""),
+        String.valueOf(limit)).orElseThrow();
     PublicCacheHeaders.allow(response, PublicCacheHeaders.LIST);
     return Api.ok(HttpStatus.OK, page, tracer);
   }

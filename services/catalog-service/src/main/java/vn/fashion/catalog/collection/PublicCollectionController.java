@@ -12,6 +12,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import vn.fashion.catalog.product.ProductCursor;
 import jakarta.servlet.http.HttpServletResponse;
+import java.time.Duration;
+import java.util.Optional;
+import tools.jackson.core.type.TypeReference;
+import vn.fashion.catalog.cache.PublicCache;
 import vn.fashion.catalog.web.Api;
 import vn.fashion.catalog.web.PublicCacheHeaders;
 import vn.fashion.catalog.web.PublicLimit;
@@ -20,10 +24,11 @@ import vn.fashion.catalog.web.PublicLimit;
 @RequestMapping("/api/v1/catalog/collections")
 public class PublicCollectionController {
   private final PublicCollectionRepository collections;
+  private final PublicCache cache;
   private final Tracer tracer;
 
-  public PublicCollectionController(PublicCollectionRepository collections, Tracer tracer) {
-    this.collections = collections; this.tracer = tracer;
+  public PublicCollectionController(PublicCollectionRepository collections, PublicCache cache, Tracer tracer) {
+    this.collections = collections; this.cache = cache; this.tracer = tracer;
   }
 
   @GetMapping
@@ -32,7 +37,8 @@ public class PublicCollectionController {
     int size = PublicLimit.parse(params.get("limit"));
     String cursor = params.get("cursor");
     ProductCursor after = cursor == null ? null : ProductCursor.decode(cursor, "COLLECTIONS", "");
-    var page = collections.list(after, size);
+    var page = cache.read("collections", Duration.ofSeconds(30), new TypeReference<PublicCollectionRepository.CollectionPage>() { },
+        () -> Optional.of(collections.list(after, size)), cursor, String.valueOf(size)).orElseThrow();
     PublicCacheHeaders.allow(response, PublicCacheHeaders.LIST);
     return Api.ok(HttpStatus.OK, page, tracer);
   }
@@ -43,7 +49,8 @@ public class PublicCollectionController {
     int size = PublicLimit.parse(params.get("limit"));
     String cursor = params.get("cursor");
     ProductCursor after = cursor == null ? null : ProductCursor.decode(cursor, "COLLECTION:" + slug, "");
-    var detail = collections.detail(slug, after, size).orElseThrow(() ->
+    var detail = cache.read("collection", Duration.ofSeconds(300), new TypeReference<PublicCollectionRepository.CollectionDetail>() { },
+        () -> collections.detail(slug, after, size), slug, cursor, String.valueOf(size)).orElseThrow(() ->
         new Api.Problem(HttpStatus.NOT_FOUND, "NOT_FOUND", "COLLECTION_NOT_FOUND", List.of()));
     PublicCacheHeaders.allow(response, PublicCacheHeaders.STATIC);
     return Api.ok(HttpStatus.OK, detail, tracer);

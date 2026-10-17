@@ -37,7 +37,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-    properties = {"fashion.messaging.relay.enabled=false", "spring.kafka.listener.auto-startup=false"})
+    properties = {"fashion.messaging.relay.enabled=false", "spring.kafka.listener.auto-startup=false",
+        "fashion.catalog.cache.enabled=false"})
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 public abstract class CatalogAdminTestSupport {
   protected static final UUID ACTOR = UUID.randomUUID();
