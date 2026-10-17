@@ -17,12 +17,13 @@ import tools.jackson.databind.ObjectMapper;
 @Repository
 public class PublicCatalogRepository {
   public record Ref(UUID id, String name) { }
-  public record VariantView(UUID id, String sku, String size, String color, long effectivePrice) { }
+  public record VariantView(UUID id, String sku, String size, String color, long effectivePrice, Integer available,
+      Instant observedAt) { }
   public record ImageView(UUID assetId, String altVi, String altEn, String variantColor, int sortOrder) { }
   public record SizeGuideView(UUID categoryId, String locale, String guidelineHtml, JsonNode table) { }
   public record ProductDetail(UUID id, String slug, String nameVi, String nameEn, String descriptionVi,
       String descriptionEn, List<String> tags, Ref category, Ref brand, long minPrice, long maxPrice,
-      List<VariantView> variants, List<ImageView> images, SizeGuideView sizeGuide, Boolean available,
+      List<VariantView> variants, List<ImageView> images, SizeGuideView sizeGuide, Integer available,
       Instant observedAt) { }
   public record CategoryNode(UUID id, String slug, String nameVi, String nameEn, List<CategoryNode> children) { }
   public record BrandView(UUID id, String name) { }
@@ -53,7 +54,8 @@ public class PublicCatalogRepository {
 
   private List<VariantView> variants(UUID product, long basePrice) {
     return jdbc.sql("""
-        select id, sku, size, color, coalesce(price_override,:base) effective_price
+        select id, sku, size, color, coalesce(price_override,:base) effective_price,
+               null::int available, null::timestamptz observed_at
         from product_variants where product_id=:product and status='ACTIVE' order by sku,id
         """).param("product", product).param("base", basePrice).query(VariantView.class).list();
   }

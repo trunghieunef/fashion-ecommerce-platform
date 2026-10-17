@@ -37,7 +37,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-    properties = "fashion.messaging.relay.enabled=false")
+    properties = {"fashion.messaging.relay.enabled=false", "spring.kafka.listener.auto-startup=false"})
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 public abstract class CatalogAdminTestSupport {
   protected static final UUID ACTOR = UUID.randomUUID();
@@ -70,7 +70,7 @@ public abstract class CatalogAdminTestSupport {
   }
   @BeforeEach void clearCatalog() throws Exception {
     try (var c = DriverManager.getConnection(postgres.getJdbcUrl(), "postgres", "postgres"); var s = c.createStatement()) {
-      s.execute("update collections set cover_asset_id=null; delete from lookbook_images; delete from product_images; delete from media_assets; delete from media_uploads; update media_job_leases set lease_token=null, lease_until=null; delete from audit_logs; delete from outbox_events; delete from idempotency_requests; delete from collection_items; delete from collections; delete from size_guides; delete from product_variants; delete from products; delete from brands; delete from categories where id <> '" + SEED + "'");
+      s.execute("update collections set cover_asset_id=null; delete from lookbook_images; delete from product_images; delete from media_assets; delete from media_uploads; update media_job_leases set lease_token=null, lease_until=null; delete from audit_logs; delete from outbox_events; delete from variant_stock_observations; delete from product_sales_applied; delete from processed_events; delete from background_tasks; delete from idempotency_requests; delete from collection_items; delete from collections; delete from size_guides; delete from product_variants; delete from products; delete from brands; delete from categories where id <> '" + SEED + "'");
     }
   }
   protected String token(String... permissions) { return signed(KEY, Instant.now(), permissions); }

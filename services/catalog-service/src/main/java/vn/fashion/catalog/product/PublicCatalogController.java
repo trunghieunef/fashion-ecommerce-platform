@@ -12,24 +12,26 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import vn.fashion.catalog.stock.StockObservations;
 import vn.fashion.catalog.web.Api;
 
 @RestController
 @RequestMapping("/api/v1/catalog")
 public class PublicCatalogController {
   private final PublicCatalogRepository catalog;
+  private final StockObservations stock;
   private final Tracer tracer;
 
-  public PublicCatalogController(PublicCatalogRepository catalog, Tracer tracer) {
-    this.catalog = catalog; this.tracer = tracer;
+  public PublicCatalogController(PublicCatalogRepository catalog, StockObservations stock, Tracer tracer) {
+    this.catalog = catalog; this.stock = stock; this.tracer = tracer;
   }
 
   @GetMapping("/products/{id}")
   public ResponseEntity<Api.Response<PublicCatalogRepository.ProductDetail>> product(@PathVariable String id,
       @RequestHeader(value = "Accept-Language", defaultValue = "") String language) {
     UUID product = publicId(id, "PRODUCT_NOT_FOUND");
-    return Api.ok(HttpStatus.OK, catalog.product(product, locale(language))
-        .orElseThrow(() -> notFound("PRODUCT_NOT_FOUND")), tracer);
+    var detail = catalog.product(product, locale(language)).orElseThrow(() -> notFound("PRODUCT_NOT_FOUND"));
+    return Api.ok(HttpStatus.OK, stock.attach(detail), tracer);
   }
 
   @GetMapping("/categories")
