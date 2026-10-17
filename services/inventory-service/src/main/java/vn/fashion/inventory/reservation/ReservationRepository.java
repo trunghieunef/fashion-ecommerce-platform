@@ -19,18 +19,20 @@ public class ReservationRepository {
     return jdbc.sql("select "+COLUMNS+" from stock_reservations r where order_id=:o").param("o",orderId)
         .query(ReservationRow.class).optional();
   }
-  /** Inserts ACTIVE or a RELEASED tombstone; false when the order already has a row (waits for a concurrent insert). */
-  public boolean insertIfAbsent(UUID id,ReservationSnapshot s,String hash,String status,String reason) {
+  /** Inserts ACTIVE or a RELEASED tombstone; empty when the order already has a row (waits for a concurrent insert). */
+  public Optional<ReservationRow> insertIfAbsent(UUID id,ReservationSnapshot s,String hash,String status,String reason) {
     return jdbc.sql("""
         insert into stock_reservations(id,order_id,order_no,request_hash,status,expires_at,released_at,release_reason,version)
         values (:id,:o,:no,:hash,:status,:expires,case when :status='ACTIVE' then null else now() end,:reason,1)
-        on conflict (order_id) do nothing
+        on conflict (order_id) do nothing returning *, expires_at <= now() as due
         """).param("id",id).param("o",s.orderId()).param("no",s.orderNo()).param("hash",hash).param("status",status)
-        .param("expires",OffsetDateTime.ofInstant(s.expiresAt(),ZoneOffset.UTC)).param("reason",reason).update()==1;
+        .param("expires",OffsetDateTime.ofInstant(s.expiresAt(),ZoneOffset.UTC)).param("reason",reason)
+        .query(ReservationRow.class).optional();
   }
   public void insertItems(UUID id,List<ReservationSnapshot.Item> items) {
-    for(var i:items) jdbc.sql("insert into stock_reservation_items(reservation_id,sku,quantity) values (:id,:sku,:q)")
-        .param("id",id).param("sku",i.sku()).param("q",i.quantity()).update();
+    jdbc.sql("insert into stock_reservation_items(reservation_id,sku,quantity) select :id,t.sku,t.q from unnest(cast(:skus as text[]),cast(:qs as int[])) as t(sku,q)")
+        .param("id",id).param("skus",items.stream().map(ReservationSnapshot.Item::sku).toArray(String[]::new))
+        .param("qs",items.stream().map(ReservationSnapshot.Item::quantity).toArray(Integer[]::new)).update();
   }
   public List<ReservationSnapshot.Item> items(UUID id) {
     return jdbc.sql("select sku,quantity from stock_reservation_items where reservation_id=:id order by sku").param("id",id)

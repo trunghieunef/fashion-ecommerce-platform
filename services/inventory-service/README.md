@@ -29,7 +29,8 @@ filter đặt `Cache-Control: no-store` cho mọi `/internal/**`, kể cả lỗ
 Reserve khóa reservation trước, SKU tăng dần sau; kiểm toàn bộ hàng rồi ghi reserved,
 items, ledger RESERVE và outbox INVENTORY_RESERVED/INVENTORY_UPDATED cùng transaction.
 SKU lạ/INACTIVE có available=0; thiếu một SKU rollback toàn bộ, trả 409 OUT_OF_STOCK.
-Retry cùng order/hash trả hiện trạng 200 trước kiểm deadline; khác hash trả 409
+Retry cùng order/hash trả hiện trạng 200 trước kiểm deadline; row ACTIVE đã quá hạn mà sweep
+chưa xử lý được expire ngay trong transaction đó rồi trả 409 RESERVATION_CLOSED; khác hash trả 409
 RESERVATION_CONFLICT, trạng thái RELEASED/EXPIRED trả RESERVATION_CLOSED.
 Query chưa có trả 404 RESERVATION_NOT_FOUND.
 Task 5 thêm POST `/internal/api/v1/inventory/commit`: ACTIVE còn hạn trừ on_hand/reserved,

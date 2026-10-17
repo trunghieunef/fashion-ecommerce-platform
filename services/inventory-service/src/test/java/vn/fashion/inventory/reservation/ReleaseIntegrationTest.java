@@ -74,6 +74,7 @@ class ReleaseIntegrationTest extends ReservationTestSupport {
     seedStock("SKU-A",5,0);var s=snapshot(UUID.randomUUID(),in(15),"SKU-A",5);data(reserve(s),201);
     var r=release(s,"customer cancel");var d=data(r,200);noStore(r);
     assertThat(d.path("status").asString()).isEqualTo("RELEASED");assertThat(d.path("release_reason").asString()).isEqualTo("customer cancel");
+    assertThat(d.path("released_at").asString()).matches(CommitIntegrationTest.MILLIS_UTC);
     assertThat(reserved("SKU-A")).isZero();assertThat(ledger("RELEASE")).isEqualTo(1);
     assertThat(outbox("INVENTORY_RESTOCKED")).isEqualTo(1);
     assertThat(data(release(s,"again"),200).path("version").asLong()).isEqualTo(2);

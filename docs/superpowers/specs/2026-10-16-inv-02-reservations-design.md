@@ -93,7 +93,8 @@ HTTP trong transaction. Thời gian luôn là `now()` của DB.
 
 1. Validate + normalize trước khi chạm DB; lỗi → 400.
 2. `INSERT ... ON CONFLICT (order_id) DO NOTHING`; nếu đã có, `SELECT ... FOR UPDATE`:
-   khác hash → 409 CONFLICT; cùng hash và ACTIVE/COMMITTED → 200 hiện trạng (T03); cùng hash và
+   khác hash → 409 CONFLICT; cùng hash và ACTIVE quá hạn → expire như job rồi 409 RESERVATION_CLOSED
+   (sửa sau review PR #22); cùng hash và ACTIVE/COMMITTED → 200 hiện trạng (T03); cùng hash và
    RELEASED/EXPIRED (gồm tombstone) → 409 RESERVATION_CLOSED (T04). Reserve đồng thời cùng order
    xếp hàng ở unique index.
 3. Khóa SKU; một SKU thiếu, không tồn tại hoặc INACTIVE → **rollback toàn bộ**, kể cả row reservation

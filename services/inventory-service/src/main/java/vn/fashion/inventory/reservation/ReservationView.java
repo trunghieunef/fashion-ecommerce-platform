@@ -8,7 +8,8 @@ public record ReservationView(UUID reservationId,UUID orderId,String orderNo,Str
     boolean restoreRequired) {
   static ReservationView of(ReservationRow r,List<ReservationSnapshot.Item> items,boolean restoreRequired) {
     return new ReservationView(r.id(),r.orderId(),r.orderNo(),r.status(),ReservationSnapshot.time(r.expiresAt()),items,r.version(),
-        r.committedAt()==null?null:r.committedAt().toString(),r.releasedAt()==null?null:r.releasedAt().toString(),
+        r.committedAt()==null?null:ReservationSnapshot.time(r.committedAt()),
+        r.releasedAt()==null?null:ReservationSnapshot.time(r.releasedAt()),
         r.releaseReason(),restoreRequired);
   }
 }

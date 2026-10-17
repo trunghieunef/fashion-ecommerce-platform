@@ -64,14 +64,31 @@ class ReserveIntegrationTest extends ReservationTestSupport {
     assertThat(problem(reserve(snapshot(order,in(15),"SKU-A",2)),409)).isEqualTo("RESERVATION_CONFLICT");
     assertThat(reserved("SKU-A")).isEqualTo(1);
   }
-  @Test void replayAfterDeadlineReturnsExistingReservation() {
-    // Retry of a request whose expires_at already passed: the stored row answers before the deadline check.
+  @Test void replayAfterDeadlineExpiresUnsweptReservation() {
+    // Retry of a request whose expires_at already passed: the stored row answers before the 400 deadline check,
+    // and an overdue ACTIVE row is expired in the same transaction instead of being reported as still held.
     seedStock("SKU-A",5,1);var s=snapshot(UUID.randomUUID(),in(-5),"SKU-A",1);UUID id=UUID.randomUUID();
     jdbc.update("insert into stock_reservations(id,order_id,order_no,request_hash,status,expires_at,version) values (?,?,?,?,'ACTIVE',now()-interval '5 minutes',1)",
         id,s.orderId(),s.orderNo(),s.hash());
     jdbc.update("insert into stock_reservation_items(reservation_id,sku,quantity) values (?,'SKU-A',1)",id);
-    var d=data(reserve(s),200);
-    assertThat(d.path("reservation_id").asString()).isEqualTo(id.toString());assertThat(reserved("SKU-A")).isEqualTo(1);
+    assertThat(problem(reserve(s),409)).isEqualTo("RESERVATION_CLOSED");
+    assertThat(jdbc.queryForMap("select status,release_reason,version from stock_reservations"))
+        .containsEntry("status","EXPIRED").containsEntry("release_reason","expired").containsEntry("version",2L);
+    assertThat(reserved("SKU-A")).isZero();assertThat(ledger("RELEASE")).isEqualTo(1);assertThat(outbox("INVENTORY_RELEASED")).isEqualTo(1);
+    assertThat(problem(reserve(s),409)).isEqualTo("RESERVATION_CLOSED");assertThat(ledger("RELEASE")).isEqualTo(1);
+  }
+  @Test void committedReplayAfterDeadlineStaysCommitted() {
+    seedStock("SKU-A",5,0);var s=snapshot(UUID.randomUUID(),in(15),"SKU-A",1);data(reserve(s),201);data(commit(s.orderId()),200);
+    jdbc.update("update stock_reservations set expires_at=now()-interval '1 second'");
+    assertThat(data(reserve(s),200).path("status").asString()).isEqualTo("COMMITTED");assertThat(ledger("RELEASE")).isZero();
+  }
+  @Test void manyItemsAreStoredInOneReservation() {
+    var skus=new ArrayList<Object>();
+    for(int i=0;i<100;i++) { String sku=String.format("SKU-%03d",i);seedStock(sku,5,0);skus.add(sku);skus.add(1+i%3); }
+    var d=data(reserve(snapshot(UUID.randomUUID(),in(15),skus.toArray())),201);
+    assertThat(d.path("items")).hasSize(100);assertThat(d.path("items").get(99).path("sku").asString()).isEqualTo("SKU-099");
+    assertThat(jdbc.queryForObject("select sum(quantity) from stock_reservation_items",Integer.class))
+        .isEqualTo(jdbc.queryForObject("select sum(reserved) from stock_items",Integer.class));
   }
   @Test void deadlineBoundsUseDatabaseClock() {
     seedStock("SKU-A",5,0);

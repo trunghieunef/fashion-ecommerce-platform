@@ -24,7 +24,8 @@ public class ReservationEvents {
     payload.put("items",items.stream().map(i->Map.of("sku",i.sku(),"quantity",i.quantity())).toList());
     payload.put("reason",row.releaseReason());payload.put("version",row.version());
     var route=routes.required(type);
-    outbox.append(new OutboxEvent(UUID.randomUUID(),"reservation",row.id().toString(),row.version(),type,1,
-        route.required("topic").asText(),row.orderNo(),correlationId,json.writeValueAsString(payload)));
+    outbox.append(new OutboxEvent(UUID.randomUUID(),"reservation",(String)payload.get(route.required("aggregate_id").asText()),
+        row.version(),type,1,route.required("topic").asText(),(String)payload.get(route.required("partition_key").asText()),
+        correlationId,json.writeValueAsString(payload)));
   }
 }

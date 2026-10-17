@@ -57,17 +57,21 @@ public class StockAdminService {
     });
   }
   public StockRow applyDelta(StockRow row,int delta,String type,String key,String reason,UUID actor,String traceId) {
-    int next=Math.addExact(row.onHand(),delta);
-    if(next<row.reserved()) throw new Api.Problem(HttpStatus.CONFLICT,"CONFLICT","ON_HAND_BELOW_RESERVED",List.of());
-    var after=jdbc.sql("update stock_items set on_hand=:next,version=version+1,updated_at=now() where sku=:sku returning *")
-        .param("next",next).param("sku",row.sku()).query(StockRow.class).single();
+    if(Math.addExact(row.onHand(),delta)<row.reserved()) throw new Api.Problem(HttpStatus.CONFLICT,"CONFLICT","ON_HAND_BELOW_RESERVED",List.of());
     String operation=type.equals("INBOUND")?"inventory.import":"inventory.adjust";
-    String operationKey="user:"+actor+":"+operation+":"+key;
+    return move(row,delta,0,type,"user:"+actor+":"+operation+":"+key,null,reason,actor,traceId);
+  }
+  /** One movement on a locked stock row: counters, ledger row and snapshot/restock event in the caller's transaction. */
+  public StockRow move(StockRow row,int onHandDelta,int reservedDelta,String type,String operationKey,UUID orderId,String reason,
+      UUID actor,String traceId) {
+    var after=jdbc.sql("update stock_items set on_hand=:o,reserved=:r,version=version+1,updated_at=now() where sku=:sku returning *")
+        .param("o",Math.addExact(row.onHand(),onHandDelta)).param("r",Math.addExact(row.reserved(),reservedDelta))
+        .param("sku",row.sku()).query(StockRow.class).single();
     jdbc.sql("""
-        insert into stock_transactions(id,sku,operation_key,type,on_hand_delta,reserved_delta,reason,actor_id)
-        values (:id,:sku,:key,:type,:delta,0,:reason,:actor)
-        """).param("id",UUID.randomUUID()).param("sku",row.sku()).param("key",operationKey)
-        .param("type",type).param("delta",delta).param("reason",reason).param("actor",actor).update();
+        insert into stock_transactions(id,sku,operation_key,type,on_hand_delta,reserved_delta,order_id,reason,actor_id)
+        values (:id,:sku,:key,:type,:o,:r,:order,:reason,:actor)
+        """).param("id",UUID.randomUUID()).param("sku",row.sku()).param("key",operationKey).param("type",type)
+        .param("o",onHandDelta).param("r",reservedDelta).param("order",orderId).param("reason",reason).param("actor",actor).update();
     events.append(after,row.available()==0 && after.available()>0,traceId);return after;
   }
   static String reason(String raw) {

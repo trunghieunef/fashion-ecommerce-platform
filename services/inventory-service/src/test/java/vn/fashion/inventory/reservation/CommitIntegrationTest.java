@@ -5,6 +5,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 class CommitIntegrationTest extends ReservationTestSupport {
+  static final String MILLIS_UTC="\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z";
   ReservationSnapshot reservedOrder(String sku,int onHand,int q) {
     seedStock(sku,onHand,0);var s=snapshot(UUID.randomUUID(),in(15),sku,q);data(reserve(s),201);return s;
   }
@@ -12,7 +13,7 @@ class CommitIntegrationTest extends ReservationTestSupport {
     var s=reservedOrder("SKU-A",5,2);
     var r=commit(s.orderId());var d=data(r,200);noStore(r);
     assertThat(d.path("status").asString()).isEqualTo("COMMITTED");assertThat(d.path("version").asLong()).isEqualTo(2);
-    assertThat(d.path("committed_at").isNull()).isFalse();
+    assertThat(d.path("committed_at").asString()).matches(MILLIS_UTC);
     assertThat(onHand("SKU-A")).isEqualTo(3);assertThat(reserved("SKU-A")).isZero();
     assertThat(data(commit(s.orderId()),200).path("version").asLong()).isEqualTo(2);
     assertThat(onHand("SKU-A")).isEqualTo(3);assertThat(ledger("COMMIT")).isEqualTo(1);

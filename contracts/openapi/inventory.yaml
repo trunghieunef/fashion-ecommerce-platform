@@ -772,7 +772,8 @@ paths:
         order_id|order_no|expires_at|SKU1:q1,SKU2:q2 (order_no escapes backslash then pipe; expires_at
         yyyy-MM-ddTHH:mm:ss.SSSZ; SKUs trimmed, uppercased, merged and sorted). 1-100 items, quantity 1-99 before and after
         merge, now < expires_at <= now + 24h (database clock, at most millisecond precision). Same order and hash returns the
-        existing ACTIVE/COMMITTED reservation (200); RELEASED/EXPIRED or tombstone returns 409 RESERVATION_CLOSED; another
+        existing ACTIVE/COMMITTED reservation (200); an ACTIVE row already past expires_at is expired first and, like
+        RELEASED/EXPIRED or a tombstone, returns 409 RESERVATION_CLOSED; another
         hash 409 RESERVATION_CONFLICT. OUT_OF_STOCK rolls back every SKU and lists errors field items[SKU], message
         requested=N available=M; unknown or INACTIVE SKUs count as available=0. Not routed by Gateway.
       tags:

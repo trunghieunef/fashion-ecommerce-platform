@@ -425,7 +425,8 @@ Không giữ một phần các SKU của đơn. Không giữ row lock khi gọi 
 `TASK:INV-02` Task 4 hiện thực reserve all-or-nothing và query reservation, phụ thuộc
 INV-01, PLT-02/03 và SEC-01; phục vụ `REQ:INV-02/03/06`. Transaction khóa reservation
 trước SKU tăng dần, ghi ledger/outbox cùng reserved. Replay cùng order/hash đọc hiện trạng
-trước kiểm deadline theo DB clock. Acceptance Task 4 dùng PostgreSQL thật để kiểm T01/T02/T03,
+trước kiểm deadline theo DB clock; row ACTIVE đã quá hạn được expire (ledger RELEASE/outbox) trong
+transaction đó rồi trả 409 RESERVATION_CLOSED, không báo còn giữ hàng sau deadline. Acceptance Task 4 dùng PostgreSQL thật để kiểm T01/T02/T03,
 race reserve/adjust, deadline, auth và no-store; kết quả kiểm thử ghi khi bàn giao.
 Task 5 thêm commit API và nhả hàng khi commit quá hạn: ghi EXPIRED, reason `expired`,
 ledger RELEASE/outbox trong transaction rồi mới trả 409 RESERVATION_EXPIRED ngoài transaction.
