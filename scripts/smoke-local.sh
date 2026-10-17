@@ -95,9 +95,11 @@ category_id="$(catalog_post category /categories \
 product_id="$(catalog_post product /products \
   "{\"category_id\":\"$category_id\",\"name_vi\":\"Smoke\",\"name_en\":\"Smoke\",\"slug\":\"smoke-$catalog_suffix\",\"base_price\":100000}" | \
   python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["status"] == "DRAFT" and d["version"] == 0; print(d["id"])')"
-variant_id="$(catalog_post variant "/products/$product_id/variants" \
+read -r variant_id variant_trace < <(catalog_post variant "/products/$product_id/variants" \
   "{\"sku\":\" smoke-$catalog_suffix \",\"size\":\"M\",\"color\":\"black\",\"weight_grams\":100}" | \
-  python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["status"] == "ACTIVE" and d["version"] == 0 and d["sku"] == sys.argv[1].upper(); print(d["id"])' "SMOKE-$catalog_suffix")"
+  python3 -c 'import json,sys; r=json.load(sys.stdin); d=r["data"]; assert d["status"] == "ACTIVE" and d["version"] == 0 and d["sku"] == sys.argv[1].upper(); print(d["id"], r["metadata"]["trace_id"])' "SMOKE-$catalog_suffix")
+variant_trace="${variant_trace//[^0-9a-f]/}"  # Windows python prints CRLF and read keeps the CR: keep hex only
+test -n "$variant_id" && test -n "$variant_trace"
 # Same key after changing casing must replay, so publish still expects product version 1.
 inventory_sku="SMOKE-${catalog_suffix^^}"
 inventory_seen=false
@@ -147,6 +149,29 @@ inventory_codes=("${PIPESTATUS[@]}")
 set -e
 test "${inventory_codes[1]}" = 0
 [[ "${inventory_codes[0]}" = 0 || "${inventory_codes[0]}" = 1 ]]
+# TASK:PLT-05: the variant request is one trace in Tempo across Gateway -> catalog -> Kafka -> inventory
+# -> Kafka -> catalog. Ingestion is asynchronous, so poll; a stopped Tempo fails only this step.
+TEMPO_URL="${TEMPO_URL:-http://127.0.0.1:3200}"
+trace_ok=1
+for _ in $(seq 1 30); do
+  if curl -fsS "$TEMPO_URL/api/v2/traces/$variant_trace" 2>/dev/null | python3 -c '
+import json,sys
+spans=[]
+for rs in json.load(sys.stdin)["trace"]["resourceSpans"]:
+    service=next(a["value"]["stringValue"] for a in rs["resource"]["attributes"] if a["key"]=="service.name")
+    for ss in rs["scopeSpans"]:
+        spans += [(service, s["name"]) for s in ss["spans"]]
+services={s for s,_ in spans}; names={n for _,n in spans}
+assert {"gateway","catalog-service","inventory-service"} <= services, services
+assert "outbox publish VARIANT_CREATED" in names and "outbox publish INVENTORY_UPDATED" in names, names
+assert any(s=="catalog-service" and "inventory.events" in n for s,n in spans), spans' 2>/dev/null; then trace_ok=0; break; fi
+  sleep 1
+done
+if [[ "$trace_ok" != 0 ]]; then
+  echo "PLT-05 Kafka trace FAIL: trace $(printf '%q' "$variant_trace") incomplete or Tempo unreachable at $TEMPO_URL" >&2
+  curl -sS "$TEMPO_URL/api/v2/traces/$variant_trace" 2>&1 | head -c 300 >&2; echo >&2; exit 1
+fi
+echo "PLT-05 Kafka trace PASS (trace_id=$variant_trace)"
 catalog_post variant "/products/$product_id/variants" \
   "{\"sku\":\"SMOKE-${catalog_suffix^^}\",\"size\":\"M\",\"color\":\"black\",\"weight_grams\":100}" | \
   python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["id"] == sys.argv[1] and d["sku"] == sys.argv[2].upper()' "$variant_id" "SMOKE-$catalog_suffix"

@@ -1,0 +1,10 @@
+# TASK:PLT-05: local-only Grafana datasource; Explore -> Tempo -> paste a trace_id from metadata.trace_id.
+apiVersion: 1
+datasources:
+  - name: Tempo
+    uid: tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    isDefault: true
+    editable: false

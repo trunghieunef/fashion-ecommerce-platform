@@ -1,0 +1,21 @@
+# TASK:PLT-05: local-only Tempo 3.0.3 in monolithic mode (17); traces kept 24h in the tempo-data volume.
+stream_over_http_enabled: true
+server:
+  http_listen_port: 3200
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        http:
+          endpoint: 0.0.0.0:4318
+storage:
+  trace:
+    backend: local
+    local:
+      path: /var/tempo/traces
+    wal:
+      path: /var/tempo/wal
+# Tempo 3 has no compactor block: retention runs in the backend worker.
+backend_worker:
+  compaction:
+    block_retention: 24h
