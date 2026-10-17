@@ -162,6 +162,41 @@ class OutboxRepositoryTest extends PostgresTestSupport {
     assertThat(status(jdbc.sql("select id from outbox_events").query(UUID.class).single())).isEqualTo("PENDING");
   }
 
+  // TASK:PLT-05: W3C traceparent of the span that wrote the event, so the relay can parent its publish span.
+  static final String TRACE = "00-" + "a".repeat(32) + "-" + "b".repeat(16) + "-01";
+
+  private String claimedTraceParent(OutboxRepository repository) {
+    var e = event("order-t", 0);
+    tx.executeWithoutResult(s -> repository.append(e));
+    return repository.claim(10, LEASE).getFirst().traceParent();
+  }
+
+  @Test
+  void appendStoresTraceParent() {
+    assertThat(claimedTraceParent(new OutboxRepository(jdbc, () -> TRACE))).isEqualTo(TRACE);
+  }
+
+  @Test
+  void invalidTraceParentStoredAsNull() {
+    for (String bad : List.of("garbage", TRACE + "x", TRACE.toUpperCase(), "01" + TRACE.substring(2))) {
+      jdbc.sql("delete from outbox_events").update();
+      assertThat(claimedTraceParent(new OutboxRepository(jdbc, () -> bad))).as(bad).isNull();
+    }
+  }
+
+  @Test
+  void appendWithoutSpanStoresNull() {
+    assertThat(claimedTraceParent(new OutboxRepository(jdbc))).isNull();
+    jdbc.sql("delete from outbox_events").update();
+    assertThat(claimedTraceParent(new OutboxRepository(jdbc, () -> null))).isNull();
+  }
+
+  @Test
+  void unsampledTraceParentIsKept() {
+    String unsampled = TRACE.substring(0, TRACE.length() - 2) + "00";
+    assertThat(claimedTraceParent(new OutboxRepository(jdbc, () -> unsampled))).isEqualTo(unsampled);
+  }
+
   static OutboxEvent event(String aggregateId, long version) {
     return new OutboxEvent(UUID.randomUUID(), "order", aggregateId, version, "ORDER_CREATED", 1,
         "order.events", "FS-SYNTH-0001", "synthetic-correlation", "{\"order_no\":\"FS-SYNTH-0001\"}");
