@@ -424,7 +424,7 @@ Nguồn: [spec đã duyệt](../superpowers/specs/2026-10-11-cat-02a-public-brow
 
 | Nhóm | Quyết định đã duyệt | Hệ quả |
 |---|---|---|
-| Phạm vi và truy vấn | Tách 02a public read/quote PostgreSQL query-time JdbcClient và 02b cache/invalidation/sold consumer/inventory/HTTP cache | Parent CAT-02 In progress; denormalize chỉ khi đo tải cần, không thêm đồng bộ write/projection |
+| Phạm vi và truy vấn | Tách 02a public read/quote PostgreSQL query-time JdbcClient và 02b cache/invalidation/sold consumer/inventory/HTTP cache | Parent CAT-02 Done (local) 2026-10-17 sau 02b; denormalize chỉ khi đo tải cần, không thêm đồng bộ write/projection |
 | Search | unaccent + ILIKE bỏ dấu tiếng Việt, bind giá trị và escape %, _, backslash | V007 append-only; literal wildcard không mở rộng query |
 | Giá đại diện | min(coalesce(variant.price_override,product.base_price)) trên variant ACTIVE, max tương tự | Dùng cho card/lọc/sort; VND integer long không âm |
 | Visibility taxonomy | Product ACTIVE chỉ public nếu category ACTIVE, brand null hoặc ACTIVE, có variant ACTIVE | Kiểm ở thời điểm đọc cho browse/detail/collection/quote active; thiếu/ẩn cùng 404 |

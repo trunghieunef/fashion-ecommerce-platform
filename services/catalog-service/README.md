@@ -273,7 +273,7 @@ không bearer; collection ACTIVE trong [start,end) và ≥1 product public, look
 Contract đầy đủ: [catalog.yaml](../../contracts/openapi/catalog.yaml),
 [evidence](../../docs/evidence/cat-02a-local-2026-10-11.md),
 [handoff](../../docs/superpowers/plans/2026-10-11-cat-02a-handoff.md).
-CAT-02 **Review** sau 02b local; xem mục cache/projection bên dưới.
+CAT-02 **Done (local)** 2026-10-17 theo [nghiệm thu](../../docs/evidence/acceptance-2026-10-17.md); xem mục cache/projection bên dưới.
 
 ## Cache, tồn hiển thị và sold (CAT-02b)
 
@@ -323,7 +323,7 @@ trả 415 generic, không echo/log header hoặc payload; không dùng mapping `
 `CATALOG_INTERNAL_CALLERS` rỗng theo mặc định (deny all); Compose chỉ truyền public keys
 được cấu hình. Không sinh key cart/order trong `local-up.sh` khi service chưa tồn tại.
 OpenAPI và tài liệu CAT-02a đã đồng bộ ở Task 7. QuoteItem NON_NULL bỏ price_override/image khi null;
-nested image giữ đủ field PublicCardImage. Parent CAT-02 In progress, còn phần 02b.
+nested image giữ đủ field PublicCardImage. CAT-02 Done (local) 2026-10-17.
 
 ## Test và health
 

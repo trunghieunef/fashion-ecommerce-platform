@@ -4,10 +4,12 @@ B1 · 2026-09-19 · Work package mặc định: **Planned; Assignee TBD; Reviewe
 
 ## 1. Cách nhận việc
 
-Update 2026-10-17 — `TASK:CAT-02` **Review**: 02b hiện thực local (Redis cache-aside +
+Update 2026-10-17 — `TASK:CAT-02` **Done (local, trước G0)** theo
+[nghiệm thu 2026-10-17](../evidence/acceptance-2026-10-17.md) (02a PR #19 + 02b `da6d3af`, PR #23 chờ merge `main`;
+CI PASS). 02b: (Redis cache-aside +
 invalidation bền vững, tồn hiển thị từ inventory, sold từ ORDER_COMPLETED, Cache-Control);
 `REQ:CAT-04/05/09`; [spec](../superpowers/specs/2026-10-17-cat-02b-cache-projections-design.md),
-[evidence](../evidence/cat-02b-local-2026-10-17.md). Chưa nghiệm thu Done.
+[evidence](../evidence/cat-02b-local-2026-10-17.md).
 
 Update 2026-10-17 — `TASK:INV-02` **Done (local, trước G0)** theo
 [nghiệm thu 2026-10-17](../evidence/acceptance-2026-10-17.md) trên `dev` `e73ec5d` (merge vào
@@ -186,7 +188,7 @@ Subtasks PLT-04.A–F, owner theo vai trò, dependencies và acceptance ở [16 
 | USR-01 | BE / 2–4 | PLT-02, PLT-03, SEC-01 | USR-01/03/05 | User/token migrations, register/login/refresh/logout/password; reset secret handoff + notification contract; concurrent refresh/replay, email race, revoke family pass |
 | USR-02 | BE / 2–3 | USR-01 | USR-06/08, ADM-06 | Profile/address, roles/permissions, bootstrap admin audit; default-address race; OPS không refund, FINANCE không adjust stock; revoked admin bị chặn |
 | CAT-01 | BE / 2–4 | PLT-02, PLT-03, USR-02 | CAT-01/02/03/06 | Catalog migration, CRUD/variant/collection/size-guide/admin; VARIANT_CREATED outbox, SKU immutable; publish validation và sanitize; không hard-delete lịch sử |
-| CAT-02 | BE / 2–3 | CAT-01 | CAT-03/04/05/09 | Browse/filter/sort/search/cursor, batch quote, durable invalidation; public collection list/detail chỉ ACTIVE, trong [start_at, end_at), có ≥ 1 product ACTIVE; chỉ trả product ACTIVE; test biên thời gian/unpublish product ACTIVE cuối cùng; BEST_SELLING consume completed từ MVP; event replay không cộng lại, cursor ổn định cùng giá  **In progress**: CAT-02a hiện thực/kiểm local 2026-10-11 (public reads + quote PostgreSQL); [evidence](../evidence/cat-02a-local-2026-10-11.md). 02b pending: Redis cache/invalidation durable, replay-safe ORDER_COMPLETED → sold_quantity, inventory available/observed_at, public HTTP cache headers; chưa nghiệm thu parent. |
+| CAT-02 | BE / 2–3 | CAT-01 | CAT-03/04/05/09 | Browse/filter/sort/search/cursor, batch quote, durable invalidation; public collection list/detail chỉ ACTIVE, trong [start_at, end_at), có ≥ 1 product ACTIVE; chỉ trả product ACTIVE; test biên thời gian/unpublish product ACTIVE cuối cùng; BEST_SELLING consume completed từ MVP; event replay không cộng lại, cursor ổn định cùng giá  **Done (local)** 2026-10-17: 02a [evidence](../evidence/cat-02a-local-2026-10-11.md), 02b [evidence](../evidence/cat-02b-local-2026-10-17.md), [nghiệm thu](../evidence/acceptance-2026-10-17.md). |
 | CAT-03 | BE+DEVOPS / 1–3 | CAT-01, SEC-01 | CAT-11 | Scoped upload/attach + object storage config; validate content/type/size/owner; image alt/thumb; object chưa kiểm tra không public |
 | INV-01 | BE / 1–3 | PLT-03, CAT-01, USR-02 | INV-01/08 | Stock schema/register SKU/import/adjust/ledger; duplicate SKU event không reset tồn; CSV lỗi không ghi một phần; adjustment dưới reserved bị từ chối |
 | INV-02 | BE / 3–5 | INV-01, PLT-02/03, SEC-01 | INV-02/03/06 | Reserve multi-SKU/commit/release/expire/query, tombstones; T01–T05/T09 pass DB thật; lock ordering; hash sai snapshot 400 REQUEST_HASH_MISMATCH, khác hash đã lưu 409 RESERVATION_CONFLICT; evidence/status tại update đầu tài liệu |
