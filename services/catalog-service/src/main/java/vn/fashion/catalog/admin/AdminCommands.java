@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import vn.fashion.catalog.cache.CacheInvalidation;
 import vn.fashion.catalog.web.Api;
 import vn.fashion.platform.idempotency.IdempotencyStore;
 
@@ -22,8 +23,9 @@ public class AdminCommands {
   private final TransactionTemplate tx;
   private final IdempotencyStore keys;
   private final ObjectMapper json;
-  public AdminCommands(TransactionTemplate tx, IdempotencyStore keys, ObjectMapper json) {
-    this.tx = tx; this.keys = keys; this.json = json;
+  private final CacheInvalidation invalidation;
+  public AdminCommands(TransactionTemplate tx, IdempotencyStore keys, ObjectMapper json, CacheInvalidation invalidation) {
+    this.tx = tx; this.keys = keys; this.json = json; this.invalidation = invalidation;
   }
   public static void requireKey(String key) {
     if (key == null || key.isBlank() || key.length() > 128)
@@ -43,12 +45,15 @@ public class AdminCommands {
         return new Replay(outcome.responseCode(), json.readTree(outcome.responseBody()));
       if (outcome.status() != IdempotencyStore.Status.STARTED) throw new IllegalStateException("unexpected pending catalog command");
       var result = work.get();
+      invalidation.enqueue(); // CAT-02b: public cache obligation commits with the change, never on replay
       String body = json.writeValueAsString(result.data());
       keys.finish(actorKey, operation, key, result.resourceId(), result.status(), body);
       return new Replay(result.status(), json.readTree(body));
     });
   }
-  public <T> T update(Supplier<T> work) { return tx.execute(status -> work.get()); }
+  public <T> T update(Supplier<T> work) {
+    return tx.execute(status -> { T result = work.get(); invalidation.enqueue(); return result; });
+  }
   public static void requireVersion(Long expected, long actual) {
     if (expected == null) throw new Api.Problem(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "VERSION_REQUIRED", List.of(new Api.FieldError("expected_version", "is required")));
     if (expected != actual) throw new Api.Problem(HttpStatus.CONFLICT, "VERSION_CONFLICT", "STALE_VERSION", List.of());

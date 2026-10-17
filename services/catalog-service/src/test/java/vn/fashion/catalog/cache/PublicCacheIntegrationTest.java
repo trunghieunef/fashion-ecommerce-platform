@@ -4,9 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
-import java.util.Arrays;
-import java.util.Set;
-import java.util.stream.Collectors;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -15,44 +12,18 @@ import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.junit.jupiter.Container;
 import tools.jackson.core.type.TypeReference;
 import vn.fashion.catalog.ProjectionEvents;
-import vn.fashion.catalog.admin.CatalogAdminTestSupport;
 import vn.fashion.catalog.product.PublicCatalogFixtures;
 import vn.fashion.catalog.stock.StockObservations;
 
 /** CAT-02b spec section 2 on a real Redis with the compose ACL (catalog user limited to local:catalog:*). */
-class PublicCacheIntegrationTest extends CatalogAdminTestSupport {
-  static final String PASSWORD = "catalog-test-password";
-  @Container static final GenericContainer<?> redis = new GenericContainer<>("redis:8.2.9").withExposedPorts(6379)
-      .withCommand("redis-server", "--save", "", "--appendonly", "no",
-          "--user", "catalog", "on", ">" + PASSWORD, "~local:catalog:*", "+@connection", "+get", "+set", "+incr");
-  @DynamicPropertySource static void redisProperties(DynamicPropertyRegistry registry) {
-    registry.add("fashion.catalog.cache.enabled", () -> "true");
-    registry.add("spring.data.redis.host", redis::getHost);
-    registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
-    registry.add("spring.data.redis.username", () -> "catalog");
-    registry.add("spring.data.redis.password", () -> PASSWORD);
-  }
+class PublicCacheIntegrationTest extends RedisCacheTestSupport {
   @Autowired PublicCache cache;
   @Autowired StockObservations stock;
   @Autowired MeterRegistry meters;
   private UUID product;
 
-  /** redis-cli as the default user, for assertions the catalog ACL user may not run. */
-  private static String cli(String... args) {
-    try {
-      var command = new String[args.length + 1]; command[0] = "redis-cli"; System.arraycopy(args, 0, command, 1, args.length);
-      return redis.execInContainer(command).getStdout().trim();
-    } catch (Exception e) { throw new AssertionError(e); }
-  }
-  private Set<String> keys(String pattern) {
-    return Arrays.stream(cli("--scan", "--pattern", pattern).split("\\R")).filter(k -> !k.isBlank()).collect(Collectors.toSet());
-  }
   private long ttl(String key) { return Long.parseLong(cli("TTL", key)); }
   private double count(String route, String outcome) {
     var c = meters.find("catalog.cache").tag("route", route).tag("outcome", outcome).counter();
@@ -123,8 +94,7 @@ class PublicCacheIntegrationTest extends CatalogAdminTestSupport {
 
   @Test void pausedRedisFallsBackWithinBudget() {
     data(send("GET", detailPath(), null, null, null), 200);
-    var docker = redis.getDockerClient();
-    docker.pauseContainerCmd(redis.getContainerId()).exec();
+    pause(true);
     try {
       long start = System.nanoTime();
       var response = send("GET", detailPath(), null, null, null);
@@ -132,7 +102,7 @@ class PublicCacheIntegrationTest extends CatalogAdminTestSupport {
       assertThat(Duration.ofNanos(System.nanoTime() - start)).isLessThan(Duration.ofSeconds(1));
       assertThat(count("product", "error")).isPositive();
     } finally {
-      docker.unpauseContainerCmd(redis.getContainerId()).exec();
+      pause(false);
     }
   }
 
