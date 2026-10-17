@@ -1,4 +1,4 @@
-package vn.fashion.catalog.stock;
+package vn.fashion.catalog;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import java.time.Instant;
@@ -20,10 +20,10 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.kafka.KafkaContainer;
-import vn.fashion.catalog.ProjectionEvents;
+import vn.fashion.catalog.stock.StockObservations;
 import vn.fashion.catalog.admin.CatalogAdminTestSupport;
 
-class InventoryEventsListenerIntegrationTest extends CatalogAdminTestSupport {
+class ProjectionListenersIntegrationTest extends CatalogAdminTestSupport {
   @Container static final KafkaContainer kafka = new KafkaContainer("apache/kafka:4.1.2")
       .withEnv("KAFKA_AUTO_CREATE_TOPICS_ENABLE", "false");
   @DynamicPropertySource static void kafkaProperties(DynamicPropertyRegistry registry) {
@@ -53,5 +53,28 @@ class InventoryEventsListenerIntegrationTest extends CatalogAdminTestSupport {
     while (stock.forSkus(List.of("KAFKA-A")).isEmpty() && System.nanoTime() < deadline) Thread.sleep(200);
     assertThat(stock.forSkus(List.of("KAFKA-A")).get("KAFKA-A").available()).isEqualTo(6);
     assertThat(jdbc.queryForObject("select count(*) from variant_stock_observations", Integer.class)).isEqualTo(1);
+  }
+
+  @Test void completedOrderWithUnknownVariantGoesToDlt() throws Exception {
+    UUID order = UUID.randomUUID();
+    var payload = new java.util.LinkedHashMap<String, Object>();
+    payload.put("order_id", order.toString()); payload.put("order_no", "FS-DLT"); payload.put("user_id", null);
+    payload.put("order_version", 5); payload.put("delivered_at", "2026-10-17T02:59:00Z");
+    payload.put("items", List.of(Map.of("variant_id", UUID.randomUUID().toString(), "sku", "X", "quantity", 1)));
+    try (var producer = new KafkaProducer<String, byte[]>(Map.of("bootstrap.servers", kafka.getBootstrapServers()),
+        new StringSerializer(), new ByteArraySerializer());
+         var consumer = new org.apache.kafka.clients.consumer.KafkaConsumer<String, byte[]>(Map.of(
+             "bootstrap.servers", kafka.getBootstrapServers(), "group.id", "dlt-probe-" + order, "auto.offset.reset", "earliest"),
+             new org.apache.kafka.common.serialization.StringDeserializer(),
+             new org.apache.kafka.common.serialization.ByteArrayDeserializer())) {
+      producer.send(new ProducerRecord<>("order.events", "FS-DLT",
+          ProjectionEvents.bytes(mapper, UUID.randomUUID(), "ORDER_COMPLETED", order.toString(), payload))).get();
+      consumer.subscribe(List.of("order.events.DLT"));
+      long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
+      int found = 0;
+      while (found == 0 && System.nanoTime() < deadline) found = consumer.poll(java.time.Duration.ofMillis(500)).count();
+      assertThat(found).isEqualTo(1);
+    }
+    assertThat(jdbc.queryForObject("select count(*) from product_sales_applied", Integer.class)).isZero();
   }
 }
