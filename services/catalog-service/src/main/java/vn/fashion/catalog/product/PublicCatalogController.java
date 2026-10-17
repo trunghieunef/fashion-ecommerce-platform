@@ -13,7 +13,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import vn.fashion.catalog.stock.StockObservations;
+import jakarta.servlet.http.HttpServletResponse;
 import vn.fashion.catalog.web.Api;
+import vn.fashion.catalog.web.PublicCacheHeaders;
 
 @RestController
 @RequestMapping("/api/v1/catalog")
@@ -28,34 +30,40 @@ public class PublicCatalogController {
 
   @GetMapping("/products/{id}")
   public ResponseEntity<Api.Response<PublicCatalogRepository.ProductDetail>> product(@PathVariable String id,
-      @RequestHeader(value = "Accept-Language", defaultValue = "") String language) {
+      @RequestHeader(value = "Accept-Language", defaultValue = "") String language, HttpServletResponse response) {
     UUID product = publicId(id, "PRODUCT_NOT_FOUND");
     var detail = catalog.product(product, locale(language)).orElseThrow(() -> notFound("PRODUCT_NOT_FOUND"));
+    PublicCacheHeaders.allow(response, PublicCacheHeaders.DETAIL);
+    PublicCacheHeaders.varyLanguage(response);
     return Api.ok(HttpStatus.OK, stock.attach(detail), tracer);
   }
 
   @GetMapping("/categories")
-  public ResponseEntity<Api.Response<List<PublicCatalogRepository.CategoryNode>>> categories() {
+  public ResponseEntity<Api.Response<List<PublicCatalogRepository.CategoryNode>>> categories(HttpServletResponse response) {
+    PublicCacheHeaders.allow(response, PublicCacheHeaders.LIST);
     return Api.ok(HttpStatus.OK, catalog.categories(), tracer);
   }
 
   @GetMapping("/brands")
-  public ResponseEntity<Api.Response<List<PublicCatalogRepository.BrandView>>> brands() {
+  public ResponseEntity<Api.Response<List<PublicCatalogRepository.BrandView>>> brands(HttpServletResponse response) {
+    PublicCacheHeaders.allow(response, PublicCacheHeaders.LIST);
     return Api.ok(HttpStatus.OK, catalog.brands(), tracer);
   }
 
   @GetMapping("/size-guides/{categoryId}")
   public ResponseEntity<Api.Response<PublicCatalogRepository.SizeGuideView>> sizeGuide(@PathVariable String categoryId,
       @RequestParam(required = false) String locale,
-      @RequestHeader(value = "Accept-Language", defaultValue = "") String language) {
+      @RequestHeader(value = "Accept-Language", defaultValue = "") String language, HttpServletResponse response) {
     UUID category = publicId(categoryId, "SIZE_GUIDE_NOT_FOUND");
     String selected = locale == null ? locale(language) : locale;
     if (!"vi".equals(selected) && !"en".equals(selected)) {
       throw new Api.Problem(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "INVALID_FIELDS",
           List.of(new Api.FieldError("locale", "must be vi or en")));
     }
-    return Api.ok(HttpStatus.OK, catalog.sizeGuide(category, selected)
-        .orElseThrow(() -> notFound("SIZE_GUIDE_NOT_FOUND")), tracer);
+    var guide = catalog.sizeGuide(category, selected).orElseThrow(() -> notFound("SIZE_GUIDE_NOT_FOUND"));
+    PublicCacheHeaders.allow(response, PublicCacheHeaders.STATIC);
+    PublicCacheHeaders.varyLanguage(response);
+    return Api.ok(HttpStatus.OK, guide, tracer);
   }
 
   private static String locale(String language) { return language.toLowerCase(Locale.ROOT).startsWith("en") ? "en" : "vi"; }

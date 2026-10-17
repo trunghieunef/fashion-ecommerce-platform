@@ -11,7 +11,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import vn.fashion.catalog.product.ProductCursor;
+import jakarta.servlet.http.HttpServletResponse;
 import vn.fashion.catalog.web.Api;
+import vn.fashion.catalog.web.PublicCacheHeaders;
 import vn.fashion.catalog.web.PublicLimit;
 
 @RestController
@@ -26,21 +28,25 @@ public class PublicCollectionController {
 
   @GetMapping
   public ResponseEntity<Api.Response<PublicCollectionRepository.CollectionPage>> list(
-      @RequestParam Map<String, String> params) {
+      @RequestParam Map<String, String> params, HttpServletResponse response) {
     int size = PublicLimit.parse(params.get("limit"));
     String cursor = params.get("cursor");
     ProductCursor after = cursor == null ? null : ProductCursor.decode(cursor, "COLLECTIONS", "");
-    return Api.ok(HttpStatus.OK, collections.list(after, size), tracer);
+    var page = collections.list(after, size);
+    PublicCacheHeaders.allow(response, PublicCacheHeaders.LIST);
+    return Api.ok(HttpStatus.OK, page, tracer);
   }
 
   @GetMapping("/{slug}")
   public ResponseEntity<Api.Response<PublicCollectionRepository.CollectionDetail>> detail(@PathVariable String slug,
-      @RequestParam Map<String, String> params) {
+      @RequestParam Map<String, String> params, HttpServletResponse response) {
     int size = PublicLimit.parse(params.get("limit"));
     String cursor = params.get("cursor");
     ProductCursor after = cursor == null ? null : ProductCursor.decode(cursor, "COLLECTION:" + slug, "");
-    return Api.ok(HttpStatus.OK, collections.detail(slug, after, size).orElseThrow(() ->
-        new Api.Problem(HttpStatus.NOT_FOUND, "NOT_FOUND", "COLLECTION_NOT_FOUND", List.of())), tracer);
+    var detail = collections.detail(slug, after, size).orElseThrow(() ->
+        new Api.Problem(HttpStatus.NOT_FOUND, "NOT_FOUND", "COLLECTION_NOT_FOUND", List.of()));
+    PublicCacheHeaders.allow(response, PublicCacheHeaders.STATIC);
+    return Api.ok(HttpStatus.OK, detail, tracer);
   }
 
 }

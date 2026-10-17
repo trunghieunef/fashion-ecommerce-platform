@@ -8,7 +8,9 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import jakarta.servlet.http.HttpServletResponse;
 import vn.fashion.catalog.web.Api;
+import vn.fashion.catalog.web.PublicCacheHeaders;
 import vn.fashion.catalog.web.PublicLimit;
 
 @RestController
@@ -23,19 +25,24 @@ public class ProductQueryController {
   }
 
   @GetMapping("/products")
-  public ResponseEntity<Api.Response<ProductPage>> listProducts(@RequestParam Map<String, String> params) {
-    return browse(params, false);
+  public ResponseEntity<Api.Response<ProductPage>> listProducts(@RequestParam Map<String, String> params,
+      HttpServletResponse response) {
+    return browse(params, false, response);
   }
 
   @GetMapping("/search")
-  public ResponseEntity<Api.Response<ProductPage>> search(@RequestParam Map<String, String> params) {
-    return browse(params, true);
+  public ResponseEntity<Api.Response<ProductPage>> search(@RequestParam Map<String, String> params,
+      HttpServletResponse response) {
+    return browse(params, true, response);
   }
 
-  private ResponseEntity<Api.Response<ProductPage>> browse(Map<String, String> params, boolean requireQ) {
+  private ResponseEntity<Api.Response<ProductPage>> browse(Map<String, String> params, boolean requireQ,
+      HttpServletResponse response) {
     int limit = PublicLimit.parse(params.get("limit"));
     BrowseFilters filters = BrowseFilters.parse(params, requireQ);
     ProductCursor after = params.containsKey("cursor") ? ProductCursor.decode(params.get("cursor"), filters) : null;
-    return Api.ok(HttpStatus.OK, products.browse(filters, after, limit), tracer);
+    var page = products.browse(filters, after, limit);
+    PublicCacheHeaders.allow(response, PublicCacheHeaders.LIST);
+    return Api.ok(HttpStatus.OK, page, tracer);
   }
 }
