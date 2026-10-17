@@ -62,7 +62,7 @@ services:
       # TASK:CAT-02b: catalog has its own ACL user limited to its key prefix (spec section 2).
       CATALOG_REDIS_PASSWORD: ${CATALOG_REDIS_PASSWORD:?run scripts/local-up.sh to generate CATALOG_REDIS_PASSWORD}
       FASHION_ENV: ${FASHION_ENV:-local}
-    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDISCLI_AUTH\" --save '' --appendonly no --user catalog on \">$$CATALOG_REDIS_PASSWORD\" \"~$${FASHION_ENV}:catalog:*\" +@connection +get +set +incr"]
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDISCLI_AUTH\" --save '' --appendonly no --user catalog on \">$$CATALOG_REDIS_PASSWORD\" \"~$${FASHION_ENV}:catalog:*\" +@connection -@dangerous +get +set +incr"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s

@@ -281,7 +281,7 @@ CAT-02 **Review** sau 02b local; xem mục cache/projection bên dưới.
 [evidence](../../docs/evidence/cat-02b-local-2026-10-17.md).
 
 - Redis: `CATALOG_REDIS_HOST/PORT`, user `CATALOG_REDIS_USERNAME` (mặc định `catalog`),
-  `CATALOG_REDIS_PASSWORD` (local-up sinh); ACL chỉ `<FASHION_ENV>:catalog:*`, lệnh GET/SET/INCR.
+  `CATALOG_REDIS_PASSWORD` (local-up sinh); ACL chỉ `<FASHION_ENV>:catalog:*`, lệnh GET/SET/INCR + connection không gồm @dangerous.
   Timeout 200 ms; lỗi Redis → đọc PostgreSQL. `CATALOG_CACHE_ENABLED=false` tắt cache.
   Readiness không gồm Redis (`management.health.redis.enabled=false`).
 - Invalidation: `AdminCommands` enqueue `background_tasks` kind `catalog.cache.invalidate`;
@@ -292,7 +292,7 @@ CAT-02 **Review** sau 02b local; xem mục cache/projection bên dưới.
   `product_sales_applied`); lỗi vĩnh viễn → `<topic>.DLT`. Local-up tạo `inventory.events.DLT`,
   `order.events`, `order.events.DLT`.
 - Metric: `catalog_cache_total{route,outcome=hit|miss|error}`,
-  `catalog_cache_invalidation_total{outcome=done|error}`.
+  `catalog_cache_invalidation_total{outcome=done|error|manual}`.
 - Giới hạn: chưa có producer ORDER_COMPLETED thật (ORD-03); task DONE chưa purge; staging chưa
   có Redis catalog/ACL.
 

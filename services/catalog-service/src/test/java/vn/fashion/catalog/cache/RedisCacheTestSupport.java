@@ -14,7 +14,7 @@ abstract class RedisCacheTestSupport extends CatalogAdminTestSupport {
   static final String PASSWORD = "catalog-test-password";
   @Container static final GenericContainer<?> redis = new GenericContainer<>("redis:8.2.9").withExposedPorts(6379)
       .withCommand("redis-server", "--save", "", "--appendonly", "no",
-          "--user", "catalog", "on", ">" + PASSWORD, "~local:catalog:*", "+@connection", "+get", "+set", "+incr");
+          "--user", "catalog", "on", ">" + PASSWORD, "~local:catalog:*", "+@connection", "-@dangerous", "+get", "+set", "+incr");
   @DynamicPropertySource static void redisProperties(DynamicPropertyRegistry registry) {
     registry.add("fashion.catalog.cache.enabled", () -> "true");
     registry.add("spring.data.redis.host", redis::getHost);

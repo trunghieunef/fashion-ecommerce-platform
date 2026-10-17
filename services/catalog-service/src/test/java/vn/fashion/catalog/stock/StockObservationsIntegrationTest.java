@@ -40,7 +40,8 @@ class StockObservationsIntegrationTest extends CatalogAdminTestSupport {
     var missing = ProjectionEvents.stock("SKU-A", 1, 1, t1); missing.remove("stock_version");
     var negative = ProjectionEvents.stock("SKU-A", -1, 1, t1);
     var zeroVersion = ProjectionEvents.stock("SKU-A", 1, 0, t1);
-    for (var payload : List.of(missing, negative, zeroVersion)) {
+    var longSku = ProjectionEvents.stock("S".repeat(65), 1, 1, t1); // Review F7: would retry forever as a DB error
+    for (var payload : List.of(missing, negative, zeroVersion, longSku)) {
       assertThatThrownBy(() -> stock.apply(ProjectionEvents.envelope(mapper, "INVENTORY_UPDATED", "SKU-A", payload)))
           .isInstanceOf(PermanentEventException.class);
     }

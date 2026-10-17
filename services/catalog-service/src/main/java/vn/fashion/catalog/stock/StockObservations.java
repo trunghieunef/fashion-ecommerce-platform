@@ -25,7 +25,9 @@ public class StockObservations {
   /** INVENTORY_UPDATED/RESTOCKED payload (stock-events StockSnapshot); true when the observation was stored. */
   public Boolean apply(EventEnvelope env) {
     JsonNode p = env.payload();
-    if (env.version() != 1 || !p.path("sku").isString() || p.path("sku").asText().isEmpty()) throw invalid();
+    // sku 1..64 (common.schema.json); a longer value would fail in the DB and be retried forever.
+    if (env.version() != 1 || !p.path("sku").isString() || p.path("sku").asText().isEmpty()
+        || p.path("sku").asText().length() > 64) throw invalid();
     long available = count(p, "available", 0), version = count(p, "stock_version", 1);
     if (available > Integer.MAX_VALUE) throw invalid();
     Instant observed;

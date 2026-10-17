@@ -112,5 +112,24 @@ class PublicCacheIntegrationTest extends RedisCacheTestSupport {
   @Test void aclUserCannotTouchOtherPrefixes() {
     assertThat(cli("--user", "catalog", "--pass", PASSWORD, "--no-auth-warning", "SET", "local:catalog:probe", "1")).isEqualTo("OK");
     assertThat(cli("--user", "catalog", "--pass", PASSWORD, "--no-auth-warning", "GET", "local:user:secret")).contains("NOPERM");
+    // Review F1: @connection alone allows CLIENT PAUSE/KILL/LIST, which would reach user-service connections.
+    assertThat(cli("--user", "catalog", "--pass", PASSWORD, "--no-auth-warning", "CLIENT", "PAUSE", "10")).contains("NOPERM");
+    assertThat(cli("--user", "catalog", "--pass", PASSWORD, "--no-auth-warning", "CLIENT", "LIST")).contains("NOPERM");
+    assertThat(cli("--user", "catalog", "--pass", PASSWORD, "--no-auth-warning", "PING")).isEqualTo("PONG");
+  }
+
+  @Test void oldSchemaValueIsMiss() {
+    // Review F3: valid JSON of another record shape must be a miss, not a detail with null variants (500).
+    data(send("GET", detailPath(), null, null, null), 200);
+    data(send("GET", detailPath(), null, null, null), 200); // second call caches even if the first hit a cold connect
+    var cached = keys("local:catalog:v1:*:product:*");
+    assertThat(cached).hasSize(1);
+    for (String k : cached) {
+      String renamed = cli("GET", k).replace("\"variants\":", "\"variants_old\":");
+      assertThat(renamed).contains("variants_old");
+      cli("SET", k, renamed);
+    }
+    var detail = data(send("GET", detailPath(), null, null, null), 200);
+    assertThat(detail.path("variants")).hasSize(1);
   }
 }

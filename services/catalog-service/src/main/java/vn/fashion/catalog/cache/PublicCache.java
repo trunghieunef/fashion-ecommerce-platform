@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.ObjectMapper;
 
 /**
@@ -42,7 +43,9 @@ public class PublicCache {
       String cached = redis.opsForValue().get(key);
       if (cached != null) {
         try {
-          T value = json.readValue(cached, type);
+          // Strict: a value written for another record shape is a miss, never a half-filled object.
+          T value = json.readerFor(type).with(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES,
+              DeserializationFeature.FAIL_ON_MISSING_CREATOR_PROPERTIES).readValue(cached);
           count(route, "hit");
           return Optional.of(value);
         } catch (RuntimeException undecodable) { count(route, "error"); }

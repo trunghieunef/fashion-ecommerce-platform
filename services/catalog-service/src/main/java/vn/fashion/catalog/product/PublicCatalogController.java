@@ -42,23 +42,26 @@ public class PublicCatalogController {
     // Stock is attached after the cache: it is never cached (spec section 4).
     var detail = cache.read("product", TTL, new TypeReference<PublicCatalogRepository.ProductDetail>() { },
         () -> catalog.product(product, locale), product.toString(), locale).orElseThrow(() -> notFound("PRODUCT_NOT_FOUND"));
-    PublicCacheHeaders.allow(response, PublicCacheHeaders.DETAIL);
+    var withStock = stock.attach(detail);
+    PublicCacheHeaders.allow(response, PublicCacheHeaders.DETAIL); // only once the body is complete: errors stay no-store
     PublicCacheHeaders.varyLanguage(response);
-    return Api.ok(HttpStatus.OK, stock.attach(detail), tracer);
+    return Api.ok(HttpStatus.OK, withStock, tracer);
   }
 
   @GetMapping("/categories")
   public ResponseEntity<Api.Response<List<PublicCatalogRepository.CategoryNode>>> categories(HttpServletResponse response) {
+    var categories = cache.read("categories", TTL, new TypeReference<List<PublicCatalogRepository.CategoryNode>>() { },
+        () -> Optional.of(catalog.categories())).orElseThrow();
     PublicCacheHeaders.allow(response, PublicCacheHeaders.LIST);
-    return Api.ok(HttpStatus.OK, cache.read("categories", TTL, new TypeReference<List<PublicCatalogRepository.CategoryNode>>() { },
-        () -> Optional.of(catalog.categories())).orElseThrow(), tracer);
+    return Api.ok(HttpStatus.OK, categories, tracer);
   }
 
   @GetMapping("/brands")
   public ResponseEntity<Api.Response<List<PublicCatalogRepository.BrandView>>> brands(HttpServletResponse response) {
+    var brands = cache.read("brands", TTL, new TypeReference<List<PublicCatalogRepository.BrandView>>() { },
+        () -> Optional.of(catalog.brands())).orElseThrow();
     PublicCacheHeaders.allow(response, PublicCacheHeaders.LIST);
-    return Api.ok(HttpStatus.OK, cache.read("brands", TTL, new TypeReference<List<PublicCatalogRepository.BrandView>>() { },
-        () -> Optional.of(catalog.brands())).orElseThrow(), tracer);
+    return Api.ok(HttpStatus.OK, brands, tracer);
   }
 
   @GetMapping("/size-guides/{categoryId}")

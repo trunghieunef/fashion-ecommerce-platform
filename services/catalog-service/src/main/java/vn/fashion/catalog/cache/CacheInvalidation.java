@@ -42,6 +42,7 @@ public class CacheInvalidation {
       for (var t : claimed) {
         var retry = Duration.ofSeconds(Math.min(60, 1L << Math.min(t.attempts(), 6)));
         tasks.fail(t.id(), t.leaseToken(), "REDIS_UNAVAILABLE", retry, MAX_ATTEMPTS);
+        if (t.attempts() >= MAX_ATTEMPTS) meters.counter("catalog.cache.invalidation", "outcome", "manual").increment();
       }
       meters.counter("catalog.cache.invalidation", "outcome", "error").increment();
       return 0;

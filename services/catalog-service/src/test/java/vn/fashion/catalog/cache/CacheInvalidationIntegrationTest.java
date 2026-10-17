@@ -90,6 +90,23 @@ class CacheInvalidationIntegrationTest extends RedisCacheTestSupport {
     assertThat(detail().path("name_vi").asText()).isEqualTo("Khi Redis treo");
   }
 
+  @Test void exhaustedTaskBecomesManualWithMetric() {
+    // Review F5: spec section 3 "MANUAL kèm metric".
+    data(call("PUT", "/products/" + product, rename("Hết lượt", 2)), 200);
+    jdbc.update("update background_tasks set attempts=9 where status='PENDING'");
+    double before = manual();
+    pause(true);
+    try { assertThat(invalidation.runOnce()).isZero(); }
+    finally { pause(false); }
+    assertThat(jdbc.queryForObject("select count(*) from background_tasks where status='MANUAL'", Integer.class)).isEqualTo(1);
+    assertThat(manual()).isEqualTo(before + 1);
+  }
+  @org.springframework.beans.factory.annotation.Autowired io.micrometer.core.instrument.MeterRegistry meters;
+  private double manual() {
+    var c = meters.find("catalog.cache.invalidation").tag("outcome", "manual").counter();
+    return c == null ? 0 : c.count();
+  }
+
   @Test void oneBumpForManyTasks() {
     String before = gen();
     data(call("PUT", "/products/" + product, rename("Một", 2)), 200);
