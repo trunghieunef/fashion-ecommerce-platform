@@ -1,7 +1,7 @@
 # PLT-05 (local) — trace liền mạch qua Kafka, xem trong Grafana
 
-`TASK:PLT-05` phần local · `REQ:NFR-01/03/04` · dependency PLT-03 (Done local). Trạng thái: **bản nháp
-chờ chủ dự án duyệt**, 2026-10-17. Chủ dự án mô tả kết quả mong muốn và giao agent tự chốt phần còn
+`TASK:PLT-05` phần local · `REQ:NFR-01/03/04` · dependency PLT-03 (Done local). Trạng thái: **đã duyệt**
+2026-10-17; plan [PLT-05 Kafka trace](../plans/2026-10-17-plt-05-kafka-trace.md). Chủ dự án mô tả kết quả mong muốn và giao agent tự chốt phần còn
 lại; các lựa chọn của agent ghi ở §8. Không thay acceptance staging của PLT-05 (cần PLT-04).
 
 ## 1. Mục tiêu
