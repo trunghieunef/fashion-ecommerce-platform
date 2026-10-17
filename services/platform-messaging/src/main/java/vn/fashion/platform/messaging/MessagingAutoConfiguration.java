@@ -113,8 +113,11 @@ public class MessagingAutoConfiguration {
   static class RelayConfiguration {
     @Bean OutboxRelay outboxRelay(OutboxRepository outbox,
         @Qualifier("kafkaTemplate") KafkaTemplate<String, String> kafka, MeterRegistry meters,
-        @Value("${fashion.messaging.relay.send-timeout:5s}") Duration timeout) {
-      var relay = new OutboxRelay(outbox, kafka, timeout); relay.metrics(meters); return relay;
+        @Value("${fashion.messaging.relay.send-timeout:5s}") Duration timeout,
+        org.springframework.beans.factory.ObjectProvider<io.micrometer.tracing.Tracer> tracer,
+        org.springframework.beans.factory.ObjectProvider<io.micrometer.tracing.propagation.Propagator> propagator) {
+      var relay = new OutboxRelay(outbox, kafka, timeout, tracer.getIfAvailable(), propagator.getIfAvailable());
+      relay.metrics(meters); return relay;
     }
   }
 
