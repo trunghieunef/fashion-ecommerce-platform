@@ -1,0 +1,25 @@
+{
+  "event_id": "77777777-7777-4777-8777-777777777782",
+  "event_type": "INVENTORY_DEDUCTED",
+  "version": 1,
+  "occurred_at": "2026-10-16T03:00:00Z",
+  "aggregate_id": "88888888-8888-4888-8888-888888888881",
+  "aggregate_version": 2,
+  "aggregate_sequence": 2,
+  "correlation_id": "synthetic-contract-example",
+  "payload": {
+    "order_id": "99999999-9999-4999-8999-999999999991",
+    "order_no": "ORD202610000001",
+    "reservation_id": "88888888-8888-4888-8888-888888888881",
+    "status": "COMMITTED",
+    "expires_at": "2026-10-16T03:15:00.000Z",
+    "items": [
+      {
+        "sku": "SYNTH-TEE-M-BLK",
+        "quantity": 2
+      }
+    ],
+    "reason": null,
+    "version": 2
+  }
+}

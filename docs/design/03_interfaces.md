@@ -66,6 +66,14 @@ Idempotency lookup của order chạy sau auth nhưng trước kiểm tra quote 
 
 Mutation cart/admin dùng expected_version; thiếu version bắt buộc trả 400; stale trả 409. Scope hash không chứa transient trace ID, cookie hay secret. Internal operation key ổn định theo order_id:operation; body có request_hash original khi release/close/cancel chống late create.
 
+Reservation `request_hash` là SHA-256 hex lowercase của UTF-8
+`order_id|order_no|expires_at|SKU1:q1,SKU2:q2,...`: order_id UUID lowercase;
+order_no 1–32 ký tự: nhân đôi mỗi ký tự backslash trước, rồi thêm một backslash trước mỗi pipe (`|`);
+expires_at UTC kết thúc `Z`, năm 0001–9999, tối đa mili giây, canonical
+`yyyy-MM-dd'T'HH:mm:ss.SSS'Z'`; SKU theo `Sku.canonical` (trim, chữ hoa ASCII),
+gộp quantity và sắp xếp tăng dần. Inventory tự tính hash; release dùng order_id và
+original_reservation để đối chiếu original_request_hash, không hash body release.
+
 ## 2. API public
 
 ### 2.1 User
@@ -463,10 +471,10 @@ Report orders do order sở hữu, cash do payment, stock do inventory; dashboar
 | POST /catalog/variants/quote | order,cart → catalog | `CAT-02a` implemented: /internal/api/v1/catalog/variants/quote; 1–100 distinct UUID → ordered snapshot; service token aud catalog-service, caller cart-service/order-service; 401 UNAUTHORIZED/INVALID_SERVICE_TOKEN, 403 FORBIDDEN/CALLER_NOT_ALLOWED, no-store mọi response |
 | GET /orders/{order_id}/snapshot | payment,shipping → order | Scoped fields; immutable snapshot/version/hash |
 | GET /orders/{order_id}/saga-status | promotion,shipping,payment → order | Intent, readiness,deadline/version; không PII dư |
-| POST /inventory/reserve | order → inventory | order_id,order_no,items,expires_at,request_hash,key → reservation |
-| POST /inventory/commit | order → inventory | order_id,key → COMMITTED hoặc conflict đã hết hạn |
-| POST /inventory/release | order → inventory | order_id,original_reservation {order_no,items,expires_at},original_request_hash,reason,key → RELEASED/EXPIRED/COMMITTED |
-| GET /inventory/reservations/{order_id} | order → inventory | Status/items/deadline,404 chưa có |
+| POST /inventory/reserve | order-service → inventory | INV-02 implemented local: `/internal/api/v1/inventory/reserve`; order_id,order_no,items,expires_at,request_hash,key → reservation; no-store |
+| POST /inventory/commit | order-service → inventory | INV-02 implemented local: `/internal/api/v1/inventory/commit`; order_id,key → COMMITTED hoặc conflict đã hết hạn; no-store |
+| POST /inventory/release | order-service → inventory | INV-02 implemented local: `/internal/api/v1/inventory/release`; order_id,original_reservation {order_no,items,expires_at},original_request_hash,reason,key → RELEASED/EXPIRED/COMMITTED; no-store |
+| GET /inventory/reservations/{order_id} | order-service → inventory | INV-02 implemented local: `/internal/api/v1/inventory/reservations/{order_id}`; status/items/deadline,404 RESERVATION_NOT_FOUND; no-store |
 | GET /inventory/skus/{sku} | catalog,cart → inventory | INV-01 hiện thực local: sku,variant_id,available,version,observed_at; no-store cả lỗi; auth/caller trước SKU validation; 404 SKU_NOT_FOUND, không route qua Gateway |
 | POST /inventory/returns | order → inventory | reservation/order,items,operation_key,evidence_ref → returned quantities |
 | POST /promotions/quote | order,cart,catalog → promotion | Server actor/verified flag,items,prices,fee → effective prices/discount/version |
@@ -505,6 +513,24 @@ type không hỗ trợ/sai cú pháp trả 415 VALIDATION_ERROR/INVALID_HTTP_REQ
 metadata/correlation/no-store và Accept quảng bá hai media types trên; không echo/log header hoặc payload.
 Request vẫn chỉ `variant_ids`; `items` là key lạ top-level, không có request item DTO trong quote.
 
+Contract `TASK:INV-02` (`REQ:INV-02/03/06`; dependency INV-01, PLT-02/03, SEC-01) tại
+[`inventory.yaml`](../../contracts/openapi/inventory.yaml) bổ sung reserve/commit/release và query
+reservation dưới `/internal/api/v1/inventory`. Chỉ `order-service`; kiểm token → caller → header/body,
+mọi response có `Cache-Control: no-store`; không route qua Gateway. Mutation cần `Idempotency-Key`
+1–128 ký tự. Body đóng; 1–100 items, quantity 1–99 trước và sau gộp SKU trùng. Reserve mới cần
+`now() < expires_at <= now() + 24h` theo DB clock; retry cùng order/hash trả reservation ACTIVE/COMMITTED
+hiện có dù deadline request đã qua. Release chỉ kiểm hình dạng snapshot gốc, không kiểm deadline.
+
+Canonical `request_hash` reservation dùng quy tắc duy nhất tại §1.3.
+Lỗi dùng envelope chung: hash sai snapshot → 400 VALIDATION_ERROR/REQUEST_HASH_MISMATCH;
+khác hash đã lưu → 409 CONFLICT/RESERVATION_CONFLICT; reserve trên tombstone/terminal →
+409 CONFLICT/RESERVATION_CLOSED. OUT_OF_STOCK trả 409, `errors[{field: "items[<SKU>]",
+message: "requested=<n> available=<m>"}]`; SKU lạ/INACTIVE có available=0, không giữ một phần đơn.
+Commit quá hạn lưu EXPIRED/nhả hàng trước khi trả 409 CONFLICT/RESERVATION_EXPIRED.
+Release sau COMMITTED trả 200 với restore_required=true và không đổi kho; restore thuộc INV-03.
+Đã hiện thực local; [evidence INV-02](../evidence/inv-02-local-2026-10-16.md) ghi runtime,
+mutation và giới hạn. Parent ở Review, chưa nghiệm thu Done.
+
 Internal stock return chỉ order; OPS dùng admin order returns để giữ evidence và orchestration. Query pure POST không cần idempotency key; mọi command còn lại cần key + stable business reference. Hash canonical tại service đích phải khớp original payload; không chỉ so chuỗi caller gửi.
 
 Snapshot-based payment/shipment create từ order được xác thực và hạn quyền. Cancel/close có đủ snapshot để tạo tombstone trước create; missing snapshot trả 400, không giả báo đã chặn.
@@ -516,7 +542,7 @@ Snapshot-based payment/shipment create từ order được xác thực và hạn
 `TASK:PLT-02` đã bắt đầu schema envelope tại `contracts/events/event-envelope.schema.json`
 và fixtures/tests; xem [contract README](../../contracts/README.md). Schema kiểm UUID,
 required fields, UTC timestamp và integer versions/sequence. Payload §5.3 của USER_CREATED,
-VARIANT_CREATED, CATALOG_CHANGED, INVENTORY_UPDATED/RESTOCKED và ORDER_CREATED/CONFIRMED/
+VARIANT_CREATED, CATALOG_CHANGED, INVENTORY_UPDATED/RESTOCKED/RESERVED/DEDUCTED/RELEASED và ORDER_CREATED/CONFIRMED/
 PAID/CANCELLED có schema thực thi qua `contracts/events/registry.json`, kèm topic/partition
 key (§5.2) và field làm aggregate_id; test đối chiếu bảng §5.2 nên sửa topic/key phải
 sửa cả hai nơi. Các event còn lại thêm trong task producer. Quy ước §1.2/1.3 nằm ở `contracts/openapi/common.yaml`. Chưa có
@@ -540,7 +566,8 @@ Relay giữ thứ tự chưa gửi theo aggregate_sequence. Consumer dedupe tron
 | user.events / user_id | user | USER_CREATED | Chưa có consumer nghiệp vụ bắt buộc; analytics sau |
 | catalog.events / product_id | catalog | VARIANT_CREATED, CATALOG_CHANGED | inventory register SKU; catalog invalidation worker |
 | order.events / order_no | order | ORDER_CREATED, ORDER_CONFIRMED, ORDER_PAID, ORDER_CANCELLED, ORDER_COMPLETED | catalog sold projection/eligibility, inventory stop restock tại COMPLETED; không create payment/stock/shipment |
-| inventory.events / sku cho snapshot; order_no cho reservation | inventory | INVENTORY_UPDATED, INVENTORY_RESTOCKED, INVENTORY_RESERVED, INVENTORY_RELEASED, INVENTORY_DEDUCTED | catalog stock projection; order reconcile reservation; inventory sở hữu restock fan-out |
+| inventory.events / sku | inventory | INVENTORY_UPDATED, INVENTORY_RESTOCKED | catalog stock projection; inventory sở hữu restock fan-out |
+| inventory.events / order_no | inventory | INVENTORY_RESERVED, INVENTORY_RELEASED, INVENTORY_DEDUCTED | order reconcile reservation (INV-02) |
 | payment.events / order_no | payment | PAYMENT_CREATED, PAYMENT_COMPLETED, PAYMENT_FAILED, PAYMENT_REFUNDED | order saga/tài chính COD; không inventory tự deduct |
 | promotion.events / variant_id | promotion | PRICE_CHANGED | catalog invalidation |
 | shipping.events / order_no | shipping | SHIPMENT_CREATED, SHIPMENT_STATUS_UPDATED, COD_COLLECTED, COD_REMITTED | order giao hàng; payment COD evidence |

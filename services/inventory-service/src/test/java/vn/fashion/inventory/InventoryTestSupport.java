@@ -37,7 +37,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-    properties = "fashion.messaging.relay.enabled=false")
+    properties = {"fashion.messaging.relay.enabled=false", "fashion.inventory.reservation-sweep.enabled=false"})
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 public abstract class InventoryTestSupport {
   protected static final UUID ACTOR = UUID.randomUUID();
@@ -71,9 +71,9 @@ public abstract class InventoryTestSupport {
     registry.add("spring.flyway.password", () -> "inventory_migration_test");
     registry.add("fashion.inventory.jwt.public-keys", InventoryTestSupport::publicKeys);
   }
-  @BeforeEach void clearInventory() throws Exception {
+  @BeforeEach protected void clearInventory() throws Exception {
     try (var c = DriverManager.getConnection(postgres.getJdbcUrl(), "postgres", "postgres"); var s = c.createStatement()) {
-      s.execute("delete from stock_transactions; delete from stock_items; delete from outbox_events; delete from processed_events; delete from idempotency_requests");
+      s.execute("delete from stock_reservation_items; delete from stock_reservations; delete from stock_transactions; delete from stock_items; delete from outbox_events; delete from processed_events; delete from idempotency_requests");
     }
   }
   protected String token(String... permissions) { return signed(KEY, Instant.now(), permissions); }

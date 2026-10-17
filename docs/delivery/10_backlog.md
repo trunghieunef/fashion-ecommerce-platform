@@ -4,13 +4,22 @@ B1 · 2026-09-19 · Work package mặc định: **Planned; Assignee TBD; Reviewe
 
 ## 1. Cách nhận việc
 
-Update 2026-10-16 — `TASK:INV-01`: Task1–8 hiện thực/kiểm local trên dev;
-whole-branch review F17 đã sửa, verify536 và smoke mới PASS; F18 đã chốt smoke admin,
-internal caller Compose để CART-01 kiểm với caller thật đầu tiên.
-Chưa Done/chưa push/PR/chưa nghiệm thu G0/G1.
-Khung stock/ledger, catalog Kafka relay → inventory inbox, admin read/adjust/import,
-internal availability và Gateway admin đã có. Theo [evidence](../evidence/inv-01-local-2026-10-15.md)
-và [handoff INV-01](../superpowers/plans/2026-10-15-inv-01-handoff.md).
+Update 2026-10-17 — `TASK:INV-02` **Done (local, trước G0)** theo
+[nghiệm thu 2026-10-17](../evidence/acceptance-2026-10-17.md) trên `dev` `e73ec5d` (PR #22, chờ merge
+`main`); review PR #22 đã sửa, verify 587 test, smoke và CI PASS; evidence tại
+[evidence INV-02](../evidence/inv-02-local-2026-10-16.md).
+`REQ:INV-02`, `REQ:INV-03`, `REQ:INV-06`; dependency INV-01, PLT-02/03, SEC-01.
+Acceptance: reserve all-or-nothing, commit/release/expiry, tombstone/query, T01–T05/T09
+trên PostgreSQL thật, relay Kafka và 6 guard mutants. Done local không thay gate G0/G1/G2;
+ORD-01/02 chưa có caller thật, INV-03 còn sau.
+
+Update 2026-10-16 — `TASK:INV-01` **Done (local, trước G0)**: merge vào `main` qua PR #20/#21
+(`a76442e`); chủ dự án chỉ định Claude Code nghiệm thu (không độc lập, cùng tác giả) sau khi chạy
+lại verify 540 test và local-up/smoke PASS. Khung stock/ledger, catalog Kafka relay → inventory
+inbox, admin read/adjust/import, internal availability và Gateway admin đã có. Follow-up PR20 còn
+mở; chưa nghiệm thu G0/G1. Theo [nghiệm thu](../evidence/acceptance-2026-10-16.md),
+[evidence](../evidence/inv-01-local-2026-10-15.md) và
+[handoff INV-01](../superpowers/plans/2026-10-15-inv-01-handoff.md).
 
 Mã trong cột Task là namespace TASK (ví dụ TASK:PAY-01); mã trong cột REQ là yêu cầu trong 02. Hai namespace độc lập, không coi task và requirement cùng hậu tố là cùng việc. Cột phụ thuộc chứa task ID, không phải REQ. “—” nghĩa không có dependency task; các gate D/O vẫn áp dụng theo 08.
 
@@ -175,7 +184,7 @@ Subtasks PLT-04.A–F, owner theo vai trò, dependencies và acceptance ở [16 
 | CAT-02 | BE / 2–3 | CAT-01 | CAT-03/04/05/09 | Browse/filter/sort/search/cursor, batch quote, durable invalidation; public collection list/detail chỉ ACTIVE, trong [start_at, end_at), có ≥ 1 product ACTIVE; chỉ trả product ACTIVE; test biên thời gian/unpublish product ACTIVE cuối cùng; BEST_SELLING consume completed từ MVP; event replay không cộng lại, cursor ổn định cùng giá  **In progress**: CAT-02a hiện thực/kiểm local 2026-10-11 (public reads + quote PostgreSQL); [evidence](../evidence/cat-02a-local-2026-10-11.md). 02b pending: Redis cache/invalidation durable, replay-safe ORDER_COMPLETED → sold_quantity, inventory available/observed_at, public HTTP cache headers; chưa nghiệm thu parent. |
 | CAT-03 | BE+DEVOPS / 1–3 | CAT-01, SEC-01 | CAT-11 | Scoped upload/attach + object storage config; validate content/type/size/owner; image alt/thumb; object chưa kiểm tra không public |
 | INV-01 | BE / 1–3 | PLT-03, CAT-01, USR-02 | INV-01/08 | Stock schema/register SKU/import/adjust/ledger; duplicate SKU event không reset tồn; CSV lỗi không ghi một phần; adjustment dưới reserved bị từ chối |
-| INV-02 | BE / 3–5 | INV-01, PLT-02 | INV-02/03/06 | Reserve multi-SKU/commit/release/expire/query, tombstones; T01–T05/T09 pass DB thật; lock ordering; original hash mismatch trả 409 |
+| INV-02 | BE / 3–5 | INV-01, PLT-02/03, SEC-01 | INV-02/03/06 | Reserve multi-SKU/commit/release/expire/query, tombstones; T01–T05/T09 pass DB thật; lock ordering; hash sai snapshot 400 REQUEST_HASH_MISMATCH, khác hash đã lưu 409 RESERVATION_CONFLICT; evidence/status tại update đầu tài liệu |
 | INV-03 | BE / 1–3 | INV-02 | INV-07 | Return/restore và cumulative guard dưới lock; operation key + evidence; T17 và return đồng thời không vượt commit |
 | CART-01 | BE / 2–3 | USR-01, CAT-02, INV-01 | CART-01/02/04 | DB guest/member carts, cookie credential, versions, item APIs; Redis loss không mất giỏ; guessed cart_id bị 404 |
 | CART-02 | BE / 1–2 | CART-01 | CART-03 | Merge locks/version và adjustments UI contract; retry/parallel chỉ cộng một lần; T19 |

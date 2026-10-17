@@ -122,7 +122,8 @@ Catalog quote nội bộ CAT-02a trả ordered snapshot found/active (variant kh
 CAT-01a tạo `VARIANT_CREATED` ngay khi tạo variant (không đợi publish): khóa product → insert
 variant → tăng product version → outbox → audit → kết quả idempotency trong cùng transaction.
 Payload giữ contract hiện có, `version` là version variant (0), aggregate_version là product
-version mới; retry cùng key không tạo event khác. Hiện intent PENDING, relay và INV-01 chưa có.
+version mới; retry cùng key không tạo event khác. Từ INV-01, catalog relay phát event lên Kafka và
+inventory-service tiêu thụ qua inbox để đăng ký SKU.
 
 Publish CAT-01a kiểm category/brand ACTIVE và ít nhất một variant ACTIVE, tên VI/EN bắt buộc,
 dưới khóa product + version guard; key/reason/idempotency và audit theo spec đã duyệt.
@@ -420,6 +421,42 @@ stateDiagram-v2
 | Return/restore | Chỉ caller order; OPS đi qua admin order returns; lock reservation → kiểm tra đã COMMITTED, tổng quantity trả chưa vượt commit → tăng on_hand + stock_returns + ledger/outbox | Không nhận số lượng trả tùy ý từ client; cần cancel chưa giao hoặc phiếu kiểm đếm hàng đã về; operation key chống cộng lại |
 
 Không giữ một phần các SKU của đơn. Không giữ row lock khi gọi service khác. Stock constraint `0 <= reserved <= on_hand` là lớp bảo vệ cuối; không thay bằng Redis distributed lock.
+
+`TASK:INV-02` Task 4 hiện thực reserve all-or-nothing và query reservation, phụ thuộc
+INV-01, PLT-02/03 và SEC-01; phục vụ `REQ:INV-02/03/06`. Transaction khóa reservation
+trước SKU tăng dần, ghi ledger/outbox cùng reserved. Replay cùng order/hash đọc hiện trạng
+trước kiểm deadline theo DB clock; row ACTIVE đã quá hạn được expire (ledger RELEASE/outbox) trong
+transaction đó rồi trả 409 RESERVATION_CLOSED, không báo còn giữ hàng sau deadline. Acceptance Task 4 dùng PostgreSQL thật để kiểm T01/T02/T03,
+race reserve/adjust, deadline, auth và no-store; kết quả kiểm thử ghi khi bàn giao.
+Task 5 thêm commit API và nhả hàng khi commit quá hạn: ghi EXPIRED, reason `expired`,
+ledger RELEASE/outbox trong transaction rồi mới trả 409 RESERVATION_EXPIRED ngoài transaction.
+Commit còn hạn ghi COMMITTED, giảm on_hand/reserved và ledger COMMIT/outbox; retry COMMITTED
+trả hiện trạng 200 không trừ thêm. Acceptance Task 5 dùng PostgreSQL thật kiểm T09, expire
+bền vững trước 409, retry không nhả lại, query và lỗi auth/body/not-found.
+Task 6 thêm release API: ACTIVE nhả reserved, ghi RELEASED cùng ledger RELEASE/outbox;
+RELEASED/EXPIRED retry no-op, COMMITTED trả 200 restore_required=true không đổi kho.
+Release chưa có reservation insert tombstone RELEASED version=1 theo order_id **trước** khi
+khóa SKU tăng dần để kiểm tồn tại, tránh đảo thứ tự khóa với reserve đang insert cùng order.
+SKU lạ trả 400 tại original_reservation.items[SKU], rollback tombstone; snapshot quá hạn
+vẫn hợp lệ nếu đúng hình dạng/hash. Tombstone giữ items và ghi INVENTORY_RELEASED, không
+đổi stock/ledger; reserve đến muộn trả RESERVATION_CLOSED. Acceptance Task 6 dùng PostgreSQL
+thật kiểm T04, retry, restore_required, input lỗi và race: release chờ unique insert reservation
+không giữ SKU lock, competing reserve vẫn khóa được SKU trước khi rollback.
+Task 7 thêm expire job (cùng dependency và REQ trên): mặc định mỗi 5s, batch 100,
+cấu hình `fashion.inventory.reservation-sweep.enabled/interval/batch`; test tắt trigger.
+Chọn ACTIVE có expires_at <= DB now, rồi mỗi id một transaction khóa reservation bằng
+`FOR UPDATE SKIP LOCKED` và kiểm lại ACTIVE/deadline trước khi khóa SKU tăng dần.
+Nhả reserved, ghi EXPIRED với reason `expired`, ledger RELEASE và outbox cùng transaction;
+lỗi một id không chặn id khác, lần quét sau thử lại. Counter operation/outcome và gauge
+ACTIVE quá hạn hỗ trợ phát hiện job kẹt, gauge vẫn có khi trigger tắt.
+Acceptance Task 7 dùng PostgreSQL thật: due/fresh, retry sweep, T05 10 vòng,
+row bị khóa được bỏ qua và COMMITTED không bị expire; test gọi thẳng lockDue trong transaction
+để kiểm guard ACTIVE với candidate đã cũ.
+INV-02 hiện thực local 2026-10-16: sweep mặc định 5 s dùng SKIP LOCKED, commit tự kiểm hạn;
+Prometheus counter `inventory_reservations_total{operation,outcome}` và gauge
+`inventory_reservations_overdue`. Gateway boundary và relay Kafka thật có regression;
+[evidence INV-02](../evidence/inv-02-local-2026-10-16.md) ghi kết quả verify/mutation.
+INV-02 Done (local) theo [nghiệm thu 2026-10-17](../evidence/acceptance-2026-10-17.md); chưa phải G0/G1/G2.
 
 ### 6.2 Nhập kho, điều chỉnh và restock
 

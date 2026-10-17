@@ -1,7 +1,13 @@
 # Cẩm nang tài liệu dự án
 
-INV-01 đang kiểm local trên dev: [evidence](evidence/inv-01-local-2026-10-15.md),
-[handoff](superpowers/plans/2026-10-15-inv-01-handoff.md); chưa Done hoặc push/PR.
+INV-01 đã merge (PR #20/#21) và Done (local) ngày 2026-10-16:
+[nghiệm thu](evidence/acceptance-2026-10-16.md), [evidence](evidence/inv-01-local-2026-10-15.md),
+[handoff](superpowers/plans/2026-10-15-inv-01-handoff.md).
+
+INV-02 reserve/commit/release/expiry và tombstone Done (local) theo
+[nghiệm thu 2026-10-17](evidence/acceptance-2026-10-17.md):
+[evidence](evidence/inv-02-local-2026-10-16.md),
+[handoff](superpowers/plans/2026-10-16-inv-02-handoff.md).
 
 Baseline B1 · 2026-09-19 · Đồng bộ để phân công; chưa nghiệm thu triển khai.
 

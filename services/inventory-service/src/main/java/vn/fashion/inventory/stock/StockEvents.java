@@ -15,10 +15,12 @@ public class StockEvents {
   private final ObjectMapper json;
   private final JsonNode routes;
   public StockEvents(OutboxRepository outbox,ObjectMapper json) {
-    this.outbox=outbox;this.json=json;
+    this.outbox=outbox;this.json=json;this.routes=loadRoutes(json);
+  }
+  public static JsonNode loadRoutes(ObjectMapper json) {
     try(var resource=StockEvents.class.getResourceAsStream("/contracts/events/registry.json")) {
       if(resource==null) throw new IllegalStateException("Event registry missing");
-      routes=json.readTree(resource);
+      return json.readTree(resource);
     } catch(IOException e) { throw new IllegalStateException("Cannot read event registry",e); }
   }
   public void append(StockRow after,boolean restocked,String correlationId) {

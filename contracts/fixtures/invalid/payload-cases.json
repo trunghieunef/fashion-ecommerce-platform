@@ -221,5 +221,7 @@
       "observed_at"
     ]
   },
-  {"name": "reset notification carries the token instead of a reference", "fixture": "notify-reset-password.json", "changes": {"token": "synthetic-reset-token"}, "validator": "additionalProperties", "path": []}
+  {"name": "reset notification carries the token instead of a reference", "fixture": "notify-reset-password.json", "changes": {"token": "synthetic-reset-token"}, "validator": "additionalProperties", "path": []},
+  {"name": "reservation item quantity above 99", "fixture": "inventory-reserved.json", "changes": {"items": [{"sku": "SYNTH-TEE-M-BLK", "quantity": 100}]}, "validator": "maximum", "path": ["items", 0, "quantity"]},
+  {"name": "reservation version starts at 1", "fixture": "inventory-reserved.json", "changes": {"version": 0}, "validator": "minimum", "path": ["version"]}
 ]
