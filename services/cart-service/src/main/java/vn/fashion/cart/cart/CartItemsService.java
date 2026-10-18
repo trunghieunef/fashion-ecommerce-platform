@@ -138,11 +138,11 @@ public class CartItemsService {
   private void requireStock(String sku, int quantity) {
     int available = stock.stock(sku).map(StockClient.Stock::available).orElse(0);
     if (available < quantity)
-      throw new Api.Problem(HttpStatus.CONFLICT, "CONFLICT", "OUT_OF_STOCK", List.of(new Api.FieldError("quantity", "available=" + available)));
+      throw new Api.Problem(HttpStatus.CONFLICT, "OUT_OF_STOCK", "OUT_OF_STOCK", List.of(new Api.FieldError("quantity", "available=" + available)));
   }
   private static void requireVersion(long expected, long actual) {
     if (expected != actual)
-      throw new Api.Problem(HttpStatus.CONFLICT, "CONFLICT", "VERSION_CONFLICT", List.of(new Api.FieldError("expected_version", "current=" + actual)));
+      throw new Api.Problem(HttpStatus.CONFLICT, "VERSION_CONFLICT", "VERSION_CONFLICT", List.of(new Api.FieldError("expected_version", "current=" + actual)));
   }
   private static Api.Problem limit(String message, String field, String detail) {
     return new Api.Problem(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", message, List.of(new Api.FieldError(field, detail)));
