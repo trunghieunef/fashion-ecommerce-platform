@@ -80,8 +80,9 @@ PLT-04/05, AWS/K3s/ECR/ArgoCD, provider sandbox và các task business Phase 1 k
   ghi rõ review hồ sơ/CI, không phải Codex chạy lại fresh clone. Lệch Docker/Compose
   được chấp nhận riêng cho local; R1 không đổi.
 - Phần S1-local của `TASK:PLT-01`, `TASK:PLT-02` core S1 và `TASK:SEC-01` nền S1 được
-  chấp nhận. Parent PLT-01 vẫn **In progress**: acceptance còn FE/PO xác nhận SEO cho SPA
-  và O02 core ngoài S1. Parent PLT-02/SEC-01 vẫn **In progress**, O02 vẫn mở cho Kafka/
+  chấp nhận. Parent PLT-01 vẫn **In progress**: PO xác nhận SPA đủ SEO cho MVP ngày 2026-10-18
+  ([08](../design/08_decisions.md)); còn O02 core ngoài S1. Theo quyết định 2026-10-18, G0
+  (PLT-04/05 staging, O02 scan) hoãn tới sau G1; O06 chốt trước ORD-01. Parent PLT-02/SEC-01 vẫn **In progress**, O02 vẫn mở cho Kafka/
   Redis, CVE/license, staging và SEO. Không coi S1-local là G0/G1/G2.
 - Phase 0 local tiếp tục: `TASK:PLT-02` — **In progress**, assignee Codex (GPT-6),
   reviewer chủ dự án; envelope, payload schemas §5.3 cho event Phase 1A + order lifecycle,

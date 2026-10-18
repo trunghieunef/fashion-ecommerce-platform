@@ -45,7 +45,7 @@ Gate task là work package trong [backlog](../delivery/10_backlog.md). Mã task 
 | ADR-14 | State machine ở 06, schema ở 05 | PRD/diagram tham chiếu để tránh nhiều bản lệch |
 | ADR-15 | AWS theo lựa chọn chủ dự án; credit $200 theo thông tin cung cấp | Đã chọn provider, chưa kiểm chứng Billing/duyệt chi phí; đề xuất EC2 + K3s staging ở 16, không phải quyết định production |
 | ADR-16 | R1 chọn Java 21 LTS + Boot 4.0.8 + Cloud 2025.1.3 + Alibaba 2025.1.0.0; Nacos server 3.2.4/client 3.1.1 | Research theo yêu cầu chủ dự án ngày 2026-09-19; thay phần Boot 3 của ADR-02 để tránh train Cloud hết hỗ trợ. Không chọn Boot 4.1 ngoài mapping Alibaba; exact patches chưa test. Nguồn và gate tại 17; TL nghiệm thu PLT-01, chưa duyệt production |
-| ADR-17 | React + Vite SPA cho storefront/admin, Node 24 LTS + npm; static hosting | Ưu tiên ít runtime và dễ deploy. Giả định MVP chưa bắt buộc SEO/HTML sản phẩm từ server; PO/FE xác nhận trước WEB-01. Nếu không đạt, mở lại lựa chọn SSR/prerender; không tự thêm Next.js/BFF. Version/peer constraints ở 17 |
+| ADR-17 | React + Vite SPA cho storefront/admin, Node 24 LTS + npm; static hosting | Ưu tiên ít runtime và dễ deploy. Giả định MVP chưa bắt buộc SEO/HTML sản phẩm từ server; **PO xác nhận SPA đủ cho MVP ngày 2026-10-18** (§ quyết định 2026-10-18). Nếu không đạt, mở lại lựa chọn SSR/prerender; không tự thêm Next.js/BFF. Version/peer constraints ở 17 |
 | ADR-18 | Sprint 1 chỉ triển khai local; AWS/cloud bắt đầu sau checkpoint S1-local | Chủ dự án chốt 2026-09-19. Sprint 1 hoàn thành nền tảng local chạy từ fresh clone, không đồng nghĩa toàn bộ G2 MVP; không provision AWS/K3s/ECR/ArgoCD hoặc gọi provider thật. Phạm vi và exit ở 09/10 |
 | ADR-19 | Service identity cho `/internal`: mỗi service tự ký JWT ES256 bằng khóa riêng (`iss = sub = kid =` tên service, `aud =` service đích, TTL 60s); service đích kiểm tra theo allowlist public key của từng caller, sau đó endpoint kiểm tra caller allowlist 03 §4 | Chủ dự án chọn 2026-10-04 (SEC-01). Chạy được cả Compose local và K3s, không cần CA hay service mesh. Phương án khác: K8s service-account token (local không có), mTLS (nặng vận hành). Private key qua Secret, public key là config. Hiện thực tại `services/platform-security`; chưa có service gọi internal thật |
 | ADR-20 | CSRF cho request ghi dùng cookie: kiểm `Origin` theo allowlist, nếu không có Origin thì chỉ nhận `Sec-Fetch-Site: same-origin`, không có cả hai thì từ chối; cookie `Secure`, `HttpOnly`, `SameSite`. Không dùng CSRF token | Chủ dự án chọn 2026-10-04 (SEC-01). Thực thi tại Gateway (`CsrfOriginFilter`, `GATEWAY_ALLOWED_ORIGINS`). FE không cần gửi token. Request chỉ dùng Bearer không bị kiểm. Nếu sau này cần double-submit token thì ghi ADR mới |
@@ -415,6 +415,15 @@ Không mở rộng DLT cho mọi loại event chưa được service sử dụng
   không đổi quyền/visibility hoặc readiness. Bằng chứng tại [evidence CAT-03](../evidence/cat-03-local-2026-10-08.md).
 
 Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác và lý do; ảnh hưởng PRD/API/schema/test/task; người quyết định; ngày; link bằng chứng. Chưa có chữ ký phê duyệt giả định thương mại.
+
+## Quyết định chủ dự án 2026-10-18 — SEO và thứ tự gate
+
+| Quyết định | Hệ quả |
+|---|---|
+| Storefront dạng SPA (không HTML sản phẩm render từ server) được chấp nhận cho MVP | ADR-17 giữ nguyên; phần SEO của O02/PLT-01 đóng; không thêm SSR/prerender/Next.js. Mở lại chỉ khi PO đổi yêu cầu SEO/preview |
+| Hoãn G0 (PLT-04 staging, PLT-05 staging/dashboard, O02 scan CVE/license) tới sau G1; staging muộn nhất ngay sau G1, trước G2 | Phase 1B/G1 làm tiếp trên local; G2 vẫn cần mọi P0 Done. Rủi ro deploy (sizing node, secret, ingress, quyền DB) dồn về sau G1 |
+| O06 (retention, consent, purge) phải chốt trước ORD-01 | Checkout/order thiết kế theo quyết định retention/consent; không chờ tới G2 |
+| Review producer/consumer PLT-02 làm khi order-service có `order.events` | Lúc đó mới đủ producer và consumer để review |
 
 ## CAT-02a — quyết định chủ dự án 2026-10-11
 

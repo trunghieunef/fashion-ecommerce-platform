@@ -33,7 +33,7 @@ Bộ kế hoạch này chuyển baseline B1 thành các gói triển khai tuần
 
 ## Cách dùng
 
-1. Chỉ bắt đầu kế hoạch sau khi gate và dependency của kế hoạch trước có evidence được reviewer chấp nhận.
+1. Chỉ bắt đầu kế hoạch sau khi gate và dependency của kế hoạch trước có evidence được reviewer chấp nhận. Ngoại lệ chủ dự án duyệt 2026-10-18: G0 hoãn tới sau G1 (staging muộn nhất ngay sau G1, trước G2), O06 chốt trước ORD-01 ([08](../../design/08_decisions.md)).
 2. Trong từng task, dùng `TASK:<id>` và REQ tương ứng; không coi task con là parent task đã Done nếu acceptance còn thiếu.
 3. Mỗi PR phải đồng bộ code, contract/schema, test và tài liệu chủ quản. Nếu không ảnh hưởng tài liệu, handoff ghi `Docs: N/A` kèm lý do.
 4. Các bước commit trong kế hoạch chỉ được chạy khi chủ dự án đã cho phép commit; nếu chưa có quyền, dừng ở checkpoint đã test và bàn giao diff.
