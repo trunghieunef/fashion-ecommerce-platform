@@ -28,6 +28,21 @@ public final class CartRequests {
     if (!errors.isEmpty()) throw invalid(errors);
     return new Put(quantity, version);
   }
+  /** CART-02 merge: both expected versions are required. */
+  public record Merge(UUID guestCartId, long guestExpectedVersion, long memberExpectedVersion) { }
+  public static Merge merge(JsonNode body) {
+    var errors = new ArrayList<Api.FieldError>();
+    UUID guest = uuid(body.path("guest_cart_id"), "guest_cart_id", errors);
+    long gv = requiredVersion(body.path("guest_expected_version"), "guest_expected_version", errors);
+    long mv = requiredVersion(body.path("member_expected_version"), "member_expected_version", errors);
+    if (!errors.isEmpty()) throw invalid(errors);
+    return new Merge(guest, gv, mv);
+  }
+  private static long requiredVersion(JsonNode node, String field, List<Api.FieldError> errors) {
+    if (node.isIntegralNumber() && node.canConvertToLong() && node.longValue() >= 0) return node.longValue();
+    errors.add(new Api.FieldError(field, "is required, a non-negative integer"));
+    return -1;
+  }
   /** CART-03 checkout cleanup: 1..100 distinct items of the order's cart snapshot. */
   public record Cleanup(UUID orderId, List<CleanupItem> items) { }
   public record CleanupItem(UUID itemId, long itemVersion, int quantity) { }

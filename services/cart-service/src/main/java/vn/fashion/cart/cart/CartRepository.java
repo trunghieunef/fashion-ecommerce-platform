@@ -32,6 +32,21 @@ public class CartRepository {
     return jdbc.sql(OWNED + " for update").param("id", cartId).param("user", actor.userId()).param("hash", actor.guestHash())
         .query(CartRow.class).optional().orElseThrow(CartRepository::notFound);
   }
+  /** CART-02: the cookie's guest cart while ACTIVE and unexpired, or once MERGED (so a retry can see the merge). */
+  public Optional<CartRow> findGuestForMerge(UUID cartId, String guestHash) {
+    return jdbc.sql("""
+        select id, user_id, guest_token_hash, status, version, expires_at from carts
+        where id = :id and guest_token_hash = :hash and (status = 'MERGED' or (status = 'ACTIVE' and expires_at > now()))""")
+        .param("id", cartId).param("hash", guestHash).query(CartRow.class).optional();
+  }
+  public Optional<UUID> mergedInto(UUID cartId) {
+    return jdbc.sql("select merged_into from carts where id = :id").param("id", cartId).query(UUID.class).optional()
+        .filter(java.util.Objects::nonNull);
+  }
+  /** Row locks in id order, the one order every multi-cart writer uses (no deadlock). Inside a transaction. */
+  public void lockInOrder(UUID a, UUID b) {
+    jdbc.sql("select id from carts where id in (:a, :b) order by id for update").param("a", a).param("b", b).query(UUID.class).list();
+  }
   public Optional<CartRow> findActive(CartActor actor) {
     return jdbc.sql("""
         select id, user_id, guest_token_hash, status, version, expires_at from carts where status = 'ACTIVE' and (

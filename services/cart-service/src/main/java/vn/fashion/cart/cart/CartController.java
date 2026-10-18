@@ -9,6 +9,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import vn.fashion.cart.web.Api;
@@ -19,10 +21,13 @@ public class CartController {
   private final CartIdentity identity;
   private final CartRepository carts;
   private final CartPreview preview;
+  private final CartMergeService merges;
+  private final tools.jackson.databind.ObjectMapper json;
   private final Tracer tracer;
 
-  public CartController(CartIdentity identity, CartRepository carts, CartPreview preview, Tracer tracer) {
-    this.identity = identity; this.carts = carts; this.preview = preview; this.tracer = tracer;
+  public CartController(CartIdentity identity, CartRepository carts, CartPreview preview, CartMergeService merges,
+                        tools.jackson.databind.ObjectMapper json, Tracer tracer) {
+    this.identity = identity; this.carts = carts; this.preview = preview; this.merges = merges; this.json = json; this.tracer = tracer;
   }
 
   /** Member: the ACTIVE cart (201 when created). Guest: the cookie's cart, else a new cart and cookie (201). */
@@ -46,6 +51,27 @@ public class CartController {
     var created = Api.ok(HttpStatus.CREATED, view(cart), tracer);
     return ResponseEntity.status(created.getStatusCode()).headers(created.getHeaders())
         .header(HttpHeaders.SET_COOKIE, CartIdentity.cookie(token).toString()).body(created.getBody());
+  }
+
+  /** CART-02: member Bearer and guest cookie both required; success drops the guest cookie. */
+  @PostMapping("/merge")
+  public ResponseEntity<?> merge(@RequestHeader(name = "Idempotency-Key", required = false) String key,
+                                 @RequestBody(required = false) String body, HttpServletRequest request) {
+    var actor = identity.resolve(request).filter(CartActor::member).orElseThrow(CartIdentity::unauthorized);
+    String guestHash = identity.guestHash(request).orElseThrow(CartRepository::notFound);
+    CartRequests.requireKey(key);
+    var result = merges.merge(actor.userId(), guestHash, key, CartRequests.merge(object(body)));
+    var ok = Api.ok(HttpStatus.OK, result, tracer);
+    return ResponseEntity.status(ok.getStatusCode()).headers(ok.getHeaders())
+        .header(HttpHeaders.SET_COOKIE, CartIdentity.clearedCookie().toString()).body(ok.getBody());
+  }
+
+  private tools.jackson.databind.JsonNode object(String body) {
+    try {
+      var node = body == null ? null : json.readTree(body);
+      if (node != null && node.isObject()) return node;
+    } catch (tools.jackson.core.JacksonException ignored) { }
+    throw new Api.Problem(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "MALFORMED_JSON", java.util.List.of());
   }
 
   @GetMapping("/mine")
