@@ -70,6 +70,7 @@ public abstract class CartTestSupport {
     registry.add("fashion.cart.service-public-key", CartTestSupport::publicKey);
     registry.add("fashion.cart.catalog-url", StubServers.CATALOG::url);
     registry.add("fashion.cart.inventory-url", StubServers.INVENTORY::url);
+    registry.add("fashion.cart.internal-callers", () -> "order-service:" + publicKey() + ",cart-service:" + publicKey());
   }
   @BeforeEach protected void clearCarts() throws Exception {
     try (var c = DriverManager.getConnection(postgres.getJdbcUrl(), "postgres", "postgres"); var s = c.createStatement()) {
@@ -86,6 +87,26 @@ public abstract class CartTestSupport {
       jwt.sign(new ECDSASigner(KEY));
       return jwt.serialize();
     } catch (Exception e) { throw new AssertionError(e); }
+  }
+  /** ADR-19 "Bearer ..." header value for a caller of the cart internal API (CART-03). */
+  protected String serviceToken(String caller) {
+    try { return "Bearer " + new vn.fashion.platform.security.ServiceTokenIssuer(caller, KEY.toECPublicKey(), KEY.toECPrivateKey(),
+        java.time.Clock.systemUTC()).issue("cart-service"); }
+    catch (Exception e) { throw new AssertionError(e); }
+  }
+  /** Inserts a cart row directly; returns its id. */
+  protected UUID seedCart(UUID userId, String guestHash, String expiresIn) {
+    UUID id = UUID.randomUUID();
+    jdbc.update("insert into carts(id, user_id, guest_token_hash, expires_at, version) values (?, ?, ?, now() + cast(? as interval), 3)",
+        id, userId, guestHash, expiresIn);
+    return id;
+  }
+  protected UUID seedItem(UUID cartId, String sku, int quantity, long version) {
+    UUID id = UUID.randomUUID();
+    jdbc.update("""
+        insert into cart_items(id, cart_id, variant_id, sku, quantity, price_snapshot, catalog_version, version, created_at)
+        values (?, ?, ?, ?, ?, 100000, 7, ?, clock_timestamp())""", id, cartId, UUID.randomUUID(), sku, quantity, version);
+    return id;
   }
   /** headers: alternating name, value (e.g. "Cookie", "cart_token=..."). */
   protected HttpResponse<String> send(String method, String path, String body, String... headers) {

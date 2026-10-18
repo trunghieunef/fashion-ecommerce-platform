@@ -48,6 +48,8 @@ fashion:
     catalog-url: ${CART_CATALOG_URL:http://localhost:8081}
     inventory-url: ${CART_INVENTORY_URL:http://localhost:8083}
     dependency-timeout: ${CART_DEPENDENCY_TIMEOUT:1s}
+    # TASK:CART-03: caller:base64-X.509 public keys for /internal (order-service only); empty = every call 401.
+    internal-callers: ${CART_INTERNAL_CALLERS:}
 
 management:
   # PLT-05: no OTLP endpoint here on purpose: an empty value still creates the exporter. Traces leave
