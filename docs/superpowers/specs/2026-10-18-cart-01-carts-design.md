@@ -1,7 +1,7 @@
 # CART-01 — giỏ hàng guest/member (cart-service)
 
 `TASK:CART-01` · `REQ:CART-01/02/04` · dependency USR-01, CAT-02, INV-01 (đều Done local).
-Trạng thái: **bản nháp chờ chủ dự án duyệt**, 2026-10-18. Chủ dự án giao agent tự chốt mặc định;
+Trạng thái: **đã duyệt** 2026-10-18; plan [CART-01](../plans/2026-10-18-cart-01-carts.md). Chủ dự án giao agent tự chốt mặc định;
 lựa chọn của agent ghi ở §9. Merge giỏ (CART-02), snapshot/cleanup cho order (CART-03) và UI (WEB-02)
 nằm ngoài phần này.
 
