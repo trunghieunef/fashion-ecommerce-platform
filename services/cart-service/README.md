@@ -7,7 +7,7 @@ giá và tồn trong giỏ chỉ là preview tham khảo, không giữ hàng, kh
 [evidence](../../docs/evidence/cart-01-local-2026-10-18.md). Trạng thái: **Done (local)** 2026-10-18 theo [nghiệm thu](../../docs/evidence/acceptance-2026-10-18.md).
 CART-03: [spec](../../docs/superpowers/specs/2026-10-18-cart-03-checkout-snapshot-design.md) ·
 [contract internal](../../contracts/openapi/cart-internal.yaml) · [evidence](../../docs/evidence/cart-03-local-2026-10-18.md);
-chờ review/nghiệm thu.
+**Done (local)** 2026-10-18 theo [nghiệm thu](../../docs/evidence/acceptance-2026-10-18.md).
 
 ## Chạy và test
 
