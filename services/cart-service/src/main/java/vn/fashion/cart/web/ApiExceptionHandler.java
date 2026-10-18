@@ -39,6 +39,10 @@ public class ApiExceptionHandler {
   @ExceptionHandler({DataAccessResourceFailureException.class, QueryTimeoutException.class}) ResponseEntity<Api.Error> unavailable() {
     return json(Api.error(HttpStatus.SERVICE_UNAVAILABLE, "TEMPORARILY_UNAVAILABLE", "DEPENDENCY_UNAVAILABLE", List.of(), tracer));
   }
+  /** CART-01: catalog/inventory unavailable while validating a write; nothing was written. */
+  @ExceptionHandler(vn.fashion.cart.deps.DependencyUnavailable.class) ResponseEntity<Api.Error> dependency() {
+    return json(Api.error(HttpStatus.SERVICE_UNAVAILABLE, "TEMPORARILY_UNAVAILABLE", "DEPENDENCY_UNAVAILABLE", List.of(), tracer));
+  }
   @ExceptionHandler(HttpMessageNotReadableException.class) ResponseEntity<Api.Error> unreadable() {
     return Api.error(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "MALFORMED_JSON", List.of(), tracer);
   }
