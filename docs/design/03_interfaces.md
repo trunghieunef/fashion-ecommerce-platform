@@ -120,7 +120,7 @@ collection chỉ gồm product public (`ACTIVE`, category và parent nếu có �
 | GET | /catalog/size-guides/{category_id} | Public / 1 | `CAT-02a` implemented: locale vi/en ưu tiên query, fallback Accept-Language (en nếu bắt đầu en, mặc định vi); category ACTIVE, category_id/locale/guideline_html/table; thiếu hoặc ẩn →404 |
 | POST | /carts | Public/member / 1 | `CART-01` implemented ([cart.yaml](../../contracts/openapi/cart.yaml)): member trả ACTIVE cart (201 khi tạo); guest cookie `cart_token` (HttpOnly, Secure, SameSite=Lax, Path=/api/v1/carts, 30 ngày trượt, DB chỉ lưu SHA-256); Bearer sai → 401 không fallback |
 | GET | /carts/mine | Member / 1 | Active cart và version |
-| GET | /carts/{cart_id} | Owner / 1 | `CART-01`: items/version + preview tham khảo (giá/active/available/observed_at, `preview_status` OK/UNAVAILABLE/EMPTY); thiếu/không thuộc/sai định dạng → cùng 404 CART_NOT_FOUND; mọi response no-store |
+| GET | /carts/{cart_id} | Owner / 1 | `CART-01`: items/version + preview tham khảo (giá/active/available/observed_at, `preview_status` OK/UNAVAILABLE/EMPTY); `CART-03`: `subtotal_preview` (tổng effective_price×qty item active, chỉ khi OK, null nếu tràn) + `shipping_fee_status: NOT_CALCULATED` — tạm tính, không phải tổng thanh toán; phí xem trước là `/shipping/fee/estimate`; thiếu/không thuộc/sai định dạng → cùng 404 CART_NOT_FOUND; mọi response no-store |
 | POST | /carts/{cart_id}/items | Owner / 1 | `CART-01`: variant_id,quantity 1–99,expected_version + key; cộng dồn variant (tổng > 99 → 400 QUANTITY_LIMIT, dòng thứ 101 → 400 CART_ITEM_LIMIT); catalog quote active + inventory available kiểm trước khi khóa giỏ; 409 VERSION_CONFLICT/OUT_OF_STOCK/VARIANT_NOT_AVAILABLE/IDEMPOTENCY_KEY_REUSED; dependency lỗi → 503 không ghi |
 | PUT | /carts/{cart_id}/items/{item_id} | Owner / 1 | Absolute quantity,expected_version |
 | DELETE | /carts/{cart_id}/items/{item_id} | Owner / 1 | expected_version qua query |
@@ -472,8 +472,8 @@ Report orders do order sở hữu, cash do payment, stock do inventory; dashboar
 
 | Methods / path | Caller → owner | Input bắt buộc / kết quả |
 |---|---|---|
-| GET /carts/{id}/snapshot | order → cart | Verified actor context + expected version → items/versions |
-| POST /carts/{id}/checkout-cleanup | order → cart | order_id,actor,items {item_id,version,quantity},key → removed/retained |
+| GET /carts/{id}/snapshot | order → cart | `CART-03` implemented ([cart-internal.yaml](../../contracts/openapi/cart-internal.yaml)): `/internal/api/v1/carts/{id}/snapshot?expected_version`; service token aud cart-service, caller order-service; header `Cart-Actor` `user:<uuid>`/`guest:<sha256 cookie>` (order đã xác minh) → items item_id/variant_id/sku/quantity/item_version/price_snapshot/catalog_version; 400 INVALID_ACTOR/VERSION_REQUIRED, 404 CART_NOT_FOUND, 409 VERSION_CONFLICT; chỉ đọc, no-store |
+| POST /carts/{id}/checkout-cleanup | order → cart | `CART-03` implemented: `/internal/api/v1/carts/{id}/checkout-cleanup`; `Cart-Actor`, `Idempotency-Key` = order_id, body order_id + 1–100 items {item_id,item_version,quantity} → removed/retained(ITEM_CHANGED,current_quantity)/missing, cart_version; một TX, idempotent theo order_id (khác body → 409 IDEMPOTENCY_KEY_REUSED); chỉ xóa item khớp version+quantity, giỏ vẫn ACTIVE |
 | POST /catalog/variants/quote | order,cart → catalog | `CAT-02a` implemented: /internal/api/v1/catalog/variants/quote; 1–100 distinct UUID → ordered snapshot; service token aud catalog-service, caller cart-service/order-service; 401 UNAUTHORIZED/INVALID_SERVICE_TOKEN, 403 FORBIDDEN/CALLER_NOT_ALLOWED, no-store mọi response |
 | GET /orders/{order_id}/snapshot | payment,shipping → order | Scoped fields; immutable snapshot/version/hash |
 | GET /orders/{order_id}/saga-status | promotion,shipping,payment → order | Intent, readiness,deadline/version; không PII dư |
