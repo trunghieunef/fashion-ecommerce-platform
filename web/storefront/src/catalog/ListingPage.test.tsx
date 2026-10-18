@@ -120,3 +120,13 @@ it('keeps tag when other filters are applied (review 4)', async () => {
   await submitFilters(container, { size: 'M' });
   expect(calls.at(-1)!.url).toMatch(/tag=new/);
 });
+
+it('keeps category and brand from the URL when their option lists failed to load (PR #28 P2)', async () => {
+  const calls = mockFetch((path) => (path.startsWith('/categories') || path.startsWith('/brands') ? json({ code: 'INTERNAL' }, 503) : json(products)));
+  const container = await render('/products?category_id=44444444-4444-4444-8444-444444444444&brand_id=88888888-8888-4888-8888-888888888888');
+  await submitFilters(container, { size: 'M' });
+  const last = calls.filter((c) => c.url.includes('/products?')).at(-1)!.url;
+  expect(last).toContain('category_id=44444444-4444-4444-8444-444444444444');
+  expect(last).toContain('brand_id=88888888-8888-4888-8888-888888888888');
+  expect(last).toContain('size=M');
+});

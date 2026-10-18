@@ -49,6 +49,9 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 
 .product { display: grid; gap: 1.5rem; }
 .gallery .zoom { padding: 0; border: 0; background: none; width: 100%; }
+.thumbs { display: flex; gap: 0.5rem; margin-top: 0.5rem; overflow-x: auto; }
+.thumbs button { padding: 0; width: 4rem; flex: none; border: 2px solid transparent; }
+.thumbs button[aria-pressed="true"] { border-color: var(--fg); }
 .product-info { display: grid; gap: 0.75rem; align-content: start; }
 .product-info h1 { margin: 0; }
 .product-info .price { font-size: 1.25rem; font-weight: 600; }

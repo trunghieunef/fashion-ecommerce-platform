@@ -53,6 +53,7 @@ const STRINGS = {
     priceOrder: 'Giá từ phải nhỏ hơn hoặc bằng Giá đến',
     noCollections: 'Chưa có bộ sưu tập',
     query: 'Từ khóa',
+    images: 'Ảnh sản phẩm',
     tag: 'Nhãn',
   },
   en: {
@@ -104,6 +105,7 @@ const STRINGS = {
     priceOrder: 'Price from must be at most Price to',
     noCollections: 'No collections yet',
     query: 'Keyword',
+    images: 'Product images',
     tag: 'Tag',
   },
 } as const;

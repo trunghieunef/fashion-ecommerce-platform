@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
 
 import collection from '../test/fixtures/collection.json';
 import collections from '../test/fixtures/collections.json';
 import products from '../test/fixtures/products.json';
-import { json, mockFetch, render } from '../test/harness';
+import { flush, json, mockFetch, render } from '../test/harness';
 
 afterEach(() => { vi.unstubAllGlobals(); document.body.innerHTML = ''; });
 
@@ -40,4 +41,18 @@ it('unknown collection and unknown route show not found', async () => {
   expect((await render('/collections/nope')).textContent).toContain('Không tìm thấy');
   document.body.innerHTML = '';
   expect((await render('/no/such/page')).textContent).toContain('Không tìm thấy');
+});
+
+it('collection pages past the first page with next_cursor (PR #28 P2)', async () => {
+  const second = { ...collection, data: { ...collection.data, next_cursor: null, products: [
+    { ...collection.data.products[0], id: '99999999-9999-4999-8999-999999999999', slug: 'ao-2', name_vi: 'Áo thứ 21', name_en: 'Tee 21' }] } };
+  const calls = mockFetch((path) => json(path.includes('cursor=') ? second : { ...collection, data: { ...collection.data, next_cursor: 'c-2' } }));
+  const container = await render('/collections/he-2026');
+  const more = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Tải thêm')!;
+  await act(async () => { more.click(); });
+  await flush();
+  expect(calls.at(-1)!.url).toBe('/api/v1/catalog/collections/he-2026?cursor=c-2');
+  expect(container.querySelectorAll('ul[aria-label="Danh sách sản phẩm"] li')).toHaveLength(2);
+  expect(container.textContent).toContain('Áo thứ 21');
+  expect([...container.querySelectorAll('button')].some((b) => b.textContent === 'Tải thêm')).toBe(false);
 });

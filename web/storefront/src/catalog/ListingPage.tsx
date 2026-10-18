@@ -1,15 +1,10 @@
 // TASK:WEB-01 SF-02: listing/search; the URL holds the filters, a filter change resets the cursor and drops late pages.
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router';
 
 import { useLang, type StringKey } from '../i18n';
 import { ApiError, FILTER_KEYS, listBrands, listCategories, listProducts, type Category, type Filters, type ProductSummary } from './api';
-import { Failed, Loading, ProductGrid, useLoad } from './ui';
-
-type Listing =
-  | { status: 'loading' }
-  | { status: 'error'; invalid: string[] | null }
-  | { status: 'ready'; items: ProductSummary[]; cursor: string | null; more: 'idle' | 'loading' | 'error' };
+import { Failed, Loading, LoadMore, ProductGrid, useLoad, usePaged } from './ui';
 
 function filtersOf(params: URLSearchParams): Filters {
   const filters: Filters = {};
@@ -24,43 +19,12 @@ export function ListingPage() {
   const { t, pick } = useLang();
   const [params, setParams] = useSearchParams();
   const filters = filtersOf(params);
-  const key = JSON.stringify(filters);
-  const [state, setState] = useState<Listing>({ status: 'loading' });
-  const [attempt, setAttempt] = useState(0);
-  // The filter set a page belongs to; a "load more" answer for an older set is discarded (spec section 3).
-  const current = useRef(key);
-  const more = useRef<AbortController | null>(null);
-
-  useEffect(() => {
-    current.current = key;
-    more.current?.abort();
-    const controller = new AbortController();
-    setState({ status: 'loading' });
-    listProducts(filters, undefined, controller.signal)
-      .then((page) => { if (!controller.signal.aborted) setState({ status: 'ready', items: page.items, cursor: page.next_cursor, more: 'idle' }); })
-      .catch((error: unknown) => {
-        // A 400 (bad filter in a shared/edited URL) is not retried: the same GET fails again (review 2).
-        if (!controller.signal.aborted)
-          setState({ status: 'error', invalid: error instanceof ApiError && error.status === 400 ? error.fields : null });
-      });
-    return () => controller.abort();
-  }, [key, attempt]);
-
-  function loadMore() {
-    if (state.status !== 'ready' || !state.cursor) return;
-    const asked = key;
-    const controller = new AbortController();
-    more.current = controller;
-    setState({ ...state, more: 'loading' });
-    listProducts(filters, state.cursor, controller.signal)
-      .then((page) => {
-        if (current.current !== asked) return;
-        setState((s) => s.status === 'ready' ? { status: 'ready', items: [...s.items, ...page.items], cursor: page.next_cursor, more: 'idle' } : s);
-      })
-      .catch(() => {
-        if (!controller.signal.aborted && current.current === asked) setState((s) => s.status === 'ready' ? { ...s, more: 'error' } : s);
-      });
-  }
+  const { state, loadMore, retry } = usePaged<ProductSummary, null>(
+    (signal) => listProducts(filters, undefined, signal).then((p) => ({ items: p.items, cursor: p.next_cursor, head: null })),
+    (cursor, signal) => listProducts(filters, cursor, signal).then((p) => ({ items: p.items, cursor: p.next_cursor })),
+    JSON.stringify(filters));
+  // A 400 (bad filter in a shared/edited URL) is not retried: the same GET fails again (review 2).
+  const invalid = state.status === 'error' && state.error instanceof ApiError && state.error.status === 400 ? state.error.fields : null;
 
   const searching = Boolean(filters.q);
   const filtered = Object.keys(filters).some((k) => k !== 'sort');
@@ -69,10 +33,10 @@ export function ListingPage() {
       <h1>{searching ? `${t('search')}: ${filters.q}` : t('products')}</h1>
       <FilterForm filters={filters} onApply={(next) => setParams(next)} pick={pick} />
       {state.status === 'loading' && <Loading />}
-      {state.status === 'error' && state.invalid === null && <Failed notFound={false} retry={() => setAttempt((n) => n + 1)} />}
-      {state.status === 'error' && state.invalid !== null && (
+      {state.status === 'error' && invalid === null && <Failed notFound={false} retry={retry} />}
+      {state.status === 'error' && invalid !== null && (
         <section className="state" aria-live="polite">
-          <p>{t('invalidFilter')}{state.invalid.length > 0 && `: ${state.invalid.map((f) => t(LABELS[f] ?? 'filters')).join(', ')}`}</p>
+          <p>{t('invalidFilter')}{invalid.length > 0 && `: ${invalid.map((f) => t(LABELS[f] ?? 'filters')).join(', ')}`}</p>
           <button type="button" onClick={() => setParams(filters.q ? { q: filters.q } : {})}>{t('clear')}</button>
         </section>
       )}
@@ -80,14 +44,7 @@ export function ListingPage() {
       {state.status === 'ready' && state.items.length > 0 && (
         <>
           <ProductGrid products={state.items} label={t('productList')} />
-          {state.cursor && (
-            <div className="more">
-              {state.more === 'error' && <p aria-live="polite">{t('loadError')}</p>}
-              <button type="button" onClick={loadMore} disabled={state.more === 'loading'}>
-                {state.more === 'error' ? t('retry') : t('loadMore')}
-              </button>
-            </div>
-          )}
+          <LoadMore state={state} onClick={loadMore} />
         </>
       )}
     </main>
@@ -128,6 +85,9 @@ function FilterForm({ filters, onApply, pick }: {
     <form className="filters" onSubmit={submit} aria-label={t('filters')} key={JSON.stringify(filters)}>
       {filters.q && <input type="hidden" name="q" value={filters.q} />}
       {filters.tag && <input type="hidden" name="tag" value={filters.tag} />}
+      {/* Option lists still loading or failed: keep the URL value instead of silently dropping it (PR #28 review). */}
+      {categories.status !== 'ready' && filters.category_id && <input type="hidden" name="category_id" value={filters.category_id} />}
+      {(brands.status !== 'ready' || brands.data.length === 0) && filters.brand_id && <input type="hidden" name="brand_id" value={filters.brand_id} />}
       {categories.status === 'ready' && (
         <label>{t('category')}
           <select name="category_id" defaultValue={filters.category_id ?? ''}>

@@ -29,12 +29,13 @@ function ProductDetail({ product }: { product: Product }) {
   const [color, setColor] = useState(colors.length === 1 ? colors[0] : '');
   const chosen = product.variants.find((v) => v.size === size && v.color === color);
   const name = pick(product.name_vi, product.name_en);
-  const images = [...product.images].sort((a, b) => a.sort_order - b.sort_order);
-  const shown = images.find((i) => color && i.variant_color === color) ?? images[0];
+  const sorted = [...product.images].sort((a, b) => a.sort_order - b.sort_order);
+  // The chosen colour's images come first; every image stays reachable (PR #28 review).
+  const images = color ? [...sorted.filter((i) => i.variant_color === color), ...sorted.filter((i) => i.variant_color !== color)] : sorted;
 
   return (
     <article className="product">
-      <Gallery assetId={shown?.asset_id} alt={shown ? pick(shown.alt_vi, shown.alt_en) : name} />
+      <Gallery key={color} images={images.map((i) => ({ assetId: i.asset_id, alt: pick(i.alt_vi, i.alt_en) || name }))} fallbackAlt={name} />
       <div className="product-info">
         <h1>{name}</h1>
         {chosen ? <Price min={chosen.effective_price} max={chosen.effective_price} /> : <Price min={product.min_price} max={product.max_price} />}
@@ -93,11 +94,14 @@ function Options({ values, selected, onSelect, name }: {
   );
 }
 
-function Gallery({ assetId, alt }: { assetId: string | undefined; alt: string }) {
+function Gallery({ images, fallbackAlt }: { images: { assetId: string; alt: string }[]; fallbackAlt: string }) {
   const { t } = useLang();
   const dialog = useRef<HTMLDialogElement>(null);
   const opener = useRef<HTMLButtonElement>(null);
-  if (!assetId) return <div className="gallery"><CatalogImage assetId={null} alt={alt} kind="image" /></div>;
+  const [index, setIndex] = useState(0);
+  const current = images[index];
+  if (!current) return <div className="gallery"><CatalogImage assetId={null} alt={fallbackAlt} kind="image" /></div>;
+  const { assetId, alt } = current;
   return (
     <div className="gallery">
       <button type="button" ref={opener} className="zoom" aria-label={`${t('zoom')}: ${alt}`} onClick={() => dialog.current?.showModal?.()}>
@@ -107,6 +111,15 @@ function Gallery({ assetId, alt }: { assetId: string | undefined; alt: string })
         <img src={imageUrl(assetId, 'image')} alt={alt} />
         <form method="dialog"><button type="submit">{t('close')}</button></form>
       </dialog>
+      {images.length > 1 && (
+        <div className="thumbs" role="group" aria-label={t('images')}>
+          {images.map((image, i) => (
+            <button key={image.assetId} type="button" aria-pressed={i === index} aria-label={`${i + 1}: ${image.alt}`} onClick={() => setIndex(i)}>
+              <CatalogImage assetId={image.assetId} alt="" />
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

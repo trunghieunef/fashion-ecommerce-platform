@@ -87,3 +87,24 @@ it('partial size/colour matrix never gets stuck (review 1)', async () => {
   await choose(container, 'color', 'Blue');
   expect(container.querySelector('.stock')!.textContent).toBe('Còn hàng (tham khảo)');
 });
+
+it('every image is reachable and the zoom shows the chosen one (PR #28 P2)', async () => {
+  const many = { ...product, data: { ...product.data, images: [
+    { asset_id: '66666666-6666-4666-8666-666666666661', alt_vi: 'Mặt trước', alt_en: 'Front', variant_color: null, sort_order: 0 },
+    { asset_id: '66666666-6666-4666-8666-666666666662', alt_vi: 'Mặt sau', alt_en: 'Back', variant_color: null, sort_order: 1 },
+    { asset_id: '66666666-6666-4666-8666-666666666663', alt_vi: 'Đỏ trước', alt_en: 'Red front', variant_color: 'Red', sort_order: 2 },
+    { asset_id: '66666666-6666-4666-8666-666666666664', alt_vi: 'Đỏ sau', alt_en: 'Red back', variant_color: 'Red', sort_order: 3 },
+  ] } };
+  mockFetch(() => json(many));
+  const container = await render(PATH);
+  const thumbs = () => [...container.querySelectorAll('.thumbs button')] as HTMLButtonElement[];
+  expect(thumbs()).toHaveLength(4);
+  await click(thumbs()[1]);
+  expect(thumbs()[1].getAttribute('aria-pressed')).toBe('true');
+  expect(container.querySelector('dialog img')!.getAttribute('src')).toContain('666666666662');
+  await choose(container, 'color', 'Red');
+  // Colour choice shows that colour's images first; both red images stay reachable.
+  expect(container.querySelector('dialog img')!.getAttribute('src')).toContain('666666666663');
+  await click(thumbs().find((b) => b.getAttribute('aria-label')?.includes('Đỏ sau')));
+  expect(container.querySelector('dialog img')!.getAttribute('src')).toContain('666666666664');
+});

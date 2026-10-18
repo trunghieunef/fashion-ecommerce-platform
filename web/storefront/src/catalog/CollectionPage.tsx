@@ -2,17 +2,22 @@
 import { useParams } from 'react-router';
 
 import { useLang } from '../i18n';
-import { getCollection } from './api';
-import { CatalogImage, Failed, Loading, ProductGrid, useLoad } from './ui';
+import { ApiError, getCollection, type CollectionDetail, type ProductSummary } from './api';
+import { CatalogImage, Failed, Loading, LoadMore, ProductGrid, usePaged } from './ui';
 
 export function CollectionPage() {
   const { slug = '' } = useParams();
   const { t, pick } = useLang();
-  const [state, retry] = useLoad((signal) => getCollection(slug, undefined, signal), [slug]);
+  const { state, loadMore, retry } = usePaged<ProductSummary, Pick<CollectionDetail, 'collection' | 'lookbook'>>(
+    (signal) => getCollection(slug, undefined, signal)
+      .then((d) => ({ items: d.products, cursor: d.next_cursor, head: { collection: d.collection, lookbook: d.lookbook } })),
+    (cursor, signal) => getCollection(slug, cursor, signal).then((d) => ({ items: d.products, cursor: d.next_cursor })),
+    slug);
   if (state.status === 'loading') return <main className="page"><Loading /></main>;
-  if (state.status === 'error') return <main className="page"><Failed notFound={state.notFound} retry={retry} /></main>;
-  // ponytail: first page of products only; add "load more" via next_cursor when collections exceed one page.
-  const { collection, lookbook, products } = state.data;
+  if (state.status === 'error')
+    return <main className="page"><Failed notFound={state.error instanceof ApiError && state.error.status === 404} retry={retry} /></main>;
+  const { collection, lookbook } = state.head;
+  const products = state.items;
   const name = pick(collection.name_vi, collection.name_en);
   return (
     <main className="page">
@@ -35,7 +40,12 @@ export function CollectionPage() {
           </ul>
         </section>
       )}
-      {products.length === 0 ? <p>{t('empty')}</p> : <ProductGrid products={products} label={t('productList')} />}
+      {products.length === 0 ? <p>{t('empty')}</p> : (
+        <>
+          <ProductGrid products={products} label={t('productList')} />
+          <LoadMore state={state} onClick={loadMore} />
+        </>
+      )}
     </main>
   );
 }

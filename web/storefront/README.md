@@ -12,12 +12,13 @@ UI hiện cố ý đơn giản; tinh chỉnh thẩm mỹ là task sau. Chưa có
 | `/` | Home: bộ sưu tập đang chạy + hàng mới | `GET /api/v1/catalog/collections?limit=6`, `/products?sort=NEWEST&limit=8` |
 | `/products` | Listing + bộ lọc (URL) | `/products?…&limit=24`, `/categories`, `/brands` |
 | `/search?q=` | Tìm kiếm (cùng bộ lọc) | `/search?q=…` |
-| `/collections/:slug` | Collection + lookbook | `/collections/{slug}` (trang đầu) |
-| `/products/:id` | Chi tiết: size/màu, giá, tồn tham khảo, zoom, bảng size | `/products/{id}` + `Accept-Language` |
+| `/collections/:slug` | Collection + lookbook, "Tải thêm" theo `next_cursor` | `/collections/{slug}?cursor=` |
+| `/products/:id` | Chi tiết: size/màu, giá, tồn tham khảo, mọi ảnh (thumbnail, ảnh của màu đã chọn lên trước), zoom ảnh đang chọn, bảng size | `/products/{id}` + `Accept-Language` |
 | `*` | Không tìm thấy | — |
 
 - Bộ lọc nằm trong query string (`q, category_id, brand_id, size, color, tag, min_price, max_price, sort`); đổi bộ lọc
-  bỏ cursor, hủy request cũ và bỏ qua trang "Tải thêm" của bộ lọc cũ. `q`/`tag` được giữ khi áp bộ lọc khác. Giá từ > giá
+  bỏ cursor, hủy request cũ và bỏ qua trang "Tải thêm" của bộ lọc cũ (hook dùng chung `usePaged` cho listing và collection).
+  `q`/`tag` được giữ khi áp bộ lọc khác; `category_id`/`brand_id` cũng được giữ khi danh sách lựa chọn chưa tải hoặc lỗi. Giá từ > giá
   đến bị chặn ngay trong form. Lỗi 400 (bộ lọc sai trong URL chia sẻ) báo tên trường và chỉ cho "Xóa lọc", không lặp "Thử lại".
 - Tiền VND từ server, định dạng `vi-VN`; client không tính giá. Tồn kho: còn hàng (tham khảo) / hết hàng / chưa rõ,
   kèm chú thích hàng chỉ được giữ khi đặt đơn; `observed_at` chưa hiển thị (đơn giản hóa có chủ đích). Mọi size/màu đều chọn
@@ -54,6 +55,6 @@ của `contracts/openapi/catalog.yaml`, nên mock không lệch contract. `tests
 
 ## Giới hạn
 
-Collection chỉ hiển thị trang sản phẩm đầu (`ponytail:` trong code); cursor không lưu trong URL (reload về trang đầu của bộ
+Cursor không lưu trong URL (reload về trang đầu của bộ
 lọc); đổi ngôn ngữ ở trang chi tiết tải lại sản phẩm (mất lựa chọn size/màu); nội dung là fixture/smoke, chưa có content
 O10 thật; chưa đo accessibility tự động (axe) — kiểm thủ công + e2e bàn phím.
