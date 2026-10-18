@@ -94,7 +94,7 @@ reviewer chạy lại kịch bản qua Gateway thật: 200 sau 1018 ms), không 
 
 ### Bằng chứng chung
 
-- Code trên `dev` `21ade69`, PR #27 (chưa merge). Application CI (pull_request) SUCCESS
+- Code trên `dev` `21ade69`, PR #27 (merge `main` tại `780b4cb` sau nghiệm thu). Application CI (pull_request) SUCCESS
   ([run 39145296419](https://github.com/trunghieunef/fashion-ecommerce-platform/actions/runs/39145296419)): `./mvnw -B test`
   toàn reactor **748 test** 0 failure (inventory 116 gồm `ReturnIntegrationTest` 15, cart 92 gồm `CartMergeIntegrationTest` 20,
   Gateway 39), contract 66 test, infra validation, local stack + smoke (`CART-01 guest/member cart PASS`, `S1-local smoke PASS`),
@@ -112,7 +112,7 @@ reviewer chạy lại kịch bản qua Gateway thật: 200 sau 1018 ms), không 
 | Ranh giới tin cậy | `authBeforeBody`, `validation`, `skuNotInReservationIs400`, `lowercaseSkuMatches`, `runtimeCannotRewriteReturns` | Pass |
 | Order đọc lại sau UNKNOWN | `getShowsReturned` (`items[].returned`) | Pass |
 
-**`TASK:INV-03`: Done (local, trước G0)**; còn merge PR #27 do chủ dự án.
+**`TASK:INV-03`: Done (local, trước G0)**; PR #27 đã merge `main` (`780b4cb`).
 
 ### CART-02 — kết quả theo tiêu chí
 
@@ -125,7 +125,7 @@ reviewer chạy lại kịch bản qua Gateway thật: 200 sau 1018 ms), không 
 | Gộp đúng dữ liệu | `mergeSumsAndKeepsOlderCreatedAt`, `newVariantAddsLineAndGuestIsMerged` (MERGED + merged_into, cookie xóa), `memberWithoutCartGetsOne`, `emptyGuestCart` | Pass |
 | Không gọi HTTP khi giữ lock; dependency lỗi không ghi; trong budget Gateway | `noLockDuringDependencyCall`, `dependencyDownIs503NoWrite`, `multiSkuMergeFitsGatewayBudget` | Pass |
 
-**`TASK:CART-02`: Done (local, trước G0)**; còn merge PR #27 do chủ dự án.
+**`TASK:CART-02`: Done (local, trước G0)**; PR #27 đã merge `main` (`780b4cb`).
 
 ### Ngoại lệ và việc còn lại (không chặn Done local)
 
