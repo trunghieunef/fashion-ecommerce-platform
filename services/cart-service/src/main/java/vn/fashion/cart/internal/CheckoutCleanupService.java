@@ -49,7 +49,10 @@ public class CheckoutCleanupService {
       var outcome = keys.begin(ACTOR, operation, key, hash);
       if (outcome.status() == IdempotencyStore.Status.CONFLICT)
         throw new Api.Problem(HttpStatus.CONFLICT, "CONFLICT", "IDEMPOTENCY_KEY_REUSED", List.of());
+      // Replay skips lockOwned: the hash covers actor.key(), so another actor gets 409 above, never this body.
       if (outcome.status() == IdempotencyStore.Status.COMPLETED) return (Object) json.readTree(outcome.responseBody());
+      // begin and finish share this transaction, so a PROCESSING row is never visible; fail loudly if that changes.
+      if (outcome.status() == IdempotencyStore.Status.IN_PROGRESS) throw new IllegalStateException("cleanup idempotency row left PROCESSING");
       var cart = carts.lockOwned(cartId, actor);
       var current = carts.items(cartId).stream().collect(Collectors.toMap(CartRepository.CartItemRow::id, Function.identity()));
       var removed = new ArrayList<UUID>();

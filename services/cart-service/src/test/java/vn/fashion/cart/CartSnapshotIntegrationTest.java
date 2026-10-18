@@ -26,6 +26,12 @@ class CartSnapshotIntegrationTest extends CartTestSupport {
     assertThat(problem(send("GET", path(cart, "3"), null, "Cart-Actor", "guest:" + GUEST), 401)).isEqualTo("INVALID_SERVICE_TOKEN");
     assertThat(problem(send("GET", path(cart, "3"), null, "Authorization", "Bearer nope", "Cart-Actor", "guest:" + GUEST), 401))
         .isEqualTo("INVALID_SERVICE_TOKEN");
+    String otherAudience;
+    try { otherAudience = new vn.fashion.platform.security.ServiceTokenIssuer("order-service", KEY.toECPublicKey(), KEY.toECPrivateKey(),
+        java.time.Clock.systemUTC()).issue("inventory-service"); }
+    catch (Exception e) { throw new AssertionError(e); }
+    assertThat(problem(send("GET", path(cart, "3"), null, "Authorization", "Bearer " + otherAudience, "Cart-Actor", "guest:" + GUEST), 401))
+        .isEqualTo("INVALID_SERVICE_TOKEN");
     assertThat(problem(send("GET", path(cart, "3"), null, "Authorization", serviceToken("cart-service"), "Cart-Actor", "guest:" + GUEST), 403))
         .isEqualTo("CALLER_NOT_ALLOWED");
   }

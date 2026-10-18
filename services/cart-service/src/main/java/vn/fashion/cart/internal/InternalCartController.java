@@ -5,6 +5,9 @@ import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -33,9 +36,14 @@ public class InternalCartController {
   private final CheckoutCleanupService cleanup;
   private final ObjectMapper json;
   private final Tracer tracer;
+  private final TransactionTemplate readSnapshot;
 
-  public InternalCartController(InternalCallers callers, CartRepository carts, CheckoutCleanupService cleanup, ObjectMapper json, Tracer tracer) {
+  public InternalCartController(InternalCallers callers, CartRepository carts, CheckoutCleanupService cleanup, ObjectMapper json, Tracer tracer,
+                                PlatformTransactionManager transactions) {
     this.callers = callers; this.carts = carts; this.cleanup = cleanup; this.json = json; this.tracer = tracer;
+    readSnapshot = new TransactionTemplate(transactions);
+    readSnapshot.setIsolationLevel(TransactionDefinition.ISOLATION_REPEATABLE_READ);
+    readSnapshot.setReadOnly(true);
   }
 
   /** Read only: no catalog/inventory call, no sliding expiry, no write (spec section 3). */
@@ -48,11 +56,15 @@ public class InternalCartController {
     var actor = InternalCallers.actor(actorHeader);
     UUID id = CartController.parseId(cartId);
     long expected = CartRequests.version(version);
-    var cart = carts.findOwned(id, actor).orElseThrow(CartRepository::notFound);
-    CartItemsService.requireVersion(expected, cart.version());
-    var items = carts.items(id).stream().map(i -> new Item(i.id(), i.variantId(), i.sku(), i.quantity(), i.version(),
-        i.priceSnapshot(), i.catalogVersion())).toList();
-    return Api.ok(HttpStatus.OK, new Snapshot(id, cart.version(), cart.userId() != null ? "MEMBER" : "GUEST", items), tracer);
+    // One REPEATABLE READ snapshot: the version and the items come from the same commit point (review I1).
+    var snapshot = readSnapshot.execute(status -> {
+      var cart = carts.findOwned(id, actor).orElseThrow(CartRepository::notFound);
+      CartItemsService.requireVersion(expected, cart.version());
+      var items = carts.items(id).stream().map(i -> new Item(i.id(), i.variantId(), i.sku(), i.quantity(), i.version(),
+          i.priceSnapshot(), i.catalogVersion())).toList();
+      return new Snapshot(id, cart.version(), cart.userId() != null ? "MEMBER" : "GUEST", items);
+    });
+    return Api.ok(HttpStatus.OK, snapshot, tracer);
   }
 
   /** Spec section 4: Idempotency-Key must be the order_id, so a retry under any other key cannot deduct again. */

@@ -96,6 +96,22 @@ class CheckoutCleanupIntegrationTest extends CartTestSupport {
     assertThat(jdbc.queryForObject("select status from carts where id = cast(? as uuid)", String.class, cartId)).isEqualTo("ACTIVE");
   }
 
+  @Test void editedBackToSameQuantityIsRetained() {
+    // Review I2: qty 3 → 1 → 3 after the snapshot changes item_version only; the item must survive.
+    add(UUID.randomUUID().toString(), 3);
+    var snap = snapshot();
+    String a = snap.get(0).path("item_id").asString();
+    for (int q : new int[] {1, 3})
+      version = data(send("PUT", "/api/v1/carts/" + cartId + "/items/" + a, "{\"quantity\":" + q + ",\"expected_version\":" + version + "}",
+          "Cookie", cookie), 200).path("version").asLong();
+    String order = UUID.randomUUID().toString();
+    var result = data(cleanup(order, body(order, items(snap))), 200);
+    assertThat(result.path("removed")).isEmpty();
+    assertThat(result.path("retained").get(0).path("reason").asString()).isEqualTo("ITEM_CHANGED");
+    assertThat(result.path("retained").get(0).path("current_quantity").asInt()).isEqualTo(3);
+    assertThat(currentItems()).containsExactly(a);
+  }
+
   @Test void quantityMismatchAtSameVersionIsRetained() {
     add(UUID.randomUUID().toString(), 2);
     var snap = snapshot().get(0);
