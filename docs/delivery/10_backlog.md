@@ -4,7 +4,7 @@ B1 · 2026-09-19 · Work package mặc định: **Planned; Assignee TBD; Reviewe
 
 ## 1. Cách nhận việc
 
-Update 2026-10-18 — `TASK:CART-03` **In review (local)**: cart-service internal snapshot/checkout-cleanup cho order-service
+Update 2026-10-18 — `TASK:CART-03` **In review (local)**, PR #26: cart-service internal snapshot/checkout-cleanup cho order-service
 (service token, chỉ caller `order-service`, actor `Cart-Actor`, idempotent theo `order_id`, giữ item đã sửa — T18) và
 `subtotal_preview`/`shipping_fee_status: NOT_CALCULATED`; `REQ:CART-05/06`; dependency CART-01, PLT-03;
 [spec](../superpowers/specs/2026-10-18-cart-03-checkout-snapshot-design.md), [evidence](../evidence/cart-03-local-2026-10-18.md).
