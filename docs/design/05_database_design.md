@@ -276,6 +276,8 @@ Tìm kiếm đầu kỳ dùng ILIKE có phân trang/giới hạn; chưa tuyên b
 
 ## 6. `cart-db`
 
+`TASK:CART-01` hiện thực `V001__carts.sql` đúng bảng dưới (CHECK một chủ sở hữu, unique ACTIVE theo member, unique hash guest, quantity 1–99) cộng `idempotency_requests`; runtime không DELETE/TRUNCATE `carts`. Giỏ guest hết hạn chưa có job dọn (CART-03/O06).
+
 ```mermaid
 erDiagram
     carts ||--o{ cart_items : contains

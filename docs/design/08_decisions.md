@@ -416,6 +416,20 @@ Không mở rộng DLT cho mọi loại event chưa được service sử dụng
 
 Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác và lý do; ảnh hưởng PRD/API/schema/test/task; người quyết định; ngày; link bằng chứng. Chưa có chữ ký phê duyệt giả định thương mại.
 
+## CART-01 — quyết định 2026-10-18
+
+`TASK:CART-01` · `REQ:CART-01/02/04`. Chủ dự án giao agent tự chốt và duyệt [spec](../superpowers/specs/2026-10-18-cart-01-carts-design.md):
+
+| Quyết định | Hệ quả |
+|---|---|
+| cart-service riêng, port 8084, DB `cart` | Không truy vấn chéo DB; gọi catalog/inventory qua internal API với service token |
+| Cookie `cart_token` SameSite=Lax, 30 ngày trượt, chỉ lưu SHA-256 | Link ngoài vẫn thấy giỏ; mutation có cookie vẫn qua CSRF origin của Gateway |
+| Bearer ưu tiên hơn cookie, Bearer lỗi → 401 không fallback | Gộp giỏ guest→member là CART-02 |
+| Không Redis | Giỏ không phụ thuộc cache; thêm khi đo tải |
+| DELETE giỏ xóa item, giỏ vẫn ACTIVE; tối đa 100 dòng | Giữ unique ACTIVE của member |
+| Kiểm tồn tham khảo khi thêm/tăng; lỗi dependency khi ghi → 503, khi đọc → preview UNAVAILABLE | Không giữ hàng, không chốt giá |
+| local-up sinh service key cho cart-service, thêm vào allowlist catalog/inventory | Lần đầu internal API có caller thật |
+
 ## Quyết định chủ dự án 2026-10-18 — SEO và thứ tự gate
 
 | Quyết định | Hệ quả |
