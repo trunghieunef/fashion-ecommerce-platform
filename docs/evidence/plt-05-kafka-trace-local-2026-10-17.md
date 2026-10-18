@@ -4,7 +4,7 @@
 [Spec đã duyệt](../superpowers/specs/2026-10-17-plt-05-kafka-trace-design.md),
 [plan](../superpowers/plans/2026-10-17-plt-05-kafka-trace.md).
 
-Trạng thái: hiện thực và kiểm local trên `dev`, chưa push/CI. PLT-05 vẫn **In progress**: còn
+Trạng thái: merge vào `main` qua PR #24 (`2c9b032`, 2026-10-18); CI PR trên `ed91ddc` PASS (s1-local run 39095806625 gồm smoke trace, docs-check). PLT-05 vẫn **In progress**: còn
 dashboard/alert và trace trên staging (cần PLT-04). Gauge `outbox_oldest_pending_age_seconds` đã có
 từ PLT-03.
 

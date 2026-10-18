@@ -107,8 +107,8 @@ PLT-04/05, AWS/K3s/ECR/ArgoCD, provider sandbox và các task business Phase 1 k
   `metadata.trace_id`), log JSON ECS có redaction và `/actuator/prometheus` (Gateway trên port 9080).
   2026-10-18: correlation HTTP/Kafka xong ở local — outbox lưu `trace_parent`, relay mở span
   PRODUCER, consumer Kafka nối trace; Tempo 3.0.3 + Grafana 13.2.2 trong compose, smoke kiểm một trace
-  Gateway → catalog → inventory → catalog ([evidence](../evidence/plt-05-kafka-trace-local-2026-10-17.md)). Gauge
-  `outbox_oldest_pending_age_seconds` đã có từ PLT-03. Còn: dashboard/alert và trace trên staging (cần PLT-04).
+  Gateway → catalog → inventory → catalog ([evidence](../evidence/plt-05-kafka-trace-local-2026-10-17.md)). Merge `main`
+  qua PR #24 (`2c9b032`), CI PASS. Gauge `outbox_oldest_pending_age_seconds` đã có từ PLT-03. Còn: dashboard/alert và trace trên staging (cần PLT-04).
 - `TASK:USR-01` — **In progress, 1a + 1b-i đã code** (2026-10-05, assignee Claude Code, reviewer chủ
   dự án; Phase 1A bắt đầu trước G0 theo quyết định ở 08). 1a: đăng ký, đăng nhập có khóa 15 phút,
   refresh xoay vòng + thu hồi family khi dùng lại, logout, `USER_CREATED` qua outbox; Gateway route
