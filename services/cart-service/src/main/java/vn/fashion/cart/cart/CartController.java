@@ -2,7 +2,6 @@ package vn.fashion.cart.cart;
 
 import io.micrometer.tracing.Tracer;
 import jakarta.servlet.http.HttpServletRequest;
-import java.util.Map;
 import java.util.UUID;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -19,10 +18,11 @@ import vn.fashion.cart.web.Api;
 public class CartController {
   private final CartIdentity identity;
   private final CartRepository carts;
+  private final CartPreview preview;
   private final Tracer tracer;
 
-  public CartController(CartIdentity identity, CartRepository carts, Tracer tracer) {
-    this.identity = identity; this.carts = carts; this.tracer = tracer;
+  public CartController(CartIdentity identity, CartRepository carts, CartPreview preview, Tracer tracer) {
+    this.identity = identity; this.carts = carts; this.preview = preview; this.tracer = tracer;
   }
 
   /** Member: the ACTIVE cart (201 when created). Guest: the cookie's cart, else a new cart and cookie (201). */
@@ -61,8 +61,11 @@ public class CartController {
     return Api.ok(HttpStatus.OK, view(carts.findOwned(cart.id(), actor).orElseThrow(CartRepository::notFound)), tracer);
   }
 
+  /** Reads carry the labeled preview (spec section 6); it is computed outside any transaction and never stored. */
   CartView view(CartRepository.CartRow cart) {
-    return CartView.of(cart, carts.items(cart.id()), Map.of(), "NOT_LOADED");
+    var items = carts.items(cart.id());
+    var loaded = preview.load(items);
+    return CartView.of(cart, items, loaded.byItem(), loaded.status());
   }
 
   /** Canonical lowercase UUID only; anything else is the same 404 as a missing cart. */
