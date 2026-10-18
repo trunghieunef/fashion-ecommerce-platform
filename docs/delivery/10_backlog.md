@@ -4,13 +4,13 @@ B1 · 2026-09-19 · Work package mặc định: **Planned; Assignee TBD; Reviewe
 
 ## 1. Cách nhận việc
 
-Update 2026-10-18 — `TASK:CART-03` **Done (local, trước G0)** theo [nghiệm thu](../evidence/acceptance-2026-10-18.md) (PR #26 CI PASS trên `461395e`, chờ merge `main`): cart-service internal snapshot/checkout-cleanup cho order-service
+Update 2026-10-18 — `TASK:CART-03` **Done (local, trước G0)** theo [nghiệm thu](../evidence/acceptance-2026-10-18.md) (PR #26 CI PASS trên `461395e`, merge `main` tại `2f19354`): cart-service internal snapshot/checkout-cleanup cho order-service
 (service token, chỉ caller `order-service`, actor `Cart-Actor`, idempotent theo `order_id`, giữ item đã sửa — T18) và
 `subtotal_preview`/`shipping_fee_status: NOT_CALCULATED`; `REQ:CART-05/06`; dependency CART-01, PLT-03;
 [spec](../superpowers/specs/2026-10-18-cart-03-checkout-snapshot-design.md), [evidence](../evidence/cart-03-local-2026-10-18.md).
 Câu hỏi mở cookie guest cho ORD-01 ghi ở 08.
 
-Update 2026-10-18 — `TASK:CART-01` **Done (local, trước G0)** theo [nghiệm thu](../evidence/acceptance-2026-10-18.md) (PR #25 CI PASS, chờ merge `main`): cart-service mới (guest cookie/member Bearer, version +
+Update 2026-10-18 — `TASK:CART-01` **Done (local, trước G0)** theo [nghiệm thu](../evidence/acceptance-2026-10-18.md) (PR #25 CI PASS, merge `main` tại `b06b27a`): cart-service mới (guest cookie/member Bearer, version +
 idempotency, preview giá/tồn tham khảo, không Redis); `REQ:CART-01/02/04`; dependency USR-01, CAT-02,
 INV-01; [spec](../superpowers/specs/2026-10-18-cart-01-carts-design.md), [evidence](../evidence/cart-01-local-2026-10-18.md).
 

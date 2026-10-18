@@ -50,7 +50,7 @@ dòng CART-03 + `REQ:CART-05/06` ở [02](../design/02_prd.md), mức local trư
 
 ### Bằng chứng chung
 
-- Code trên `dev` `461395e`, PR #26 (chưa merge). Application CI (pull_request) SUCCESS
+- Code trên `dev` `461395e`, PR #26 (merge `main` tại `2f19354` sau nghiệm thu). Application CI (pull_request) SUCCESS
   ([run 39137396425](https://github.com/trunghieunef/fashion-ecommerce-platform/actions/runs/39137396425)):
   `./mvnw -B test` toàn reactor **713 test** 0 failure (cart-service 72), contract validation 64 test
   (gồm 4 test `test_cart_internal`), infra validation, local stack + smoke (`CART-01 guest/member cart PASS`,
@@ -71,7 +71,7 @@ dòng CART-03 + `REQ:CART-05/06` ở [02](../design/02_prd.md), mức local trư
 | Route internal không public | `GatewayBoundaryTest#cartInternalIsNotRouted` (snapshot qua Gateway → 404) | Pass |
 | Contract | `cart-internal.yaml` + `cart.yaml` Redocly lint, `test_cart_internal.py`/`test_cart.py` trên CI | Pass |
 
-**`TASK:CART-03`: Done (local, trước G0)**; còn bước merge PR #26 vào `main` do chủ dự án thực hiện.
+**`TASK:CART-03`: Done (local, trước G0)**; chủ dự án đã merge PR #26 vào `main` (`2f19354`), CI trên `7c0726f` PASS trước merge.
 
 ### Ngoại lệ và việc còn lại (không chặn Done local)
 
