@@ -20,7 +20,7 @@ tối đa mili giây); deadline của reserve được kiểm bằng DB clock tr
 Internal reservations giới hạn 1–100 items thô và 1–100 SKU sau gộp, quantity 1–99
 trước/sau gộp; reserve mới cần `now() < expires_at <= now()+24h`. Canonical/hash theo
 [03 §1.3](../../docs/design/03_interfaces.md), SHA-256 lowercase; server tính lại,
-sai snapshot trả 400 REQUEST_HASH_MISMATCH. Return/restore thuộc INV-03.
+sai snapshot trả 400 REQUEST_HASH_MISMATCH. Return/restore: INV-03 bên dưới.
 
 Task 4 hiện thực POST `/internal/api/v1/inventory/reserve` và GET
 `/internal/api/v1/inventory/reservations/{order_id}`, chỉ caller `order-service`.
@@ -40,7 +40,7 @@ Commit sau hạn nhả reserved, lưu EXPIRED với reason `expired`, ledger REL
 INVENTORY_RELEASED trước khi trả 409 RESERVATION_EXPIRED ngoài transaction; retry không nhả lại.
 Task 6 thêm POST `/internal/api/v1/inventory/release`: ACTIVE nhả reserved qua ledger RELEASE,
 ghi RELEASED và outbox cùng transaction; retry RELEASED/EXPIRED không ghi lại.
-COMMITTED trả 200 với restore_required=true, không đổi kho (restore thuộc INV-03).
+COMMITTED trả 200 với restore_required=true, không đổi kho (order restore qua `/returns`, INV-03).
 Chưa có reservation thì tạo tombstone RELEASED version=1 với items snapshot và outbox
 INVENTORY_RELEASED, không đổi stock/ledger; reserve đến muộn trả RESERVATION_CLOSED.
 Tombstone insert theo order_id trước khi khóa SKU tăng dần để giữ cùng lock order với reserve;
@@ -48,6 +48,15 @@ SKU lạ trả 400 field original_reservation.items[SKU] và rollback cả tombs
 Release chỉ kiểm hình dạng deadline, chấp nhận snapshot đã quá hạn; khác hash đã lưu trả 409.
 Acceptance Task 6 kiểm T04, retry, release sau commit, hash/reason/SKU lỗi và race reservation→SKU
 bằng PostgreSQL thật.
+`TASK:INV-03` · `REQ:INV-07` ([spec](../../docs/superpowers/specs/2026-10-18-inv-03-returns-design.md),
+[evidence](../../docs/evidence/inv-03-local-2026-10-18.md)): `V004__stock_returns.sql` thêm `stock_returns`
+(UNIQUE reservation_id+operation_key+sku, quantity 1–99, reason/evidence_ref 1–500; runtime chỉ SELECT/INSERT).
+POST `/internal/api/v1/inventory/returns` (chỉ `order-service`; `Idempotency-Key` = `operation_key`): một transaction
+khóa reservation (phải COMMITTED) → cùng operation_key thì so dữ liệu đã lưu (khớp → 200 không cộng, khác → 409
+RETURN_CONFLICT) → SKU phải thuộc reservation → tổng trả + quantity ≤ commit (409 RETURN_EXCEEDS_COMMITTED, không ghi)
+→ khóa SKU tăng dần, insert return, on_hand +quantity (reserved giữ nguyên), ledger RETURN
+`order:<order_id>:RETURN:<operation_key>`, outbox INVENTORY_UPDATED/RESTOCKED. SKU INACTIVE vẫn được cộng.
+GET reservation có `items[].returned`. Counter `inventory.reservations{operation=return}`.
 Task 7 thêm expiry sweep: chọn ACTIVE quá hạn bằng DB clock, mỗi id một transaction,
 khóa `FOR UPDATE SKIP LOCKED` và kiểm lại ACTIVE/deadline trước khi nhả hàng qua `finish`.
 Ghi EXPIRED, reason `expired`, ledger RELEASE và outbox cùng transaction; lỗi một id được log

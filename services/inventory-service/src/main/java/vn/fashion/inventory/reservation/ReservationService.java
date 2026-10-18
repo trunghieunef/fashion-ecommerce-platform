@@ -130,7 +130,7 @@ public class ReservationService {
   }
   public ReservationView find(UUID orderId) {
     var row=reservations.find(orderId).orElseThrow(ReservationService::notFound);
-    return ReservationView.of(row,reservations.items(row.id()),false);
+    return ReservationView.of(row,reservations.items(row.id()),false,reservations.returnedTotals(row.id()));
   }
 
   private Outcome replay(ReservationRow row,String hash,String traceId) {
@@ -143,7 +143,9 @@ public class ReservationService {
     count("reserve","closed");
     throw conflict("RESERVATION_CLOSED");
   }
-  ReservationView view(ReservationRow row,boolean restoreRequired) { return ReservationView.of(row,reservations.items(row.id()),restoreRequired); }
+  ReservationView view(ReservationRow row,boolean restoreRequired) {
+    return ReservationView.of(row,reservations.items(row.id()),restoreRequired,reservations.returnedTotals(row.id()));
+  }
   /** Applies one stock movement with its ledger row and stock snapshot event. */
   StockRow move(StockRow before,int onHandDelta,int reservedDelta,String type,UUID orderId,String reason,String traceId) {
     return stocks.move(before,onHandDelta,reservedDelta,type,"order:"+orderId+":"+type,orderId,reason,null,traceId);

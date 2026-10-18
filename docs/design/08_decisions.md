@@ -430,6 +430,19 @@ Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác v
 | Kiểm tồn tham khảo khi thêm/tăng; lỗi dependency khi ghi → 503, khi đọc → preview UNAVAILABLE | Không giữ hàng, không chốt giá |
 | local-up sinh service key cho cart-service, thêm vào allowlist catalog/inventory | Lần đầu internal API có caller thật |
 
+## CART-02 — quyết định 2026-10-18
+
+`TASK:CART-02` · `REQ:CART-03`. Chủ dự án giao agent tự chốt và duyệt [spec](../superpowers/specs/2026-10-18-cart-02-merge-design.md):
+
+| Quyết định | Hệ quả |
+|---|---|
+| Merge là lệnh client gọi rõ ràng sau login (`POST /carts/merge`) | Auth không tự gộp; WEB-02 gọi sau login |
+| Đã MERGED vào cùng giỏ member → 200 `already_merged`, kể cả key khác | T19: retry/song song chỉ cộng một lần |
+| Target = max(qty member, min(member + guest, 99, available quan sát)); mọi dòng bỏ/giảm có adjustment | Không âm thầm bỏ item; không giảm item member |
+| Member chưa có giỏ thì tạo trong merge | `member_expected_version` = 0 |
+| Giỏ guest giữ items, chỉ MERGED + `merged_into`; response xóa cookie guest | Không migration |
+| Tồn kiểm trước transaction, không giữ hàng | Như add item CART-01 |
+
 ## CART-03 — quyết định 2026-10-18
 
 `TASK:CART-03` · `REQ:CART-05/06`. Chủ dự án giao agent tự chốt và duyệt [spec](../superpowers/specs/2026-10-18-cart-03-checkout-snapshot-design.md):
@@ -446,6 +459,18 @@ Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác v
 **Câu hỏi mở cho ORD-01/WEB-03 (chưa quyết định):** cookie `cart_token` có `Path=/api/v1/carts` nên trình duyệt không
 gửi nó tới `/api/v1/orders`; order-service cần một cách xác minh guest để điền `Cart-Actor` (mở rộng Path cookie
 hoặc cơ chế khác). CART-03 không đổi cookie. Phải chốt trước khi ORD-01 triển khai guest checkout.
+
+## INV-03 — quyết định 2026-10-18
+
+`TASK:INV-03` · `REQ:INV-07`. Chủ dự án giao agent tự chốt và duyệt [spec](../superpowers/specs/2026-10-18-inv-03-returns-design.md):
+
+| Quyết định | Hệ quả |
+|---|---|
+| Một endpoint `/returns` cho restore sau hủy (release `restore_required`) và hàng hoàn đã kiểm đếm | Reservation vẫn COMMITTED, không thêm trạng thái |
+| `stock_returns` thêm `evidence_ref`; UNIQUE `(reservation_id, operation_key, sku)` thay `(operation_key, sku)` | 05 cập nhật; key của order chỉ unique theo order |
+| `Idempotency-Key` = `operation_key`; replay so dữ liệu đã lưu | Không thêm cột hash |
+| Vượt tổng commit → 409 cả request | Không cộng một phần |
+| Không event mới; dùng INVENTORY_UPDATED/RESTOCKED | Catalog projection nhận tồn mới như mọi movement |
 
 ## Quyết định chủ dự án 2026-10-18 — SEO và thứ tự gate
 

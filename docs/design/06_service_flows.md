@@ -265,7 +265,7 @@ sequenceDiagram
 |---|---|---|
 | Tạo/xem giỏ | Member lấy ACTIVE cart; guest cấp token ngẫu nhiên, lưu hash → đọc DB/cache | Không cho truy cập chỉ bằng ID; guest TTL 30 ngày; Redis hỏng đọc DB |
 | Add/update/remove | `CART-01` implemented: đọc giỏ, gọi catalog quote + inventory stock (service token ADR-19) **ngoài** transaction, rồi TX ngắn lock giỏ, kiểm version, ghi. Validate quantity 1–99; catalog ACTIVE; kiểm tra tồn tham khảo; TX kiểm tra cart/item version rồi ghi | Hết tồn trả lỗi kèm số lượng; version khác trả 409; không âm thầm ghi đè thay đổi thiết bị khác |
-| Merge login | Xác minh đồng thời guest token và member → lock hai cart theo ID → nếu guest MERGED trả kết quả cũ → cộng qty, giữ created_at của item cũ hơn → đánh dấu MERGED | Cap 99 và available quan sát được; SKU không bán/không còn tồn bỏ khỏi kết quả nhưng trả danh sách điều chỉnh để UI báo; kho chưa được reserve |
+| Merge login | Xác minh đồng thời guest token và member → lock hai cart theo ID → nếu guest MERGED trả kết quả cũ → cộng qty, giữ created_at của item cũ hơn → đánh dấu MERGED. `CART-02` implemented: catalog/stock đọc trước transaction; target = max(qty member, min(member + guest, 99, available)), không giảm qty member có sẵn; client gọi `POST /carts/merge` sau login | Cap 99 và available quan sát được; SKU không bán/không còn tồn bỏ khỏi kết quả nhưng trả danh sách điều chỉnh để UI báo; kho chưa được reserve |
 | Preview | Đọc items → tính giá lại và fee/voucher preview. `CART-03`: cart trả `subtotal_preview` + `shipping_fee_status: NOT_CALCULATED`, không gọi shipping/promotion; fee là `/shipping/fee/estimate` (SHP-01) | Preview không giữ quota; provider lỗi cho biết chưa tính được phí, không hiển thị tổng giả là giá chốt |
 | Sau tạo đơn | Order gửi cleanup với order_id và item_id/version/quantity đã snapshot; TX xóa item khớp snapshot. `CART-03` implemented: khớp = cùng version **và** quantity → xóa cả dòng; khác → giữ nguyên dòng (`retained` ITEM_CHANGED), không giảm phần còn lại; dòng đã mất → `missing` | Retry cùng order_id không trừ giỏ hai lần; item version đã đổi giữ nguyên và báo refresh; không xóa sạch giỏ hiện tại |
 
@@ -440,7 +440,7 @@ Commit còn hạn ghi COMMITTED, giảm on_hand/reserved và ledger COMMIT/outbo
 trả hiện trạng 200 không trừ thêm. Acceptance Task 5 dùng PostgreSQL thật kiểm T09, expire
 bền vững trước 409, retry không nhả lại, query và lỗi auth/body/not-found.
 Task 6 thêm release API: ACTIVE nhả reserved, ghi RELEASED cùng ledger RELEASE/outbox;
-RELEASED/EXPIRED retry no-op, COMMITTED trả 200 restore_required=true không đổi kho.
+RELEASED/EXPIRED retry no-op, COMMITTED trả 200 restore_required=true không đổi kho; order cộng lại bằng `POST /inventory/returns` (INV-03).
 Release chưa có reservation insert tombstone RELEASED version=1 theo order_id **trước** khi
 khóa SKU tăng dần để kiểm tồn tại, tránh đảo thứ tự khóa với reserve đang insert cùng order.
 SKU lạ trả 400 tại original_reservation.items[SKU], rollback tombstone; snapshot quá hạn
@@ -617,7 +617,7 @@ Các operation dưới đây đã được hợp nhất vào **03 Interfaces B1*
 | Internal cart | `GET /carts/{id}/snapshot`, `POST /carts/{id}/checkout-cleanup` (`CART-03` implemented, prefix `/internal/api/v1`) | Actor (`Cart-Actor`)/version bắt buộc; cleanup chứa order_id và items snapshot, idempotent theo order_id |
 | Internal catalog | `POST /catalog/variants/quote` | Batch variant IDs, trả giá/version/weight/status; không một HTTP call cho mỗi item |
 | Internal order | `GET /orders/{order_id}/snapshot`, `GET /orders/{order_id}/saga-status` | Payment, promotion, shipping query snapshot/intent với quyền caller riêng |
-| Internal inventory | Giữ reserve/commit/release; thêm `GET /inventory/reservations/{order_id}`, `POST /inventory/returns` | Reserve toàn giỏ có expires_at + request_hash; release original snapshot/hash; return reason/evidence/quantities |
+| Internal inventory | Giữ reserve/commit/release; thêm `GET /inventory/reservations/{order_id}`, `POST /inventory/returns` (`INV-03` implemented local) | Reserve toàn giỏ có expires_at + request_hash; release original snapshot/hash; return reason/evidence/quantities, idempotent theo operation_key, tổng trả ≤ commit dưới lock reservation |
 | Internal promotion | `POST /promotions/quote`, `POST /promotions/reservations/{lock,commit,release}`, `GET /promotions/reservations/{order_id}` | Bao phủ voucher và campaign quota trong một TX; thay lock/release voucher riêng ở checkout |
 | Internal payment | `POST /payments`, `GET /payments/by-order/{order_id}`, `POST /payments/{order_id}/close`, `POST /payments/{payment_id}/refunds` | Amount server-owned; close có snapshot để ghi tombstone nếu create chưa đến |
 | Public payment | `GET /orders/{order_no}/payment` | Chỉ đọc payment sẵn có đúng owner; refund qua FINANCE/order internal |

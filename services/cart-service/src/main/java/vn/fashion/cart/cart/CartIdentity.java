@@ -59,6 +59,21 @@ public class CartIdentity {
     return Optional.empty();
   }
 
+  /** CART-02: the guest cookie's hash even when a Bearer is present (merge needs both credentials). */
+  public Optional<String> guestHash(HttpServletRequest request) {
+    if (request.getCookies() == null) return Optional.empty();
+    for (Cookie cookie : request.getCookies()) {
+      if (COOKIE.equals(cookie.getName()) && cookie.getValue() != null && TOKEN.matcher(cookie.getValue()).matches())
+        return Optional.of(hash(cookie.getValue()));
+    }
+    return Optional.empty();
+  }
+
+  /** CART-02: drops the merged guest cookie from the browser. */
+  public static ResponseCookie clearedCookie() {
+    return ResponseCookie.from(COOKIE, "").httpOnly(true).secure(true).sameSite("Lax").path("/api/v1/carts").maxAge(0).build();
+  }
+
   /** Spec section 3: 30 days since last activity also in the browser — re-issue after every successful guest call. */
   public void refresh(HttpServletRequest request, jakarta.servlet.http.HttpServletResponse response) {
     guestToken(request).ifPresent(token -> response.addHeader(org.springframework.http.HttpHeaders.SET_COOKIE, cookie(token).toString()));

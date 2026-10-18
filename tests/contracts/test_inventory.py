@@ -26,7 +26,7 @@ class InventoryContractTest(unittest.TestCase):
         return Draft202012Validator({"$ref": BASE + "inventory.yaml#/components/schemas/" + schema},
                                    registry=registry, format_checker=FormatChecker())
 
-    def test_nine_implemented_operations_and_permissions(self):
+    def test_ten_implemented_operations_and_permissions(self):
         doc = self.load()
         expected = {("get", "/admin/api/v1/inventory/skus"),
                     ("get", "/admin/api/v1/inventory/skus/{sku}/transactions"),
@@ -36,6 +36,7 @@ class InventoryContractTest(unittest.TestCase):
                     ("post", "/internal/api/v1/inventory/reserve"),
                     ("post", "/internal/api/v1/inventory/commit"),
                     ("post", "/internal/api/v1/inventory/release"),
+                    ("post", "/internal/api/v1/inventory/returns"),
                     ("get", "/internal/api/v1/inventory/reservations/{order_id}")}
         actual = {(method, path) for path, item in doc["paths"].items() for method in item if method != "parameters"}
         self.assertEqual(actual, expected)
@@ -100,6 +101,19 @@ class InventoryContractTest(unittest.TestCase):
                 self.assertFalse(data["restore_required"])
                 if command == "release":
                     self.assertTrue(data["release_reason"])
+
+    def test_return_request_is_closed_and_bounded(self):
+        validator = self.validator("ReturnRequest")
+        ok = {"order_id": "99999999-9999-4999-8999-999999999991", "operation_key": "return-1", "reason": "counted",
+              "evidence_ref": "ops-1", "items": [{"sku": "SKU-1", "quantity": 1}]}
+        self.assertEqual(list(validator.iter_errors(ok)), [])
+        for change in ({"items": []}, {"items": [{"sku": "SKU-1", "quantity": 1}] * 101}, {"operation_key": "k" * 129},
+                       {"evidence_ref": ""}, {"reason": "x" * 501}, {"items": [{"sku": "SKU-1", "quantity": 100}]},
+                       {"restock": True}):
+            with self.subTest(change=change):
+                self.assertTrue(list(validator.iter_errors({**ok, **change})))
+        for field in ("order_id", "operation_key", "reason", "evidence_ref", "items"):
+            self.assertTrue(list(validator.iter_errors({k: v for k, v in ok.items() if k != field})), field)
 
     def test_expired_event_fixture_is_not_published_before_its_deadline(self):
         event = json.loads((ROOT / "contracts/fixtures/valid/inventory-released.json").read_text(encoding="utf-8"))
