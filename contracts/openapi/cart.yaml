@@ -1,0 +1,331 @@
+openapi: 3.1.0
+info:
+  title: Cart API
+  version: 0.1.0
+  description: TASK:CART-01 guest (cookie) and member (Bearer) carts stored in PostgreSQL. Prices and stock in a cart are a
+    labeled reference preview, never a reservation or a final price (order quote decides). Every response is no-store.
+servers:
+- url: http://localhost:8080
+  description: Local Gateway
+tags:
+- name: Carts
+  description: Owner-only carts; a cart_id alone never grants access (404 for every miss)
+security:
+- memberBearer: []
+- guestCookie: []
+paths:
+  /api/v1/carts:
+    post:
+      tags: [Carts]
+      operationId: openCart
+      summary: Open or create the caller cart
+      description: CART-01 implemented. Member (valid Bearer) gets the single ACTIVE cart, created on first call (201) or
+        returned (200). Guest with a valid cart_token cookie gets that cart (200, expiry extended 30 days); otherwise a new
+        cart and cookie (201). An invalid Bearer is 401 and never falls back to the cookie.
+      responses:
+        '200': &cartOk
+          description: Existing cart with preview
+          headers: &cartHeaders
+            X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+            Cache-Control: {$ref: '#/components/headers/NoStore'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CartResponse'}
+              examples:
+                guest:
+                  value:
+                    code: OK
+                    data:
+                      cart_id: 11111111-1111-4111-8111-111111111111
+                      version: 1
+                      owner: GUEST
+                      expires_at: '2026-11-17T03:00:00Z'
+                      preview_status: OK
+                      items:
+                      - item_id: 22222222-2222-4222-8222-222222222222
+                        variant_id: 33333333-3333-4333-8333-333333333333
+                        sku: TEE-M
+                        quantity: 2
+                        price_snapshot: 100000
+                        item_version: 0
+                        preview: {effective_price: 90000, price_changed: true, active: true, available: 3, observed_at: '2026-10-18T03:00:00Z'}
+                    metadata: {request_id: cart01-synthetic-request, trace_id: cart01-synthetic-trace}
+        '201':
+          description: New cart. Guests also receive the cookie.
+          headers:
+            X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+            Cache-Control: {$ref: '#/components/headers/NoStore'}
+            Set-Cookie:
+              description: 'Guest only: cart_token=<43 base64url chars>; HttpOnly; Secure; SameSite=Lax; Path=/api/v1/carts;
+                Max-Age=2592000. The server stores only its SHA-256.'
+              schema: {type: string}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CartResponse'}
+              examples:
+                empty:
+                  value:
+                    code: OK
+                    data: {cart_id: 11111111-1111-4111-8111-111111111111, version: 0, owner: GUEST, expires_at: '2026-11-17T03:00:00Z',
+                      preview_status: EMPTY, items: []}
+                    metadata: {request_id: cart01-synthetic-request, trace_id: cart01-synthetic-trace}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '500': {$ref: '#/components/responses/Internal'}
+  /api/v1/carts/mine:
+    get:
+      tags: [Carts]
+      operationId: getMyCart
+      summary: Member active cart
+      security: [{memberBearer: []}]
+      description: CART-01 implemented. Member's ACTIVE cart with preview; 404 when the member has none yet.
+      responses:
+        '200': *cartOk
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/CartNotFound'}
+  /api/v1/carts/{cart_id}:
+    parameters:
+    - {$ref: '#/components/parameters/CartId'}
+    get:
+      tags: [Carts]
+      operationId: getCart
+      summary: Read an owned cart with preview
+      description: CART-01 implemented. Owner only (member user or unexpired guest cookie); missing, foreign, expired or
+        non-canonical ids are the same 404. Preview is computed per read, never stored; preview_status UNAVAILABLE keeps the
+        stored items when catalog or inventory cannot answer.
+      responses:
+        '200': *cartOk
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/CartNotFound'}
+    delete:
+      tags: [Carts]
+      operationId: clearCart
+      summary: Remove every item
+      description: CART-01 implemented. Removes every item; the cart stays ACTIVE and version increases by 1.
+      parameters:
+      - {$ref: '#/components/parameters/ExpectedVersionQuery'}
+      responses:
+        '200': &cartMutated
+          description: Changed cart; preview_status NOT_LOADED (read the cart for a preview)
+          headers: *cartHeaders
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CartResponse'}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '404': {$ref: '#/components/responses/CartNotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/carts/{cart_id}/items:
+    parameters:
+    - {$ref: '#/components/parameters/CartId'}
+    post:
+      tags: [Carts]
+      operationId: addCartItem
+      summary: Add quantity of a variant
+      description: CART-01 implemented. Adds quantity to the variant line (created when absent). Catalog must report the
+        variant found and active and inventory available must cover the new line quantity (reference only, nothing is
+        reserved). Dependencies are called before the cart row is locked. Same Idempotency-Key and body replays the stored
+        response; another body is 409 IDEMPOTENCY_KEY_REUSED. Line total over 99 is 400 QUANTITY_LIMIT, a 101st line is 400
+        CART_ITEM_LIMIT; catalog/inventory failure is 503 and writes nothing.
+      parameters:
+      - {$ref: '#/components/parameters/RequiredIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AddItemRequest'}
+      responses:
+        '200': *cartMutated
+        '400': {$ref: '#/components/responses/Invalid'}
+        '404': {$ref: '#/components/responses/CartNotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /api/v1/carts/{cart_id}/items/{item_id}:
+    parameters:
+    - {$ref: '#/components/parameters/CartId'}
+    - {$ref: '#/components/parameters/ItemId'}
+    put:
+      tags: [Carts]
+      operationId: setCartItemQuantity
+      summary: Set an item quantity
+      description: CART-01 implemented. Absolute quantity 1..99. Increasing re-checks sellability and stock like add;
+        decreasing never calls dependencies (allowed even when the variant is no longer sold).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SetQuantityRequest'}
+      responses:
+        '200': *cartMutated
+        '400': {$ref: '#/components/responses/Invalid'}
+        '404': {$ref: '#/components/responses/CartNotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    delete:
+      tags: [Carts]
+      operationId: removeCartItem
+      summary: Remove an item
+      description: CART-01 implemented. Removes the line; an item of another cart is 404 CART_ITEM_NOT_FOUND.
+      parameters:
+      - {$ref: '#/components/parameters/ExpectedVersionQuery'}
+      responses:
+        '200': *cartMutated
+        '400': {$ref: '#/components/responses/Invalid'}
+        '404': {$ref: '#/components/responses/CartNotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+components:
+  securitySchemes:
+    memberBearer: {type: http, scheme: bearer, bearerFormat: JWT, description: ADR-21 access token; takes precedence over the cookie}
+    guestCookie: {type: apiKey, in: cookie, name: cart_token, description: Random guest credential; mutations need an allowed Origin at the Gateway}
+  headers:
+    NoStore:
+      description: Carts are per actor; never cached, errors included.
+      schema: {type: string, const: no-store}
+  parameters:
+    CartId:
+      name: cart_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    ItemId:
+      name: item_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    ExpectedVersionQuery:
+      name: expected_version
+      in: query
+      required: true
+      description: Missing is 400 VERSION_REQUIRED; stale is 409 VERSION_CONFLICT with errors[expected_version]=current=N
+      schema: {type: integer, minimum: 0, maximum: 9223372036854775807}
+    RequiredIdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: 1..128 characters; scope is actor + cart + key
+      schema: {type: string, minLength: 1, maxLength: 128}
+  schemas:
+    Quantity: {type: integer, minimum: 1, maximum: 99}
+    AddItemRequest:
+      type: object
+      required: [variant_id, quantity, expected_version]
+      properties:
+        variant_id: {type: string, format: uuid}
+        quantity: {$ref: '#/components/schemas/Quantity'}
+        expected_version: {type: integer, minimum: 0, maximum: 9223372036854775807}
+    SetQuantityRequest:
+      type: object
+      required: [quantity, expected_version]
+      properties:
+        quantity: {$ref: '#/components/schemas/Quantity'}
+        expected_version: {type: integer, minimum: 0, maximum: 9223372036854775807}
+    Preview:
+      description: Reference only; not a reservation or a final price.
+      type: object
+      additionalProperties: false
+      required: [effective_price, price_changed, active, available, observed_at]
+      properties:
+        effective_price: {type: integer, minimum: 0, maximum: 9223372036854775807}
+        price_changed: {type: boolean}
+        active: {type: boolean}
+        available: {type: integer, minimum: 0}
+        observed_at:
+          anyOf:
+          - {type: string, format: date-time}
+          - {type: 'null'}
+    CartItem:
+      type: object
+      additionalProperties: false
+      required: [item_id, variant_id, sku, quantity, price_snapshot, item_version, preview]
+      properties:
+        item_id: {type: string, format: uuid}
+        variant_id: {type: string, format: uuid}
+        sku: {type: string, minLength: 1, maxLength: 64}
+        quantity: {$ref: '#/components/schemas/Quantity'}
+        price_snapshot: {type: integer, minimum: 0, maximum: 9223372036854775807}
+        item_version: {type: integer, minimum: 0}
+        preview:
+          anyOf:
+          - {$ref: '#/components/schemas/Preview'}
+          - {type: 'null'}
+    Cart:
+      type: object
+      additionalProperties: false
+      required: [cart_id, version, owner, expires_at, items, preview_status]
+      properties:
+        cart_id: {type: string, format: uuid}
+        version: {type: integer, minimum: 0}
+        owner: {type: string, enum: [GUEST, MEMBER]}
+        expires_at:
+          description: Guest only (sliding 30 days); null for members
+          anyOf:
+          - {type: string, format: date-time}
+          - {type: 'null'}
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/CartItem'}
+        preview_status: {type: string, enum: [OK, UNAVAILABLE, EMPTY, NOT_LOADED]}
+    CartResponse:
+      type: object
+      required: [code, data, metadata]
+      properties:
+        code: {type: string, const: OK}
+        data: {$ref: '#/components/schemas/Cart'}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
+  responses:
+    CartNotFound:
+      description: CART_NOT_FOUND or CART_ITEM_NOT_FOUND; identical for missing and foreign resources
+      headers: *cartHeaders
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+          examples:
+            cart:
+              value: {code: NOT_FOUND, message: CART_NOT_FOUND, metadata: {request_id: cart01-synthetic-request, trace_id: cart01-synthetic-trace}}
+    Unauthorized:
+      description: INVALID_ACCESS_TOKEN (invalid Bearer; no cookie fallback) or missing member token on /mine
+      headers: *cartHeaders
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+          examples:
+            token:
+              value: {code: UNAUTHORIZED, message: INVALID_ACCESS_TOKEN, metadata: {request_id: cart01-synthetic-request, trace_id: cart01-synthetic-trace}}
+    Invalid:
+      description: INVALID_FIELDS, VERSION_REQUIRED, INVALID_KEY, QUANTITY_LIMIT, CART_ITEM_LIMIT or MALFORMED_JSON
+      headers: *cartHeaders
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+          examples:
+            quantity:
+              value: {code: VALIDATION_ERROR, message: QUANTITY_LIMIT, errors: [{field: quantity, message: total must be at most 99}],
+                metadata: {request_id: cart01-synthetic-request, trace_id: cart01-synthetic-trace}}
+    Conflict:
+      description: VERSION_CONFLICT (errors expected_version current=N), OUT_OF_STOCK (errors quantity available=N),
+        VARIANT_NOT_AVAILABLE or IDEMPOTENCY_KEY_REUSED
+      headers: *cartHeaders
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+          examples:
+            version:
+              value: {code: VERSION_CONFLICT, message: VERSION_CONFLICT, errors: [{field: expected_version, message: current=4}],
+                metadata: {request_id: cart01-synthetic-request, trace_id: cart01-synthetic-trace}}
+            stock:
+              value: {code: OUT_OF_STOCK, message: OUT_OF_STOCK, errors: [{field: quantity, message: available=1}],
+                metadata: {request_id: cart01-synthetic-request, trace_id: cart01-synthetic-trace}}
+    Unavailable:
+      description: Catalog or inventory could not validate the write; nothing was written. Retry with the same Idempotency-Key.
+      headers: *cartHeaders
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+          examples:
+            dependency:
+              value: {code: TEMPORARILY_UNAVAILABLE, message: DEPENDENCY_UNAVAILABLE, metadata: {request_id: cart01-synthetic-request, trace_id: cart01-synthetic-trace}}
+    Internal:
+      description: Unexpected error
+      headers: *cartHeaders
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}

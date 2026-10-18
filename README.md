@@ -40,6 +40,7 @@ chủ dự án ngày 2026-10-04, với CI PASS trên patch `b62f963`. Đây khô
 Contract core đã review; [platform-durability](services/platform-durability/README.md) được
 user-service dùng cho outbox/idempotency, chưa bật relay user/notification-service.
 INV-01 thêm [platform-messaging](services/platform-messaging/README.md), Kafka local và
+[cart-service](services/cart-service/README.md) (CART-01, Done local): giỏ guest/member, version + idempotency, preview giá/tồn.
 [inventory-service](services/inventory-service/README.md): catalog relay → inbox đăng ký SKU,
 stock ledger, adjust/import và internal availability. [Handoff hiện hành](docs/superpowers/plans/2026-10-15-inv-01-handoff.md)
 ghi kiểm tra/giới hạn và follow-up; INV-01 đã merge PR #20/#21 và

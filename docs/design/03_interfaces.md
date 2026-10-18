@@ -118,10 +118,10 @@ collection chỉ gồm product public (`ACTIVE`, category và parent nếu có �
 | GET | /catalog/collections | Public / 1 | `CAT-02a` implemented: ACTIVE trong [start_at,end_at), có ≥1 product public; cover_asset_id AVAILABLE hoặc null; limit/cursor (created_at,id) DESC |
 | GET | /catalog/collections/{slug} | Public / 1 | `CAT-02a` implemented: cùng visibility; lookbook asset_id/caption_vi/caption_en/sort_order (caption làm alternate text, không alt), products public phân trang (sort_order,product_id) ASC |
 | GET | /catalog/size-guides/{category_id} | Public / 1 | `CAT-02a` implemented: locale vi/en ưu tiên query, fallback Accept-Language (en nếu bắt đầu en, mặc định vi); category ACTIVE, category_id/locale/guideline_html/table; thiếu hoặc ẩn →404 |
-| POST | /carts | Public/member / 1 | Guest cấp cookie; member trả ACTIVE cart |
+| POST | /carts | Public/member / 1 | `CART-01` implemented ([cart.yaml](../../contracts/openapi/cart.yaml)): member trả ACTIVE cart (201 khi tạo); guest cookie `cart_token` (HttpOnly, Secure, SameSite=Lax, Path=/api/v1/carts, 30 ngày trượt, DB chỉ lưu SHA-256); Bearer sai → 401 không fallback |
 | GET | /carts/mine | Member / 1 | Active cart và version |
-| GET | /carts/{cart_id} | Owner / 1 | Items/version và preview có nhãn |
-| POST | /carts/{cart_id}/items | Owner / 1 | variant_id,quantity,expected_version + key |
+| GET | /carts/{cart_id} | Owner / 1 | `CART-01`: items/version + preview tham khảo (giá/active/available/observed_at, `preview_status` OK/UNAVAILABLE/EMPTY); thiếu/không thuộc/sai định dạng → cùng 404 CART_NOT_FOUND; mọi response no-store |
+| POST | /carts/{cart_id}/items | Owner / 1 | `CART-01`: variant_id,quantity 1–99,expected_version + key; cộng dồn variant (tổng > 99 → 400 QUANTITY_LIMIT, dòng thứ 101 → 400 CART_ITEM_LIMIT); catalog quote active + inventory available kiểm trước khi khóa giỏ; 409 VERSION_CONFLICT/OUT_OF_STOCK/VARIANT_NOT_AVAILABLE/IDEMPOTENCY_KEY_REUSED; dependency lỗi → 503 không ghi |
 | PUT | /carts/{cart_id}/items/{item_id} | Owner / 1 | Absolute quantity,expected_version |
 | DELETE | /carts/{cart_id}/items/{item_id} | Owner / 1 | expected_version qua query |
 | DELETE | /carts/{cart_id} | Owner / 1 | Xóa giỏ do khách, expected_version; không dùng cho cleanup order |

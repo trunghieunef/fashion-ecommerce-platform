@@ -4,6 +4,10 @@ B1 · 2026-09-19 · Work package mặc định: **Planned; Assignee TBD; Reviewe
 
 ## 1. Cách nhận việc
 
+Update 2026-10-18 — `TASK:CART-01` **Done (local, trước G0)** theo [nghiệm thu](../evidence/acceptance-2026-10-18.md) (PR #25 CI PASS, chờ merge `main`): cart-service mới (guest cookie/member Bearer, version +
+idempotency, preview giá/tồn tham khảo, không Redis); `REQ:CART-01/02/04`; dependency USR-01, CAT-02,
+INV-01; [spec](../superpowers/specs/2026-10-18-cart-01-carts-design.md), [evidence](../evidence/cart-01-local-2026-10-18.md).
+
 Update 2026-10-17 — `TASK:CAT-02` **Done (local, trước G0)** theo
 [nghiệm thu 2026-10-17](../evidence/acceptance-2026-10-17.md) (02a PR #19 + 02b `da6d3af`, merge `main` qua PR #23 `0a6928e`;
 CI PASS). 02b: (Redis cache-aside +
@@ -80,8 +84,9 @@ PLT-04/05, AWS/K3s/ECR/ArgoCD, provider sandbox và các task business Phase 1 k
   ghi rõ review hồ sơ/CI, không phải Codex chạy lại fresh clone. Lệch Docker/Compose
   được chấp nhận riêng cho local; R1 không đổi.
 - Phần S1-local của `TASK:PLT-01`, `TASK:PLT-02` core S1 và `TASK:SEC-01` nền S1 được
-  chấp nhận. Parent PLT-01 vẫn **In progress**: acceptance còn FE/PO xác nhận SEO cho SPA
-  và O02 core ngoài S1. Parent PLT-02/SEC-01 vẫn **In progress**, O02 vẫn mở cho Kafka/
+  chấp nhận. Parent PLT-01 vẫn **In progress**: PO xác nhận SPA đủ SEO cho MVP ngày 2026-10-18
+  ([08](../design/08_decisions.md)); còn O02 core ngoài S1. Theo quyết định 2026-10-18, G0
+  (PLT-04/05 staging, O02 scan) hoãn tới sau G1; O06 chốt trước ORD-01. Parent PLT-02/SEC-01 vẫn **In progress**, O02 vẫn mở cho Kafka/
   Redis, CVE/license, staging và SEO. Không coi S1-local là G0/G1/G2.
 - Phase 0 local tiếp tục: `TASK:PLT-02` — **In progress**, assignee Codex (GPT-6),
   reviewer chủ dự án; envelope, payload schemas §5.3 cho event Phase 1A + order lifecycle,
@@ -107,8 +112,8 @@ PLT-04/05, AWS/K3s/ECR/ArgoCD, provider sandbox và các task business Phase 1 k
   `metadata.trace_id`), log JSON ECS có redaction và `/actuator/prometheus` (Gateway trên port 9080).
   2026-10-18: correlation HTTP/Kafka xong ở local — outbox lưu `trace_parent`, relay mở span
   PRODUCER, consumer Kafka nối trace; Tempo 3.0.3 + Grafana 13.2.2 trong compose, smoke kiểm một trace
-  Gateway → catalog → inventory → catalog ([evidence](../evidence/plt-05-kafka-trace-local-2026-10-17.md)). Gauge
-  `outbox_oldest_pending_age_seconds` đã có từ PLT-03. Còn: dashboard/alert và trace trên staging (cần PLT-04).
+  Gateway → catalog → inventory → catalog ([evidence](../evidence/plt-05-kafka-trace-local-2026-10-17.md)). Merge `main`
+  qua PR #24 (`2c9b032`), CI PASS. Gauge `outbox_oldest_pending_age_seconds` đã có từ PLT-03. Còn: dashboard/alert và trace trên staging (cần PLT-04).
 - `TASK:USR-01` — **In progress, 1a + 1b-i đã code** (2026-10-05, assignee Claude Code, reviewer chủ
   dự án; Phase 1A bắt đầu trước G0 theo quyết định ở 08). 1a: đăng ký, đăng nhập có khóa 15 phút,
   refresh xoay vòng + thu hồi family khi dùng lại, logout, `USER_CREATED` qua outbox; Gateway route

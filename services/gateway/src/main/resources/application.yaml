@@ -58,6 +58,11 @@ spring:
               uri: ${INVENTORY_BASE_URL:http://localhost:8083}
               predicates:
                 - Path=/admin/api/v1/inventory/**
+            # TASK:CART-01: guest cookie / member Bearer carts; cart-service checks ownership.
+            - id: cart-public
+              uri: ${CART_BASE_URL:http://localhost:8084}
+              predicates:
+                - Path=/api/v1/carts/**,/api/v1/carts
             - id: user-auth-public
               uri: ${USER_BASE_URL:http://localhost:8082}
               predicates:

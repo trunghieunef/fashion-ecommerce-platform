@@ -57,6 +57,7 @@ class GatewayBoundaryTest {
     // The recording stub also stands in for user-service; tests check the forwarded path.
     registry.add("USER_BASE_URL", CATALOG::baseUrl);
     registry.add("INVENTORY_BASE_URL", CATALOG::baseUrl);
+    registry.add("CART_BASE_URL", CATALOG::baseUrl);
     registry.add("fashion.security.allowed-origins", () -> "http://localhost:4173");
     registry.add("GATEWAY_MANAGEMENT_PORT", () -> "0");
   }
@@ -81,6 +82,28 @@ class GatewayBoundaryTest {
   void inventoryReservationInternalIsNotRouted() {
     client.get().uri("/internal/api/v1/inventory/reservations/4c8a1f2e-0000-4000-8000-000000000010")
         .exchange().expectStatus().isNotFound();
+    assertThat(CATALOG.requestCount()).isZero();
+  }
+
+  // TASK:CART-01: public cart routes forward; cookie mutations keep the CSRF origin check; no internal route.
+  @Test
+  void cartRoutesAreForwarded() {
+    client.get().uri("/api/v1/carts/4c8a1f2e-0000-4000-8000-000000000011").exchange().expectStatus().isOk();
+    assertThat(CATALOG.path()).isEqualTo("/api/v1/carts/4c8a1f2e-0000-4000-8000-000000000011");
+    client.post().uri("/api/v1/carts").header("Origin", "http://localhost:4173").exchange().expectStatus().isOk();
+    assertThat(CATALOG.path()).isEqualTo("/api/v1/carts");
+  }
+
+  @Test
+  void cartCookieMutationNeedsAllowedOrigin() {
+    client.post().uri("/api/v1/carts/4c8a1f2e-0000-4000-8000-000000000011/items").header("Cookie", "cart_token=x")
+        .header("Origin", "https://evil.example").exchange().expectStatus().isForbidden();
+    assertThat(CATALOG.requestCount()).isZero();
+  }
+
+  @Test
+  void cartInternalIsNotRouted() {
+    client.get().uri("/internal/api/v1/carts/4c8a1f2e-0000-4000-8000-000000000011/snapshot").exchange().expectStatus().isNotFound();
     assertThat(CATALOG.requestCount()).isZero();
   }
 

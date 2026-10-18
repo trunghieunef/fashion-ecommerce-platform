@@ -264,7 +264,7 @@ sequenceDiagram
 | Luồng | Xử lý | Lỗi / kết quả |
 |---|---|---|
 | Tạo/xem giỏ | Member lấy ACTIVE cart; guest cấp token ngẫu nhiên, lưu hash → đọc DB/cache | Không cho truy cập chỉ bằng ID; guest TTL 30 ngày; Redis hỏng đọc DB |
-| Add/update/remove | Validate quantity 1–99; catalog ACTIVE; kiểm tra tồn tham khảo; TX kiểm tra cart/item version rồi ghi | Hết tồn trả lỗi kèm số lượng; version khác trả 409; không âm thầm ghi đè thay đổi thiết bị khác |
+| Add/update/remove | `CART-01` implemented: đọc giỏ, gọi catalog quote + inventory stock (service token ADR-19) **ngoài** transaction, rồi TX ngắn lock giỏ, kiểm version, ghi. Validate quantity 1–99; catalog ACTIVE; kiểm tra tồn tham khảo; TX kiểm tra cart/item version rồi ghi | Hết tồn trả lỗi kèm số lượng; version khác trả 409; không âm thầm ghi đè thay đổi thiết bị khác |
 | Merge login | Xác minh đồng thời guest token và member → lock hai cart theo ID → nếu guest MERGED trả kết quả cũ → cộng qty, giữ created_at của item cũ hơn → đánh dấu MERGED | Cap 99 và available quan sát được; SKU không bán/không còn tồn bỏ khỏi kết quả nhưng trả danh sách điều chỉnh để UI báo; kho chưa được reserve |
 | Preview | Đọc items → tính giá lại và fee/voucher preview | Preview không giữ quota; provider lỗi cho biết chưa tính được phí, không hiển thị tổng giả là giá chốt |
 | Sau tạo đơn | Order gửi cleanup với order_id và item_id/version/quantity đã snapshot; TX xóa/giảm item khớp snapshot | Retry cùng order_id không trừ giỏ hai lần; item version đã đổi giữ nguyên và báo refresh; không xóa sạch giỏ hiện tại |

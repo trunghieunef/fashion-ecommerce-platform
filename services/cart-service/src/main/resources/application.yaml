@@ -1,0 +1,75 @@
+server:
+  port: ${SERVER_PORT:8084}
+
+spring:
+  jackson:
+    property-naming-strategy: SNAKE_CASE
+    deserialization:
+      fail-on-unknown-properties: false
+      accept-float-as-int: false
+  application:
+    name: cart-service
+  datasource:
+    url: ${CART_DB_URL:jdbc:postgresql://localhost:5432/cart}
+    username: ${CART_DB_USERNAME:cart_runtime}
+    password: ${CART_DB_PASSWORD:cart_runtime_local}
+    hikari:
+      maximum-pool-size: ${CART_DB_MAX_POOL_SIZE:10}
+  cloud:
+    # Nacos is off by default; profile nacos-compat enables it (O02 proof).
+    nacos:
+      config:
+        enabled: false
+        import-check:
+          enabled: false
+      discovery:
+        enabled: false
+  flyway:
+    url: ${CART_MIGRATION_DB_URL:jdbc:postgresql://localhost:5432/cart}
+    user: ${CART_MIGRATION_DB_USERNAME:cart_migration}
+    password: ${CART_MIGRATION_DB_PASSWORD:cart_migration_local}
+    locations: classpath:db/migration
+
+logging:
+  structured:
+    format:
+      # PLT-05: JSON (ECS) logs with trace ids; every string value is redacted (XCT-06).
+      console: ecs
+    json:
+      customizer: vn.fashion.platform.security.PiiRedactingJsonCustomizer
+
+fashion:
+  cart:
+    jwt:
+      public-keys: ${CART_JWT_PUBLIC_KEYS}
+    # ADR-19 caller identity for catalog quote and inventory stock (local-up generates the pair).
+    service-private-key: ${CART_SERVICE_PRIVATE_KEY:}
+    service-public-key: ${CART_SERVICE_PUBLIC_KEY:}
+    catalog-url: ${CART_CATALOG_URL:http://localhost:8081}
+    inventory-url: ${CART_INVENTORY_URL:http://localhost:8083}
+    dependency-timeout: ${CART_DEPENDENCY_TIMEOUT:1s}
+
+management:
+  # PLT-05: no OTLP endpoint here on purpose: an empty value still creates the exporter. Traces leave
+  # the process only when MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT is set (local compose: Tempo).
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:0.1}
+  observations:
+    enable:
+      # Scheduler runs (relay, sweeps, cache worker, media jobs) are not requests: no trace per run, and
+      # outbox rows they write keep trace_parent null (PLT-05 spec section 3).
+      tasks.scheduled: false
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,db
