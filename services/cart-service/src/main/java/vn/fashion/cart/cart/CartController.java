@@ -27,7 +27,7 @@ public class CartController {
 
   /** Member: the ACTIVE cart (201 when created). Guest: the cookie's cart, else a new cart and cookie (201). */
   @PostMapping
-  public ResponseEntity<Api.Response<CartView>> open(HttpServletRequest request) {
+  public ResponseEntity<Api.Response<CartView>> open(HttpServletRequest request, jakarta.servlet.http.HttpServletResponse response) {
     var actor = identity.resolve(request);
     if (actor.isPresent() && actor.get().member()) {
       boolean created = carts.createMember(actor.get().userId());
@@ -37,14 +37,15 @@ public class CartController {
       var existing = carts.findActive(actor.get());
       if (existing.isPresent()) {
         carts.touch(existing.get().id());
+        identity.refresh(request, response);
         return Api.ok(HttpStatus.OK, view(carts.findActive(actor.get()).orElseThrow()), tracer);
       }
     }
     String token = identity.newGuestToken();
     var cart = carts.createGuest(CartIdentity.hash(token));
-    var response = Api.ok(HttpStatus.CREATED, view(cart), tracer);
-    return ResponseEntity.status(response.getStatusCode()).headers(response.getHeaders())
-        .header(HttpHeaders.SET_COOKIE, CartIdentity.cookie(token).toString()).body(response.getBody());
+    var created = Api.ok(HttpStatus.CREATED, view(cart), tracer);
+    return ResponseEntity.status(created.getStatusCode()).headers(created.getHeaders())
+        .header(HttpHeaders.SET_COOKIE, CartIdentity.cookie(token).toString()).body(created.getBody());
   }
 
   @GetMapping("/mine")
@@ -54,11 +55,14 @@ public class CartController {
   }
 
   @GetMapping("/{cartId}")
-  public ResponseEntity<Api.Response<CartView>> get(@PathVariable String cartId, HttpServletRequest request) {
+  public ResponseEntity<Api.Response<CartView>> get(@PathVariable String cartId, HttpServletRequest request,
+                                                    jakarta.servlet.http.HttpServletResponse response) {
     var actor = identity.resolve(request).orElseThrow(CartRepository::notFound);
     var cart = carts.findOwned(parseId(cartId), actor).orElseThrow(CartRepository::notFound);
     carts.touch(cart.id());
-    return Api.ok(HttpStatus.OK, view(carts.findOwned(cart.id(), actor).orElseThrow(CartRepository::notFound)), tracer);
+    var body = view(carts.findOwned(cart.id(), actor).orElseThrow(CartRepository::notFound));
+    identity.refresh(request, response);
+    return Api.ok(HttpStatus.OK, body, tracer);
   }
 
   /** Reads carry the labeled preview (spec section 6); it is computed outside any transaction and never stored. */

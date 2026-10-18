@@ -58,6 +58,27 @@ class CartPreviewIntegrationTest extends CartTestSupport {
     assertThat(read().path("preview_status").asString()).isEqualTo("UNAVAILABLE");
   }
 
+  @Test void largeCartPreviewHasOneDeadline() {
+    // Review I2: 100 slow-but-valid stock reads must not serialize on a small pool (was ~7.5 s at 600 ms each).
+    StubServers.CATALOG.reply(s -> {
+      var ids = java.util.regex.Pattern.compile("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}").matcher(s.body()).results()
+          .map(m -> StubServers.quoteItem(m.group(), true, "BIG-" + m.group().substring(0, 8), 1000, 1)).toList();
+      return new StubServers.Reply(200, StubServers.ok("[" + String.join(",", ids) + "]"));
+    });
+    StubServers.INVENTORY.reply(s -> new StubServers.Reply(200, StubServers.stock("x", 50)));
+    for (int i = 0; i < 100; i++) {
+      data(send("POST", "/api/v1/carts/" + cartId + "/items", "{\"variant_id\":\"" + UUID.randomUUID() + "\",\"quantity\":1,\"expected_version\":" + i + "}",
+          "Cookie", cookie, "Idempotency-Key", UUID.randomUUID().toString()), 200);
+    }
+    // 600 ms each: parallel ≈ 0.6-1 s; the old 8-thread pool queued 100 calls ≈ 7.5 s. (900 ms + connect exceeds the 1 s client timeout.)
+    StubServers.INVENTORY.delay(600);
+    long start = System.nanoTime();
+    var cart = read();
+    assertThat(java.time.Duration.ofNanos(System.nanoTime() - start)).isLessThan(java.time.Duration.ofMillis(2500));
+    assertThat(cart.path("items")).hasSize(100);
+    assertThat(cart.path("preview_status").asString()).isEqualTo("OK");
+  }
+
   @Test void emptyCartSkipsDependencies() {
     var cart = read();
     assertThat(cart.path("preview_status").asString()).isEqualTo("EMPTY");

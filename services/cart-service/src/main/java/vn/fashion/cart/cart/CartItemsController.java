@@ -35,31 +35,36 @@ public class CartItemsController {
 
   @PostMapping("/items")
   public ResponseEntity<?> add(@PathVariable String cartId, @RequestHeader(name = "Idempotency-Key", required = false) String key,
-                               HttpServletRequest request) {
+                               HttpServletRequest request, jakarta.servlet.http.HttpServletResponse response) {
     var actor = actor(request); UUID cart = CartController.parseId(cartId);
-    return Api.ok(HttpStatus.OK, items.add(actor, cart, key, CartRequests.add(body(request))), tracer);
+    return ok(request, response, items.add(actor, cart, key, CartRequests.add(body(request))));
   }
 
   @PutMapping("/items/{itemId}")
-  public ResponseEntity<?> put(@PathVariable String cartId, @PathVariable String itemId, HttpServletRequest request) {
+  public ResponseEntity<?> put(@PathVariable String cartId, @PathVariable String itemId, HttpServletRequest request, jakarta.servlet.http.HttpServletResponse response) {
     var actor = actor(request); UUID cart = CartController.parseId(cartId);
-    return Api.ok(HttpStatus.OK, items.put(actor, cart, item(itemId), CartRequests.put(body(request))), tracer);
+    return ok(request, response, items.put(actor, cart, item(itemId), CartRequests.put(body(request))));
   }
 
   @DeleteMapping("/items/{itemId}")
   public ResponseEntity<?> remove(@PathVariable String cartId, @PathVariable String itemId,
-                                  @RequestParam(name = "expected_version", required = false) String version, HttpServletRequest request) {
+                                  @RequestParam(name = "expected_version", required = false) String version, HttpServletRequest request, jakarta.servlet.http.HttpServletResponse response) {
     var actor = actor(request); UUID cart = CartController.parseId(cartId);
-    return Api.ok(HttpStatus.OK, items.remove(actor, cart, item(itemId), CartRequests.version(version)), tracer);
+    return ok(request, response, items.remove(actor, cart, item(itemId), CartRequests.version(version)));
   }
 
   @DeleteMapping
   public ResponseEntity<?> clear(@PathVariable String cartId, @RequestParam(name = "expected_version", required = false) String version,
-                                 HttpServletRequest request) {
+                                 HttpServletRequest request, jakarta.servlet.http.HttpServletResponse response) {
     var actor = actor(request); UUID cart = CartController.parseId(cartId);
-    return Api.ok(HttpStatus.OK, items.clear(actor, cart, CartRequests.version(version)), tracer);
+    return ok(request, response, items.clear(actor, cart, CartRequests.version(version)));
   }
 
+  /** Success only: guest cookie re-issued (sliding 30 days); errors leave the browser cookie untouched. */
+  private ResponseEntity<?> ok(HttpServletRequest request, jakarta.servlet.http.HttpServletResponse response, Object body) {
+    identity.refresh(request, response);
+    return Api.ok(HttpStatus.OK, body, tracer);
+  }
   private CartActor actor(HttpServletRequest request) { return identity.resolve(request).orElseThrow(CartRepository::notFound); }
   private static UUID item(String raw) {
     try {

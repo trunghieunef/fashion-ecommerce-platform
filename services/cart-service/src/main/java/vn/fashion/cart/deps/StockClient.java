@@ -37,10 +37,16 @@ public class StockClient {
               + URLEncoder.encode(sku, StandardCharsets.UTF_8).replace("+", "%20"))).timeout(timeout)
           .header("Authorization", tokens.bearer("inventory-service")).GET().build();
       var response = http.send(request, HttpResponse.BodyHandlers.ofString());
-      if (response.statusCode() == 404) return Optional.empty();
+      // Review I5: only inventory's own SKU_NOT_FOUND means "not registered yet"; any other 404 is misrouting.
+      if (response.statusCode() == 404) {
+        if ("SKU_NOT_FOUND".equals(json.readTree(response.body()).path("message").asString(""))) return Optional.empty();
+        throw new DependencyUnavailable("inventory");
+      }
       if (response.statusCode() != 200) throw new DependencyUnavailable("inventory");
       JsonNode data = json.readTree(response.body()).path("data");
-      if (!data.path("available").isIntegralNumber() || !data.path("observed_at").isString()) throw new DependencyUnavailable("inventory");
+      var available = data.path("available");
+      if (!available.isIntegralNumber() || !available.canConvertToInt() || available.intValue() < 0 || !data.path("observed_at").isString())
+        throw new DependencyUnavailable("inventory");
       return Optional.of(new Stock(data.path("available").intValue(), Instant.parse(data.path("observed_at").asString())));
     } catch (DependencyUnavailable e) { throw e; }
     catch (InterruptedException e) { Thread.currentThread().interrupt(); throw new DependencyUnavailable("inventory"); }

@@ -50,7 +50,7 @@ class DependencyClientsIntegrationTest extends CartTestSupport {
   }
 
   @Test void timeoutIsUnavailable() {
-    StubServers.CATALOG.reply(s -> new StubServers.Reply(200, StubServers.ok("[]")));
+    StubServers.CATALOG.reply(s -> new StubServers.Reply(200, StubServers.ok("[" + StubServers.quoteItem(variant.toString(), true, "TEE-M", 1, 1) + "]")));
     catalog.quote(List.of(variant)); // warm up signing/HTTP client so the bound measures the 1 s timeout only
     StubServers.CATALOG.delay(2000);
     long start = System.nanoTime();

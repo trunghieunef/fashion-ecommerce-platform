@@ -197,12 +197,36 @@ class CartItemsIntegrationTest extends CartTestSupport {
   }
 
   @Test void noRowLockDuringDependencyCall() throws Exception {
+    // Review I3: the concurrent request must need the cart row lock; a plain read never waits on it.
     StubServers.CATALOG.delay(800);
-    var slow = CompletableFuture.supplyAsync(() -> add(v(), 1, 0, ikey()).statusCode());
+    var slow = CompletableFuture.supplyAsync(() -> add(v(), 1, 0, ikey()));
     Thread.sleep(200);
     long start = System.nanoTime();
-    assertThat(send("GET", "/api/v1/carts/" + cartId, null, "Cookie", cookie).statusCode()).isEqualTo(200);
+    var cleared = send("DELETE", "/api/v1/carts/" + cartId + "?expected_version=0", null, "Cookie", cookie);
+    assertThat(cleared.statusCode()).isEqualTo(200);
     assertThat(Duration.ofNanos(System.nanoTime() - start)).isLessThan(Duration.ofMillis(300));
-    assertThat(slow.get(5, TimeUnit.SECONDS)).isEqualTo(200);
+    assertThat(problem(slow.get(5, TimeUnit.SECONDS), 409)).isEqualTo("VERSION_CONFLICT");
+  }
+
+  @Test void dependencyBadShapeOnWriteIs503() {
+    // Review I4: values the database would reject, or answers missing the asked variant, are dependency failures.
+    for (String reply : new String[] {
+        StubServers.ok("[" + StubServers.quoteItem("%s", true, "SKU-NEG", -1, 3) + "]"),
+        StubServers.ok("[" + StubServers.quoteItem("%s", true, "S".repeat(65), 100, 3) + "]"),
+        StubServers.ok("[{\"variant_id\":\"%s\",\"found\":true,\"sku\":\"SKU-X\",\"effective_price\":1,\"product_version\":1}]"),
+        StubServers.ok("[]")}) {
+      String variant = v();
+      StubServers.CATALOG.reply(s -> new StubServers.Reply(200, reply.replace("%s", variant)));
+      assertThat(problem(add(variant, 1, 0, ikey()), 503)).as(reply).isEqualTo("DEPENDENCY_UNAVAILABLE");
+    }
+    StubServers.CATALOG.reply(s -> new StubServers.Reply(200, StubServers.ok("[" + StubServers.quoteItem(UUIDS.matcher(s.body()).results().findFirst().orElseThrow().group(), true, "SKU-OK", 1, 1) + "]")));
+    StubServers.INVENTORY.reply(s -> new StubServers.Reply(200, StubServers.ok("{\"available\":99999999999,\"observed_at\":\"2026-10-18T03:00:00Z\"}")));
+    assertThat(problem(add(v(), 1, 0, ikey()), 503)).isEqualTo("DEPENDENCY_UNAVAILABLE");
+    // Review I5: only a SKU_NOT_FOUND body means "not registered yet"; any other 404 is a dependency failure.
+    StubServers.INVENTORY.reply(s -> new StubServers.Reply(404, "<html>no route</html>"));
+    assertThat(problem(add(v(), 1, 0, ikey()), 503)).isEqualTo("DEPENDENCY_UNAVAILABLE");
+    StubServers.INVENTORY.reply(s -> new StubServers.Reply(404, "{\"code\":\"NOT_FOUND\",\"message\":\"SKU_NOT_FOUND\"}"));
+    assertThat(problem(add(v(), 1, 0, ikey()), 409)).isEqualTo("OUT_OF_STOCK");
+    assertThat(cart().path("version").asLong()).isZero();
   }
 }

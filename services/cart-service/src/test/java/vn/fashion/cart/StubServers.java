@@ -21,7 +21,7 @@ public final class StubServers {
     volatile long delayMillis;
     public final List<Seen> seen = new CopyOnWriteArrayList<>();
     Stub() {
-      try { server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0); }
+      try { server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 256); }
       catch (IOException e) { throw new AssertionError(e); }
       server.setExecutor(Executors.newCachedThreadPool());
       server.createContext("/", this::handle);

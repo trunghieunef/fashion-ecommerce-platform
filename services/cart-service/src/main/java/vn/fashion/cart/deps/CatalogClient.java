@@ -45,11 +45,16 @@ public class CatalogClient {
       for (JsonNode n : data) {
         UUID id = UUID.fromString(n.path("variant_id").asString());
         if (!n.path("found").asBoolean(false)) { result.put(id, new Quote(id, false, false, null, 0, 0)); continue; }
-        if (!n.path("effective_price").isIntegralNumber() || !n.path("product_version").isIntegralNumber() || !n.path("sku").isString())
+        // Review I4: anything the cart could not store or would misread is a dependency failure, not a 409/500.
+        var sku = n.path("sku");
+        if (!n.path("active").isBoolean() || !n.path("effective_price").isIntegralNumber() || !n.path("effective_price").canConvertToLong()
+            || n.path("effective_price").longValue() < 0 || !n.path("product_version").isIntegralNumber()
+            || !sku.isString() || sku.asString().isEmpty() || sku.asString().length() > 64)
           throw new DependencyUnavailable("catalog");
         result.put(id, new Quote(id, true, n.path("active").asBoolean(false), n.path("sku").asString(),
             n.path("effective_price").longValue(), n.path("product_version").longValue()));
       }
+      if (!result.keySet().containsAll(variantIds)) throw new DependencyUnavailable("catalog");
       return result;
     } catch (DependencyUnavailable e) { throw e; }
     catch (InterruptedException e) { Thread.currentThread().interrupt(); throw new DependencyUnavailable("catalog"); }

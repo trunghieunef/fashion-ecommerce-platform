@@ -43,7 +43,14 @@ class CartIdentityIntegrationTest extends CartTestSupport {
     String id = data(first, 201).path("cart_id").asString();
     var again = send("POST", CARTS, null, "Cookie", "cart_token=" + token(first));
     assertThat(data(again, 200).path("cart_id").asString()).isEqualTo(id);
-    assertThat(setCookie(again)).isNull();
+    // Review I1: the cookie is re-issued with a fresh Max-Age so "30 days since last activity" holds in the browser too.
+    assertThat(setCookie(again)).startsWith("cart_token=" + token(first) + ";").contains("Max-Age=2592000");
+    var read = send("GET", CARTS + "/" + id, null, "Cookie", "cart_token=" + token(first));
+    assertThat(setCookie(read)).startsWith("cart_token=" + token(first) + ";");
+    var miss = send("GET", CARTS + "/" + UUID.randomUUID(), null, "Cookie", "cart_token=" + token(first));
+    assertThat(setCookie(miss)).isNull();
+    var member = send("POST", CARTS, null, "Authorization", "Bearer " + memberToken(UUID.randomUUID()), "Cookie", "cart_token=" + token(first));
+    assertThat(setCookie(member)).isNull();
   }
 
   @Test void malformedCookieGetsNewCart() {

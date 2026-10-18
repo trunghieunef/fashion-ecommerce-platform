@@ -22,12 +22,15 @@ public class CartPreview {
   private final CatalogClient catalog;
   private final StockClient stock;
   private final Duration timeout;
-  // ponytail: fixed pool of 8 shared by all reads; size it from measured traffic before production.
-  private final ExecutorService pool = Executors.newFixedThreadPool(8);
+  // Virtual threads: 100 blocking stock reads of one cart never queue behind other carts (review I2).
+  // ponytail: one HTTP call per SKU; switch to a stock batch endpoint if inventory adds one.
+  private final ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor();
 
   public CartPreview(CatalogClient catalog, StockClient stock, @Value("${fashion.cart.dependency-timeout:1s}") Duration timeout) {
     this.catalog = catalog; this.stock = stock; this.timeout = timeout;
   }
+
+  @jakarta.annotation.PreDestroy void close() { pool.shutdownNow(); }
 
   public Result load(List<CartRepository.CartItemRow> items) {
     if (items.isEmpty()) return new Result(Map.of(), "EMPTY");
@@ -35,12 +38,16 @@ public class CartPreview {
       var quotes = CompletableFuture.supplyAsync(() -> catalog.quote(items.stream().map(CartRepository.CartItemRow::variantId).toList()), pool);
       var stocks = new HashMap<String, CompletableFuture<Optional<StockClient.Stock>>>();
       for (var item : items) stocks.computeIfAbsent(item.sku(), sku -> CompletableFuture.supplyAsync(() -> stock.stock(sku), pool));
-      long waitMillis = timeout.toMillis() * 2;
-      var quoted = quotes.get(waitMillis, TimeUnit.MILLISECONDS);
+      var all = new java.util.ArrayList<CompletableFuture<?>>(stocks.values());
+      all.add(quotes);
+      // One deadline for the whole read: client timeout plus a small margin; leftovers are cancelled.
+      try { CompletableFuture.allOf(all.toArray(CompletableFuture[]::new)).get(timeout.toMillis() + 500, TimeUnit.MILLISECONDS); }
+      catch (java.util.concurrent.TimeoutException e) { all.forEach(f -> f.cancel(true)); throw e; }
+      var quoted = quotes.join();
       var result = new HashMap<UUID, CartView.Preview>();
       for (var item : items) {
         var quote = quoted.get(item.variantId());
-        var observed = stocks.get(item.sku()).get(waitMillis, TimeUnit.MILLISECONDS);
+        var observed = stocks.get(item.sku()).join();
         boolean active = quote != null && quote.found() && quote.active();
         long price = quote != null && quote.found() ? quote.effectivePrice() : item.priceSnapshot();
         result.put(item.id(), new CartView.Preview(price, price != item.priceSnapshot(), active,

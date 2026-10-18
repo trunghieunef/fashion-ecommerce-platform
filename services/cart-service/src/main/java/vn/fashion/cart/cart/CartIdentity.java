@@ -49,6 +49,21 @@ public class CartIdentity {
     return Optional.empty();
   }
 
+  /** Raw cookie value of a guest request (no Authorization header), for re-issuing the sliding cookie. */
+  public Optional<String> guestToken(HttpServletRequest request) {
+    if (request.getHeader("Authorization") != null || request.getCookies() == null) return Optional.empty();
+    for (Cookie cookie : request.getCookies()) {
+      if (COOKIE.equals(cookie.getName()) && cookie.getValue() != null && TOKEN.matcher(cookie.getValue()).matches())
+        return Optional.of(cookie.getValue());
+    }
+    return Optional.empty();
+  }
+
+  /** Spec section 3: 30 days since last activity also in the browser — re-issue after every successful guest call. */
+  public void refresh(HttpServletRequest request, jakarta.servlet.http.HttpServletResponse response) {
+    guestToken(request).ifPresent(token -> response.addHeader(org.springframework.http.HttpHeaders.SET_COOKIE, cookie(token).toString()));
+  }
+
   public String newGuestToken() {
     byte[] bytes = new byte[32];
     random.nextBytes(bytes);
