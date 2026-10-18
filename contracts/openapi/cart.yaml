@@ -87,7 +87,9 @@ paths:
         applied is what the guest line added). The guest cart becomes MERGED; a later merge of it into the same member cart,
         with any Idempotency-Key, returns 200 already_merged true and adds nothing. Stale versions are 409 VERSION_CONFLICT
         (errors guest_expected_version / member_expected_version current=N); dependency failure is 503 and writes nothing.
-        Stock is a reference, nothing is reserved. Success clears the guest cookie.
+        Stock is a reference, nothing is reserved. Success clears the guest cookie, so a retry after an UNKNOWN outcome
+        without the cookie is 404: read GET /api/v1/carts/mine to see whether the merge landed. A guest edit between the
+        catalog read and the lock is 409 VERSION_CONFLICT (retry with the new version).
       parameters:
       - {$ref: '#/components/parameters/RequiredIdempotencyKey'}
       requestBody:

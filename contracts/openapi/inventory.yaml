@@ -1089,7 +1089,20 @@ paths:
                     committed: 2
                     returned_total: 1
                 metadata: *reservationMetadata
-        '400': *reservation400
+        '400':
+          description: INVALID_INPUT, INVALID_KEY, MALFORMED_JSON or IDEMPOTENCY_KEY_MISMATCH (Idempotency-Key differs from operation_key)
+          headers: *reservationHeaders
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: VALIDATION_ERROR
+                message: IDEMPOTENCY_KEY_MISMATCH
+                errors:
+                - field: Idempotency-Key
+                  message: must equal operation_key
+                metadata: *reservationMetadata
         '401': *reservation401
         '403': *reservation403
         '404': *reservation404

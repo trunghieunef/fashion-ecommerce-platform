@@ -32,11 +32,12 @@ public class ReturnService {
     return tx.execute(status->{
       var row=reservations.lock(c.orderId()).orElseThrow(ReservationService::notFound);
       if(!"COMMITTED".equals(row.status())) { counters.count("return","not_committed");throw ReservationService.conflict("RESERVATION_NOT_COMMITTED"); }
-      var stored=jdbc.sql("select sku,quantity,reason,evidence_ref from stock_returns where reservation_id=:r and operation_key=:k order by sku")
+      var stored=jdbc.sql("select sku,quantity,reason,evidence_ref from stock_returns where reservation_id=:r and operation_key=:k")
           .param("r",row.id()).param("k",c.operationKey()).query(Stored.class).list();
       if(!stored.isEmpty()) {
         var requested=c.items().stream().map(i->new Stored(i.sku(),i.quantity(),c.reason(),c.evidenceRef())).toList();
-        if(!stored.equals(requested)) { counters.count("return","conflict");throw ReservationService.conflict("RETURN_CONFLICT"); }
+        // Order-independent: DB collation and Java code-point order disagree on SKUs such as A1 / A-2 (review I1).
+        if(!new HashSet<>(stored).equals(new HashSet<>(requested))) { counters.count("return","conflict");throw ReservationService.conflict("RETURN_CONFLICT"); }
         counters.count("return","replayed");
         return view(row,c);
       }
@@ -60,8 +61,10 @@ public class ReturnService {
             values (:id,:r,:sku,:k,:q,:reason,:evidence)""")
             .param("id",UUID.randomUUID()).param("r",row.id()).param("sku",item.sku()).param("k",c.operationKey())
             .param("q",item.quantity()).param("reason",c.reason()).param("evidence",c.evidenceRef()).update();
-        stocks.move(locked.get(item.sku()),item.quantity(),0,"RETURN","order:"+c.orderId()+":RETURN:"+c.operationKey(),
-            c.orderId(),c.reason(),null,traceId);
+        try {
+          stocks.move(locked.get(item.sku()),item.quantity(),0,"RETURN","order:"+c.orderId()+":RETURN:"+c.operationKey(),
+              c.orderId(),c.reason(),null,traceId);
+        } catch(ArithmeticException e) { throw ReservationRequests.invalid("items["+item.sku()+"]","exceeds stock integer range"); }
       }
       counters.count("return","restored");
       return view(row,c);

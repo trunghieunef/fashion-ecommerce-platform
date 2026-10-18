@@ -73,6 +73,15 @@ class ReturnIntegrationTest extends ReservationTestSupport {
     assertThat(onHand("SKU-B")).isEqualTo(5);
   }
 
+  @Test void multiSkuReplayIgnoresCollationOrder() {
+    // Review I1: en_US collation ignores '-' (A1 < A-2), Java code-point order puts A-2 first.
+    assertThat(jdbc.queryForList("select s from unnest(array['A-2','A1']) s order by s",String.class)).containsExactly("A1","A-2");
+    UUID order=committed("A1",5,2,"A-2",5,2);
+    var first=data(returnStock(order,"ret-1","A1",1,"A-2",1),200);
+    assertThat(data(returnStock(order,"ret-1","A-2",1,"A1",1),200)).isEqualTo(first);
+    assertThat(onHand("A1")).isEqualTo(4);assertThat(onHand("A-2")).isEqualTo(4);
+  }
+
   @Test void sameKeyDifferentItemsIs409() {
     UUID order=committed("SKU-A",5,3);
     data(returnStock(order,"ret-1","SKU-A",1),200);

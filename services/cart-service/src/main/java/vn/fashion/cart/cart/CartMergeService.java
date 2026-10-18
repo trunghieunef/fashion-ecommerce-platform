@@ -69,12 +69,16 @@ public class CartMergeService {
       carts.lockInOrder(target.id(), guest.id());
       var lockedGuest = carts.findGuestForMerge(guest.id(), guestHash).orElseThrow(CartRepository::notFound);
       var lockedTarget = carts.findActive(member).orElseThrow(CartRepository::notFound);
+      // The locked row must still be the member's ACTIVE cart (review M3: checkout may move it out of ACTIVE later).
+      if (!lockedTarget.id().equals(target.id())) version("member_expected_version", -1, lockedTarget.version());
       Result result;
       if ("MERGED".equals(lockedGuest.status())) {
         if (!carts.mergedInto(lockedGuest.id()).filter(lockedTarget.id()::equals).isPresent()) throw CartRepository.notFound();
         result = new Result(view(lockedTarget), lockedGuest.id(), true, List.of());
       } else {
         version("guest_expected_version", r.guestExpectedVersion(), lockedGuest.version());
+        // Guest edited between the quote and the lock: its new lines have no quote (review M2) -> client retries.
+        if (lockedGuest.version() != guest.version()) version("guest_expected_version", guest.version(), lockedGuest.version());
         version("member_expected_version", r.memberExpectedVersion(), lockedTarget.version());
         var adjustments = fold(lockedGuest.id(), lockedTarget.id(), quoted, available);
         jdbc.sql("update carts set status = 'MERGED', merged_into = :into, version = version + 1, updated_at = now() where id = :id")
