@@ -199,6 +199,7 @@ services:
       CART_SERVICE_PUBLIC_KEY: ${CART_SERVICE_PUBLIC_KEY:-}
       CART_CATALOG_URL: http://catalog:8081
       CART_INVENTORY_URL: http://inventory:8083
+      CART_INTERNAL_CALLERS: ${CART_INTERNAL_CALLERS:-}
     depends_on:
       postgres:
         condition: service_healthy

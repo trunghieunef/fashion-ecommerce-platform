@@ -75,7 +75,8 @@ class CartContractTest(unittest.TestCase):
             self.assertTrue(list(add.iter_errors({**ok, "quantity": q})), q)
         cart = self.validator("Cart")
         sample = {"cart_id": "11111111-1111-4111-8111-111111111111", "version": 1, "owner": "GUEST",
-                  "expires_at": "2026-11-17T03:00:00Z", "preview_status": "OK", "items": [{
+                  "expires_at": "2026-11-17T03:00:00Z", "preview_status": "OK", "subtotal_preview": 180000,
+                  "shipping_fee_status": "NOT_CALCULATED", "items": [{
                       "item_id": "22222222-2222-4222-8222-222222222222", "variant_id": "11111111-1111-4111-8111-111111111111",
                       "sku": "TEE-M", "quantity": 2, "price_snapshot": 100000, "item_version": 0,
                       "preview": {"effective_price": 90000, "price_changed": True, "active": True, "available": 3,
@@ -83,6 +84,11 @@ class CartContractTest(unittest.TestCase):
         self.assertEqual(list(cart.iter_errors(sample)), [])
         self.assertTrue(list(cart.iter_errors({**sample, "owner": "ADMIN"})))
         self.assertTrue(list(cart.iter_errors({**sample, "preview_status": "MAYBE"})))
+        # CART-03: the subtotal is an estimate or null; the shipping fee is never calculated by cart.
+        self.assertEqual(list(cart.iter_errors({**sample, "subtotal_preview": None})), [])
+        self.assertTrue(list(cart.iter_errors({**sample, "subtotal_preview": -1})))
+        self.assertTrue(list(cart.iter_errors({**sample, "shipping_fee_status": "CALCULATED"})))
+        self.assertTrue(list(cart.iter_errors({k: v for k, v in sample.items() if k != "shipping_fee_status"})))
 
     def test_guest_cookie_is_documented(self):
         op = self.doc["paths"]["/api/v1/carts"]["post"]

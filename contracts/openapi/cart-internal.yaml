@@ -1,0 +1,264 @@
+openapi: 3.1.0
+info:
+  title: Cart internal API
+  version: 0.1.0
+  description: >
+    TASK:CART-03 — cart snapshot and checkout cleanup for order-service (docs/design/03_interfaces.md §4).
+    ADR-19 ES256 service token, audience cart-service, caller order-service only; token and caller are
+    checked before any header or body. order-service passes the actor it verified in Cart-Actor; the cart
+    applies the same ownership rule as the public API (miss = 404). Not routed by the public Gateway.
+    Every response is no-store.
+servers:
+- url: http://localhost:8084
+  description: Private cart service; bypasses public Gateway
+tags:
+- name: Internal cart
+  description: order-service only
+security:
+- serviceToken: []
+paths:
+  /internal/api/v1/carts/{cart_id}/snapshot:
+    parameters:
+    - {$ref: '#/components/parameters/CartId'}
+    - {$ref: '#/components/parameters/CartActor'}
+    get:
+      tags: [Internal cart]
+      operationId: getCartSnapshot
+      summary: Items and versions of the actor's cart at an expected version
+      description: Read only. No catalog or inventory call, no sliding guest expiry, no write. Empty carts return items [];
+        order-service decides whether to reject.
+      x-implementation-status: implemented
+      parameters:
+      - name: expected_version
+        in: query
+        required: true
+        description: Missing is 400 VERSION_REQUIRED; stale is 409 VERSION_CONFLICT with errors[expected_version]=current=N
+        schema: {type: integer, minimum: 0, maximum: 9223372036854775807}
+      responses:
+        '200':
+          description: Snapshot
+          headers: &headers
+            X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+            Cache-Control: {$ref: '#/components/headers/NoStore'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SnapshotResponse'}
+              examples:
+                guest:
+                  value:
+                    code: OK
+                    data:
+                      cart_id: 11111111-1111-4111-8111-111111111111
+                      version: 3
+                      owner: GUEST
+                      items:
+                      - item_id: 22222222-2222-4222-8222-222222222222
+                        variant_id: 33333333-3333-4333-8333-333333333333
+                        sku: TEE-M
+                        quantity: 2
+                        item_version: 1
+                        price_snapshot: 100000
+                        catalog_version: 7
+                    metadata: {request_id: cart03-synthetic-request, trace_id: cart03-synthetic-trace}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /internal/api/v1/carts/{cart_id}/checkout-cleanup:
+    parameters:
+    - {$ref: '#/components/parameters/CartId'}
+    - {$ref: '#/components/parameters/CartActor'}
+    post:
+      tags: [Internal cart]
+      operationId: cleanupCheckedOutItems
+      summary: Remove the items an order took from the cart
+      description: >-
+        One transaction, no HTTP. Idempotent per order_id: the same order and body replay the stored response and never
+        deduct again; another body is 409 IDEMPOTENCY_KEY_REUSED. Per snapshot item: version and quantity still match →
+        removed; changed after the snapshot → retained (ITEM_CHANGED, current_quantity); gone → missing. Items not in the
+        snapshot are untouched. cart_version increases by 1 only when something was removed; the cart stays ACTIVE.
+        The cart version is not checked: items may change after the snapshot, item versions are the guard.
+      x-implementation-status: implemented
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        description: Must equal order_id (400 IDEMPOTENCY_KEY_REQUIRED / IDEMPOTENCY_KEY_MISMATCH)
+        schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CleanupRequest'}
+      responses:
+        '200':
+          description: Cleanup result (fresh or replayed)
+          headers: *headers
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CleanupResponse'}
+              examples:
+                t18:
+                  value:
+                    code: OK
+                    data:
+                      cart_id: 11111111-1111-4111-8111-111111111111
+                      cart_version: 7
+                      order_id: 44444444-4444-4444-8444-444444444444
+                      removed: [22222222-2222-4222-8222-222222222222]
+                      retained:
+                      - {item_id: 55555555-5555-4555-8555-555555555555, reason: ITEM_CHANGED, current_quantity: 1}
+                      missing: [66666666-6666-4666-8666-666666666666]
+                    metadata: {request_id: cart03-synthetic-request, trace_id: cart03-synthetic-trace}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+components:
+  securitySchemes:
+    serviceToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT (ES256 service token, ADR-19; aud cart-service; caller order-service)
+  headers:
+    NoStore:
+      description: Never cache internal carts or their errors.
+      schema: {type: string, const: no-store}
+  parameters:
+    CartId:
+      name: cart_id
+      in: path
+      required: true
+      description: Canonical lowercase UUID; anything else is the same 404
+      schema: {type: string, format: uuid}
+    CartActor:
+      name: Cart-Actor
+      in: header
+      required: true
+      description: Actor verified by order-service — user:<uuid> or guest:<SHA-256 hex of the cart_token cookie>. Anything
+        else is 400 INVALID_ACTOR. The raw cookie is never sent.
+      schema: {type: string, pattern: '^(user:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|guest:[0-9a-f]{64})$'}
+  schemas:
+    Uuid: {type: string, format: uuid}
+    SnapshotItem:
+      type: object
+      additionalProperties: false
+      required: [item_id, variant_id, sku, quantity, item_version, price_snapshot, catalog_version]
+      properties:
+        item_id: {$ref: '#/components/schemas/Uuid'}
+        variant_id: {$ref: '#/components/schemas/Uuid'}
+        sku: {type: string, minLength: 1, maxLength: 64}
+        quantity: {type: integer, minimum: 1, maximum: 99}
+        item_version: {type: integer, minimum: 0}
+        price_snapshot: {type: integer, minimum: 0, maximum: 9223372036854775807, description: Cart-time reference only; order re-quotes}
+        catalog_version: {type: integer}
+    Snapshot:
+      type: object
+      additionalProperties: false
+      required: [cart_id, version, owner, items]
+      properties:
+        cart_id: {$ref: '#/components/schemas/Uuid'}
+        version: {type: integer, minimum: 0}
+        owner: {type: string, enum: [GUEST, MEMBER]}
+        items: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/SnapshotItem'}}
+    SnapshotResponse:
+      type: object
+      required: [code, data, metadata]
+      properties:
+        code: {type: string, const: OK}
+        data: {$ref: '#/components/schemas/Snapshot'}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
+    CleanupRequest:
+      type: object
+      required: [order_id, items]
+      properties:
+        order_id: {$ref: '#/components/schemas/Uuid'}
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          description: The order's snapshot items; item_id must be distinct
+          items:
+            type: object
+            required: [item_id, item_version, quantity]
+            properties:
+              item_id: {$ref: '#/components/schemas/Uuid'}
+              item_version: {type: integer, minimum: 0}
+              quantity: {type: integer, minimum: 1, maximum: 99}
+    Cleanup:
+      type: object
+      additionalProperties: false
+      required: [cart_id, cart_version, order_id, removed, retained, missing]
+      properties:
+        cart_id: {$ref: '#/components/schemas/Uuid'}
+        cart_version: {type: integer, minimum: 0}
+        order_id: {$ref: '#/components/schemas/Uuid'}
+        removed: {type: array, items: {$ref: '#/components/schemas/Uuid'}}
+        retained:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [item_id, reason, current_quantity]
+            properties:
+              item_id: {$ref: '#/components/schemas/Uuid'}
+              reason: {type: string, const: ITEM_CHANGED}
+              current_quantity: {type: integer, minimum: 1, maximum: 99}
+        missing: {type: array, items: {$ref: '#/components/schemas/Uuid'}}
+    CleanupResponse:
+      type: object
+      required: [code, data, metadata]
+      properties:
+        code: {type: string, const: OK}
+        data: {$ref: '#/components/schemas/Cleanup'}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
+  responses:
+    Invalid:
+      description: INVALID_ACTOR, VERSION_REQUIRED, INVALID_FIELDS, MALFORMED_JSON, IDEMPOTENCY_KEY_REQUIRED or IDEMPOTENCY_KEY_MISMATCH
+      headers: *headers
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+          examples:
+            actor:
+              value: {code: VALIDATION_ERROR, message: INVALID_ACTOR, errors: [{field: Cart-Actor, message: 'must be user:<uuid> or guest:<sha256>'}],
+                metadata: {request_id: cart03-synthetic-request, trace_id: cart03-synthetic-trace}}
+    Unauthorized:
+      description: INVALID_SERVICE_TOKEN
+      headers: *headers
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+          examples:
+            token:
+              value: {code: UNAUTHORIZED, message: INVALID_SERVICE_TOKEN, metadata: {request_id: cart03-synthetic-request, trace_id: cart03-synthetic-trace}}
+    Forbidden:
+      description: CALLER_NOT_ALLOWED (any caller other than order-service)
+      headers: *headers
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+          examples:
+            caller:
+              value: {code: FORBIDDEN, message: CALLER_NOT_ALLOWED, metadata: {request_id: cart03-synthetic-request, trace_id: cart03-synthetic-trace}}
+    NotFound:
+      description: CART_NOT_FOUND — missing, foreign, expired guest, non-ACTIVE or non-canonical cart id
+      headers: *headers
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+          examples:
+            cart:
+              value: {code: NOT_FOUND, message: CART_NOT_FOUND, metadata: {request_id: cart03-synthetic-request, trace_id: cart03-synthetic-trace}}
+    Conflict:
+      description: VERSION_CONFLICT (snapshot, errors expected_version current=N) or IDEMPOTENCY_KEY_REUSED (cleanup)
+      headers: *headers
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+          examples:
+            version:
+              value: {code: VERSION_CONFLICT, message: VERSION_CONFLICT, errors: [{field: expected_version, message: current=4}],
+                metadata: {request_id: cart03-synthetic-request, trace_id: cart03-synthetic-trace}}

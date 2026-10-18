@@ -39,3 +39,46 @@ theo quyết định 2026-10-18 trong [08](../design/08_decisions.md)).
 - Cookie `Secure` trên trình duyệt thật và CORS khi storefront khác origin: kiểm ở WEB-02.
 - Minor để sau: `current_version` dạng chuỗi trong `errors`, `idempotency_requests` không hết hạn,
   trace không vào preview, PUT tăng không làm mới `price_snapshot`, body đọc như JSON bất kể `Content-Type`.
+
+## TASK:CART-03 — snapshot/cleanup cho order
+
+Chủ dự án yêu cầu Claude Code nghiệm thu `TASK:CART-03` sau khi Application CI của PR #26 PASS.
+**Không độc lập:** CART-03 do Claude Code viết. Review gồm một subagent reviewer (0 Critical, 2 Important đã sửa)
+và một agent review riêng trên PR #26 (1 finding P2 đã sửa ở `461395e`; quyết định "đồng ý merge về mặt code,
+chờ Application CI PASS"), không thay review bởi người khác tác giả. Phạm vi: acceptance ở [10](../delivery/10_backlog.md)
+dòng CART-03 + `REQ:CART-05/06` ở [02](../design/02_prd.md), mức local trước G0.
+
+### Bằng chứng chung
+
+- Code trên `dev` `461395e`, PR #26 (chưa merge). Application CI (pull_request) SUCCESS
+  ([run 39137396425](https://github.com/trunghieunef/fashion-ecommerce-platform/actions/runs/39137396425)):
+  `./mvnw -B test` toàn reactor **713 test** 0 failure (cart-service 72), contract validation 64 test
+  (gồm 4 test `test_cart_internal`), infra validation, local stack + smoke (`CART-01 guest/member cart PASS`,
+  `S1-local smoke PASS`), browser smoke. Documentation CI SUCCESS.
+- Local: `./mvnw -B -pl services/cart-service verify` 72 test PASS; mutation 3/3 (guard version, guard quantity,
+  replay idempotency); scan-secrets sạch. Chi tiết: [evidence CART-03](cart-03-local-2026-10-18.md).
+
+### Kết quả theo tiêu chí
+
+| Tiêu chí | Bằng chứng | Kết quả |
+|---|---|---|
+| Snapshot API cho order: actor đã xác minh + expected version → items/versions (03 §4) | `CartSnapshotIntegrationTest`: `snapshotReturnsItemsWithoutWrites`, `snapshotChecksVersion` (400/409 current), `snapshotIsOwnerOnly` (actor khác/guest hết hạn/id sai → 404), `snapshotRejectsBadActor`, `snapshotRequiresOrderServiceToken` (không token, sai audience → 401; caller khác → 403) | Pass |
+| Cleanup theo snapshot/version/qty, key `order_id` (REQ CART-06) | `t18KeepsChangedAndNewItems`, `editedBackToSameQuantityIsRetained`, `quantityMismatchAtSameVersionIsRetained`, `keyMustEqualOrderId`; mutation bỏ guard version/quantity bị bắt | Pass |
+| T18: giữ item mới/sửa, không xóa sạch giỏ | `t18KeepsChangedAndNewItems` (A sửa → retained, B xóa → missing, D mới còn, C removed, giỏ ACTIVE), `nothingRemovedKeepsVersion` | Pass |
+| Cleanup retry không trừ lại | `retrySameOrderDoesNotDeductTwice` (kể cả sau khi khách thêm lại cùng variant), `parallelSameOrderRemovesOnce`, `sameOrderDifferentBodyIs409`, `notOwnedRollsBackKey`; mutation bỏ replay bị bắt | Pass |
+| Preview không giữ kho/quota; chưa tính phí không hiện tổng như đã chốt (REQ CART-05) + fee-preview integration contract | `subtotalWhenPreviewOk`, `subtotalNullWhenUnavailableOrEmpty`, `subtotalNullOnOverflow`, `shipping_fee_status: NOT_CALCULATED` trong `cart.yaml`/03/06; preview chỉ đọc (`readDoesNotWrite`) | Pass |
+| Validation ở ranh giới tin cậy, auth trước body | `validation` (gồm item_id sai/thiếu trước item hợp lệ → 400, finding PR #26), `authBeforeBody` | Pass |
+| Route internal không public | `GatewayBoundaryTest#cartInternalIsNotRouted` (snapshot qua Gateway → 404) | Pass |
+| Contract | `cart-internal.yaml` + `cart.yaml` Redocly lint, `test_cart_internal.py`/`test_cart.py` trên CI | Pass |
+
+**`TASK:CART-03`: Done (local, trước G0)**; còn bước merge PR #26 vào `main` do chủ dự án thực hiện.
+
+### Ngoại lệ và việc còn lại (không chặn Done local)
+
+- Route internal chưa có smoke tích hợp thật: order-service chưa tồn tại; `CART_INTERNAL_CALLERS` trống mặc định.
+  ORD-01 đăng ký public key và gọi qua `background_tasks`.
+- Câu hỏi mở ORD-01/WEB-03 ([08](../design/08_decisions.md) mục CART-03): cookie `cart_token` `Path=/api/v1/carts`
+  không tới `/api/v1/orders`; phải chốt cách xác minh guest cho `Cart-Actor` trước guest checkout.
+- Snapshot REPEATABLE READ (review I1) chưa có test xác định chen commit giữa hai lần đọc.
+- Khách thêm lại cùng variant sau snapshot → dòng gộp được giữ nguyên (quyết định spec §8.4); WEB-03 hiển thị `retained`.
+- Fee estimate thật thuộc SHP-01; job dọn giỏ guest hết hạn chờ O06.

@@ -430,6 +430,23 @@ Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác v
 | Kiểm tồn tham khảo khi thêm/tăng; lỗi dependency khi ghi → 503, khi đọc → preview UNAVAILABLE | Không giữ hàng, không chốt giá |
 | local-up sinh service key cho cart-service, thêm vào allowlist catalog/inventory | Lần đầu internal API có caller thật |
 
+## CART-03 — quyết định 2026-10-18
+
+`TASK:CART-03` · `REQ:CART-05/06`. Chủ dự án giao agent tự chốt và duyệt [spec](../superpowers/specs/2026-10-18-cart-03-checkout-snapshot-design.md):
+
+| Quyết định | Hệ quả |
+|---|---|
+| Snapshot/cleanup ở `/internal/api/v1/carts/...`, service token `aud=cart-service`, chỉ caller `order-service` | Gateway không route; shipping tự thêm vào allowlist ở SHP-01 nếu cần |
+| Actor qua header `Cart-Actor` (`user:<uuid>`/`guest:<sha256>`), order xác minh trước | Cart không nhận raw cookie qua internal; ownership giữ quy tắc CART-01 |
+| Idempotency cleanup theo `order_id` (`Idempotency-Key` phải bằng `order_id`) | Order retry bằng key khác vẫn không trừ hai lần |
+| Chỉ xóa item còn khớp cả version và quantity; khác → giữ nguyên dòng (`ITEM_CHANGED`), không "giảm phần còn lại" | T18: item khách sửa/thêm sau snapshot không mất |
+| Giỏ vẫn ACTIVE sau cleanup (không `CHECKED_OUT`); version chỉ tăng khi có xóa | Giữ unique ACTIVE member và item còn lại |
+| Cart không gọi shipping: `subtotal_preview` (chỉ khi preview OK) + `shipping_fee_status: NOT_CALCULATED` | Fee preview là SHP-01 `POST /shipping/fee/estimate`; tổng chốt chỉ ở order quote |
+
+**Câu hỏi mở cho ORD-01/WEB-03 (chưa quyết định):** cookie `cart_token` có `Path=/api/v1/carts` nên trình duyệt không
+gửi nó tới `/api/v1/orders`; order-service cần một cách xác minh guest để điền `Cart-Actor` (mở rộng Path cookie
+hoặc cơ chế khác). CART-03 không đổi cookie. Phải chốt trước khi ORD-01 triển khai guest checkout.
+
 ## Quyết định chủ dự án 2026-10-18 — SEO và thứ tự gate
 
 | Quyết định | Hệ quả |

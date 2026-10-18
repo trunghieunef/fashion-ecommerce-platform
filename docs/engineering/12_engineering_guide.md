@@ -22,7 +22,7 @@ User-service chưa bật relay; notification-service/UI auth/admin chưa có.
 Catalog admin CAT-01a dùng cùng ES256 verifier, JdbcClient và durability, có catalog.write,
 version/key/audit; [evidence local](../evidence/cat-01a-local-2026-10-07.md) ghi số test và mutation.
 
-CART-01: `./mvnw -B -pl services/cart-service -am test` (PostgreSQL Testcontainers, stub catalog/inventory). Smoke tạo giỏ guest qua Gateway, thêm SKU smoke, retry cùng key, đọc preview và mở giỏ member (`CART-01 guest/member cart PASS`); local-up sinh service key cho cart-service.
+CART-01: `./mvnw -B -pl services/cart-service -am test` (PostgreSQL Testcontainers, stub catalog/inventory). Smoke tạo giỏ guest qua Gateway, thêm SKU smoke, retry cùng key, đọc preview và mở giỏ member (`CART-01 guest/member cart PASS`); local-up sinh service key cho cart-service. CART-03: route internal snapshot/cleanup chỉ kiểm bằng integration test (`CartSnapshotIntegrationTest`, `CheckoutCleanupIntegrationTest`), chưa smoke vì chưa có order-service; `CART_INTERNAL_CALLERS` trống mặc định.
 
 PLT-05: `local-up` bật thêm Tempo (`127.0.0.1:3200`) và Grafana (`http://127.0.0.1:3000`, anonymous
 viewer). Xem trace: lấy `metadata.trace_id` của response → Grafana Explore → Tempo → dán trace id.

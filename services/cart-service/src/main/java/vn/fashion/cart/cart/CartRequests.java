@@ -16,17 +16,38 @@ public final class CartRequests {
   public static Add add(JsonNode body) {
     var errors = new ArrayList<Api.FieldError>();
     UUID variant = uuid(body.path("variant_id"), "variant_id", errors);
-    int quantity = quantity(body.path("quantity"), errors);
+    int quantity = quantity(body.path("quantity"), "quantity", errors);
     long version = version(body.path("expected_version"));
     if (!errors.isEmpty()) throw invalid(errors);
     return new Add(variant, quantity, version);
   }
   public static Put put(JsonNode body) {
     var errors = new ArrayList<Api.FieldError>();
-    int quantity = quantity(body.path("quantity"), errors);
+    int quantity = quantity(body.path("quantity"), "quantity", errors);
     long version = version(body.path("expected_version"));
     if (!errors.isEmpty()) throw invalid(errors);
     return new Put(quantity, version);
+  }
+  /** CART-03 checkout cleanup: 1..100 distinct items of the order's cart snapshot. */
+  public record Cleanup(UUID orderId, List<CleanupItem> items) { }
+  public record CleanupItem(UUID itemId, long itemVersion, int quantity) { }
+  public static Cleanup cleanup(JsonNode body) {
+    var errors = new ArrayList<Api.FieldError>();
+    UUID order = uuid(body.path("order_id"), "order_id", errors);
+    var items = new ArrayList<CleanupItem>();
+    JsonNode list = body.path("items");
+    if (!list.isArray() || list.isEmpty() || list.size() > 100) errors.add(new Api.FieldError("items", "must have 1..100 items"));
+    else for (JsonNode item : list) {
+      UUID id = uuid(item.path("item_id"), "items.item_id", errors);
+      JsonNode v = item.path("item_version");
+      boolean versionOk = v.isIntegralNumber() && v.canConvertToLong() && v.longValue() >= 0;
+      if (!versionOk) errors.add(new Api.FieldError("items.item_version", "must be a non-negative integer"));
+      int quantity = quantity(item.path("quantity"), "items.quantity", errors);
+      if (id != null && items.stream().anyMatch(i -> id.equals(i.itemId()))) errors.add(new Api.FieldError("items.item_id", "must be distinct"));
+      items.add(new CleanupItem(id, versionOk ? v.longValue() : -1, quantity));
+    }
+    if (!errors.isEmpty()) throw invalid(errors);
+    return new Cleanup(order, List.copyOf(items));
   }
   public static long version(String raw) {
     if (raw == null || raw.isBlank()) throw versionRequired();
@@ -45,9 +66,9 @@ public final class CartRequests {
       throw invalid(List.of(new Api.FieldError("expected_version", "must be a non-negative integer")));
     return node.longValue();
   }
-  private static int quantity(JsonNode node, List<Api.FieldError> errors) {
+  private static int quantity(JsonNode node, String field, List<Api.FieldError> errors) {
     if (!node.isIntegralNumber() || !node.canConvertToInt() || node.intValue() < 1 || node.intValue() > 99) {
-      errors.add(new Api.FieldError("quantity", "must be an integer 1..99"));
+      errors.add(new Api.FieldError(field, "must be an integer 1..99"));
       return 0;
     }
     return node.intValue();

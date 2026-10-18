@@ -140,7 +140,7 @@ public class CartItemsService {
     if (available < quantity)
       throw new Api.Problem(HttpStatus.CONFLICT, "OUT_OF_STOCK", "OUT_OF_STOCK", List.of(new Api.FieldError("quantity", "available=" + available)));
   }
-  private static void requireVersion(long expected, long actual) {
+  public static void requireVersion(long expected, long actual) {
     if (expected != actual)
       throw new Api.Problem(HttpStatus.CONFLICT, "VERSION_CONFLICT", "VERSION_CONFLICT", List.of(new Api.FieldError("expected_version", "current=" + actual)));
   }
@@ -153,7 +153,7 @@ public class CartItemsService {
   static Api.Problem itemNotFound() {
     return new Api.Problem(HttpStatus.NOT_FOUND, "NOT_FOUND", "CART_ITEM_NOT_FOUND", List.of());
   }
-  static String sha256(String value) {
+  public static String sha256(String value) {
     try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8))); }
     catch (NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
   }
