@@ -3,7 +3,7 @@
 `TASK:WEB-01` · `REQ:CAT-03/04/05/06`, `REQ:XCT-01/05` (trên shell `TASK:PLT-01`).
 [Spec](../../docs/superpowers/specs/2026-10-18-web-01-storefront-design.md) ·
 [evidence](../../docs/evidence/web-01-local-2026-10-18.md). React 19 SPA (Vite, React Router), không UI kit/i18n/state library.
-UI hiện cố ý đơn giản; tinh chỉnh thẩm mỹ là task sau. Chưa có giỏ, login (WEB-02) hay checkout (WEB-03).
+Trạng thái: **Done (local) — bản thô**, [nghiệm thu 2026-10-19](../../docs/evidence/acceptance-2026-10-19.md). UI hiện cố ý đơn giản; tinh chỉnh thẩm mỹ là task sau. Chưa có giỏ, login (WEB-02) hay checkout (WEB-03).
 
 ## Màn hình
 
