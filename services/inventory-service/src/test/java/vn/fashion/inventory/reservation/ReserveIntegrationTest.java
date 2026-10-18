@@ -11,7 +11,7 @@ class ReserveIntegrationTest extends ReservationTestSupport {
     var s=snapshot(order,in(15),"sku-b",2,"SKU-A",1);
     var r=reserve(s);var d=data(r,201);noStore(r);
     assertThat(d.path("status").asString()).isEqualTo("ACTIVE");assertThat(d.path("version").asLong()).isEqualTo(1);
-    assertThat(d.path("items").toString()).isEqualTo("[{\"sku\":\"SKU-A\",\"quantity\":1},{\"sku\":\"SKU-B\",\"quantity\":2}]");
+    assertThat(d.path("items").toString()).isEqualTo("[{\"sku\":\"SKU-A\",\"quantity\":1,\"returned\":0},{\"sku\":\"SKU-B\",\"quantity\":2,\"returned\":0}]");
     assertThat(d.path("restore_required").asBoolean()).isFalse();
     assertThat(reserved("SKU-A")).isEqualTo(1);assertThat(reserved("SKU-B")).isEqualTo(3);
     assertThat(jdbc.queryForList("select operation_key from stock_transactions where type='RESERVE' order by sku",String.class))

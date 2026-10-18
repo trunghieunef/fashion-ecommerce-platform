@@ -30,6 +30,34 @@ public final class ReservationRequests {
     if(reason.isEmpty() || reason.length()>500) throw invalid("reason","must be 1..500 characters");
     return new ReleaseCommand(order,snap,hash,reason);
   }
+  /** INV-03: items are canonical, distinct and sorted by SKU (lock order). */
+  public record ReturnCommand(UUID orderId,String operationKey,String reason,String evidenceRef,List<ReservationSnapshot.Item> items) { }
+  public static ReturnCommand returns(JsonNode body) {
+    closed(body,"",Set.of("order_id","operation_key","reason","evidence_ref","items"));
+    UUID order=orderId(text(body,"order_id","order_id"),"order_id");
+    String key=text(body,"operation_key","operation_key");
+    String reason=bounded(text(body,"reason","reason"),"reason"),evidence=bounded(text(body,"evidence_ref","evidence_ref"),"evidence_ref");
+    var raw=body.get("items");
+    if(raw==null || !raw.isArray() || raw.isEmpty() || raw.size()>100) throw invalid("items","must have 1..100 items");
+    var items=new TreeMap<String,Integer>();
+    for(int i=0;i<raw.size();i++) {
+      String at="items["+i+"].";var item=raw.get(i);
+      closed(item,at,Set.of("sku","quantity"));
+      String sku;
+      try { sku=Sku.canonical(text(item,"sku",at+"sku")); }
+      catch(Api.Problem e) { throw invalid(at+"sku","must be 1..64 ASCII SKU characters"); }
+      var q=item.get("quantity");
+      if(q==null || !q.isIntegralNumber() || !q.canConvertToInt() || q.intValue()<1 || q.intValue()>99)
+        throw invalid(at+"quantity","must be an integer 1..99");
+      if(items.put(sku,q.intValue())!=null) throw invalid(at+"sku","must be distinct");
+    }
+    return new ReturnCommand(order,key,reason,evidence,items.entrySet().stream().map(e->new ReservationSnapshot.Item(e.getKey(),e.getValue())).toList());
+  }
+  private static String bounded(String raw,String field) {
+    String value=raw.strip();
+    if(value.isEmpty() || value.length()>500) throw invalid(field,"must be 1..500 characters");
+    return value;
+  }
   public static UUID commit(JsonNode body) {
     closed(body,"",Set.of("order_id"));
     return orderId(text(body,"order_id","order_id"),"order_id");

@@ -21,10 +21,11 @@ public class ReservationController {
   private static final Set<String> CALLERS=Set.of("order-service");
   private final InternalCallers callers;
   private final ReservationService service;
+  private final ReturnService returns;
   private final Tracer tracer;
   private final ObjectMapper json;
-  public ReservationController(InternalCallers callers,ReservationService service,Tracer tracer,ObjectMapper json) {
-    this.callers=callers;this.service=service;this.tracer=tracer;this.json=json;
+  public ReservationController(InternalCallers callers,ReservationService service,ReturnService returns,Tracer tracer,ObjectMapper json) {
+    this.callers=callers;this.service=service;this.returns=returns;this.tracer=tracer;this.json=json;
   }
   @PostMapping("/reserve")
   public ResponseEntity<?> reserve(@RequestHeader(name="Authorization",required=false) String auth,
@@ -43,6 +44,17 @@ public class ReservationController {
       @RequestHeader(name="Idempotency-Key",required=false) String key,HttpServletRequest request) {
     var meta=authorize(auth,key);
     return respond(service.release(ReservationRequests.release(body(request)),meta.traceId()),meta);
+  }
+  /** INV-03: Idempotency-Key must equal operation_key, the durable dedupe key of a return. */
+  @PostMapping("/returns")
+  public ResponseEntity<?> returns(@RequestHeader(name="Authorization",required=false) String auth,
+      @RequestHeader(name="Idempotency-Key",required=false) String key,HttpServletRequest request) {
+    var meta=authorize(auth,key);
+    var command=ReservationRequests.returns(body(request));
+    if(!key.equals(command.operationKey()))
+      throw new Api.Problem(HttpStatus.BAD_REQUEST,"VALIDATION_ERROR","IDEMPOTENCY_KEY_MISMATCH",
+          List.of(new Api.FieldError("Idempotency-Key","must equal operation_key")));
+    return Api.ok(HttpStatus.OK,returns.restore(command,meta.traceId()),meta);
   }
   @GetMapping("/reservations/{orderId}")
   public ResponseEntity<?> get(@RequestHeader(name="Authorization",required=false) String auth,@PathVariable String orderId) {

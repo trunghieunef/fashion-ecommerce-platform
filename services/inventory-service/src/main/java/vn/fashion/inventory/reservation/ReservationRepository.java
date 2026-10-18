@@ -56,6 +56,13 @@ public class ReservationRepository {
     return jdbc.sql("select "+COLUMNS+" from stock_reservations r where id=:id and status='ACTIVE' and expires_at<=now() for update skip locked")
         .param("id",id).query(ReservationRow.class).optional();
   }
+  /** INV-03: total returned per SKU of a reservation. */
+  public Map<String,Integer> returnedTotals(UUID reservationId) {
+    var totals=new HashMap<String,Integer>();
+    jdbc.sql("select sku,sum(quantity)::int as total from stock_returns where reservation_id=:r group by sku").param("r",reservationId)
+        .query(rs->{ totals.put(rs.getString("sku"),rs.getInt("total")); });
+    return totals;
+  }
   public long overdueCount() {
     return jdbc.sql("select count(*) from stock_reservations where status='ACTIVE' and expires_at<=now()").query(Long.class).single();
   }
