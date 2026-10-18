@@ -29,14 +29,13 @@ public class CartMergeService {
   private final JdbcClient jdbc;
   private final TransactionTemplate tx;
   private final CartRepository carts;
-  private final CatalogClient catalog;
-  private final StockClient stock;
+  private final CartPreview preview;
   private final IdempotencyStore keys;
   private final ObjectMapper json;
 
-  public CartMergeService(JdbcClient jdbc, TransactionTemplate tx, CartRepository carts, CatalogClient catalog, StockClient stock,
+  public CartMergeService(JdbcClient jdbc, TransactionTemplate tx, CartRepository carts, CartPreview preview,
                           IdempotencyStore keys, ObjectMapper json) {
-    this.jdbc = jdbc; this.tx = tx; this.carts = carts; this.catalog = catalog; this.stock = stock; this.keys = keys; this.json = json;
+    this.jdbc = jdbc; this.tx = tx; this.carts = carts; this.preview = preview; this.keys = keys; this.json = json;
   }
 
   /** Returns a fresh Result or the stored response of an earlier identical request. */
@@ -47,15 +46,15 @@ public class CartMergeService {
     String hash = CartItemsService.sha256(r.guestCartId() + "|" + r.guestExpectedVersion() + "|" + r.memberExpectedVersion());
     var guest = carts.findGuestForMerge(r.guestCartId(), guestHash).orElseThrow(CartRepository::notFound);
     // Outside any transaction (spec section 3): reference prices/stock for the guest lines; failure is 503, nothing written.
+    // Parallel under one deadline (PR #27 review P2): sequential stock calls ran past the Gateway 2 s timeout.
     var quotes = Map.<UUID, CatalogClient.Quote>of();
     var available = new HashMap<String, Integer>();
     if ("ACTIVE".equals(guest.status())) {
       var items = carts.items(guest.id());
       if (!items.isEmpty()) {
-        quotes = catalog.quote(items.stream().map(CartRepository.CartItemRow::variantId).toList());
-        // ponytail: one stock call per SKU in sequence; reuse CartPreview's parallel pool if merge latency matters.
-        for (var q : quotes.values())
-          if (q.found() && q.active()) available.computeIfAbsent(q.sku(), sku -> stock.stock(sku).map(StockClient.Stock::available).orElse(0));
+        var fetched = preview.fetch(items);
+        quotes = fetched.quotes();
+        fetched.stock().forEach((sku, s) -> available.put(sku, s.map(StockClient.Stock::available).orElse(0)));
       }
     }
     carts.createMember(userId);
@@ -102,7 +101,7 @@ public class CartMergeService {
       var existing = memberItems.get(g.variantId());
       int had = existing == null ? 0 : existing.quantity();
       int wanted = had + g.quantity();
-      int target = Math.max(had, Math.min(Math.min(wanted, CartItemsService.MAX_QUANTITY), available.getOrDefault(q.sku(), 0)));
+      int target = Math.max(had, Math.min(Math.min(wanted, CartItemsService.MAX_QUANTITY), available.getOrDefault(g.sku(), 0)));
       int applied = target - had;
       if (existing == null) {
         if (target == 0) { adjustments.add(new Adjustment(g.variantId(), q.sku(), "OUT_OF_STOCK", g.quantity(), 0)); continue; }
@@ -118,6 +117,10 @@ public class CartMergeService {
             update cart_items set quantity = :q, price_snapshot = :p, catalog_version = :v, version = version + 1, updated_at = now(),
               created_at = least(created_at, :created) where id = :id""")
             .param("q", target).param("p", q.effectivePrice()).param("v", q.productVersion())
+            .param("created", Timestamp.from(g.createdAt())).param("id", existing.id()).update();
+      } else {
+        // Nothing added (capped), yet the line keeps the older created_at (PR #27 review P3, spec section 3.5).
+        jdbc.sql("update cart_items set created_at = least(created_at, :created) where id = :id")
             .param("created", Timestamp.from(g.createdAt())).param("id", existing.id()).update();
       }
       if (applied < g.quantity()) adjustments.add(new Adjustment(g.variantId(), q.sku(), "QUANTITY_CAPPED", g.quantity(), applied));

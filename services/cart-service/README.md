@@ -72,7 +72,7 @@ khi đặt `MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT`, `/actuator/p
 
 ## Giới hạn
 
-Chưa có job dọn giỏ guest hết hạn (O06), Redis cache hay rate limit riêng. Merge gọi stock tuần tự theo SKU (tối đa 100).
+Chưa có job dọn giỏ guest hết hạn (O06), Redis cache hay rate limit riêng. Merge và đọc giỏ dùng chung `CartPreview.fetch` (catalog + stock song song, một deadline timeout + 500 ms, dưới timeout 2 s của Gateway).
 Không event Kafka. Route internal chưa có smoke local (chưa có order-service); cart không gọi shipping —
 phí xem trước là SHP-01. Cookie `cart_token` có `Path=/api/v1/carts` nên không tới `/api/v1/orders`:
 cách order xác minh guest để điền `Cart-Actor` là câu hỏi mở cho ORD-01 (08).

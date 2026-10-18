@@ -215,6 +215,30 @@ class CartMergeIntegrationTest extends CartTestSupport {
     assertThat(adjustment(result, v).path("reason").asString()).isEqualTo("QUANTITY_CAPPED");
   }
 
+  @Test void multiSkuMergeFitsGatewayBudget() {
+    // PR #27 review P2: 3 SKUs at 800 ms each took 2.4 s sequentially, past the Gateway 2 s response timeout.
+    for (int i = 0; i < 3; i++) addGuest(UUID.randomUUID().toString(), 1);
+    StubServers.INVENTORY.delay(800);
+    long start = System.nanoTime();
+    var result = data(merge(UUID.randomUUID().toString()), 200);
+    assertThat(java.time.Duration.ofNanos(System.nanoTime() - start)).isLessThan(java.time.Duration.ofMillis(1800));
+    assertThat(result.path("cart").path("items")).hasSize(3);
+    assertThat(result.path("adjustments")).isEmpty();
+  }
+
+  @Test void cappedLineKeepsOlderCreatedAt() {
+    // PR #27 review P3: applied = 0 must still keep the older created_at (spec section 3.5).
+    String v = UUID.randomUUID().toString();
+    addGuest(v, 2); addMember(v, 5);
+    jdbc.update("update cart_items set created_at = timestamptz '2026-10-01T00:00:00Z' where cart_id = cast(? as uuid)", guestCart);
+    stockBySku.put(sku(v), 1);
+    var result = data(merge(UUID.randomUUID().toString()), 200);
+    assertThat(adjustment(result, v).path("applied").asInt()).isZero();
+    assertThat(jdbc.queryForObject("""
+        select i.created_at from cart_items i join carts c on c.id = i.cart_id where c.user_id is not null and i.variant_id = cast(? as uuid)""",
+        java.time.OffsetDateTime.class, v).toInstant()).isEqualTo(java.time.Instant.parse("2026-10-01T00:00:00Z"));
+  }
+
   @Test void cartItemLimit() {
     openMember();
     String cartId = memberCartId();

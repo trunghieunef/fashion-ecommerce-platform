@@ -13,6 +13,7 @@ import java.util.concurrent.TimeUnit;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import vn.fashion.cart.deps.CatalogClient;
+import vn.fashion.cart.deps.DependencyUnavailable;
 import vn.fashion.cart.deps.StockClient;
 
 /** Spec section 6: one quote batch plus per-SKU stock, in parallel; any failure → UNAVAILABLE, never an error. */
@@ -32,32 +33,43 @@ public class CartPreview {
 
   @jakarta.annotation.PreDestroy void close() { pool.shutdownNow(); }
 
+  /** Catalog quotes by variant and stock by stored SKU. */
+  public record Fetched(Map<UUID, CatalogClient.Quote> quotes, Map<String, Optional<StockClient.Stock>> stock) { }
+
+  /**
+   * One quote batch plus per-SKU stock, all in parallel under one deadline (client timeout + 500 ms, inside the Gateway
+   * 2 s budget); leftovers are cancelled and any failure is DependencyUnavailable. Shared by the read preview and CART-02 merge.
+   */
+  public Fetched fetch(List<CartRepository.CartItemRow> items) {
+    var quotes = CompletableFuture.supplyAsync(() -> catalog.quote(items.stream().map(CartRepository.CartItemRow::variantId).toList()), pool);
+    var stocks = new HashMap<String, CompletableFuture<Optional<StockClient.Stock>>>();
+    for (var item : items) stocks.computeIfAbsent(item.sku(), sku -> CompletableFuture.supplyAsync(() -> stock.stock(sku), pool));
+    var all = new java.util.ArrayList<CompletableFuture<?>>(stocks.values());
+    all.add(quotes);
+    try { CompletableFuture.allOf(all.toArray(CompletableFuture[]::new)).get(timeout.toMillis() + 500, TimeUnit.MILLISECONDS); }
+    catch (InterruptedException e) { Thread.currentThread().interrupt(); all.forEach(f -> f.cancel(true)); throw new DependencyUnavailable("cart dependencies"); }
+    catch (Exception e) { all.forEach(f -> f.cancel(true)); throw new DependencyUnavailable("cart dependencies"); }
+    var observed = new HashMap<String, Optional<StockClient.Stock>>();
+    stocks.forEach((sku, f) -> observed.put(sku, f.join()));
+    return new Fetched(quotes.join(), observed);
+  }
+
   public Result load(List<CartRepository.CartItemRow> items) {
     if (items.isEmpty()) return new Result(Map.of(), "EMPTY");
     try {
-      var quotes = CompletableFuture.supplyAsync(() -> catalog.quote(items.stream().map(CartRepository.CartItemRow::variantId).toList()), pool);
-      var stocks = new HashMap<String, CompletableFuture<Optional<StockClient.Stock>>>();
-      for (var item : items) stocks.computeIfAbsent(item.sku(), sku -> CompletableFuture.supplyAsync(() -> stock.stock(sku), pool));
-      var all = new java.util.ArrayList<CompletableFuture<?>>(stocks.values());
-      all.add(quotes);
-      // One deadline for the whole read: client timeout plus a small margin; leftovers are cancelled.
-      try { CompletableFuture.allOf(all.toArray(CompletableFuture[]::new)).get(timeout.toMillis() + 500, TimeUnit.MILLISECONDS); }
-      catch (java.util.concurrent.TimeoutException e) { all.forEach(f -> f.cancel(true)); throw e; }
-      var quoted = quotes.join();
+      var fetched = fetch(items);
+      var quoted = fetched.quotes();
       var result = new HashMap<UUID, CartView.Preview>();
       for (var item : items) {
         var quote = quoted.get(item.variantId());
-        var observed = stocks.get(item.sku()).join();
+        var observed = fetched.stock().get(item.sku());
         boolean active = quote != null && quote.found() && quote.active();
         long price = quote != null && quote.found() ? quote.effectivePrice() : item.priceSnapshot();
         result.put(item.id(), new CartView.Preview(price, price != item.priceSnapshot(), active,
             observed.map(StockClient.Stock::available).orElse(0), observed.map(StockClient.Stock::observedAt).orElse(null)));
       }
       return new Result(result, "OK");
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      return new Result(Map.of(), "UNAVAILABLE");
-    } catch (Exception e) {
+    } catch (RuntimeException e) {
       return new Result(Map.of(), "UNAVAILABLE");
     }
   }
