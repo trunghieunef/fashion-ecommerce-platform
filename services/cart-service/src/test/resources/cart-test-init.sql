@@ -1,0 +1,10 @@
+CREATE ROLE cart_migration LOGIN PASSWORD 'cart_migration_test';
+CREATE ROLE cart_runtime LOGIN PASSWORD 'cart_runtime_test';
+GRANT CREATE ON DATABASE cart TO cart_migration;
+REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+GRANT USAGE, CREATE ON SCHEMA public TO cart_migration;
+GRANT USAGE ON SCHEMA public TO cart_runtime;
+ALTER DEFAULT PRIVILEGES FOR ROLE cart_migration IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO cart_runtime;
+ALTER DEFAULT PRIVILEGES FOR ROLE cart_migration IN SCHEMA public
+  GRANT USAGE, SELECT ON SEQUENCES TO cart_runtime;
