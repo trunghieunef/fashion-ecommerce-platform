@@ -16,7 +16,8 @@ export function HomePage() {
         <h2 id="collections">{t('collections')}</h2>
         {collections.status === 'loading' && <Loading />}
         {collections.status === 'error' && <Failed notFound={false} retry={retryCollections} />}
-        {collections.status === 'ready' && (
+        {collections.status === 'ready' && collections.data.items.length === 0 && <p>{t('noCollections')}</p>}
+        {collections.status === 'ready' && collections.data.items.length > 0 && (
           <ul className="collection-list">
             {collections.data.items.map((c) => {
               const name = pick(c.name_vi, c.name_en);

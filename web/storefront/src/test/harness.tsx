@@ -15,14 +15,15 @@ export function json(body: unknown, status = 200) {
 }
 
 /** handler gets the path+query after /api/v1/catalog and returns a Response (or a promise of one). */
-export function mockFetch(handler: (path: string) => Response | Promise<Response>) {
+export function mockFetch(handler: (path: string) => Response | Promise<Response>, honourAbort = true) {
   const calls: Call[] = [];
   vi.stubGlobal('fetch', vi.fn((input: string, init?: RequestInit) => {
     const headers = new Headers(init?.headers);
     calls.push({ url: input, lang: headers.get('Accept-Language') });
     const signal = init?.signal;
     return new Promise<Response>((resolve, reject) => {
-      signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+      // honourAbort=false models a response already in flight when abort fires (it still resolves).
+      if (honourAbort) signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
       Promise.resolve(handler(input.replace('/api/v1/catalog', ''))).then(resolve, reject);
     });
   }));

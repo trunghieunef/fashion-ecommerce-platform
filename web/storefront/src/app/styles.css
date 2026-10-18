@@ -61,6 +61,7 @@ legend { font-weight: 600; margin-bottom: 0.4rem; }
 .option input:disabled + span { opacity: 0.4; text-decoration: line-through; }
 .stock { font-weight: 600; margin: 0; }
 .note { color: var(--muted); font-size: 0.85rem; margin: 0; }
+.field-error { color: #b3261e; grid-column: 1 / -1; margin: 0; }
 table { border-collapse: collapse; }
 th, td { border: 1px solid var(--line); padding: 0.3rem 0.6rem; text-align: left; }
 dialog { max-width: min(90vw, 50rem); padding: 1rem; }

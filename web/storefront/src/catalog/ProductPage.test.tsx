@@ -21,7 +21,11 @@ it('asks for a variant, then shows its price and the three stock states', async 
   expect(container.textContent).toContain('Tồn kho chỉ để tham khảo');
 
   await choose(container, 'size', 'L');
-  expect((container.querySelector('input[name="color"][value="Red"]') as HTMLInputElement).disabled).toBe(true);
+  // L has no Red variant: picking Red clears L instead of disabling Red (no dead end, review 1).
+  await choose(container, 'color', 'Red');
+  expect((container.querySelector('input[name="size"][value="L"]') as HTMLInputElement).checked).toBe(false);
+  await choose(container, 'size', 'L');
+  expect((container.querySelector('input[name="color"][value="Red"]') as HTMLInputElement).checked).toBe(false);
   await choose(container, 'color', 'Blue');
   expect(container.querySelector('.stock')!.textContent).toBe('Hết hàng');
   expect(container.querySelector('.product-info .price')!.textContent).toMatch(/^120\.000\s₫$/);
@@ -65,4 +69,21 @@ it('shows not found for a 404 and keeps the image alt when it fails to load', as
   await act(async () => { img.dispatchEvent(new Event('error')); });
   await flush();
   expect(container.querySelector('.gallery [role="img"]')!.getAttribute('aria-label')).toBe('Áo thun mẫu');
+});
+
+it('partial size/colour matrix never gets stuck (review 1)', async () => {
+  const partial = { ...product, data: { ...product.data, variants: [
+    { ...product.data.variants[0], id: '55555555-5555-4555-8555-555555555561', size: 'S', color: 'Red', sku: 'S-RED' },
+    { ...product.data.variants[0], id: '55555555-5555-4555-8555-555555555562', size: 'M', color: 'Blue', sku: 'M-BLUE' },
+  ] } };
+  mockFetch(() => json(partial));
+  const container = await render(PATH);
+  await choose(container, 'size', 'S');
+  await choose(container, 'color', 'Red');
+  const m = container.querySelector('input[name="size"][value="M"]') as HTMLInputElement;
+  expect(m.disabled).toBe(false);
+  await choose(container, 'size', 'M');
+  expect((container.querySelector('input[name="color"][value="Red"]') as HTMLInputElement).checked).toBe(false);
+  await choose(container, 'color', 'Blue');
+  expect(container.querySelector('.stock')!.textContent).toBe('Còn hàng (tham khảo)');
 });

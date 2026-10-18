@@ -49,6 +49,11 @@ const STRINGS = {
     close: 'Đóng',
     imageMissing: 'Chưa có ảnh',
     sampleContent: 'Nội dung mẫu',
+    invalidFilter: 'Bộ lọc không hợp lệ',
+    priceOrder: 'Giá từ phải nhỏ hơn hoặc bằng Giá đến',
+    noCollections: 'Chưa có bộ sưu tập',
+    query: 'Từ khóa',
+    tag: 'Nhãn',
   },
   en: {
     store: 'Fashion Store',
@@ -95,6 +100,11 @@ const STRINGS = {
     close: 'Close',
     imageMissing: 'No image yet',
     sampleContent: 'Sample content',
+    invalidFilter: 'Invalid filter',
+    priceOrder: 'Price from must be at most Price to',
+    noCollections: 'No collections yet',
+    query: 'Keyword',
+    tag: 'Tag',
   },
 } as const;
 

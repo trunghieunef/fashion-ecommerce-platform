@@ -17,9 +17,11 @@ UI hiện cố ý đơn giản; tinh chỉnh thẩm mỹ là task sau. Chưa có
 | `*` | Không tìm thấy | — |
 
 - Bộ lọc nằm trong query string (`q, category_id, brand_id, size, color, tag, min_price, max_price, sort`); đổi bộ lọc
-  bỏ cursor, hủy request cũ và bỏ qua trang "Tải thêm" của bộ lọc cũ.
+  bỏ cursor, hủy request cũ và bỏ qua trang "Tải thêm" của bộ lọc cũ. `q`/`tag` được giữ khi áp bộ lọc khác. Giá từ > giá
+  đến bị chặn ngay trong form. Lỗi 400 (bộ lọc sai trong URL chia sẻ) báo tên trường và chỉ cho "Xóa lọc", không lặp "Thử lại".
 - Tiền VND từ server, định dạng `vi-VN`; client không tính giá. Tồn kho: còn hàng (tham khảo) / hết hàng / chưa rõ,
-  kèm chú thích hàng chỉ được giữ khi đặt đơn.
+  kèm chú thích hàng chỉ được giữ khi đặt đơn; `observed_at` chưa hiển thị (đơn giản hóa có chủ đích). Mọi size/màu đều chọn
+  được; chọn một giá trị không có variant với lựa chọn kia thì lựa chọn kia bị bỏ (không bị kẹt).
 - Ảnh `/api/v1/catalog/images/{asset_id}?kind=thumb|image`; lỗi ảnh → khung placeholder giữ alt.
 - Mô tả và `guideline_html` render HTML đã được catalog-service sanitize (CAT-01); client không tự sanitize thêm.
 - VI/EN: nút trên header, lưu `localStorage` (`storefront.lang`, bọc try/catch), `<html lang>` theo ngôn ngữ;
@@ -44,11 +46,14 @@ npx playwright install chromium && npx playwright test  # stack thật, desktop 
 ```
 
 Fixture mock ở `src/test/fixtures/*.json` được `tests/contracts/test_storefront_fixtures.py` validate với schema response
-của `contracts/openapi/catalog.yaml`, nên mock không lệch contract. `tests/e2e/web-01.spec.ts` đi home → listing → lọc →
-chi tiết (chọn size bằng bàn phím) → đổi EN, không có error state và không cuộn ngang; phần chi tiết chỉ chạy khi stack có
-sản phẩm public.
+của `contracts/openapi/catalog.yaml`, nên mock không lệch contract. `tests/e2e/web-01.spec.ts` có ba test (desktop + 360px):
+(1) stack thật: home → listing → lọc → (chi tiết nếu có sản phẩm public) → đổi EN, không error state, không cuộn ngang;
+(2) luồng chi tiết bằng `page.route` với chính các fixture trên: chọn size/màu bằng Space/Arrow, tồn "còn hàng"/"chưa rõ",
+ảnh lỗi giữ alt, bảng size, EN; (3) route/sản phẩm không tồn tại → "không tìm thấy". Test (2) chạy được cả với Vite dev
+(`PLAYWRIGHT_BASE_URL=http://localhost:5173`, không cần backend).
 
 ## Giới hạn
 
 Collection chỉ hiển thị trang sản phẩm đầu (`ponytail:` trong code); cursor không lưu trong URL (reload về trang đầu của bộ
-lọc); nội dung là fixture/smoke, chưa có content O10 thật; chưa đo accessibility tự động (axe) — kiểm thủ công + e2e bàn phím.
+lọc); đổi ngôn ngữ ở trang chi tiết tải lại sản phẩm (mất lựa chọn size/màu); nội dung là fixture/smoke, chưa có content
+O10 thật; chưa đo accessibility tự động (axe) — kiểm thủ công + e2e bàn phím.

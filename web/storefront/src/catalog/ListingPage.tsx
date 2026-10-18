@@ -2,13 +2,13 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router';
 
-import { useLang } from '../i18n';
-import { FILTER_KEYS, listBrands, listCategories, listProducts, type Category, type Filters, type ProductSummary } from './api';
+import { useLang, type StringKey } from '../i18n';
+import { ApiError, FILTER_KEYS, listBrands, listCategories, listProducts, type Category, type Filters, type ProductSummary } from './api';
 import { Failed, Loading, ProductGrid, useLoad } from './ui';
 
 type Listing =
   | { status: 'loading' }
-  | { status: 'error' }
+  | { status: 'error'; invalid: string[] | null }
   | { status: 'ready'; items: ProductSummary[]; cursor: string | null; more: 'idle' | 'loading' | 'error' };
 
 function filtersOf(params: URLSearchParams): Filters {
@@ -37,8 +37,12 @@ export function ListingPage() {
     const controller = new AbortController();
     setState({ status: 'loading' });
     listProducts(filters, undefined, controller.signal)
-      .then((page) => setState({ status: 'ready', items: page.items, cursor: page.next_cursor, more: 'idle' }))
-      .catch(() => { if (!controller.signal.aborted) setState({ status: 'error' }); });
+      .then((page) => { if (!controller.signal.aborted) setState({ status: 'ready', items: page.items, cursor: page.next_cursor, more: 'idle' }); })
+      .catch((error: unknown) => {
+        // A 400 (bad filter in a shared/edited URL) is not retried: the same GET fails again (review 2).
+        if (!controller.signal.aborted)
+          setState({ status: 'error', invalid: error instanceof ApiError && error.status === 400 ? error.fields : null });
+      });
     return () => controller.abort();
   }, [key, attempt]);
 
@@ -65,7 +69,13 @@ export function ListingPage() {
       <h1>{searching ? `${t('search')}: ${filters.q}` : t('products')}</h1>
       <FilterForm filters={filters} onApply={(next) => setParams(next)} pick={pick} />
       {state.status === 'loading' && <Loading />}
-      {state.status === 'error' && <Failed notFound={false} retry={() => setAttempt((n) => n + 1)} />}
+      {state.status === 'error' && state.invalid === null && <Failed notFound={false} retry={() => setAttempt((n) => n + 1)} />}
+      {state.status === 'error' && state.invalid !== null && (
+        <section className="state" aria-live="polite">
+          <p>{t('invalidFilter')}{state.invalid.length > 0 && `: ${state.invalid.map((f) => t(LABELS[f] ?? 'filters')).join(', ')}`}</p>
+          <button type="button" onClick={() => setParams(filters.q ? { q: filters.q } : {})}>{t('clear')}</button>
+        </section>
+      )}
       {state.status === 'ready' && state.items.length === 0 && <p aria-live="polite">{filtered ? t('noResults') : t('empty')}</p>}
       {state.status === 'ready' && state.items.length > 0 && (
         <>
@@ -84,6 +94,12 @@ export function ListingPage() {
   );
 }
 
+/** errors[].field of a 400 -> the label the user sees in the form. */
+const LABELS: Record<string, StringKey> = {
+  q: 'query', category_id: 'category', brand_id: 'brand', size: 'size', color: 'color', tag: 'tag',
+  min_price: 'minPrice', max_price: 'maxPrice', sort: 'sort',
+};
+
 function FilterForm({ filters, onApply, pick }: {
   filters: Filters;
   onApply: (next: Record<string, string>) => void;
@@ -93,6 +109,7 @@ function FilterForm({ filters, onApply, pick }: {
   // Option lists are optional helpers: if they fail the selects are simply not offered.
   const [categories] = useLoad(listCategories, []);
   const [brands] = useLoad(listBrands, []);
+  const [priceError, setPriceError] = useState(false);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -101,13 +118,16 @@ function FilterForm({ filters, onApply, pick }: {
       const text = String(value).trim();
       if (text) next[name] = text;
     });
-    onApply(next);
+    const priceInverted = next.min_price && next.max_price && Number(next.min_price) > Number(next.max_price);
+    setPriceError(Boolean(priceInverted));
+    if (!priceInverted) onApply(next);
   }
   const flat = (list: Category[]): Category[] => list.flatMap((c) => [c, ...c.children.map((child) => ({ ...child, name_vi: `— ${child.name_vi}`, name_en: `— ${child.name_en}` }))]);
 
   return (
     <form className="filters" onSubmit={submit} aria-label={t('filters')} key={JSON.stringify(filters)}>
       {filters.q && <input type="hidden" name="q" value={filters.q} />}
+      {filters.tag && <input type="hidden" name="tag" value={filters.tag} />}
       {categories.status === 'ready' && (
         <label>{t('category')}
           <select name="category_id" defaultValue={filters.category_id ?? ''}>
@@ -126,8 +146,11 @@ function FilterForm({ filters, onApply, pick }: {
       )}
       <label>{t('size')}<input name="size" defaultValue={filters.size ?? ''} /></label>
       <label>{t('color')}<input name="color" defaultValue={filters.color ?? ''} /></label>
-      <label>{t('minPrice')}<input name="min_price" type="number" min="0" step="1000" inputMode="numeric" defaultValue={filters.min_price ?? ''} /></label>
-      <label>{t('maxPrice')}<input name="max_price" type="number" min="0" step="1000" inputMode="numeric" defaultValue={filters.max_price ?? ''} /></label>
+      <label>{t('minPrice')}<input name="min_price" type="number" min="0" step="1" inputMode="numeric" defaultValue={filters.min_price ?? ''}
+        aria-invalid={priceError} aria-describedby={priceError ? 'price-error' : undefined} /></label>
+      <label>{t('maxPrice')}<input name="max_price" type="number" min="0" step="1" inputMode="numeric" defaultValue={filters.max_price ?? ''}
+        aria-invalid={priceError} aria-describedby={priceError ? 'price-error' : undefined} /></label>
+      {priceError && <p id="price-error" role="alert" className="field-error">{t('priceOrder')}</p>}
       <label>{t('sort')}
         <select name="sort" defaultValue={filters.sort ?? 'NEWEST'}>
           <option value="NEWEST">{t('sortNewest')}</option>

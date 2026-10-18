@@ -79,3 +79,44 @@ it('searches through /search and keeps the query when filters are applied', asyn
   await submitFilters(container, { size: 'M' });
   expect(calls.at(-1)!.url).toMatch(/^\/api\/v1\/catalog\/search\?q=%C3%A1o.*size=M/);
 });
+
+it('drops a late load-more page even when the old request ignores abort (review 11)', async () => {
+  let releaseOld: (r: Response) => void = () => {};
+  mockFetch((path) => {
+    const p = passthrough(path);
+    if (p) return p;
+    if (path.includes('cursor=')) return new Promise<Response>((resolve) => { releaseOld = resolve; });
+    return json(path.includes('color=Red') ? empty : products);
+  }, false);
+  const container = await render('/products');
+  await click(byText(container, 'button', 'Tải thêm'));
+  await submitFilters(container, { color: 'Red' });
+  await act(async () => releaseOld(json(page2)));
+  await flush();
+  expect(container.textContent).not.toContain('Váy mẫu');
+});
+
+it('a 400 filter error names the field and offers clear instead of a retry loop (review 2)', async () => {
+  mockFetch((path) => passthrough(path) ?? json({ code: 'VALIDATION_ERROR', message: 'INVALID_FILTER',
+    errors: [{ field: 'category_id', message: 'invalid value' }], metadata: products.metadata }, 400));
+  const container = await render('/products?category_id=not-a-uuid');
+  expect(container.textContent).toContain('Bộ lọc không hợp lệ: Danh mục');
+  expect(byText(container, 'button', 'Thử lại')).toBeUndefined();
+  expect(byText(container, 'section.state button', 'Xóa lọc')).toBeDefined();
+});
+
+it('min price above max price is refused in the form, keeping the URL (review 2)', async () => {
+  const calls = mockFetch((path) => passthrough(path) ?? json(products));
+  const container = await render('/products');
+  const before = calls.length;
+  await submitFilters(container, { min_price: '500000', max_price: '100000' });
+  expect(container.querySelector('[role="alert"]')!.textContent).toContain('Giá từ phải nhỏ hơn hoặc bằng Giá đến');
+  expect(calls.filter((c) => c.url.includes('/products?')).length).toBe(calls.slice(0, before).filter((c) => c.url.includes('/products?')).length);
+});
+
+it('keeps tag when other filters are applied (review 4)', async () => {
+  const calls = mockFetch((path) => passthrough(path) ?? json(products));
+  const container = await render('/products?tag=new');
+  await submitFilters(container, { size: 'M' });
+  expect(calls.at(-1)!.url).toMatch(/tag=new/);
+});

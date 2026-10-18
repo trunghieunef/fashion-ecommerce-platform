@@ -40,13 +40,18 @@ function ProductDetail({ product }: { product: Product }) {
         {chosen ? <Price min={chosen.effective_price} max={chosen.effective_price} /> : <Price min={product.min_price} max={product.max_price} />}
         <fieldset>
           <legend>{t('size')}</legend>
-          <Options values={sizes} selected={size} onSelect={setSize} name="size"
-            enabled={(s) => product.variants.some((v) => v.size === s && (!color || v.color === color))} />
+          <Options values={sizes} selected={size} name="size" onSelect={(s) => {
+            // Every size stays reachable; a colour that does not exist in the new size is cleared (review 1).
+            setSize(s);
+            if (color && !product.variants.some((v) => v.size === s && v.color === color)) setColor('');
+          }} />
         </fieldset>
         <fieldset>
           <legend>{t('color')}</legend>
-          <Options values={colors} selected={color} onSelect={setColor} name="color"
-            enabled={(c) => product.variants.some((v) => v.color === c && (!size || v.size === size))} />
+          <Options values={colors} selected={color} name="color" onSelect={(c) => {
+            setColor(c);
+            if (size && !product.variants.some((v) => v.color === c && v.size === size)) setSize('');
+          }} />
         </fieldset>
         <p aria-live="polite" className="stock">{chosen ? <Stock variant={chosen} /> : t('chooseVariant')}</p>
         <p className="note">{t('stockNote')}</p>
@@ -72,16 +77,15 @@ function Stock({ variant }: { variant: Variant }) {
   return <>{variant.available > 0 ? t('inStock') : t('outOfStock')}</>;
 }
 
-/** Native radio inputs: arrow keys move inside a group, a disabled option has no ACTIVE variant for the other choice. */
-function Options({ values, selected, onSelect, name, enabled }: {
-  values: string[]; selected: string; onSelect: (v: string) => void; name: string; enabled: (v: string) => boolean;
+/** Native radio inputs: arrow keys move inside a group; every value comes from an ACTIVE variant, so all stay enabled. */
+function Options({ values, selected, onSelect, name }: {
+  values: string[]; selected: string; onSelect: (v: string) => void; name: string;
 }) {
   return (
     <div className="options">
       {values.map((value) => (
         <label key={value} className="option">
-          <input type="radio" name={name} value={value} checked={selected === value} disabled={!enabled(value)}
-            onChange={() => onSelect(value)} />
+          <input type="radio" name={name} value={value} checked={selected === value} onChange={() => onSelect(value)} />
           <span>{value}</span>
         </label>
       ))}
@@ -96,8 +100,8 @@ function Gallery({ assetId, alt }: { assetId: string | undefined; alt: string })
   if (!assetId) return <div className="gallery"><CatalogImage assetId={null} alt={alt} kind="image" /></div>;
   return (
     <div className="gallery">
-      <button type="button" ref={opener} className="zoom" aria-label={t('zoom')} onClick={() => dialog.current?.showModal?.()}>
-        <CatalogImage assetId={assetId} alt={alt} kind="image" />
+      <button type="button" ref={opener} className="zoom" aria-label={`${t('zoom')}: ${alt}`} onClick={() => dialog.current?.showModal?.()}>
+        <CatalogImage key={assetId} assetId={assetId} alt={alt} kind="image" />
       </button>
       <dialog ref={dialog} aria-label={alt} onClose={() => opener.current?.focus()}>
         <img src={imageUrl(assetId, 'image')} alt={alt} />

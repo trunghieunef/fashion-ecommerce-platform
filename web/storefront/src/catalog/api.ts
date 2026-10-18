@@ -64,9 +64,9 @@ export type CollectionDetail = {
 export type Category = { id: string; slug: string; name_vi: string; name_en: string; children: Category[] };
 export type Brand = { id: string; name: string };
 
-/** Non-2xx response; status 0 means the network failed. */
+/** Non-2xx response; status 0 means the network failed. fields: errors[].field of a 400 (which filter is invalid). */
 export class ApiError extends Error {
-  constructor(readonly status: number) {
+  constructor(readonly status: number, readonly fields: string[] = []) {
     super(`catalog:${status}`);
   }
 }
@@ -78,6 +78,10 @@ async function get<T>(path: string, signal: AbortSignal, lang?: Lang): Promise<T
   } catch (error) {
     if (signal.aborted) throw error;
     throw new ApiError(0);
+  }
+  if (response.status === 400) {
+    const body = (await response.json().catch(() => null)) as { errors?: { field?: string }[] } | null;
+    throw new ApiError(400, (body?.errors ?? []).map((e) => e.field ?? '').filter(Boolean));
   }
   if (!response.ok) throw new ApiError(response.status);
   return ((await response.json()) as { data: T }).data;
