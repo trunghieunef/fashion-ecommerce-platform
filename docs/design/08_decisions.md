@@ -430,6 +430,19 @@ Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác v
 | Kiểm tồn tham khảo khi thêm/tăng; lỗi dependency khi ghi → 503, khi đọc → preview UNAVAILABLE | Không giữ hàng, không chốt giá |
 | local-up sinh service key cho cart-service, thêm vào allowlist catalog/inventory | Lần đầu internal API có caller thật |
 
+## CART-02 — quyết định 2026-10-18
+
+`TASK:CART-02` · `REQ:CART-03`. Chủ dự án giao agent tự chốt và duyệt [spec](../superpowers/specs/2026-10-18-cart-02-merge-design.md):
+
+| Quyết định | Hệ quả |
+|---|---|
+| Merge là lệnh client gọi rõ ràng sau login (`POST /carts/merge`) | Auth không tự gộp; WEB-02 gọi sau login |
+| Đã MERGED vào cùng giỏ member → 200 `already_merged`, kể cả key khác | T19: retry/song song chỉ cộng một lần |
+| Target = max(qty member, min(member + guest, 99, available quan sát)); mọi dòng bỏ/giảm có adjustment | Không âm thầm bỏ item; không giảm item member |
+| Member chưa có giỏ thì tạo trong merge | `member_expected_version` = 0 |
+| Giỏ guest giữ items, chỉ MERGED + `merged_into`; response xóa cookie guest | Không migration |
+| Tồn kiểm trước transaction, không giữ hàng | Như add item CART-01 |
+
 ## CART-03 — quyết định 2026-10-18
 
 `TASK:CART-03` · `REQ:CART-05/06`. Chủ dự án giao agent tự chốt và duyệt [spec](../superpowers/specs/2026-10-18-cart-03-checkout-snapshot-design.md):

@@ -125,7 +125,7 @@ collection chỉ gồm product public (`ACTIVE`, category và parent nếu có �
 | PUT | /carts/{cart_id}/items/{item_id} | Owner / 1 | Absolute quantity,expected_version |
 | DELETE | /carts/{cart_id}/items/{item_id} | Owner / 1 | expected_version qua query |
 | DELETE | /carts/{cart_id} | Owner / 1 | Xóa giỏ do khách, expected_version; không dùng cho cleanup order |
-| POST | /carts/merge | Member + guest cookie / 1 | guest_cart_id,expected versions + key → target cart,adjustments |
+| POST | /carts/merge | Member + guest cookie / 1 | `CART-02` implemented: guest_cart_id,guest_expected_version,member_expected_version + key → cart (member),merged_from,already_merged,adjustments {variant_id,sku,reason UNAVAILABLE/OUT_OF_STOCK/QUANTITY_CAPPED/CART_ITEM_LIMIT,requested,applied}; Bearer thiếu/sai → 401, cookie/giỏ guest không thuộc → 404; khóa hai giỏ theo id; đã MERGED vào cùng giỏ → 200 already_merged, không cộng lại; 409 VERSION_CONFLICT/IDEMPOTENCY_KEY_REUSED; dependency lỗi → 503 không ghi; xóa cookie guest |
 | GET | /catalog/products/{id}/reviews | Public / 2 | Cursor, summary chỉ APPROVED |
 | GET | /catalog/review-eligibilities/mine | Member / 2 | order_id,variant_id,eligibility_id,expires_at |
 | POST | /catalog/products/{id}/reviews | Member / 2 | eligibility_id,rating,title,content,image object IDs |

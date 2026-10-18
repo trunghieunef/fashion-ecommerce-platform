@@ -4,6 +4,11 @@ B1 · 2026-09-19 · Work package mặc định: **Planned; Assignee TBD; Reviewe
 
 ## 1. Cách nhận việc
 
+Update 2026-10-18 — `TASK:CART-02` **In review (local)**: cart-service `POST /api/v1/carts/merge` gộp giỏ guest vào giỏ
+member (cần cả Bearer và cookie), khóa hai giỏ theo id, đã MERGED → `already_merged` không cộng lại (T19), adjustments
+UNAVAILABLE/OUT_OF_STOCK/QUANTITY_CAPPED/CART_ITEM_LIMIT; `REQ:CART-03`; dependency CART-01;
+[spec](../superpowers/specs/2026-10-18-cart-02-merge-design.md), [evidence](../evidence/cart-02-local-2026-10-18.md).
+
 Update 2026-10-18 — `TASK:INV-03` **In review (local)**: inventory `POST /internal/api/v1/inventory/returns` (chỉ
 `order-service`) cộng lại on_hand cho hàng đã commit, idempotent theo `operation_key` (T17), tổng trả ≤ commit dưới lock
 reservation; V004 `stock_returns` (+`evidence_ref`, unique theo reservation); `REQ:INV-07`; dependency INV-02;

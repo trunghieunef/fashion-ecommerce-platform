@@ -1,6 +1,6 @@
 # cart-service
 
-`TASK:CART-01` · `REQ:CART-01/02/04`; `TASK:CART-03` · `REQ:CART-05/06` (snapshot/cleanup cho order). Giỏ hàng guest (cookie) và member (Bearer) lưu trong PostgreSQL;
+`TASK:CART-01` · `REQ:CART-01/02/04`; `TASK:CART-02` · `REQ:CART-03` (merge guest→member, [spec](../../docs/superpowers/specs/2026-10-18-cart-02-merge-design.md), [evidence](../../docs/evidence/cart-02-local-2026-10-18.md)); `TASK:CART-03` · `REQ:CART-05/06` (snapshot/cleanup cho order). Giỏ hàng guest (cookie) và member (Bearer) lưu trong PostgreSQL;
 giá và tồn trong giỏ chỉ là preview tham khảo, không giữ hàng, không chốt giá (order quote quyết định).
 [Spec](../../docs/superpowers/specs/2026-10-18-cart-01-carts-design.md) ·
 [contract](../../contracts/openapi/cart.yaml) ·
@@ -29,6 +29,7 @@ Qua Gateway: `http://localhost:8080/api/v1/carts`. Service không publish port t
 | PUT | `/api/v1/carts/{cart_id}/items/{item_id}` | Quantity tuyệt đối; tăng thì kiểm lại catalog/tồn |
 | DELETE | `/api/v1/carts/{cart_id}/items/{item_id}?expected_version=N` | Xóa dòng |
 | DELETE | `/api/v1/carts/{cart_id}?expected_version=N` | Xóa mọi dòng; giỏ vẫn ACTIVE |
+| POST | `/api/v1/carts/merge` | CART-02: Bearer **và** cookie guest; `Idempotency-Key`; `guest_cart_id`, `guest_expected_version`, `member_expected_version` → giỏ member + `adjustments`; đã gộp → `already_merged`; xóa cookie guest |
 
 Internal (CART-03, không qua Gateway; service token ADR-19 `aud=cart-service`, chỉ caller `order-service`;
 header `Cart-Actor: user:<uuid>|guest:<sha256 cookie>` do order đã xác minh):
@@ -71,7 +72,7 @@ khi đặt `MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT`, `/actuator/p
 
 ## Giới hạn
 
-Chưa có merge guest→member (CART-02), job dọn giỏ guest hết hạn (O06), Redis cache hay rate limit riêng.
+Chưa có job dọn giỏ guest hết hạn (O06), Redis cache hay rate limit riêng. Merge gọi stock tuần tự theo SKU (tối đa 100).
 Không event Kafka. Route internal chưa có smoke local (chưa có order-service); cart không gọi shipping —
 phí xem trước là SHP-01. Cookie `cart_token` có `Path=/api/v1/carts` nên không tới `/api/v1/orders`:
 cách order xác minh guest để điền `Cart-Actor` là câu hỏi mở cho ORD-01 (08).

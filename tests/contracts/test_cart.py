@@ -13,6 +13,7 @@ OPERATIONS = {
     ("post", "/api/v1/carts"), ("get", "/api/v1/carts/mine"), ("get", "/api/v1/carts/{cart_id}"),
     ("delete", "/api/v1/carts/{cart_id}"), ("post", "/api/v1/carts/{cart_id}/items"),
     ("put", "/api/v1/carts/{cart_id}/items/{item_id}"), ("delete", "/api/v1/carts/{cart_id}/items/{item_id}"),
+    ("post", "/api/v1/carts/merge"),
 }
 
 
@@ -40,7 +41,7 @@ class CartContractTest(unittest.TestCase):
         return Draft202012Validator({"$ref": BASE + "cart.yaml#/components/schemas/" + name},
                                     registry=self.registry, format_checker=FormatChecker())
 
-    def test_seven_operations_exist(self):
+    def test_eight_operations_exist(self):
         self.assertIsNotNone(self.doc, "cart contract is missing")
         actual = {(m, p) for p, item in self.doc["paths"].items() for m in item if m != "parameters"}
         self.assertEqual(actual, OPERATIONS)
@@ -89,6 +90,23 @@ class CartContractTest(unittest.TestCase):
         self.assertTrue(list(cart.iter_errors({**sample, "subtotal_preview": -1})))
         self.assertTrue(list(cart.iter_errors({**sample, "shipping_fee_status": "CALCULATED"})))
         self.assertTrue(list(cart.iter_errors({k: v for k, v in sample.items() if k != "shipping_fee_status"})))
+
+    def test_merge_contract(self):
+        op = self.doc["paths"]["/api/v1/carts/merge"]["post"]
+        self.assertEqual(op["security"], [{"memberBearer": [], "guestCookie": []}])
+        self.assertTrue(self.resolve(op["parameters"][0])["required"])
+        body = self.validator("MergeRequest")
+        ok = {"guest_cart_id": "11111111-1111-4111-8111-111111111111", "guest_expected_version": 1, "member_expected_version": 0}
+        self.assertEqual(list(body.iter_errors(ok)), [])
+        for field in ok:
+            self.assertTrue(list(body.iter_errors({k: v for k, v in ok.items() if k != field})), field)
+        self.assertTrue(list(body.iter_errors({**ok, "guest_expected_version": -1})))
+        adjustment = self.validator("Adjustment")
+        sample = {"variant_id": "11111111-1111-4111-8111-111111111111", "sku": "TEE-M", "reason": "OUT_OF_STOCK",
+                  "requested": 2, "applied": 0}
+        self.assertEqual(list(adjustment.iter_errors(sample)), [])
+        self.assertTrue(list(adjustment.iter_errors({**sample, "reason": "DROPPED"})))
+        self.assertIn("Max-Age=0", self.resolve(op["responses"]["200"])["headers"]["Set-Cookie"]["description"])
 
     def test_guest_cookie_is_documented(self):
         op = self.doc["paths"]["/api/v1/carts"]["post"]

@@ -73,6 +73,71 @@ paths:
                     metadata: {request_id: cart01-synthetic-request, trace_id: cart01-synthetic-trace}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '500': {$ref: '#/components/responses/Internal'}
+  /api/v1/carts/merge:
+    post:
+      tags: [Carts]
+      operationId: mergeGuestCart
+      summary: Fold the guest cart into the member cart
+      security: [{memberBearer: [], guestCookie: []}]
+      description: >-
+        CART-02 implemented. Needs both a valid member Bearer (401 otherwise) and the guest cart_token cookie of
+        guest_cart_id (missing, foreign or expired is 404). Catalog and inventory are read before both carts are locked in id
+        order. Each guest line is added once - target is max(member quantity, min(member + guest, 99, observed available)) -
+        and every line dropped or cut is listed in adjustments (UNAVAILABLE, OUT_OF_STOCK, QUANTITY_CAPPED, CART_ITEM_LIMIT;
+        applied is what the guest line added). The guest cart becomes MERGED; a later merge of it into the same member cart,
+        with any Idempotency-Key, returns 200 already_merged true and adds nothing. Stale versions are 409 VERSION_CONFLICT
+        (errors guest_expected_version / member_expected_version current=N); dependency failure is 503 and writes nothing.
+        Stock is a reference, nothing is reserved. Success clears the guest cookie.
+      parameters:
+      - {$ref: '#/components/parameters/RequiredIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/MergeRequest'}
+      responses:
+        '200':
+          description: Member cart after the merge (preview NOT_LOADED)
+          headers:
+            X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+            Cache-Control: {$ref: '#/components/headers/NoStore'}
+            Set-Cookie:
+              description: 'cart_token=; HttpOnly; Secure; SameSite=Lax; Path=/api/v1/carts; Max-Age=0 (guest cookie cleared)'
+              schema: {type: string}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MergeResponse'}
+              examples:
+                merged:
+                  value:
+                    code: OK
+                    data:
+                      cart:
+                        cart_id: 44444444-4444-4444-8444-444444444444
+                        version: 4
+                        owner: MEMBER
+                        expires_at: null
+                        preview_status: NOT_LOADED
+                        subtotal_preview: null
+                        shipping_fee_status: NOT_CALCULATED
+                        items:
+                        - item_id: 22222222-2222-4222-8222-222222222222
+                          variant_id: 33333333-3333-4333-8333-333333333333
+                          sku: TEE-M
+                          quantity: 3
+                          price_snapshot: 100000
+                          item_version: 1
+                          preview: null
+                      merged_from: 11111111-1111-4111-8111-111111111111
+                      already_merged: false
+                      adjustments:
+                      - {variant_id: 55555555-5555-4555-8555-555555555555, sku: TEE-L, reason: QUANTITY_CAPPED, requested: 5, applied: 3}
+                    metadata: {request_id: cart02-synthetic-request, trace_id: cart02-synthetic-trace}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/CartNotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Unavailable'}
   /api/v1/carts/mine:
     get:
       tags: [Carts]
@@ -277,6 +342,41 @@ components:
             (SHP-01), so UI must not show subtotal_preview as the amount to pay.
           type: string
           const: NOT_CALCULATED
+    MergeRequest:
+      type: object
+      required: [guest_cart_id, guest_expected_version, member_expected_version]
+      properties:
+        guest_cart_id: {type: string, format: uuid}
+        guest_expected_version: {type: integer, minimum: 0, maximum: 9223372036854775807}
+        member_expected_version: {type: integer, minimum: 0, maximum: 9223372036854775807, description: 0 when the member has no cart yet}
+    Adjustment:
+      type: object
+      additionalProperties: false
+      required: [variant_id, sku, reason, requested, applied]
+      properties:
+        variant_id: {type: string, format: uuid}
+        sku: {type: string, minLength: 1, maxLength: 64}
+        reason: {type: string, enum: [UNAVAILABLE, OUT_OF_STOCK, QUANTITY_CAPPED, CART_ITEM_LIMIT]}
+        requested: {$ref: '#/components/schemas/Quantity'}
+        applied: {type: integer, minimum: 0, maximum: 98}
+    MergeResponse:
+      type: object
+      required: [code, data, metadata]
+      properties:
+        code: {type: string, const: OK}
+        data:
+          type: object
+          additionalProperties: false
+          required: [cart, merged_from, already_merged, adjustments]
+          properties:
+            cart: {$ref: '#/components/schemas/Cart'}
+            merged_from: {type: string, format: uuid}
+            already_merged: {type: boolean}
+            adjustments:
+              type: array
+              maxItems: 100
+              items: {$ref: '#/components/schemas/Adjustment'}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
     CartResponse:
       type: object
       required: [code, data, metadata]
