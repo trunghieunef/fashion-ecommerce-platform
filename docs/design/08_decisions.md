@@ -430,6 +430,21 @@ Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác v
 | Kiểm tồn tham khảo khi thêm/tăng; lỗi dependency khi ghi → 503, khi đọc → preview UNAVAILABLE | Không giữ hàng, không chốt giá |
 | local-up sinh service key cho cart-service, thêm vào allowlist catalog/inventory | Lần đầu internal API có caller thật |
 
+## WEB-01 — quyết định 2026-10-19
+
+`TASK:WEB-01`. Chủ dự án duyệt [spec](../superpowers/specs/2026-10-18-web-01-storefront-design.md) và chỉ đạo UI/UX đơn giản trước,
+tinh chỉnh thẩm mỹ sau (task riêng):
+
+| Quyết định | Hệ quả |
+|---|---|
+| Dùng contract đã implement (`catalog.yaml`) thay cho PLT-02 hoàn tất | PLT-02 vẫn In progress, không đánh dấu Done |
+| Không thêm thư viện UI/i18n/state/testing | React Router + CSS thuần + từ điển `src/i18n.tsx` |
+| Link sản phẩm theo id (`/products/:id`) | API detail nhận UUID; chưa có route theo slug |
+| Ngôn ngữ lưu `localStorage`, mặc định VI, không vào URL | Link chia sẻ mở theo ngôn ngữ của người xem |
+| "Tải thêm" thay infinite scroll; cursor không lưu URL | Reload về trang đầu của bộ lọc |
+| Chưa có "Thêm vào giỏ" | WEB-02 |
+| Fixture mock được validate với `catalog.yaml` bằng contract test | Mock không lệch contract |
+
 ## CART-02 — quyết định 2026-10-18
 
 `TASK:CART-02` · `REQ:CART-03`. Chủ dự án giao agent tự chốt và duyệt [spec](../superpowers/specs/2026-10-18-cart-02-merge-design.md):

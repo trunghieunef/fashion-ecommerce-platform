@@ -4,6 +4,12 @@ B1 · 2026-09-19 · Work package mặc định: **Planned; Assignee TBD; Reviewe
 
 ## 1. Cách nhận việc
 
+Update 2026-10-19 — `TASK:WEB-01` **In review (local)**: storefront home/collection/listing/search/detail (SF-01/02/03), VI/EN,
+360px–desktop, filter trên URL reset cursor, tồn tham khảo ba trạng thái, zoom, size guide; UI đơn giản theo chỉ đạo chủ
+dự án (thẩm mỹ làm sau); `REQ:CAT-03/04/05/06`, `REQ:XCT-01/05`; dependency PLT-02 — dùng contract đã implement, PLT-02 vẫn
+In progress (08); [spec](../superpowers/specs/2026-10-18-web-01-storefront-design.md),
+[evidence](../evidence/web-01-local-2026-10-18.md).
+
 Update 2026-10-18 — `TASK:CART-02` **Done (local, trước G0)** theo [nghiệm thu](../evidence/acceptance-2026-10-18.md) (PR #27 CI PASS trên `21ade69`, merge `main` tại `780b4cb`): cart-service `POST /api/v1/carts/merge` gộp giỏ guest vào giỏ
 member (cần cả Bearer và cookie), khóa hai giỏ theo id, đã MERGED → `already_merged` không cộng lại (T19), adjustments
 UNAVAILABLE/OUT_OF_STOCK/QUANTITY_CAPPED/CART_ITEM_LIMIT; `REQ:CART-03`; dependency CART-01;
