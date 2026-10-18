@@ -68,6 +68,8 @@ public abstract class CartTestSupport {
     registry.add("fashion.cart.jwt.public-keys", () -> "test:" + publicKey());
     registry.add("fashion.cart.service-private-key", CartTestSupport::privateKey);
     registry.add("fashion.cart.service-public-key", CartTestSupport::publicKey);
+    registry.add("fashion.cart.catalog-url", StubServers.CATALOG::url);
+    registry.add("fashion.cart.inventory-url", StubServers.INVENTORY::url);
   }
   @BeforeEach protected void clearCarts() throws Exception {
     try (var c = DriverManager.getConnection(postgres.getJdbcUrl(), "postgres", "postgres"); var s = c.createStatement()) {
