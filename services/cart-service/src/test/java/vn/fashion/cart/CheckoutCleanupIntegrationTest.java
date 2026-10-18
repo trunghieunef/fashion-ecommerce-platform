@@ -169,6 +169,9 @@ class CheckoutCleanupIntegrationTest extends CartTestSupport {
         body(order, List.of("{\"item_id\":\"" + id + "\",\"item_version\":0,\"quantity\":100}")),
         body(order, List.of("{\"item_id\":\"" + id + "\",\"item_version\":-1,\"quantity\":1}")),
         body(order, List.of("{\"item_id\":\"" + id.toUpperCase() + "\",\"item_version\":0,\"quantity\":1}")),
+        // PR #26 review: a bad or missing item_id before a valid one must stay 400, not NPE → 500.
+        body(order, List.of("{\"item_id\":\"bad\",\"item_version\":0,\"quantity\":1}", one)),
+        body(order, List.of("{\"item_version\":0,\"quantity\":1}", one)),
         "{\"items\":[" + one + "]}")) {
       var response = cleanup(order, bad);
       assertThat(response.statusCode()).withFailMessage(bad + " -> " + response.body()).isEqualTo(400);

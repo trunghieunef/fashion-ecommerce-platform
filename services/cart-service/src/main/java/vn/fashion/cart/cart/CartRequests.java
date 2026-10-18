@@ -43,7 +43,7 @@ public final class CartRequests {
       boolean versionOk = v.isIntegralNumber() && v.canConvertToLong() && v.longValue() >= 0;
       if (!versionOk) errors.add(new Api.FieldError("items.item_version", "must be a non-negative integer"));
       int quantity = quantity(item.path("quantity"), "items.quantity", errors);
-      if (id != null && items.stream().anyMatch(i -> i.itemId().equals(id))) errors.add(new Api.FieldError("items.item_id", "must be distinct"));
+      if (id != null && items.stream().anyMatch(i -> id.equals(i.itemId()))) errors.add(new Api.FieldError("items.item_id", "must be distinct"));
       items.add(new CleanupItem(id, versionOk ? v.longValue() : -1, quantity));
     }
     if (!errors.isEmpty()) throw invalid(errors);
