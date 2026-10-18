@@ -40,7 +40,7 @@ chủ dự án ngày 2026-10-04, với CI PASS trên patch `b62f963`. Đây khô
 Contract core đã review; [platform-durability](services/platform-durability/README.md) được
 user-service dùng cho outbox/idempotency, chưa bật relay user/notification-service.
 INV-01 thêm [platform-messaging](services/platform-messaging/README.md), Kafka local và
-[cart-service](services/cart-service/README.md) (CART-01, Done local): giỏ guest/member, version + idempotency, preview giá/tồn; CART-03 (Done local): internal snapshot/checkout-cleanup cho order-service, tạm tính `subtotal_preview`; CART-02 (in review): merge giỏ guest→member.
+[cart-service](services/cart-service/README.md) (CART-01, Done local): giỏ guest/member, version + idempotency, preview giá/tồn; CART-03 (Done local): internal snapshot/checkout-cleanup cho order-service, tạm tính `subtotal_preview`; CART-02 (Done local): merge giỏ guest→member.
 [inventory-service](services/inventory-service/README.md): catalog relay → inbox đăng ký SKU,
 stock ledger, adjust/import và internal availability. [Handoff hiện hành](docs/superpowers/plans/2026-10-15-inv-01-handoff.md)
 ghi kiểm tra/giới hạn và follow-up; INV-01 đã merge PR #20/#21 và
@@ -50,7 +50,7 @@ INV-02 đã hiện thực local reservation đa SKU, commit/release/expiry và t
 xem [evidence](docs/evidence/inv-02-local-2026-10-16.md) và
 [handoff INV-02](docs/superpowers/plans/2026-10-16-inv-02-handoff.md);
 [nghiệm thu Done (local)](docs/evidence/acceptance-2026-10-17.md) ngày 2026-10-17; merge vào `main` qua PR #22 (`abd5cfb`).
-INV-03 (in review): return/restore hàng đã commit, xem [evidence](docs/evidence/inv-03-local-2026-10-18.md).
+INV-03 (Done local): return/restore hàng đã commit, xem [evidence](docs/evidence/inv-03-local-2026-10-18.md).
 Tiến độ mới nhất và bước tiếp ở [handoff CAT-01a](docs/superpowers/plans/2026-10-07-cat-01a-handoff.md):
 PR #14 đã merge; [spec CAT-01b](docs/superpowers/specs/2026-10-07-cat-01b-design.md)
 collection/items và size guide admin đã được duyệt;
