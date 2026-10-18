@@ -57,6 +57,12 @@ sequenceDiagram
     C->>K: Commit offset
 ```
 
+Trace (`TASK:PLT-05`): append lưu `trace_parent` của span hiện tại; relay mở span `outbox publish
+<event_type>` có parent đó và đặt header `traceparent` của span relay; listener bật observation nên
+handler và outbox mới nằm trong span consumer. Thiếu/hỏng `traceparent` → trace mới, không lỗi.
+Scheduler (relay, sweep, worker) không tạo span (`management.observations.enable.tasks.scheduled=false`)
+nên outbox do sweep ghi có `trace_parent` null.
+
 Relay không gửi aggregate_sequence sau khi sequence trước cùng aggregate chưa được ACK/đánh dấu SENT; event consumer vẫn tự bảo vệ trước replay/retry. Hiện thực `TASK:PLT-03`: `OutboxRepository.claim/markSent/relay`, `InboxGuard.applyOnce`, `IdempotencyStore.begin/finish`, `BackgroundTaskRepository` và `LeaseRepository` tại [platform-durability](../../services/platform-durability/README.md); crash sau publish, lease hết hạn và thứ tự cùng version đã có test với PostgreSQL/Kafka thật. Với cache, consumer ghi yêu cầu invalidate bền vững trước ACK rồi worker thực hiện; không đánh dấu đã xử lý khi Redis invalidate chưa có cơ chế retry. TTL là giới hạn stale bổ sung.
 
 ## 2. `user-service`

@@ -107,6 +107,9 @@ services:
   catalog:
     build: ../../services/catalog-service
     environment:
+      # TASK:PLT-05: traces to local Tempo; sampling 1.0 only here.
+      MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT: http://tempo:4318/v1/traces
+      TRACING_SAMPLING_PROBABILITY: ${TRACING_SAMPLING_PROBABILITY:-1.0}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       CATALOG_DB_URL: jdbc:postgresql://postgres:5432/${CATALOG_POSTGRES_DB:-catalog}
       CATALOG_JWT_PUBLIC_KEYS: ${USER_JWT_PUBLIC_KEYS:?run scripts/local-up.sh to generate local JWT keys}
@@ -154,6 +157,9 @@ services:
   inventory:
     build: ../../services/inventory-service
     environment:
+      # TASK:PLT-05: traces to local Tempo; sampling 1.0 only here.
+      MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT: http://tempo:4318/v1/traces
+      TRACING_SAMPLING_PROBABILITY: ${TRACING_SAMPLING_PROBABILITY:-1.0}
       INVENTORY_DB_URL: jdbc:postgresql://postgres:5432/inventory
       INVENTORY_DB_PASSWORD: ${INVENTORY_DB_PASSWORD:?run scripts/local-up.sh}
       INVENTORY_MIGRATION_DB_URL: jdbc:postgresql://postgres:5432/inventory
@@ -178,6 +184,9 @@ services:
   user-service:
     build: ../../services/user-service
     environment:
+      # TASK:PLT-05: traces to local Tempo; sampling 1.0 only here.
+      MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT: http://tempo:4318/v1/traces
+      TRACING_SAMPLING_PROBABILITY: ${TRACING_SAMPLING_PROBABILITY:-1.0}
       FASHION_ENV: ${FASHION_ENV:-local}
       USER_DB_URL: jdbc:postgresql://postgres:5432/users
       USER_DB_USERNAME: user_runtime
@@ -208,6 +217,9 @@ services:
   gateway:
     build: ../../services/gateway
     environment:
+      # TASK:PLT-05: traces to local Tempo; sampling 1.0 only here.
+      MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT: http://tempo:4318/v1/traces
+      TRACING_SAMPLING_PROBABILITY: ${TRACING_SAMPLING_PROBABILITY:-1.0}
       INVENTORY_BASE_URL: http://inventory:8083
       # nacos-compat proof sets GATEWAY_CATALOG_BASE_URL=lb://catalog-service.
       CATALOG_BASE_URL: ${GATEWAY_CATALOG_BASE_URL:-http://catalog:8081}
@@ -247,8 +259,38 @@ services:
       timeout: 3s
       retries: 10
 
+  # TASK:PLT-05: local-only trace store (Tempo 3 monolithic) and viewer. Loopback ports only; services
+  # do not wait for them, so a stopped Tempo only drops spans.
+  tempo:
+    image: grafana/tempo:3.0.3@sha256:0296560ac66f8a3600d7fb3014a52c189d4d9c3549ad6ff441bf2409855d68d5
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./tempo/tempo.yaml:/etc/tempo.yaml:ro
+      - tempo-data:/var/tempo
+    ports:
+      - "127.0.0.1:${TEMPO_PORT:-3200}:3200"
+
+  grafana:
+    image: grafana/grafana:13.2.2@sha256:ac461fb352abc50da10a51c7d02462e9c05488f11f53f14b3ad79a8145f638a0
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      # Explore (trace search) needs this for the anonymous viewer; nothing is persisted.
+      GF_USERS_VIEWERS_CAN_EDIT: "true"
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
+    depends_on:
+      tempo:
+        condition: service_started
+
 volumes:
   kafka-data:
   catalog-postgres-data:
   catalog-media-data:
   nacos-data:
+  tempo-data:

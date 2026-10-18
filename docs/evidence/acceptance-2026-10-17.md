@@ -65,7 +65,7 @@ dòng CAT-02 + `REQ:CAT-03/04/05/09` ở [02](../design/02_prd.md), mức local 
 ## Bằng chứng chung
 
 - 02a merge vào `main` qua PR #19 (`edfd003`), [evidence 02a](cat-02a-local-2026-10-11.md).
-- 02b trên `dev` `da6d3af`, PR #23 (chưa merge). Application CI (pull_request) trên `da6d3af`
+- 02b trên `dev` `da6d3af`, merge vào `main` qua PR #23 (`0a6928e`, 2026-10-17), tree trùng `dev` `39708c6`. Application CI (pull_request) trên `da6d3af`
   SUCCESS (run 39037570831: `./mvnw -B test`, `validate-contracts.sh`, smoke local/auth/browser);
   Documentation CI SUCCESS.
 - Local trên `da6d3af`: catalog 336 test PASS; `./mvnw -B verify` 619 test PASS trước fix review
@@ -87,7 +87,7 @@ dòng CAT-02 + `REQ:CAT-03/04/05/09` ở [02](../design/02_prd.md), mức local 
 | Redis lỗi không làm hỏng public read | `PublicCacheRedisDownIntegrationTest`, `pausedRedisFallsBackWithinBudget`, `undecodableValueIsMiss`, `oldSchemaValueIsMiss` | Pass |
 | Public HTTP cache header, lỗi no-store | `PublicCacheHeadersIntegrationTest`, `PublicServerErrorHeadersIntegrationTest` | Pass |
 
-**`TASK:CAT-02`: Done (local, trước G0)**; còn bước merge PR #23 vào `main` do chủ dự án thực hiện.
+**`TASK:CAT-02`: Done (local, trước G0).**
 
 ## Ngoại lệ và việc còn lại (không chặn Done local)
 

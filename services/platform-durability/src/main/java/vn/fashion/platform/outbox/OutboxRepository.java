@@ -3,6 +3,8 @@ package vn.fashion.platform.outbox;
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Supplier;
+import java.util.regex.Pattern;
 import java.util.function.Consumer;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -12,10 +14,19 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  * sequence and envelope stay fixed across re-publish, so consumers dedupe with processed_events.
  */
 public class OutboxRepository {
+  /** W3C traceparent (TASK:PLT-05); anything else is stored as null rather than relayed. */
+  private static final Pattern TRACE_PARENT = Pattern.compile("00-[0-9a-f]{32}-[0-9a-f]{16}-0[01]");
   private final JdbcClient jdbc;
+  private final Supplier<String> traceParent;
 
   public OutboxRepository(JdbcClient jdbc) {
+    this(jdbc, () -> null);
+  }
+
+  /** traceParent returns the current span's traceparent, or null outside a span. */
+  public OutboxRepository(JdbcClient jdbc, Supplier<String> traceParent) {
     this.jdbc = jdbc;
+    this.traceParent = traceParent;
   }
 
   /**
@@ -29,15 +40,16 @@ public class OutboxRepository {
     return jdbc.sql("""
             insert into outbox_events(id, aggregate_type, aggregate_id, aggregate_version,
                 aggregate_sequence, event_type, schema_version, topic, partition_key,
-                correlation_id, payload)
+                correlation_id, payload, trace_parent)
             select :id, :type, :aggregateId, :version, coalesce(max(aggregate_sequence), 0) + 1,
                 :eventType, :schemaVersion, :topic, :partitionKey, :correlationId,
-                cast(:payload as jsonb)
+                cast(:payload as jsonb), :traceParent
             from outbox_events
             where aggregate_type = :type and aggregate_id = :aggregateId
             returning aggregate_sequence
             """)
         .param("id", event.eventId())
+        .param("traceParent", validTraceParent())
         .param("type", event.aggregateType())
         .param("aggregateId", event.aggregateId())
         .param("version", event.aggregateVersion())
@@ -80,7 +92,7 @@ public class OutboxRepository {
                 lease_until = now() + make_interval(secs => :leaseSeconds), attempts = o.attempts + 1
             from heads
             where o.id = heads.id
-            returning o.id, o.topic, o.partition_key, o.aggregate_sequence, o.lease_token,
+            returning o.id, o.topic, o.partition_key, o.aggregate_sequence, o.lease_token, o.trace_parent,
               jsonb_build_object(
                 'event_id', o.id,
                 'event_type', o.event_type,
@@ -100,7 +112,8 @@ public class OutboxRepository {
             rs.getString("partition_key"),
             rs.getLong("aggregate_sequence"),
             rs.getString("envelope"),
-            rs.getObject("lease_token", UUID.class)))
+            rs.getObject("lease_token", UUID.class),
+            rs.getString("trace_parent")))
         .list();
   }
 
@@ -137,5 +150,9 @@ public class OutboxRepository {
       }
     }
     return sent;
+  }
+  private String validTraceParent() {
+    String value = traceParent.get();
+    return value != null && TRACE_PARENT.matcher(value).matches() ? value : null;
   }
 }

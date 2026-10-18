@@ -59,7 +59,7 @@ Một người có thể nhiều role nhưng audit phải ghi actor/action/reaso
 | Notification recipient/rendered content | notification-db | Sender/support có scope; OTP dùng marker | O06 chốt TTL ngắn, cleanup verified trước launch |
 | Marketing preferences | notification-db | Opt-in, consent timestamp và unsubscribe hash | O06 chốt bằng chứng consent/retention |
 | Outbox/inbox | DB service | Application/ops bounded replay | Dự kiến SENT 30 ngày, dedupe 90 ngày; phải đủ replay window |
-| Logs/traces | Observability storage | RBAC, mask phone/email/token, không body webhook secret (Gateway: log JSON ECS qua `PiiRedactingJsonCustomizer`, PLT-05) | PO duyệt khung logs 30–90 ngày tại bảng O06 bên dưới; traces theo budget và O06 |
+| Logs/traces | Observability storage | RBAC, mask phone/email/token, không body webhook secret; span relay chỉ có topic/event_type/event_id, không payload/partition key (PLT-05) (Gateway: log JSON ECS qua `PiiRedactingJsonCustomizer`, PLT-05) | PO duyệt khung logs 30–90 ngày tại bảng O06 bên dưới; traces theo budget và O06 |
 | Media | Object storage | Scoped upload, public chỉ approved assets | CAT-03 giữ detached/never-attached và partial terminal 7 ngày; URL PUT 300 giây, complete deadline +24h, lifecycle quarantine 2 ngày; không xóa attached/evidence |
 
 CAT-03 local (chủ dự án chốt ngày 2026-10-07, review bổ sung 2026-10-08):

@@ -44,6 +44,11 @@
       <groupId>io.micrometer</groupId>
       <artifactId>micrometer-tracing-bridge-otel</artifactId>
     </dependency>
+    <!-- PLT-05: OTLP HTTP export to Tempo when MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT is set (version from Boot BOM). -->
+    <dependency>
+      <groupId>io.opentelemetry</groupId>
+      <artifactId>opentelemetry-exporter-otlp</artifactId>
+    </dependency>
     <!-- PLT-05: RED metrics scraped from the management port. -->
     <dependency>
       <groupId>io.micrometer</groupId>

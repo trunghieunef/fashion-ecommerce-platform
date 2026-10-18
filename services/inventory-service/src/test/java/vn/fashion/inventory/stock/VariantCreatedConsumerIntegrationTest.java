@@ -105,6 +105,22 @@ class VariantCreatedConsumerIntegrationTest extends InventoryTestSupport {
         "payload",Map.of("product_id",product,"variant_id",variant,"sku",sku,"version",0)));
   }
   void publish(String body) throws Exception { producer.send(new ProducerRecord<>("catalog.events",0,"product",body)).get(10,TimeUnit.SECONDS); }
+  void publish(String body,String traceparent) throws Exception {
+    var record=new ProducerRecord<String,String>("catalog.events",0,"product",body);
+    record.headers().add("traceparent",traceparent.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    producer.send(record).get(10,TimeUnit.SECONDS);
+  }
+  // TASK:PLT-05: the consumer span continues the producer's trace, and the outbox it writes carries it on.
+  @Test void traceContinuesIntoOutbox() throws Exception {
+    String trace="0af7651916cd43dd8448eb211c80319c", parent="b7ad6b7169203331";
+    start(); publish(event(UUID.randomUUID(),UUID.randomUUID(),"TRACED"),"00-"+trace+"-"+parent+"-01"); awaitSku("TRACED");
+    String stored=jdbc.queryForObject("select trace_parent from outbox_events where aggregate_id='TRACED'",String.class);
+    assertThat(stored).matches("00-"+trace+"-[0-9a-f]{16}-01").doesNotContain(parent); awaitCommitted();
+  }
+  @Test void malformedTraceparentIsStillConsumed() throws Exception {
+    start(); publish(event(UUID.randomUUID(),UUID.randomUUID(),"BADTRACE"),"not-a-trace"); awaitSku("BADTRACE"); awaitCommitted();
+    assertThat(jdbc.queryForObject("select count(*) from outbox_events where aggregate_id='BADTRACE'",Integer.class)).isEqualTo(1);
+  }
   AdminClient admin() { return AdminClient.create(Map.of("bootstrap.servers",kafka.getBootstrapServers())); }
   void awaitSku(String sku) throws Exception { await(()->jdbc.queryForObject("select count(*) from stock_items where sku=?",Integer.class,sku)==1); }
   void awaitCommitted() throws Exception {

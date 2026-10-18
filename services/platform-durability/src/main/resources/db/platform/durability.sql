@@ -13,6 +13,7 @@ CREATE TABLE outbox_events (
   topic text NOT NULL,
   partition_key text NOT NULL,
   correlation_id text NOT NULL,
+  trace_parent varchar(55),
   payload jsonb NOT NULL CHECK (jsonb_typeof(payload) = 'object'),
   status varchar(32) NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'IN_FLIGHT', 'SENT')),
   attempts int NOT NULL DEFAULT 0,

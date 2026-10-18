@@ -8,11 +8,11 @@
 ## Trạng thái
 
 7 task đã hiện thực và kiểm local: verify 619 test, contract 54, smoke, 6/6 mutant. CAT-02
-**Done (local)** 2026-10-17 theo [nghiệm thu](../../evidence/acceptance-2026-10-17.md); PR #23 CI PASS, chờ merge `main`.
+**Done (local)** 2026-10-17 theo [nghiệm thu](../../evidence/acceptance-2026-10-17.md); PR #23 merge `main` (`0a6928e`).
 
 ## Việc tiếp theo
 
-1. Chủ dự án merge PR #23 vào `main`.
+1. ~~Merge PR #23~~: xong `0a6928e`.
 2. Khi có ORD-03: kiểm E2E `ORDER_COMPLETED` thật → `sold_quantity`.
 3. Trước staging: Redis/ACL cho catalog trong `infra/environments`, purge `background_tasks` DONE nếu bảng lớn.
 

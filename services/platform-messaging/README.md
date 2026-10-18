@@ -41,6 +41,12 @@ Không log payload/CSV/token; logging producer mặc định có thể lộ payl
 
 ## Quan sát và health
 
+Trace (PLT-05): `OutboxRelay(outbox, kafka, timeout, tracer, propagator)` mở span PRODUCER
+`outbox publish <event_type>` với parent là `OutboxMessage.traceParent()` và đặt header
+`traceparent` của span đó; không có tracer/traceParent thì giữ header cũ dựng từ `correlation_id`.
+Listener container factory bật observation. `TraceParents.current(tracer)` là supplier cho
+`OutboxRepository(jdbc, supplier)`.
+
 MeterBinder đăng ký `outbox_pending` (status khác SENT),
 `outbox_oldest_pending_age_seconds`; auto-wired relay đếm
 `outbox_relay_failures_total`, recoverer đếm `messaging_dlt_total{topic}` sau ACK DLT.
