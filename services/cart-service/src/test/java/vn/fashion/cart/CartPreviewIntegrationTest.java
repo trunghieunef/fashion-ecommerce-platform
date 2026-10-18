@@ -42,6 +42,40 @@ class CartPreviewIntegrationTest extends CartTestSupport {
     assertThat(preview.path("observed_at").asString()).isEqualTo("2026-10-18T03:00:00Z");
   }
 
+  // CART-03 spec section 5: labeled subtotal of sellable items only; shipping never computed by cart.
+  @Test void subtotalWhenPreviewOk() {
+    addItem();
+    String inactive = UUID.randomUUID().toString();
+    StubServers.CATALOG.reply(s -> new StubServers.Reply(200, StubServers.ok("[" + StubServers.quoteItem(variant, true, "PREVIEW-M", price, 3)
+        + (s.body().contains(inactive) ? "," + StubServers.quoteItem(inactive, true, "PREVIEW-L", 70000, 3) : "") + "]")));
+    data(send("POST", "/api/v1/carts/" + cartId + "/items", "{\"variant_id\":\"" + inactive + "\",\"quantity\":1,\"expected_version\":1}",
+        "Cookie", cookie, "Idempotency-Key", UUID.randomUUID().toString()), 200);
+    price = 90000;
+    StubServers.CATALOG.reply(s -> new StubServers.Reply(200, StubServers.ok("[" + StubServers.quoteItem(variant, true, "PREVIEW-M", price, 3)
+        + "," + StubServers.quoteItem(inactive, false, "PREVIEW-L", 70000, 3) + "]")));
+    var cart = read();
+    assertThat(cart.path("subtotal_preview").asLong()).isEqualTo(180000);
+    assertThat(cart.path("shipping_fee_status").asString()).isEqualTo("NOT_CALCULATED");
+  }
+
+  @Test void subtotalNullWhenUnavailableOrEmpty() {
+    var empty = read();
+    assertThat(empty.path("preview_status").asString()).isEqualTo("EMPTY");
+    assertThat(empty.path("subtotal_preview").isNull()).isTrue();
+    assertThat(empty.path("shipping_fee_status").asString()).isEqualTo("NOT_CALCULATED");
+    addItem();
+    StubServers.INVENTORY.reply(s -> new StubServers.Reply(503, "{}"));
+    assertThat(read().path("subtotal_preview").isNull()).isTrue();
+  }
+
+  @Test void subtotalNullOnOverflow() {
+    price = Long.MAX_VALUE / 2 + 1;
+    addItem();
+    var cart = read();
+    assertThat(cart.path("preview_status").asString()).isEqualTo("OK");
+    assertThat(cart.path("subtotal_preview").isNull()).isTrue();
+  }
+
   @Test void dependencyDownStillReturnsCart() {
     addItem();
     StubServers.CATALOG.reply(s -> new StubServers.Reply(503, "{}"));
