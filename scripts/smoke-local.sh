@@ -232,6 +232,25 @@ curl --fail --silent --show-error "$GATEWAY_URL/api/v1/catalog/products/$product
 curl --fail --silent --show-error "$GATEWAY_URL/api/v1/catalog/search?q=Smoke&limit=100" | \
   python3 -c 'import json,sys; assert any(p["id"] == sys.argv[1] for p in json.load(sys.stdin)["data"]["items"])' "$product_id"
 echo 'CAT-02a browse/detail/search PASS'
+# TASK:CART-01: guest cart via Gateway (cookie + allowed Origin), add the published smoke variant
+# (inventory available 5), retry with the same key adds once, read preview; member opens a cart.
+cart_jar="$(mktemp)"
+cart_id="$(curl -sS -c "$cart_jar" -X POST "$GATEWAY_URL/api/v1/carts" | python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["owner"]=="GUEST" and d["version"]==0; print(d["cart_id"])')"
+grep -q 'cart_token' "$cart_jar"
+cart_add() {
+  curl -sS -b "$cart_jar" -H "Origin: $STOREFRONT_URL" -H 'Content-Type: application/json' \
+    -H "Idempotency-Key: smoke-$catalog_suffix-cart" \
+    -d "{\"variant_id\":\"$variant_id\",\"quantity\":2,\"expected_version\":0}" "$GATEWAY_URL/api/v1/carts/$cart_id/items"
+}
+cart_add | python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["version"]==1 and d["items"][0]["quantity"]==2, d'
+cart_add | python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["version"]==1 and d["items"][0]["quantity"]==2, d'
+curl -sS -b "$cart_jar" "$GATEWAY_URL/api/v1/carts/$cart_id" | \
+  python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["preview_status"]=="OK", d; p=d["items"][0]["preview"]; assert p["available"]==5 and p["active"], p'
+test "$(status "$GATEWAY_URL/api/v1/carts/$cart_id")" = 404
+curl -sS -X POST -H "Authorization: Bearer $access" "$GATEWAY_URL/api/v1/carts" | \
+  python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["owner"]=="MEMBER", d'
+rm -f "$cart_jar"
+echo 'CART-01 guest/member cart PASS'
 # TASK:CAT-02b: public detail is cacheable for 5 s (Redis keeps it 300 s until invalidated).
 curl -sS -o /dev/null -D "$headers" "$GATEWAY_URL/api/v1/catalog/products/$product_id"
 grep -qi '^cache-control: public, max-age=5' "$headers"

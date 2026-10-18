@@ -48,6 +48,28 @@ if ! grep -q '^USER_JWT_PUBLIC_KEYS=.' "$ENV_FILE"; then
   sed -i "s|^USER_JWT_PUBLIC_KEYS=.*|USER_JWT_PUBLIC_KEYS=${kid:-user-local}:$public|" "$ENV_FILE"
 fi
 
+# TASK:CART-01: ADR-19 caller key pair for cart-service (catalog quote, inventory stock); generated once.
+if ! grep -q '^CART_SERVICE_PRIVATE_KEY=.' "$ENV_FILE"; then
+  key="$(openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 |
+    openssl pkcs8 -topk8 -nocrypt -outform DER | base64 | tr -d '\r\n')"
+  sed -i "s|^CART_SERVICE_PRIVATE_KEY=.*|CART_SERVICE_PRIVATE_KEY=$key|" "$ENV_FILE"
+  sed -i "s|^CART_SERVICE_PUBLIC_KEY=.*|CART_SERVICE_PUBLIC_KEY=|" "$ENV_FILE"
+fi
+if ! grep -q '^CART_SERVICE_PUBLIC_KEY=.' "$ENV_FILE"; then
+  private="$(grep '^CART_SERVICE_PRIVATE_KEY=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r')"
+  public="$(printf '%s' "$private" | base64 -d | openssl pkey -inform DER -pubout -outform DER | base64 | tr -d '\r\n')"
+  sed -i "s|^CART_SERVICE_PUBLIC_KEY=.*|CART_SERVICE_PUBLIC_KEY=$public|" "$ENV_FILE"
+fi
+# Allow cart-service on catalog and inventory internal APIs; existing callers are kept.
+cart_public="$(grep '^CART_SERVICE_PUBLIC_KEY=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r')"
+for callers_key in CATALOG_INTERNAL_CALLERS INVENTORY_INTERNAL_CALLERS; do
+  current="$(grep "^${callers_key}=" "$ENV_FILE" | cut -d= -f2- | tr -d '\r')"
+  if [[ "$current" != *"cart-service:${cart_public}"* ]]; then
+    others="$(printf '%s' "$current" | tr ',' '\n' | grep -v '^cart-service:' | paste -sd, - || true)"
+    sed -i "s|^${callers_key}=.*|${callers_key}=${others:+$others,}cart-service:${cart_public}|" "$ENV_FILE"
+  fi
+done
+
 ./mvnw -q -DskipTests package
 npm ci
 npm run build --workspace @fashion/storefront
