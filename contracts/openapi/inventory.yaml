@@ -815,6 +815,7 @@ paths:
                   items:
                   - sku: SKU-1
                     quantity: 2
+                    returned: 0
                   version: 1
                   committed_at: null
                   released_at: null
@@ -940,6 +941,7 @@ paths:
                   items:
                   - sku: SKU-1
                     quantity: 2
+                    returned: 0
                   version: 2
                   committed_at: '2026-10-16T03:05:00.000Z'
                   released_at: null
@@ -982,7 +984,7 @@ paths:
         TASK:INV-02. order-service only. original_request_hash must equal the hash recomputed from original_reservation
         (only its shape is validated, not the deadline). No reservation yet stores a RELEASED tombstone so a late reserve
         is refused. ACTIVE releases reserved stock; RELEASED/EXPIRED is a no-op; COMMITTED returns 200 with
-        restore_required true and changes no stock (restore is INV-03). A stored reservation with another hash returns
+        restore_required true and changes no stock; order then restores it through /returns (INV-03). A stored reservation with another hash returns
         409 RESERVATION_CONFLICT.
       tags:
       - Internal reservations
@@ -1016,6 +1018,7 @@ paths:
                   items:
                   - sku: SKU-1
                     quantity: 2
+                    returned: 0
                   version: 2
                   committed_at: null
                   released_at: '2026-10-16T03:05:00.000Z'
@@ -1035,6 +1038,74 @@ paths:
               example:
                 code: CONFLICT
                 message: RESERVATION_CONFLICT
+                metadata: *reservationMetadata
+        '500': *reservation500
+        '503': *reservation503
+      servers: *privateInventory
+  /internal/api/v1/inventory/returns:
+    post:
+      operationId: returnCommittedStock
+      summary: Restore committed stock of an order
+      description: >-
+        TASK:INV-03. order-service only; token and caller are checked before headers and body. Idempotency-Key must equal
+        operation_key (400 IDEMPOTENCY_KEY_MISMATCH). Used after release reports restore_required (cancel before handover)
+        and after OPS counted returned goods (restock quantity only). One transaction under the reservation row lock: the
+        reservation must be COMMITTED (409 RESERVATION_NOT_COMMITTED); the same operation_key with the same items, reason
+        and evidence_ref replays 200 without adding stock, otherwise 409 RETURN_CONFLICT; every SKU must belong to the
+        reservation (400 INVALID_INPUT); returned so far + quantity must not exceed the committed quantity per SKU, else
+        409 RETURN_EXCEEDS_COMMITTED with errors items[SKU] committed=N returned=M requested=K and nothing is written.
+        Each SKU adds on_hand (reserved unchanged), writes ledger type RETURN with key order:ORDER_ID:RETURN:OPERATION_KEY
+        and a stock snapshot event. returned_total is the current total for the SKU. Not routed by Gateway.
+      tags:
+      - Internal reservations
+      x-implementation-status: implemented
+      security:
+      - serviceToken: []
+      parameters:
+      - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReturnRequest'
+      responses:
+        '200':
+          description: Restored (first or replayed)
+          headers: *reservationHeaders
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReturnResponse'
+              example:
+                code: OK
+                data:
+                  order_id: 99999999-9999-4999-8999-999999999991
+                  reservation_id: 88888888-8888-4888-8888-888888888881
+                  operation_key: return-1
+                  items:
+                  - sku: SKU-1
+                    quantity: 1
+                    committed: 2
+                    returned_total: 1
+                metadata: *reservationMetadata
+        '400': *reservation400
+        '401': *reservation401
+        '403': *reservation403
+        '404': *reservation404
+        '409':
+          description: RESERVATION_NOT_COMMITTED, RETURN_CONFLICT or RETURN_EXCEEDS_COMMITTED
+          headers: *reservationHeaders
+          content:
+            application/json:
+              schema:
+                $ref: ./common.yaml#/components/schemas/ApiError
+              example:
+                code: CONFLICT
+                message: RETURN_EXCEEDS_COMMITTED
+                errors:
+                - field: items[SKU-1]
+                  message: committed=2 returned=2 requested=1
                 metadata: *reservationMetadata
         '500': *reservation500
         '503': *reservation503
@@ -1450,6 +1521,7 @@ components:
             required:
             - sku
             - quantity
+            - returned
             additionalProperties: false
             properties:
               sku:
@@ -1459,6 +1531,11 @@ components:
                 type: integer
                 minimum: 1
                 maximum: 99
+              returned:
+                type: integer
+                minimum: 0
+                maximum: 99
+                description: INV-03 total restored for this SKU by /returns (0 until a return)
         version:
           type: integer
           minimum: 1
@@ -1481,6 +1558,100 @@ components:
         restore_required:
           type: boolean
           description: true only when release finds a COMMITTED reservation
+    ReturnRequest:
+      type: object
+      required:
+      - order_id
+      - operation_key
+      - reason
+      - evidence_ref
+      - items
+      additionalProperties: false
+      properties:
+        order_id:
+          type: string
+          format: uuid
+        operation_key:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: Equals the Idempotency-Key header; unique per reservation
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+        evidence_ref:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: OPS count or cancellation evidence reference
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          description: Distinct SKUs after trim/uppercase
+          items:
+            $ref: '#/components/schemas/ReservationItem'
+    ReturnResponse:
+      type: object
+      required:
+      - code
+      - data
+      - metadata
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          const: OK
+        data:
+          type: object
+          required:
+          - order_id
+          - reservation_id
+          - operation_key
+          - items
+          additionalProperties: false
+          properties:
+            order_id:
+              type: string
+              format: uuid
+            reservation_id:
+              type: string
+              format: uuid
+            operation_key:
+              type: string
+              minLength: 1
+              maxLength: 128
+            items:
+              type: array
+              minItems: 1
+              maxItems: 100
+              items:
+                type: object
+                required:
+                - sku
+                - quantity
+                - committed
+                - returned_total
+                additionalProperties: false
+                properties:
+                  sku:
+                    type: string
+                    pattern: ^[A-Z0-9][A-Z0-9._-]{0,63}$
+                  quantity:
+                    type: integer
+                    minimum: 1
+                    maximum: 99
+                  committed:
+                    type: integer
+                    minimum: 1
+                    maximum: 99
+                  returned_total:
+                    type: integer
+                    minimum: 1
+                    maximum: 99
+        metadata:
+          $ref: ./common.yaml#/components/schemas/Metadata
     ReservationResponse:
       type: object
       required:

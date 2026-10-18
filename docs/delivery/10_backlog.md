@@ -4,6 +4,11 @@ B1 · 2026-09-19 · Work package mặc định: **Planned; Assignee TBD; Reviewe
 
 ## 1. Cách nhận việc
 
+Update 2026-10-18 — `TASK:INV-03` **In review (local)**: inventory `POST /internal/api/v1/inventory/returns` (chỉ
+`order-service`) cộng lại on_hand cho hàng đã commit, idempotent theo `operation_key` (T17), tổng trả ≤ commit dưới lock
+reservation; V004 `stock_returns` (+`evidence_ref`, unique theo reservation); `REQ:INV-07`; dependency INV-02;
+[spec](../superpowers/specs/2026-10-18-inv-03-returns-design.md), [evidence](../evidence/inv-03-local-2026-10-18.md).
+
 Update 2026-10-18 — `TASK:CART-03` **Done (local, trước G0)** theo [nghiệm thu](../evidence/acceptance-2026-10-18.md) (PR #26 CI PASS trên `461395e`, merge `main` tại `2f19354`): cart-service internal snapshot/checkout-cleanup cho order-service
 (service token, chỉ caller `order-service`, actor `Cart-Actor`, idempotent theo `order_id`, giữ item đã sửa — T18) và
 `subtotal_preview`/`shipping_fee_status: NOT_CALCULATED`; `REQ:CART-05/06`; dependency CART-01, PLT-03;

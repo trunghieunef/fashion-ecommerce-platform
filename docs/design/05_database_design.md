@@ -333,7 +333,7 @@ erDiagram
 | `stock_reservations` (T) | `id`, `order_id uuid`, `order_no varchar(32)`, `request_hash char(64)`, `status varchar(16)`, `expires_at timestamptz`, `committed_at timestamptz?`, `released_at timestamptz?`, `release_reason text?`, `version bigint` | UNIQUE order_id; order_no 1–32 ký tự; ACTIVE/COMMITTED/RELEASED/EXPIRED; version >= 1; committed_at có khi và chỉ khi COMMITTED; released_at có khi và chỉ khi RELEASED/EXPIRED; release_reason NULL hoặc 1–500 ký tự; partial index expires_at WHERE status='ACTIVE' |
 | `stock_reservation_items` | `reservation_id uuid FK stock_reservations`, `sku varchar(64) FK stock_items`, `quantity int` | PK `(reservation_id, sku)`; quantity 1–99 |
 | `stock_transactions` (C) | `id`, `sku varchar(64) FK stock_items`, `operation_key text`, `type varchar(16)`, `on_hand_delta int`, `reserved_delta int`, `order_id uuid?`, `reason text`, `actor_id uuid?` | UNIQUE `(operation_key, sku)`; type INBOUND/RESERVE/COMMIT/RELEASE/ADJUST/RETURN; index `(sku, created_at, id)` |
-| `stock_returns` (C) | `id`, `reservation_id uuid FK stock_reservations`, `sku varchar(64) FK stock_items`, `operation_key text`, `quantity int`, `reason text`, `actor_id uuid?` | UNIQUE `(operation_key, sku)`; quantity > 0; transaction khóa reservation và kiểm tra tổng trả <= quantity đã commit |
+| `stock_returns` (C) | `id`, `reservation_id uuid FK stock_reservations`, `sku varchar(64) FK stock_items`, `operation_key varchar(128)`, `quantity int`, `reason text`, `evidence_ref text`, `actor_id uuid?` | UNIQUE `(reservation_id, operation_key, sku)` (`INV-03`: key của order chỉ unique theo order); quantity 1–99; reason/evidence_ref 1–500; runtime chỉ SELECT/INSERT; transaction khóa reservation và kiểm tra tổng trả <= quantity đã commit |
 | `restock_subscriptions` (T, Phase 2) | `id`, `user_id uuid`, `sku varchar(64) FK stock_items`, `status varchar(32) = 'ACTIVE'`, `generation int = 1`, `last_notified_at timestamptz?` | UNIQUE `(user_id, sku)`; ACTIVE/QUEUED/SENT/INACTIVE; index `(sku, status)` |
 
 `available` tính `on_hand - reserved`, không lưu thành cột thứ ba có thể lệch. Reserve tất cả SKU trong **một transaction inventory-db**, khóa SKU theo thứ tự cố định. Commit giảm cả on_hand/reserved; release chỉ giảm reserved. Return của hàng đã commit tăng on_hand, không dùng release.
@@ -347,7 +347,7 @@ Reservation version bắt đầu từ 1, tăng mỗi lần chuyển trạng thá
 V002 không đặt DEFAULT cho status hoặc version; service ghi version=1 khi tạo, +1 mỗi transition.
 Runtime SELECT/INSERT/UPDATE reservation; items SELECT/INSERT và quyền UPDATE kế thừa
 từ default privileges của migration role; không có DELETE/TRUNCATE trên cả hai bảng.
-INV-02 đã hiện thực API/job local; return/subscription vẫn thuộc task sau.
+INV-02 đã hiện thực API/job local; INV-03 thêm `stock_returns` (V004) và API return local; subscription vẫn thuộc task sau.
 Chủ dự án duyệt 2026-10-16: ledger adjust/import dùng operation_key ghép
 `user:<actor UUID>:<operation>:<Idempotency-Key>` để UNIQUE không va chạm giữa actor hoặc
 operation; operation inventory.adjust/inventory.import, header và phạm vi replay giữ nguyên.

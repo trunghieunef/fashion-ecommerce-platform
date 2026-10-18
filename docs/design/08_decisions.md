@@ -447,6 +447,18 @@ Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác v
 gửi nó tới `/api/v1/orders`; order-service cần một cách xác minh guest để điền `Cart-Actor` (mở rộng Path cookie
 hoặc cơ chế khác). CART-03 không đổi cookie. Phải chốt trước khi ORD-01 triển khai guest checkout.
 
+## INV-03 — quyết định 2026-10-18
+
+`TASK:INV-03` · `REQ:INV-07`. Chủ dự án giao agent tự chốt và duyệt [spec](../superpowers/specs/2026-10-18-inv-03-returns-design.md):
+
+| Quyết định | Hệ quả |
+|---|---|
+| Một endpoint `/returns` cho restore sau hủy (release `restore_required`) và hàng hoàn đã kiểm đếm | Reservation vẫn COMMITTED, không thêm trạng thái |
+| `stock_returns` thêm `evidence_ref`; UNIQUE `(reservation_id, operation_key, sku)` thay `(operation_key, sku)` | 05 cập nhật; key của order chỉ unique theo order |
+| `Idempotency-Key` = `operation_key`; replay so dữ liệu đã lưu | Không thêm cột hash |
+| Vượt tổng commit → 409 cả request | Không cộng một phần |
+| Không event mới; dùng INVENTORY_UPDATED/RESTOCKED | Catalog projection nhận tồn mới như mọi movement |
+
 ## Quyết định chủ dự án 2026-10-18 — SEO và thứ tự gate
 
 | Quyết định | Hệ quả |

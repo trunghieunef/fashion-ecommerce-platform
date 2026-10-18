@@ -482,7 +482,7 @@ Report orders do order sở hữu, cash do payment, stock do inventory; dashboar
 | POST /inventory/release | order-service → inventory | INV-02 implemented local: `/internal/api/v1/inventory/release`; order_id,original_reservation {order_no,items,expires_at},original_request_hash,reason,key → RELEASED/EXPIRED/COMMITTED; no-store |
 | GET /inventory/reservations/{order_id} | order-service → inventory | INV-02 implemented local: `/internal/api/v1/inventory/reservations/{order_id}`; status/items/deadline,404 RESERVATION_NOT_FOUND; no-store |
 | GET /inventory/skus/{sku} | catalog,cart → inventory | INV-01 hiện thực local: sku,variant_id,available,version,observed_at; no-store cả lỗi; auth/caller trước SKU validation; 404 SKU_NOT_FOUND, không route qua Gateway |
-| POST /inventory/returns | order → inventory | reservation/order,items,operation_key,evidence_ref → returned quantities |
+| POST /inventory/returns | order → inventory | `INV-03` implemented local: `/internal/api/v1/inventory/returns`; order_id,operation_key (= Idempotency-Key),reason,evidence_ref,items {sku,quantity} → items {sku,quantity,committed,returned_total}; reservation COMMITTED, cùng operation_key replay không cộng lại (khác dữ liệu → 409 RETURN_CONFLICT), tổng trả ≤ commit theo SKU (409 RETURN_EXCEEDS_COMMITTED), 409 RESERVATION_NOT_COMMITTED; GET reservation thêm `items[].returned`; no-store |
 | POST /promotions/quote | order,cart,catalog → promotion | Server actor/verified flag,items,prices,fee → effective prices/discount/version |
 | POST /promotions/reservations/lock | order → promotion | order snapshot/hash,deadline,key → locks/quota |
 | POST /promotions/reservations/commit | order → promotion | order_id,key → COMMITTED |

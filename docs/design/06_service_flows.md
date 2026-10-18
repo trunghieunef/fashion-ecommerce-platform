@@ -440,7 +440,7 @@ Commit còn hạn ghi COMMITTED, giảm on_hand/reserved và ledger COMMIT/outbo
 trả hiện trạng 200 không trừ thêm. Acceptance Task 5 dùng PostgreSQL thật kiểm T09, expire
 bền vững trước 409, retry không nhả lại, query và lỗi auth/body/not-found.
 Task 6 thêm release API: ACTIVE nhả reserved, ghi RELEASED cùng ledger RELEASE/outbox;
-RELEASED/EXPIRED retry no-op, COMMITTED trả 200 restore_required=true không đổi kho.
+RELEASED/EXPIRED retry no-op, COMMITTED trả 200 restore_required=true không đổi kho; order cộng lại bằng `POST /inventory/returns` (INV-03).
 Release chưa có reservation insert tombstone RELEASED version=1 theo order_id **trước** khi
 khóa SKU tăng dần để kiểm tồn tại, tránh đảo thứ tự khóa với reserve đang insert cùng order.
 SKU lạ trả 400 tại original_reservation.items[SKU], rollback tombstone; snapshot quá hạn
@@ -617,7 +617,7 @@ Các operation dưới đây đã được hợp nhất vào **03 Interfaces B1*
 | Internal cart | `GET /carts/{id}/snapshot`, `POST /carts/{id}/checkout-cleanup` (`CART-03` implemented, prefix `/internal/api/v1`) | Actor (`Cart-Actor`)/version bắt buộc; cleanup chứa order_id và items snapshot, idempotent theo order_id |
 | Internal catalog | `POST /catalog/variants/quote` | Batch variant IDs, trả giá/version/weight/status; không một HTTP call cho mỗi item |
 | Internal order | `GET /orders/{order_id}/snapshot`, `GET /orders/{order_id}/saga-status` | Payment, promotion, shipping query snapshot/intent với quyền caller riêng |
-| Internal inventory | Giữ reserve/commit/release; thêm `GET /inventory/reservations/{order_id}`, `POST /inventory/returns` | Reserve toàn giỏ có expires_at + request_hash; release original snapshot/hash; return reason/evidence/quantities |
+| Internal inventory | Giữ reserve/commit/release; thêm `GET /inventory/reservations/{order_id}`, `POST /inventory/returns` (`INV-03` implemented local) | Reserve toàn giỏ có expires_at + request_hash; release original snapshot/hash; return reason/evidence/quantities, idempotent theo operation_key, tổng trả ≤ commit dưới lock reservation |
 | Internal promotion | `POST /promotions/quote`, `POST /promotions/reservations/{lock,commit,release}`, `GET /promotions/reservations/{order_id}` | Bao phủ voucher và campaign quota trong một TX; thay lock/release voucher riêng ở checkout |
 | Internal payment | `POST /payments`, `GET /payments/by-order/{order_id}`, `POST /payments/{order_id}/close`, `POST /payments/{payment_id}/refunds` | Amount server-owned; close có snapshot để ghi tombstone nếu create chưa đến |
 | Public payment | `GET /orders/{order_no}/payment` | Chỉ đọc payment sẵn có đúng owner; refund qua FINANCE/order internal |
