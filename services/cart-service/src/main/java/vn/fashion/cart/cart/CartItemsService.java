@@ -153,7 +153,7 @@ public class CartItemsService {
   static Api.Problem itemNotFound() {
     return new Api.Problem(HttpStatus.NOT_FOUND, "NOT_FOUND", "CART_ITEM_NOT_FOUND", List.of());
   }
-  static String sha256(String value) {
+  public static String sha256(String value) {
     try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8))); }
     catch (NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
   }
