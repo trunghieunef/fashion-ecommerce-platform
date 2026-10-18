@@ -4,9 +4,9 @@ B1 · 2026-09-19 · Work package mặc định: **Planned; Assignee TBD; Reviewe
 
 ## 1. Cách nhận việc
 
-Update 2026-10-18 — `TASK:CART-01` **Review**: cart-service mới (guest cookie/member Bearer, version +
+Update 2026-10-18 — `TASK:CART-01` **Done (local, trước G0)** theo [nghiệm thu](../evidence/acceptance-2026-10-18.md) (PR #25 CI PASS, chờ merge `main`): cart-service mới (guest cookie/member Bearer, version +
 idempotency, preview giá/tồn tham khảo, không Redis); `REQ:CART-01/02/04`; dependency USR-01, CAT-02,
-INV-01; [spec](../superpowers/specs/2026-10-18-cart-01-carts-design.md), [evidence](../evidence/cart-01-local-2026-10-18.md). Chưa nghiệm thu Done.
+INV-01; [spec](../superpowers/specs/2026-10-18-cart-01-carts-design.md), [evidence](../evidence/cart-01-local-2026-10-18.md).
 
 Update 2026-10-17 — `TASK:CAT-02` **Done (local, trước G0)** theo
 [nghiệm thu 2026-10-17](../evidence/acceptance-2026-10-17.md) (02a PR #19 + 02b `da6d3af`, merge `main` qua PR #23 `0a6928e`;
