@@ -1,0 +1,8 @@
+{
+  "code": "OK",
+  "data": [
+    {"id": "44444444-4444-4444-8444-444444444444", "slug": "ao", "name_vi": "Áo", "name_en": "Tops",
+     "children": [{"id": "44444444-4444-4444-8444-444444444445", "slug": "ao-thun", "name_vi": "Áo thun", "name_en": "Tees", "children": []}]}
+  ],
+  "metadata": {"request_id": "web01-fixture", "trace_id": "web01-fixture"}
+}

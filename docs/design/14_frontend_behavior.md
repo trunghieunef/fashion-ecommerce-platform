@@ -12,9 +12,9 @@ Public amount/tổng tiền là dữ liệu render; FE chỉ gửi lựa chọn/
 
 | ID / màn | Phase | Thành phần / dữ liệu | Acceptance / task |
 |---|---|---|---|
-| SF-01 Home/collection | 1 | Collection active, lookbook, ảnh CDN, VI/EN | Ảnh lỗi có fallback/alt; link đúng slug; WEB-01 |
-| SF-02 Listing/search | 1 | Filters/sort/cursor, empty/no results | Giữ filter URL, đổi filter reset cursor; không trộn trang giá cũ; WEB-01 |
-| SF-03 Product detail | 1 | Variant size/màu, ảnh/zoom, giá, size guide, available/observed_at | Chọn variant trước add; out-of-stock/unknown rõ; không cam kết hàng đã giữ; WEB-01 |
+| SF-01 Home/collection | 1 | Collection active, lookbook, ảnh CDN, VI/EN | Ảnh lỗi có fallback/alt; link đúng slug; WEB-01 — `WEB-01` implemented local (`/`, `/collections/:slug`, "Tải thêm" theo cursor) |
+| SF-02 Listing/search | 1 | Filters/sort/cursor, empty/no results | Giữ filter URL, đổi filter reset cursor; không trộn trang giá cũ; WEB-01 — `WEB-01` implemented local (`/products`, `/search`; nút "Tải thêm", cursor không lưu URL) |
+| SF-03 Product detail | 1 | Variant size/màu, ảnh/zoom, giá, size guide, available/observed_at | Chọn variant trước add; out-of-stock/unknown rõ; không cam kết hàng đã giữ; WEB-01 — `WEB-01` implemented local (`/products/:id`, mọi ảnh chọn được qua thumbnail; nút thêm vào giỏ thuộc WEB-02) |
 | SF-04 Account/auth/address | 1 | Login/register/forgot/reset/profile/address/default | Refresh single-flight, validation, không tiết lộ account qua forgot; WEB-02 |
 | SF-05 Cart | 1 | Items/qty, version, giá tham khảo, estimate fee | 409 refresh và báo điều chỉnh; merge không âm thầm bỏ item; WEB-02 |
 | SF-06 Checkout quote | 1 | Contact/address/method, server quote và expiry | Khách xác nhận tổng; sai giá/fee phải confirm lại; không đặt tự động; WEB-03 |

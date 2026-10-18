@@ -1,0 +1,11 @@
+{
+  "code": "OK",
+  "data": {
+    "items": [
+      {"id": "77777777-7777-4777-8777-777777777777", "slug": "he-2026", "name_vi": "Hè 2026 (mẫu)", "name_en": "Summer 2026 (sample)",
+       "cover_asset_id": null, "start_at": null, "end_at": null}
+    ],
+    "next_cursor": null
+  },
+  "metadata": {"request_id": "web01-fixture", "trace_id": "web01-fixture"}
+}

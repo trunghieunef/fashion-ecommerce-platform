@@ -1,0 +1,11 @@
+{
+  "code": "OK",
+  "data": {
+    "items": [
+      {"id": "33333333-3333-4333-8333-333333333333", "slug": "vay-mau", "name_vi": "Váy mẫu", "name_en": "Sample dress",
+       "min_price": 450000, "max_price": 500000, "image": null}
+    ],
+    "next_cursor": null
+  },
+  "metadata": {"request_id": "web01-fixture", "trace_id": "web01-fixture"}
+}

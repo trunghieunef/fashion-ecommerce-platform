@@ -1,0 +1,36 @@
+{
+  "code": "OK",
+  "data": {
+    "id": "11111111-1111-4111-8111-111111111111",
+    "slug": "ao-thun",
+    "name_vi": "Áo thun mẫu",
+    "name_en": "Sample tee",
+    "description_vi": "<p>Áo thun cotton (mô tả mẫu).</p>",
+    "description_en": "<p>Cotton tee (sample copy).</p>",
+    "tags": ["new"],
+    "category": {"id": "44444444-4444-4444-8444-444444444444", "name": "Áo"},
+    "brand": null,
+    "min_price": 100000,
+    "max_price": 120000,
+    "variants": [
+      {"id": "55555555-5555-4555-8555-555555555551", "sku": "TEE-M-BLUE", "size": "M", "color": "Blue", "effective_price": 100000,
+       "available": 3, "observed_at": "2026-10-18T03:00:00.000Z"},
+      {"id": "55555555-5555-4555-8555-555555555552", "sku": "TEE-L-BLUE", "size": "L", "color": "Blue", "effective_price": 120000,
+       "available": 0, "observed_at": "2026-10-18T03:00:00.000Z"},
+      {"id": "55555555-5555-4555-8555-555555555553", "sku": "TEE-M-RED", "size": "M", "color": "Red", "effective_price": 100000,
+       "available": null, "observed_at": null}
+    ],
+    "images": [
+      {"asset_id": "66666666-6666-4666-8666-666666666666", "alt_vi": "Áo thun mẫu", "alt_en": "Sample tee", "variant_color": null, "sort_order": 0}
+    ],
+    "size_guide": {
+      "category_id": "44444444-4444-4444-8444-444444444444",
+      "locale": "vi",
+      "guideline_html": "<p>Đo vòng ngực (mẫu).</p>",
+      "table": {"columns": ["Size", "Ngực (cm)"], "rows": [["M", "90"], ["L", "96"]]}
+    },
+    "available": 3,
+    "observed_at": "2026-10-18T03:00:00.000Z"
+  },
+  "metadata": {"request_id": "web01-fixture", "trace_id": "web01-fixture"}
+}

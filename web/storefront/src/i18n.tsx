@@ -1,0 +1,157 @@
+// TASK:WEB-01: VI/EN UI strings and content picking; the chosen language is a per-browser convenience only.
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+
+import type { Lang } from './catalog/api';
+
+const STRINGS = {
+  vi: {
+    store: 'Fashion Store',
+    nav: 'Điều hướng chính',
+    home: 'Trang chủ',
+    products: 'Sản phẩm',
+    search: 'Tìm kiếm',
+    searchLabel: 'Tìm sản phẩm',
+    switchLang: 'English',
+    loading: 'Đang tải…',
+    loadError: 'Không thể tải dữ liệu. Vui lòng thử lại.',
+    retry: 'Thử lại',
+    empty: 'Chưa có sản phẩm',
+    noResults: 'Không có sản phẩm phù hợp',
+    productList: 'Danh sách sản phẩm',
+    loadMore: 'Tải thêm',
+    filters: 'Bộ lọc',
+    category: 'Danh mục',
+    brand: 'Thương hiệu',
+    size: 'Size',
+    color: 'Màu',
+    minPrice: 'Giá từ',
+    maxPrice: 'Giá đến',
+    sort: 'Sắp xếp',
+    sortNewest: 'Mới nhất',
+    sortBest: 'Bán chạy',
+    sortPriceAsc: 'Giá tăng dần',
+    sortPriceDesc: 'Giá giảm dần',
+    all: 'Tất cả',
+    apply: 'Áp dụng',
+    clear: 'Xóa lọc',
+    collections: 'Bộ sưu tập',
+    newArrivals: 'Hàng mới',
+    lookbook: 'Lookbook',
+    notFound: 'Không tìm thấy trang hoặc sản phẩm.',
+    backHome: 'Về trang chủ',
+    chooseVariant: 'Chọn size và màu',
+    inStock: 'Còn hàng (tham khảo)',
+    outOfStock: 'Hết hàng',
+    unknownStock: 'Chưa rõ tồn kho',
+    stockNote: 'Tồn kho chỉ để tham khảo; hàng chỉ được giữ khi đặt đơn.',
+    sizeGuide: 'Bảng size',
+    zoom: 'Phóng to ảnh',
+    close: 'Đóng',
+    imageMissing: 'Chưa có ảnh',
+    sampleContent: 'Nội dung mẫu',
+    invalidFilter: 'Bộ lọc không hợp lệ',
+    priceOrder: 'Giá từ phải nhỏ hơn hoặc bằng Giá đến',
+    noCollections: 'Chưa có bộ sưu tập',
+    query: 'Từ khóa',
+    images: 'Ảnh sản phẩm',
+    tag: 'Nhãn',
+  },
+  en: {
+    store: 'Fashion Store',
+    nav: 'Main navigation',
+    home: 'Home',
+    products: 'Products',
+    search: 'Search',
+    searchLabel: 'Search products',
+    switchLang: 'Tiếng Việt',
+    loading: 'Loading…',
+    loadError: 'Could not load data. Please try again.',
+    retry: 'Try again',
+    empty: 'No products yet',
+    noResults: 'No matching products',
+    productList: 'Product list',
+    loadMore: 'Load more',
+    filters: 'Filters',
+    category: 'Category',
+    brand: 'Brand',
+    size: 'Size',
+    color: 'Color',
+    minPrice: 'Price from',
+    maxPrice: 'Price to',
+    sort: 'Sort',
+    sortNewest: 'Newest',
+    sortBest: 'Best selling',
+    sortPriceAsc: 'Price: low to high',
+    sortPriceDesc: 'Price: high to low',
+    all: 'All',
+    apply: 'Apply',
+    clear: 'Clear filters',
+    collections: 'Collections',
+    newArrivals: 'New arrivals',
+    lookbook: 'Lookbook',
+    notFound: 'Page or product not found.',
+    backHome: 'Back to home',
+    chooseVariant: 'Choose size and color',
+    inStock: 'In stock (reference)',
+    outOfStock: 'Out of stock',
+    unknownStock: 'Stock unknown',
+    stockNote: 'Stock is for reference only; items are held only when you place an order.',
+    sizeGuide: 'Size guide',
+    zoom: 'Zoom image',
+    close: 'Close',
+    imageMissing: 'No image yet',
+    sampleContent: 'Sample content',
+    invalidFilter: 'Invalid filter',
+    priceOrder: 'Price from must be at most Price to',
+    noCollections: 'No collections yet',
+    query: 'Keyword',
+    images: 'Product images',
+    tag: 'Tag',
+  },
+} as const;
+
+export type StringKey = keyof (typeof STRINGS)['vi'];
+type LangContext = {
+  lang: Lang;
+  setLang: (lang: Lang) => void;
+  t: (key: StringKey) => string;
+  /** Content in the active language; an empty English value falls back to Vietnamese. */
+  pick: (vi: string, en: string) => string;
+};
+
+const KEY = 'storefront.lang';
+function stored(): Lang {
+  try {
+    return localStorage.getItem(KEY) === 'en' ? 'en' : 'vi';
+  } catch {
+    return 'vi';
+  }
+}
+
+const Context = createContext<LangContext | null>(null);
+
+export function LangProvider({ children, initial }: { children: ReactNode; initial?: Lang }) {
+  const [lang, setState] = useState<Lang>(initial ?? stored);
+  useEffect(() => { document.documentElement.lang = lang; }, [lang]);
+  const setLang = (next: Lang) => {
+    setState(next);
+    try {
+      localStorage.setItem(KEY, next);
+    } catch {
+      // Private mode or blocked storage: the choice lasts for this page only.
+    }
+  };
+  const value: LangContext = {
+    lang,
+    setLang,
+    t: (key) => STRINGS[lang][key],
+    pick: (vi, en) => (lang === 'en' && en.trim() ? en : vi),
+  };
+  return <Context.Provider value={value}>{children}</Context.Provider>;
+}
+
+export function useLang(): LangContext {
+  const value = useContext(Context);
+  if (!value) throw new Error('useLang outside LangProvider');
+  return value;
+}
