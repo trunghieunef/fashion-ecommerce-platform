@@ -4,7 +4,7 @@ B1 · 2026-09-19 · Work package mặc định: **Planned; Assignee TBD; Reviewe
 
 ## 1. Cách nhận việc
 
-Update 2026-10-19 — `TASK:SHP-01` **In review (local)**: shipping-service mới — rule phí SELF (tỉnh + trọng lượng từ catalog,
+Update 2026-10-19 — `TASK:SHP-01` **In review (local)**, PR #29: shipping-service mới — rule phí SELF (tỉnh + trọng lượng từ catalog,
 COD), estimate public, quote internal lưu DB, một shipment SELF/đơn (CREATED, SHIPMENT_CREATED outbox), OPS rules/shipments;
 bảng phí mẫu vì O04 còn mở; `REQ:SHP-01/04`; dependency PLT-03, USR-02, CAT-02;
 [spec](../superpowers/specs/2026-10-19-shp-01-shipping-design.md), [evidence](../evidence/shp-01-local-2026-10-19.md).
