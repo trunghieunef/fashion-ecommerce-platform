@@ -73,7 +73,9 @@ public record RuleConfig(String type, List<String> provinces, List<Tier> tiers, 
       for (String name : t.propertyNames()) if (!Set.of("max_weight_grams", "fee").contains(name)) errors.add(new Api.FieldError(at + "." + name, "is not allowed"));
       JsonNode max = t.path("max_weight_grams");
       Integer limit = null;
-      if (max.isNull() || max.isMissingNode()) {
+      if (max.isMissingNode()) {
+        errors.add(new Api.FieldError(at + ".max_weight_grams", "is required (null = no upper bound)"));
+      } else if (max.isNull()) {
         if (i != node.size() - 1) errors.add(new Api.FieldError(at + ".max_weight_grams", "only the last tier may be unbounded"));
       } else if (!max.isIntegralNumber() || !max.canConvertToInt() || max.intValue() < 1) {
         errors.add(new Api.FieldError(at + ".max_weight_grams", "must be a positive integer or null"));

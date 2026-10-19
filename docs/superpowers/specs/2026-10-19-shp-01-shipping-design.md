@@ -49,8 +49,9 @@ Theo 05 §11.1, chỉ phần cần cho SHP-01:
 | WEIGHT | `{provinces:[code…]?, tiers:[{max_weight_grams|null, fee}], cod_fee}` | (tỉnh khớp nếu có danh sách) và tier đầu tiên `weight ≤ max` (null = không giới hạn) |
 
 Chọn rule ACTIVE có `priority` nhỏ nhất mà khớp; không rule nào khớp → 422 `NO_SHIPPING_RULE`. Tiền là số nguyên VND ≥ 0.
-`cod_fee` chỉ cộng khi `cod=true`. Seed mẫu V002 (đánh dấu `(mẫu)`): FLAT 35.000/COD 15.000; PROVINCE HN/HCM 25.000/10.000;
-WEIGHT >3 kg +tiers. Mã tỉnh là chuỗi `province_code` như `user_addresses` (không kiểm danh mục hành chính — O04).
+`cod_fee` chỉ cộng khi `cod=true`. Seed mẫu V002 (đánh dấu `(mẫu)`; chỉnh khi triển khai, review SHP-01 #8): WEIGHT HN/HCM
+(`01`,`79`) ≤3 kg 25.000 / >3 kg 40.000, COD 10.000 (priority 10); WEIGHT toàn quốc ≤1 kg 30.000 / ≤3 kg 45.000 / >3 kg 70.000,
+COD 15.000 (priority 50); FLAT 35.000 / COD 15.000 (priority 1000). Mã tỉnh là chuỗi `province_code` như `user_addresses` (không kiểm danh mục hành chính — O04).
 
 ## 5. API
 

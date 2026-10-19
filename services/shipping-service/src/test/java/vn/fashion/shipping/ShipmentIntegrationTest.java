@@ -131,4 +131,36 @@ class ShipmentIntegrationTest extends ShippingTestSupport {
     org.assertj.core.api.Assertions.assertThatThrownBy(() -> jdbc.update("update shipment_status_history set reason = 'x'"))
         .isInstanceOf(org.springframework.dao.DataAccessException.class);
   }
+
+  @Test void parallelCreatesOfOneOrderWithDifferentQuotes() throws Exception {
+    String order = UUID.randomUUID().toString(), q1 = quote("79", false), q2 = quote("79", false);
+    var barrier = new CyclicBarrier(2);
+    var a = CompletableFuture.supplyAsync(() -> { try { barrier.await(); } catch (Exception e) { throw new AssertionError(e); }
+      return create("pa", body(order, "ORD7", q1, "79", 0)); });
+    var b = CompletableFuture.supplyAsync(() -> { try { barrier.await(); } catch (Exception e) { throw new AssertionError(e); }
+      return create("pb", body(order, "ORD7", q2, "79", 0)); });
+    var codes = java.util.List.of(a.get().statusCode(), b.get().statusCode());
+    assertThat(codes).containsExactlyInAnyOrder(200, 409);
+    assertThat(jdbc.queryForObject("select count(*) from shipments", Integer.class)).isEqualTo(1);
+  }
+
+  @Test void bodyHashIsInjective() {
+    // Review 4: moving text between address fields is another body, not a retry.
+    String order = UUID.randomUUID().toString(), quote = quote("79", false);
+    String withDistrict = body(order, "ORD8", quote, "79", 0).replace("\"ward_code\"", "\"district_code\":\"5\",\"ward_code\"");
+    String folded = body(order, "ORD8", quote, "79", 0).replace("1 Đường Mẫu", "1 Đường Mẫu, district_code=5");
+    data(create("h1", withDistrict), 200);
+    assertThat(problem(create("h2", folded), 409)).isEqualTo("SHIPMENT_CONFLICT");
+  }
+
+  @Test void existingOrderWinsOverUnknownQuote() {
+    // Review 5: same order, other body -> 409 even when the new quote does not exist.
+    String order = UUID.randomUUID().toString();
+    data(create("e1", body(order, "ORD9", quote("79", false), "79", 0)), 200);
+    assertThat(problem(create("e2", body(order, "ORD9", UUID.randomUUID().toString(), "79", 0)), 409)).isEqualTo("SHIPMENT_CONFLICT");
+  }
+
+  @Test void keyIsCheckedBeforeBody() {
+    assertThat(problem(send("POST", SHIPMENTS, "{}", "Authorization", serviceToken("order-service")), 400)).isEqualTo("INVALID_KEY");
+  }
 }

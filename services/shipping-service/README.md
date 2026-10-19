@@ -25,7 +25,7 @@ Port 8085 (không publish ra host). Qua Gateway: `/api/v1/shipping/**`, `/admin/
 | `POST /internal/api/v1/shipping/quotes` | `order-service` | Cùng input + `Idempotency-Key` → `quote_id` lưu DB, rule id/version, hạn 15 phút |
 | `POST /internal/api/v1/shipping/shipments` | `order-service` | order_id/order_no/quote_id/cod_amount/to_address + key → shipment SELF `CREATED` |
 | `GET /internal/api/v1/shipping/shipments/by-order/{order_id}` | `order-service` | Trạng thái, tracking, `handed_over_at`, version (không trả địa chỉ) |
-| `GET,POST /admin/api/v1/shipping/rules`, `PUT /…/{id}` | `shipping.rules` | Rule FLAT/PROVINCE/WEIGHT, `expected_version`, `reason` bắt buộc, audit |
+| `GET,POST /admin/api/v1/shipping/rules`, `PUT /…/{id}` | `shipping.rules` | Rule FLAT/PROVINCE/WEIGHT; POST cần `Idempotency-Key` (retry cùng user → rule cũ); PUT cần `expected_version` và `active`; `reason` bắt buộc, audit |
 | `GET /admin/api/v1/shipping/shipments`, `/{id}` | `shipping.read` | Danh sách (status, cursor) / chi tiết có địa chỉ + history |
 
 - **Phí**: trọng lượng = Σ `weight_grams` (catalog quote, service token `shipping-service`) × quantity; rule ACTIVE có `priority`
@@ -61,3 +61,6 @@ không UPDATE history/quotes/audit. `V002__sample_rules.sql`: 3 rule mẫu. Loca
 
 Readiness `readinessState,db`; log JSON ECS có redaction (địa chỉ không vào log); trace OTLP khi đặt endpoint; `/actuator/prometheus`.
 Chưa có: chuyển trạng thái sau CREATED, COD, cancel/tombstone (SHP-02), carrier thật (SHP-03), consumer `SHIPMENT_CREATED` (ORD).
+Estimate public không cần đăng nhập và gọi catalog (≤ 100 variant/request); chưa có rate limit riêng ở Gateway — thêm cùng
+rate-limit chung (03 §1) trước go-live. Mỗi lần tính phí kiểm lại config của mọi rule ACTIVE; một rule lỗi (chỉ có thể do
+migration, API đã validate) làm estimate trả 400 thay vì bỏ qua rule đó.

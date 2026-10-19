@@ -65,8 +65,11 @@ paths:
       operationId: createShippingRule
       summary: Create a fee rule (audited)
       description: SHP-01 implemented. Permission shipping.rules. config is validated per rule_type; the write and its audit
-        row (actor, reason, resulting rule) share one transaction.
+        row (actor, reason, resulting rule) share one transaction. Same Idempotency-Key and body from the same user replays the
+        first create (201, same rule); another body is 409 IDEMPOTENCY_KEY_REUSED.
       security: [{bearerAuth: []}]
+      parameters:
+      - $ref: ./common.yaml#/components/parameters/IdempotencyKey
       requestBody:
         required: true
         content:
@@ -89,6 +92,7 @@ paths:
         '400': {$ref: '#/components/responses/Invalid'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
   /admin/api/v1/shipping/rules/{id}:
     put:
       tags: [Shipping admin]
@@ -229,12 +233,17 @@ components:
         active: {type: boolean, default: true}
         reason: {type: string, minLength: 1, maxLength: 500, description: Audit reason}
     RuleUpdate:
-      allOf:
-      - {$ref: '#/components/schemas/RuleCreate'}
-      - type: object
-        required: [expected_version]
-        properties:
-          expected_version: {type: integer, minimum: 0}
+      type: object
+      description: Full replacement; active is required so editing a disabled rule never re-enables it by omission.
+      required: [expected_version, name, rule_type, priority, config, active, reason]
+      properties:
+        expected_version: {type: integer, minimum: 0}
+        name: {type: string, minLength: 1, maxLength: 200}
+        rule_type: {$ref: '#/components/schemas/RuleType'}
+        priority: {type: integer, minimum: 0}
+        config: {$ref: '#/components/schemas/RuleConfig'}
+        active: {type: boolean}
+        reason: {type: string, minLength: 1, maxLength: 500}
     Rule:
       type: object
       additionalProperties: false
@@ -350,7 +359,7 @@ components:
         application/json:
           schema: {$ref: ./common.yaml#/components/schemas/ApiError}
     Conflict:
-      description: VERSION_CONFLICT (errors expected_version current=N)
+      description: VERSION_CONFLICT (errors expected_version current=N) or IDEMPOTENCY_KEY_REUSED
       headers: *headers
       content:
         application/json:

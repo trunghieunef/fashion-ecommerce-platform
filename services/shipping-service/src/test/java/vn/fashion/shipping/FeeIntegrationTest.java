@@ -94,4 +94,22 @@ class FeeIntegrationTest extends ShippingTestSupport {
     assertThat(problem(send("POST", QUOTES, feeBody("79", false, variant(1), 1), "Authorization", serviceToken("order-service")), 400))
         .isEqualTo("INVALID_KEY");
   }
+
+  @Test void quoteReplayDoesNotNeedCatalogOrRules() {
+    // Review I1: an UNKNOWN retry must get the stored quote even if catalog is down or the rule changed since.
+    String v = variant(500), key = UUID.randomUUID().toString();
+    var first = data(send("POST", QUOTES, feeBody("79", false, v, 1), "Authorization", serviceToken("order-service"), "Idempotency-Key", key), 200);
+    CatalogStub.status = 503;
+    jdbc.update("update shipping_rules set active = false");
+    assertThat(data(send("POST", QUOTES, feeBody("79", false, v, 1), "Authorization", serviceToken("order-service"), "Idempotency-Key", key), 200))
+        .isEqualTo(first);
+    assertThat(problem(send("POST", QUOTES, feeBody("79", true, v, 1), "Authorization", serviceToken("order-service"), "Idempotency-Key", key), 409))
+        .isEqualTo("IDEMPOTENCY_KEY_REUSED");
+  }
+
+  @Test void runtimeCannotRewriteQuotes() {
+    data(send("POST", QUOTES, feeBody("79", false, variant(100), 1), "Authorization", serviceToken("order-service"), "Idempotency-Key", "q"), 200);
+    org.assertj.core.api.Assertions.assertThatThrownBy(() -> jdbc.update("update shipping_quotes set fee = 0"))
+        .isInstanceOf(org.springframework.dao.DataAccessException.class);
+  }
 }

@@ -81,6 +81,13 @@ class ShippingContractTest(unittest.TestCase):
                     {**body, "to_address": {**body["to_address"], "extra": "x"}}):
             self.assertTrue(list(create.iter_errors(bad)), bad)
 
+    def test_rule_create_needs_key_and_update_states_active(self):
+        create = self.docs["shipping.yaml"]["paths"]["/admin/api/v1/shipping/rules"]["post"]
+        self.assertIn({"$ref": "./common.yaml#/components/parameters/IdempotencyKey"}, create["parameters"])
+        update = self.docs["shipping.yaml"]["components"]["schemas"]["RuleUpdate"]
+        self.assertIn("active", update["required"])
+        self.assertIn("expected_version", update["required"])
+
     def test_rule_types(self):
         types = self.docs["shipping.yaml"]["components"]["schemas"]["RuleType"]["enum"]
         self.assertEqual(types, ["FLAT", "PROVINCE", "WEIGHT"])

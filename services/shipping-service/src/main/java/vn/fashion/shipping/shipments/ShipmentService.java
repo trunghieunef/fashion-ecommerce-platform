@@ -26,9 +26,7 @@ import vn.fashion.shipping.web.Api;
  */
 @Service
 public class ShipmentService {
-  public record Create(UUID orderId, String orderNo, UUID quoteId, Map<String, String> toAddress, long codAmount) {
-    String canonical() { return orderId + "|" + orderNo + "|" + quoteId + "|" + codAmount + "|" + new java.util.TreeMap<>(toAddress); }
-  }
+  public record Create(UUID orderId, String orderNo, UUID quoteId, Map<String, String> toAddress, long codAmount) { }
   public record View(UUID shipmentId, UUID orderId, String orderNo, String status, String carrier, String trackingCode, long fee,
                      long codAmount, Instant handedOverAt, long version) { }
   private record Quote(UUID id, String provinceCode, boolean cod, long fee, int weightGrams) { }
@@ -52,7 +50,14 @@ public class ShipmentService {
   /** Returns a fresh View or the stored response; the same order with another body is 409 SHIPMENT_CONFLICT. */
   public Object create(String key, Create c, String correlationId) {
     FeeService.requireKey(key);
-    String hash = FeeService.sha256(c.canonical());
+    // Review 4: canonical JSON (sorted keys), so moving text between fields is another body, never a retry.
+    var canonical = new java.util.TreeMap<String, Object>();
+    canonical.put("order_id", c.orderId().toString());
+    canonical.put("order_no", c.orderNo());
+    canonical.put("quote_id", c.quoteId().toString());
+    canonical.put("cod_amount", c.codAmount());
+    canonical.put("to_address", new java.util.TreeMap<>(c.toAddress()));
+    String hash = FeeService.sha256(json.writeValueAsString(canonical));
     return tx.execute(status -> {
       var outcome = keys.begin(ACTOR, "shipping.shipment.create", key, hash);
       if (outcome.status() == IdempotencyStore.Status.CONFLICT) throw conflict("IDEMPOTENCY_KEY_REUSED");
@@ -60,9 +65,7 @@ public class ShipmentService {
       // Serialize every create that uses this quote (same order retried, or another order reusing it). Quotes are
       // insert-only for the runtime role, so a transaction-scoped advisory lock replaces SELECT ... FOR UPDATE.
       jdbc.sql("select pg_advisory_xact_lock(hashtextextended(:q, 0))").param("q", c.quoteId().toString()).query((rs, n) -> 1).list();
-      var quote = jdbc.sql("select id, province_code, cod, fee, weight_grams from shipping_quotes where id = :id")
-          .param("id", c.quoteId()).query(Quote.class).optional()
-          .orElseThrow(() -> new Api.Problem(HttpStatus.NOT_FOUND, "NOT_FOUND", "QUOTE_NOT_FOUND", List.of()));
+      // Review 5: an order that already has a shipment answers first (same body -> it, other body -> 409).
       var existing = byOrder(c.orderId());
       if (existing.isPresent()) {
         String storedHash = jdbc.sql("select request_hash from shipments where order_id = :o").param("o", c.orderId()).query(String.class).single();
@@ -70,6 +73,9 @@ public class ShipmentService {
         keys.finish(ACTOR, "shipping.shipment.create", key, existing.get().shipmentId(), 200, json.writeValueAsString(existing.get()));
         return existing.get();
       }
+      var quote = jdbc.sql("select id, province_code, cod, fee, weight_grams from shipping_quotes where id = :id")
+          .param("id", c.quoteId()).query(Quote.class).optional()
+          .orElseThrow(() -> new Api.Problem(HttpStatus.NOT_FOUND, "NOT_FOUND", "QUOTE_NOT_FOUND", List.of()));
       if (!quote.provinceCode().equals(c.toAddress().get("province_code")) || quote.cod() != (c.codAmount() > 0))
         throw conflict("QUOTE_MISMATCH");
       if (jdbc.sql("select count(*) from shipments where quote_id = :q").param("q", c.quoteId()).query(Long.class).single() > 0)

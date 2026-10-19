@@ -35,6 +35,7 @@ public class ShipmentController {
                                   @RequestHeader(name = "Idempotency-Key", required = false) String key,
                                   @RequestBody(required = false) String body) {
     callers.require(authorization);
+    vn.fashion.shipping.fee.FeeService.requireKey(key);
     var meta = Api.metadata(tracer);
     var request = ShipmentService.parse(FeeController.object(json, body));
     return Api.ok(HttpStatus.OK, shipments.create(key, request, meta.traceId()), meta);

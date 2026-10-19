@@ -68,6 +68,9 @@ public class FeeService {
   public Object quote(String key, Input input) {
     requireKey(key);
     String hash = sha256(input.canonical());
+    // Review I1: an UNKNOWN retry gets the stored quote even when catalog is down or the rules changed since.
+    var stored = stored(ACTOR, "shipping.quote", key, hash);
+    if (stored.isPresent()) return stored.get();
     var fee = compute(input);
     return tx.execute(status -> {
       var outcome = keys.begin(ACTOR, "shipping.quote", key, hash);
@@ -87,6 +90,18 @@ public class FeeService {
       keys.finish(ACTOR, "shipping.quote", key, id, 200, json.writeValueAsString(quote));
       return quote;
     });
+  }
+
+  /** Completed identical request -> its stored body; same key with another body -> 409; else empty (no lock taken). */
+  public java.util.Optional<Object> stored(String actor, String operation, String key, String hash) {
+    return jdbc.sql("""
+        select request_hash, status, response_body::text as body from idempotency_requests
+        where actor_key = :a and operation = :o and key = :k""").param("a", actor).param("o", operation).param("k", key)
+        .query((rs, n) -> {
+          if (!rs.getString("request_hash").equals(hash))
+            throw new Api.Problem(HttpStatus.CONFLICT, "CONFLICT", "IDEMPOTENCY_KEY_REUSED", List.of());
+          return "COMPLETED".equals(rs.getString("status")) ? (Object) json.readTree(rs.getString("body")) : null;
+        }).optional();
   }
 
   Fee compute(Input input) {

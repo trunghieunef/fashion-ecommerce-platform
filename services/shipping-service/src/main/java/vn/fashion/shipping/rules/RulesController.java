@@ -31,9 +31,12 @@ public class RulesController {
   private final TransactionTemplate tx;
   private final ObjectMapper json;
   private final Tracer tracer;
+  private final vn.fashion.platform.idempotency.IdempotencyStore keys;
+  private final vn.fashion.shipping.fee.FeeService fees;
 
-  public RulesController(AdminAuth auth, RuleRepository rules, TransactionTemplate tx, ObjectMapper json, Tracer tracer) {
-    this.auth = auth; this.rules = rules; this.tx = tx; this.json = json; this.tracer = tracer;
+  public RulesController(AdminAuth auth, RuleRepository rules, TransactionTemplate tx, ObjectMapper json, Tracer tracer,
+                         vn.fashion.platform.idempotency.IdempotencyStore keys, vn.fashion.shipping.fee.FeeService fees) {
+    this.auth = auth; this.rules = rules; this.tx = tx; this.json = json; this.tracer = tracer; this.keys = keys; this.fees = fees;
   }
 
   @GetMapping
@@ -44,14 +47,27 @@ public class RulesController {
 
   @PostMapping
   public ResponseEntity<?> create(@RequestHeader(name = "Authorization", required = false) String authorization,
+                                  @RequestHeader(name = "Idempotency-Key", required = false) String key,
                                   @RequestBody(required = false) String body) {
     UUID actor = auth.require(authorization, PERMISSION);
+    vn.fashion.shipping.fee.FeeService.requireKey(key);
     var w = parse(object(body), false);
+    // Review I2 (03 section 1.3): an OPS retry after a timeout replays the first create instead of adding a rule.
+    String actorKey = "user:" + actor, operation = "shipping.rule.create";
+    String hash = vn.fashion.shipping.fee.FeeService.sha256(json.writeValueAsString(w));
+    var stored = fees.stored(actorKey, operation, key, hash);
+    if (stored.isPresent()) return Api.ok(HttpStatus.CREATED, stored.get(), tracer);
     UUID id = UUID.randomUUID();
     var created = tx.execute(status -> {
+      var outcome = keys.begin(actorKey, operation, key, hash);
+      if (outcome.status() == vn.fashion.platform.idempotency.IdempotencyStore.Status.CONFLICT)
+        throw new Api.Problem(HttpStatus.CONFLICT, "CONFLICT", "IDEMPOTENCY_KEY_REUSED", List.of());
+      if (outcome.status() == vn.fashion.platform.idempotency.IdempotencyStore.Status.COMPLETED)
+        return (Object) json.readTree(outcome.responseBody());
       rules.insert(id, w.name(), w.ruleType(), w.priority(), w.config(), w.active());
       var rule = rules.get(id);
       rules.audit(rule, actor, w.reason());
+      keys.finish(actorKey, operation, key, id, 201, json.writeValueAsString(rule));
       return rule;
     });
     return Api.ok(HttpStatus.CREATED, created, tracer);
@@ -84,7 +100,9 @@ public class RulesController {
     int priority = p.isIntegralNumber() && p.canConvertToInt() && p.intValue() >= 0 ? p.intValue() : -1;
     if (priority < 0) errors.add(new Api.FieldError("priority", "must be an integer >= 0"));
     JsonNode a = body.path("active");
-    if (!a.isMissingNode() && !a.isBoolean()) errors.add(new Api.FieldError("active", "must be a boolean"));
+    // Review 3: a PUT must state active, so editing a disabled rule never re-enables it by omission.
+    if ((update && a.isMissingNode()) || (!a.isMissingNode() && !a.isBoolean()))
+      errors.add(new Api.FieldError("active", update ? "is required, a boolean" : "must be a boolean"));
     long expected = -1;
     if (update) {
       JsonNode v = body.path("expected_version");

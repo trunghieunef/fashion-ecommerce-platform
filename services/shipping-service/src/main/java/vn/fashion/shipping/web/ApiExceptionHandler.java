@@ -31,7 +31,7 @@ public class ApiExceptionHandler {
     return json(Api.error(e.status(), e.code(), e.getMessage(), e.errors(), tracer));
   }
   @ExceptionHandler(DuplicateKeyException.class) ResponseEntity<Api.Error> duplicate(DuplicateKeyException e) {
-    return Api.error(HttpStatus.CONFLICT, "CONFLICT", "DUPLICATE", List.of(), tracer);
+    return json(Api.error(HttpStatus.CONFLICT, "CONFLICT", "DUPLICATE", List.of(), tracer));
   }
   @ExceptionHandler(MissingRequestHeaderException.class) ResponseEntity<Api.Error> missingHeader(MissingRequestHeaderException e) {
     return Api.error(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "MISSING_HEADER", List.of(new Api.FieldError(e.getHeaderName(), "is required")), tracer);
