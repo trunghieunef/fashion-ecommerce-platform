@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fashion.local/contracts/events/shipping-events.schema.json",
+  "title": "shipping.events shipment payloads (03 §5.2/5.3)",
+  "description": "TASK:SHP-01 emits SHIPMENT_CREATED only; SHIPMENT_STATUS_UPDATED and COD events arrive with SHP-02. handed_over_at stays null until hand-over is confirmed.",
+  "$defs": {
+    "ShipmentStatus": {
+      "description": "SHIPMENT_CREATED (and later SHIPMENT_STATUS_UPDATED): order identifiers, carrier, tracking, status, hand-over and version",
+      "type": "object",
+      "required": ["order_id", "order_no", "shipment_id", "carrier", "tracking_code", "status", "handed_over_at", "provider_occurred_at", "shipment_version"],
+      "properties": {
+        "order_id": {"$ref": "common.schema.json#/$defs/uuid"},
+        "order_no": {"type": "string", "minLength": 1, "maxLength": 32},
+        "shipment_id": {"$ref": "common.schema.json#/$defs/uuid"},
+        "carrier": {"enum": ["SELF"]},
+        "tracking_code": {"type": ["string", "null"], "minLength": 1, "maxLength": 128},
+        "status": {"enum": ["PENDING", "UNKNOWN", "CREATED", "PICKING", "DELIVERING", "DELIVERED", "FAILED", "RETURNING", "RETURNED", "CANCEL_PENDING", "CANCELLED", "MANUAL"]},
+        "handed_over_at": {"anyOf": [{"$ref": "common.schema.json#/$defs/utc_timestamp"}, {"type": "null"}]},
+        "provider_occurred_at": {"anyOf": [{"$ref": "common.schema.json#/$defs/utc_timestamp"}, {"type": "null"}]},
+        "shipment_version": {"type": "integer", "minimum": 0, "maximum": 9223372036854775807}
+      },
+      "additionalProperties": false
+    }
+  }
+}

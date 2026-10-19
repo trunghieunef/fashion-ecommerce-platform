@@ -10,7 +10,7 @@ không có Kafka client, HTTP client hay domain entity.
 |---|---|
 | `outbox.OutboxRepository` | `append` trong transaction nghiệp vụ, tự cấp `aggregate_sequence`. `claim` dùng lease, `SKIP LOCKED` và chỉ lấy sequence nhỏ nhất chưa SENT của mỗi aggregate. `markSent` CAS theo lease token và lease còn hạn. `relay` = claim → publish → markSent |
 | `inbox.InboxGuard` | `applyOnce(consumer, eventId, effect)`: ghi `processed_events` và effect trong cùng transaction; consumer chỉ commit offset sau khi hàm này trả về |
-| `idempotency.IdempotencyStore` | `begin`/`finish` theo `(actor_key, operation, key)` và `request_hash`. `CONFLICT` → service trả 409, `IN_PROGRESS` → 202, `COMPLETED` → trả lại response đã lưu |
+| `idempotency.IdempotencyStore` | `begin`/`finish` theo `(actor_key, operation, key)` và `request_hash`; `find` đọc kết quả mà không ghi/khóa (retry trả response cũ trước khi gọi dependency). `CONFLICT` → service trả 409, `IN_PROGRESS` → 202, `COMPLETED` → trả lại response đã lưu |
 | `work.BackgroundTaskRepository` | `background_tasks`: `enqueue` trong transaction nghiệp vụ (unique theo kind + business key), `claimDue`, `complete`/`fail` CAS theo token; hết số lần retry thì chuyển `MANUAL` |
 | `work.LeaseRepository` | Lease và CAS trên bảng work của service (ví dụ `order_sagas`): worker có lease đã hết hạn không ghi được kết quả |
 

@@ -1,0 +1,366 @@
+openapi: 3.1.0
+info:
+  title: Shipping API
+  version: 0.1.0
+  description: TASK:SHP-01 public SELF fee estimate (reference only, nothing stored) and OPS fee rules / shipment reads.
+    Weight always comes from catalog, never from the client. Fee table is a SAMPLE until O04 is decided. Every response is no-store.
+servers:
+- url: http://localhost:8080
+  description: Local Gateway
+tags:
+- name: Shipping fee
+  description: Public reference fee (no reservation, no final price)
+- name: Shipping admin
+  description: OPS rules and shipment reads (permission shipping.rules / shipping.read)
+paths:
+  /api/v1/shipping/fee/estimate:
+    post:
+      tags: [Shipping fee]
+      operationId: estimateShippingFee
+      summary: Reference SELF fee for a destination province and items
+      description: SHP-01 implemented. ACTIVE rule with the lowest priority covering province_code and the catalog weight
+        (Σ weight_grams × quantity) wins; cod_fee only when cod is true. Not a final price (order quote is), nothing is stored.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/FeeRequest'}
+      responses:
+        '200':
+          description: Estimate
+          headers: &headers
+            X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+            Cache-Control: {$ref: '#/components/headers/NoStore'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EstimateResponse'}
+              examples:
+                hcm:
+                  value:
+                    code: OK
+                    data: {fee: 25000, cod_fee: 10000, carrier: SELF, weight_grams: 1000, estimate: true, expires_at: '2026-10-19T04:00:00Z'}
+                    metadata: {request_id: shp01-synthetic-request, trace_id: shp01-synthetic-trace}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /admin/api/v1/shipping/rules:
+    get:
+      tags: [Shipping admin]
+      operationId: listShippingRules
+      summary: All fee rules, priority order
+      description: SHP-01 implemented. Permission shipping.rules.
+      security: [{bearerAuth: []}]
+      responses:
+        '200':
+          description: Rules
+          headers: *headers
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RulesResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      tags: [Shipping admin]
+      operationId: createShippingRule
+      summary: Create a fee rule (audited)
+      description: SHP-01 implemented. Permission shipping.rules. config is validated per rule_type; the write and its audit
+        row (actor, reason, resulting rule) share one transaction. Same Idempotency-Key and body from the same user replays the
+        first create (201, same rule); another body is 409 IDEMPOTENCY_KEY_REUSED.
+      security: [{bearerAuth: []}]
+      parameters:
+      - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RuleCreate'}
+      responses:
+        '201':
+          description: Created
+          headers: *headers
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RuleResponse'}
+              examples:
+                province:
+                  value:
+                    code: OK
+                    data: {id: 5b0e7c1a-0000-4000-8000-000000000009, name: Đà Nẵng, rule_type: PROVINCE, priority: 5,
+                      config: {provinces: ['48'], fee: 20000, cod_fee: 5000}, active: true, version: 0, updated_at: '2026-10-19T03:00:00Z'}
+                    metadata: {request_id: shp01-synthetic-request, trace_id: shp01-synthetic-trace}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /admin/api/v1/shipping/rules/{id}:
+    put:
+      tags: [Shipping admin]
+      operationId: updateShippingRule
+      summary: Replace a fee rule at an expected version (audited)
+      description: SHP-01 implemented. Permission shipping.rules. Stale expected_version is 409 VERSION_CONFLICT (current=N).
+      security: [{bearerAuth: []}]
+      parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RuleUpdate'}
+      responses:
+        '200':
+          description: Updated
+          headers: *headers
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RuleResponse'}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /admin/api/v1/shipping/shipments:
+    get:
+      tags: [Shipping admin]
+      operationId: listShipments
+      summary: Shipments newest first
+      description: SHP-01 implemented. Permission shipping.read. Optional status filter; keyset cursor (created_at, id).
+      security: [{bearerAuth: []}]
+      parameters:
+      - {name: status, in: query, schema: {$ref: '#/components/schemas/ShipmentStatus'}}
+      - {name: cursor, in: query, schema: {type: string}}
+      - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+      responses:
+        '200':
+          description: Page
+          headers: *headers
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ShipmentPageResponse'}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /admin/api/v1/shipping/shipments/{id}:
+    get:
+      tags: [Shipping admin]
+      operationId: getShipment
+      summary: Shipment detail with addresses and status history
+      description: SHP-01 implemented. Permission shipping.read. Addresses are personal data (13 §3); never logged.
+      security: [{bearerAuth: []}]
+      parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Detail
+          headers: *headers
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ShipmentDetailResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT, description: ADR-21 access token with shipping.read / shipping.rules}
+  headers:
+    NoStore:
+      description: Never cached, errors included.
+      schema: {type: string, const: no-store}
+  schemas:
+    Money: {type: integer, minimum: 0, maximum: 1000000000}
+    ProvinceCode: {type: string, pattern: '^[A-Za-z0-9_-]{1,32}$', description: 'Same code as user_addresses.province_code (O04 open)'}
+    FeeRequest:
+      type: object
+      required: [province_code, items, cod]
+      properties:
+        province_code: {$ref: '#/components/schemas/ProvinceCode'}
+        cod: {type: boolean}
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          description: Distinct variant_id
+          items:
+            type: object
+            required: [variant_id, quantity]
+            properties:
+              variant_id: {type: string, format: uuid}
+              quantity: {type: integer, minimum: 1, maximum: 99}
+    Estimate:
+      type: object
+      additionalProperties: false
+      required: [fee, cod_fee, carrier, weight_grams, estimate, expires_at]
+      properties:
+        fee: {$ref: '#/components/schemas/Money'}
+        cod_fee: {$ref: '#/components/schemas/Money'}
+        carrier: {type: string, const: SELF}
+        weight_grams: {type: integer, minimum: 1, maximum: 2147483647}
+        estimate: {type: boolean, const: true}
+        expires_at: {type: string, format: date-time}
+    EstimateResponse:
+      type: object
+      required: [code, data, metadata]
+      properties:
+        code: {type: string, const: OK}
+        data: {$ref: '#/components/schemas/Estimate'}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
+    RuleType: {type: string, enum: [FLAT, PROVINCE, WEIGHT]}
+    RuleConfig:
+      description: 'FLAT {fee, cod_fee}; PROVINCE {provinces, fee, cod_fee}; WEIGHT {provinces?, tiers:[{max_weight_grams|null, fee}] strictly increasing, only the last unbounded, cod_fee}'
+      type: object
+      properties:
+        fee: {$ref: '#/components/schemas/Money'}
+        cod_fee: {$ref: '#/components/schemas/Money'}
+        provinces: {type: array, minItems: 1, maxItems: 100, items: {$ref: '#/components/schemas/ProvinceCode'}}
+        tiers:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            type: object
+            required: [max_weight_grams, fee]
+            properties:
+              max_weight_grams: {type: [integer, 'null'], minimum: 1}
+              fee: {$ref: '#/components/schemas/Money'}
+    RuleCreate:
+      type: object
+      required: [name, rule_type, priority, config, reason]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 200}
+        rule_type: {$ref: '#/components/schemas/RuleType'}
+        priority: {type: integer, minimum: 0, description: Lower wins}
+        config: {$ref: '#/components/schemas/RuleConfig'}
+        active: {type: boolean, default: true}
+        reason: {type: string, minLength: 1, maxLength: 500, description: Audit reason}
+    RuleUpdate:
+      type: object
+      description: Full replacement; active is required so editing a disabled rule never re-enables it by omission.
+      required: [expected_version, name, rule_type, priority, config, active, reason]
+      properties:
+        expected_version: {type: integer, minimum: 0}
+        name: {type: string, minLength: 1, maxLength: 200}
+        rule_type: {$ref: '#/components/schemas/RuleType'}
+        priority: {type: integer, minimum: 0}
+        config: {$ref: '#/components/schemas/RuleConfig'}
+        active: {type: boolean}
+        reason: {type: string, minLength: 1, maxLength: 500}
+    Rule:
+      type: object
+      additionalProperties: false
+      required: [id, name, rule_type, priority, config, active, version, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        rule_type: {$ref: '#/components/schemas/RuleType'}
+        priority: {type: integer, minimum: 0}
+        config: {$ref: '#/components/schemas/RuleConfig'}
+        active: {type: boolean}
+        version: {type: integer, minimum: 0}
+        updated_at: {type: string, format: date-time}
+    RuleResponse:
+      type: object
+      required: [code, data, metadata]
+      properties:
+        code: {type: string, const: OK}
+        data: {$ref: '#/components/schemas/Rule'}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
+    RulesResponse:
+      type: object
+      required: [code, data, metadata]
+      properties:
+        code: {type: string, const: OK}
+        data: {type: array, items: {$ref: '#/components/schemas/Rule'}}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
+    ShipmentStatus: {type: string, enum: [PENDING, UNKNOWN, CREATED, PICKING, DELIVERING, DELIVERED, FAILED, RETURNING, RETURNED, CANCEL_PENDING, CANCELLED, MANUAL]}
+    ShipmentSummary:
+      type: object
+      additionalProperties: false
+      required: [shipment_id, order_id, order_no, status, carrier, tracking_code, fee, cod_amount, handed_over_at, created_at]
+      properties:
+        shipment_id: {type: string, format: uuid}
+        order_id: {type: string, format: uuid}
+        order_no: {type: string, minLength: 1, maxLength: 32}
+        status: {$ref: '#/components/schemas/ShipmentStatus'}
+        carrier: {type: string, const: SELF}
+        tracking_code: {type: [string, 'null']}
+        fee: {$ref: '#/components/schemas/Money'}
+        cod_amount: {type: integer, minimum: 0}
+        handed_over_at: {type: [string, 'null'], format: date-time}
+        created_at: {type: string, format: date-time}
+    ShipmentPageResponse:
+      type: object
+      required: [code, data, metadata]
+      properties:
+        code: {type: string, const: OK}
+        data:
+          type: object
+          required: [items, next_cursor]
+          properties:
+            items: {type: array, items: {$ref: '#/components/schemas/ShipmentSummary'}}
+            next_cursor: {type: [string, 'null']}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
+    ShipmentDetailResponse:
+      type: object
+      required: [code, data, metadata]
+      properties:
+        code: {type: string, const: OK}
+        data:
+          type: object
+          description: Summary fields plus quote_id, weight_grams, cod_collected_amount, cod_remitted_amount, assigned_to, version,
+            from_address, to_address and history[{from_status, to_status, provider_event_key, applied, reason, created_at}]
+          required: [shipment_id, order_id, status, to_address, history]
+          properties:
+            shipment_id: {type: string, format: uuid}
+            order_id: {type: string, format: uuid}
+            status: {$ref: '#/components/schemas/ShipmentStatus'}
+            from_address: {type: object}
+            to_address: {type: object}
+            history: {type: array, items: {type: object}}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
+  responses:
+    Invalid:
+      description: INVALID_FIELDS, MALFORMED_JSON, WEIGHT_OUT_OF_RANGE or INVALID_PARAMETER
+      headers: *headers
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+    Unprocessable:
+      description: VARIANT_NOT_AVAILABLE (errors items[i].variant_id) or NO_SHIPPING_RULE
+      headers: *headers
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+          examples:
+            rule:
+              value: {code: VALIDATION_ERROR, message: NO_SHIPPING_RULE, errors: [{field: province_code, message: no active rule covers this destination and weight}],
+                metadata: {request_id: shp01-synthetic-request, trace_id: shp01-synthetic-trace}}
+    Unavailable:
+      description: Catalog could not answer (DEPENDENCY_UNAVAILABLE); nothing stored
+      headers: *headers
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+    Unauthorized:
+      description: INVALID_ACCESS_TOKEN
+      headers: *headers
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+    Forbidden:
+      description: PERMISSION_REQUIRED
+      headers: *headers
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+    NotFound:
+      description: RULE_NOT_FOUND or SHIPMENT_NOT_FOUND
+      headers: *headers
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+    Conflict:
+      description: VERSION_CONFLICT (errors expected_version current=N) or IDEMPOTENCY_KEY_REUSED
+      headers: *headers
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}

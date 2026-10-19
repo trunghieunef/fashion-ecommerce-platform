@@ -555,8 +555,8 @@ flowchart TD
 
 | Luồng | Xử lý | Lỗi / kết quả |
 |---|---|---|
-| Fee estimate/quote | Validate địa chỉ, lấy weight từ catalog snapshot → áp dụng rule/carrier → trả fee/cod_fee/carrier/expiry | Preview cache 1h được; giá chốt cần còn hiệu lực; carrier lỗi chỉ dùng bảng phí fallback đã cấu hình, có nhãn và khách xác nhận |
-| Create | Chỉ order hoặc OPS thông qua order kiểm tra PACKING + saga ready → insert shipment PENDING → gọi carrier cùng provider_request_id → lưu tracking/outbox | UNIQUE order_id chặn hai vận đơn; không tạo từ ORDER_PAID song song REST |
+| Fee estimate/quote | Validate địa chỉ, lấy weight từ catalog snapshot → áp dụng rule/carrier → trả fee/cod_fee/carrier/expiry. `SHP-01` implemented (SELF): rule ACTIVE priority nhỏ nhất khớp; estimate public không lưu, quote internal lưu `shipping_quotes` | Preview cache 1h được; giá chốt cần còn hiệu lực; carrier lỗi chỉ dùng bảng phí fallback đã cấu hình, có nhãn và khách xác nhận |
+| Create | Chỉ order hoặc OPS thông qua order kiểm tra PACKING + saga ready → insert shipment PENDING → gọi carrier cùng provider_request_id → lưu tracking/outbox. `SHP-01` implemented cho SELF: PENDING → CREATED cùng một TX (advisory lock theo quote), history + outbox SHIPMENT_CREATED | UNIQUE order_id chặn hai vận đơn; không tạo từ ORDER_PAID song song REST |
 | Retry create | Query theo merchant reference trước retry nếu request trước UNKNOWN | Tối đa 3 lần thử có kết quả xác định; không tìm được kết quả an toàn thì MANUAL, không chuyển hãng tự động |
 | Cancel trước bàn giao | Lưu CANCEL_PENDING → query/cancel carrier → CANCELLED chỉ khi xác nhận | Carrier đã lấy hàng hoặc UNKNOWN: báo order chờ/return, không cho restore kho |
 | Webhook status | Verify adapter → dedupe event → kiểm tra cạnh/sequence/timestamp → TX history + status/version + outbox | Event cũ ghi applied=false; thiếu tiền đề query carrier; không dùng bảng rank đơn giản cho mọi nhánh |

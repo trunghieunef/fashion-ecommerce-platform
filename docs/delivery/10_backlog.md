@@ -4,6 +4,11 @@ B1 · 2026-09-19 · Work package mặc định: **Planned; Assignee TBD; Reviewe
 
 ## 1. Cách nhận việc
 
+Update 2026-10-19 — `TASK:SHP-01` **Done (local, trước G0) — ngoại lệ O04 (phí mẫu), chuyển trạng thái thuộc SHP-02** theo [nghiệm thu](../evidence/acceptance-2026-10-19.md) (PR #29 CI PASS trên `afea3c6`, chờ merge `main`): shipping-service mới — rule phí SELF (tỉnh + trọng lượng từ catalog,
+COD), estimate public, quote internal lưu DB, một shipment SELF/đơn (CREATED, SHIPMENT_CREATED outbox), OPS rules/shipments;
+bảng phí mẫu vì O04 còn mở; `REQ:SHP-01/04`; dependency PLT-03, USR-02, CAT-02;
+[spec](../superpowers/specs/2026-10-19-shp-01-shipping-design.md), [evidence](../evidence/shp-01-local-2026-10-19.md).
+
 Update 2026-10-19 — `TASK:WEB-01` **Done (local, trước G0) — bản thô, chưa hoàn thiện chi tiết UI** theo [nghiệm thu](../evidence/acceptance-2026-10-19.md) (PR #28 CI PASS trên `c024084`, chờ merge `main`): storefront home/collection/listing/search/detail (SF-01/02/03), VI/EN,
 360px–desktop, filter trên URL reset cursor, tồn tham khảo ba trạng thái, zoom, size guide; UI đơn giản theo chỉ đạo chủ
 dự án (thẩm mỹ làm sau); `REQ:CAT-03/04/05/06`, `REQ:XCT-01/05`; dependency PLT-02 — dùng contract đã implement, PLT-02 vẫn

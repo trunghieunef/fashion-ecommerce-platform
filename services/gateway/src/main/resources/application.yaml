@@ -63,6 +63,15 @@ spring:
               uri: ${CART_BASE_URL:http://localhost:8084}
               predicates:
                 - Path=/api/v1/carts/**,/api/v1/carts
+            # TASK:SHP-01: public fee estimate and OPS shipping admin; shipping-service checks permissions.
+            - id: shipping-public
+              uri: ${SHIPPING_BASE_URL:http://localhost:8085}
+              predicates:
+                - Path=/api/v1/shipping/**
+            - id: shipping-admin
+              uri: ${SHIPPING_BASE_URL:http://localhost:8085}
+              predicates:
+                - Path=/admin/api/v1/shipping/**
             - id: user-auth-public
               uri: ${USER_BASE_URL:http://localhost:8082}
               predicates:

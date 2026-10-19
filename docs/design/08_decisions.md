@@ -430,6 +430,21 @@ Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác v
 | Kiểm tồn tham khảo khi thêm/tăng; lỗi dependency khi ghi → 503, khi đọc → preview UNAVAILABLE | Không giữ hàng, không chốt giá |
 | local-up sinh service key cho cart-service, thêm vào allowlist catalog/inventory | Lần đầu internal API có caller thật |
 
+## SHP-01 — quyết định 2026-10-19
+
+`TASK:SHP-01` · `REQ:SHP-01/04`. Chủ dự án giao agent tự chốt và duyệt [spec](../superpowers/specs/2026-10-19-shp-01-shipping-design.md):
+
+| Quyết định | Hệ quả |
+|---|---|
+| Service mới shipping-service (8085, DB `shipping`), chỉ carrier SELF | Carrier thật là SHP-03 |
+| O04 vẫn mở: bảng phí mẫu V002 "(mẫu)", OPS sửa qua API; mã tỉnh không kiểm danh mục | Phí thật cần PO/OPS chốt trước go-live |
+| Rule ACTIVE priority nhỏ nhất khớp thắng; không khớp → 422 (không phí 0) | FLAT là fallback do OPS cấu hình |
+| Trọng lượng shipping tự lấy từ catalog quote | Catalog allowlist thêm `shipping-service` |
+| Estimate public nhận `items` thay cart/version (khác baseline 03) | Không phụ thuộc giỏ/actor; không lưu |
+| Quote internal lưu `shipping_quotes` (bảng mới), hạn 15 phút; shipment lấy fee từ quote, quote phải khớp tỉnh/COD | Order kiểm hạn quote khi tạo đơn |
+| SELF tạo PENDING → CREATED trong một TX, tracking `SELF-<order_no>`; advisory lock theo quote (quote insert-only) | Bàn giao/giao/COD/cancel là SHP-02 |
+| Phát `SHIPMENT_CREATED` qua outbox từ SHP-01 | Schema + registry mới; chưa có consumer |
+
 ## WEB-01 — quyết định 2026-10-19
 
 `TASK:WEB-01`. Chủ dự án duyệt [spec](../superpowers/specs/2026-10-18-web-01-storefront-design.md) và chỉ đạo UI/UX đơn giản trước,
