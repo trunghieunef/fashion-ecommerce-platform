@@ -56,23 +56,20 @@ service_key() {
   shift 2
   if ! grep -q "^${prefix}_SERVICE_PRIVATE_KEY=." "$ENV_FILE"; then
     key="$(openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 |
-      openssl pkcs8 -topk8 -nocrypt -outform DER | base64 | tr -d '
-')"
+      openssl pkcs8 -topk8 -nocrypt -outform DER | base64 | tr -d '\r\n')"
     sed -i "s|^${prefix}_SERVICE_PRIVATE_KEY=.*|${prefix}_SERVICE_PRIVATE_KEY=$key|" "$ENV_FILE"
     sed -i "s|^${prefix}_SERVICE_PUBLIC_KEY=.*|${prefix}_SERVICE_PUBLIC_KEY=|" "$ENV_FILE"
   fi
   if ! grep -q "^${prefix}_SERVICE_PUBLIC_KEY=." "$ENV_FILE"; then
-    private="$(grep "^${prefix}_SERVICE_PRIVATE_KEY=" "$ENV_FILE" | cut -d= -f2- | tr -d '')"
-    public="$(printf '%s' "$private" | base64 -d | openssl pkey -inform DER -pubout -outform DER | base64 | tr -d '
-')"
+    private="$(grep "^${prefix}_SERVICE_PRIVATE_KEY=" "$ENV_FILE" | cut -d= -f2- | tr -d '\r')"
+    public="$(printf '%s' "$private" | base64 -d | openssl pkey -inform DER -pubout -outform DER | base64 | tr -d '\r\n')"
     sed -i "s|^${prefix}_SERVICE_PUBLIC_KEY=.*|${prefix}_SERVICE_PUBLIC_KEY=$public|" "$ENV_FILE"
   fi
-  public="$(grep "^${prefix}_SERVICE_PUBLIC_KEY=" "$ENV_FILE" | cut -d= -f2- | tr -d '')"
+  public="$(grep "^${prefix}_SERVICE_PUBLIC_KEY=" "$ENV_FILE" | cut -d= -f2- | tr -d '\r')"
   for callers_key in "$@"; do
-    current="$(grep "^${callers_key}=" "$ENV_FILE" | cut -d= -f2- | tr -d '')"
+    current="$(grep "^${callers_key}=" "$ENV_FILE" | cut -d= -f2- | tr -d '\r')"
     if [[ "$current" != *"${name}:${public}"* ]]; then
-      others="$(printf '%s' "$current" | tr ',' '
-' | grep -v "^${name}:" | paste -sd, - || true)"
+      others="$(printf '%s' "$current" | tr ',' '\n' | grep -v "^${name}:" | paste -sd, - || true)"
       sed -i "s|^${callers_key}=.*|${callers_key}=${others:+$others,}${name}:${public}|" "$ENV_FILE"
     fi
   done
