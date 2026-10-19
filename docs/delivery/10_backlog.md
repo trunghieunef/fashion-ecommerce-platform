@@ -4,6 +4,11 @@ B1 · 2026-09-19 · Work package mặc định: **Planned; Assignee TBD; Reviewe
 
 ## 1. Cách nhận việc
 
+Update 2026-10-20 — `TASK:SHP-02` **In progress (local)**: OPS SELF events có bằng chứng (gán shipper, bàn giao đặt
+`handed_over_at`, giao/thất bại/giao lại/hoàn), COD thu/nộp là event tài chính riêng, cancel trước bàn giao + tombstone
+hủy-trước-tạo, 409 sau bàn giao; `REQ:SHP-02/04/06`; dependency SHP-01;
+[spec](../superpowers/specs/2026-10-20-shp-02-self-events-cancel-design.md), [evidence](../evidence/shp-02-local-2026-10-20.md).
+
 Update 2026-10-19 — `TASK:SHP-01` **Done (local, trước G0) — ngoại lệ O04 (phí mẫu), chuyển trạng thái thuộc SHP-02** theo [nghiệm thu](../evidence/acceptance-2026-10-19.md) (PR #29 CI PASS trên `afea3c6`, đã merge `main` `cb4fe9b`): shipping-service mới — rule phí SELF (tỉnh + trọng lượng từ catalog,
 COD), estimate public, quote internal lưu DB, một shipment SELF/đơn (CREATED, SHIPMENT_CREATED outbox), OPS rules/shipments;
 bảng phí mẫu vì O04 còn mở; `REQ:SHP-01/04`; dependency PLT-03, USR-02, CAT-02;

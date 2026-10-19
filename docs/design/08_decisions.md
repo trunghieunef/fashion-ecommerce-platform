@@ -445,6 +445,20 @@ Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác v
 | SELF tạo PENDING → CREATED trong một TX, tracking `SELF-<order_no>`; advisory lock theo quote (quote insert-only) | Bàn giao/giao/COD/cancel là SHP-02 |
 | Phát `SHIPMENT_CREATED` qua outbox từ SHP-01 | Schema + registry mới; chưa có consumer |
 
+## SHP-02 — quyết định 2026-10-20
+
+`TASK:SHP-02` · `REQ:SHP-02/04/06`. Chủ dự án giao agent tự chốt và duyệt [spec](../superpowers/specs/2026-10-20-shp-02-self-events-cancel-design.md) (cả các mặc định §8):
+
+| Quyết định | Hệ quả |
+|---|---|
+| PICKING = đã gán shipper, chưa lấy hàng; `HANDED_OVER` là sự kiện riêng đặt `handed_over_at` | Order chỉ SHIPPING ở mốc bàn giao (T15) |
+| COD thu đủ `cod_amount` một lần (sau DELIVERED), nộp đủ phần còn lại một lần | Nộp nhiều đợt để sau nếu OPS cần |
+| `evidence_ref` là mã tham chiếu, chưa upload ảnh | Bằng chứng file làm sau (ADM-02) |
+| SELF event sai thứ tự/version → 409, không ghi `applied=false` | `applied=false` dành cho webhook carrier (SHP-03) |
+| Cancel SELF trước bàn giao là tức thì; tombstone cần quote tồn tại và khớp | CANCEL_PENDING dành cho carrier |
+| Path cancel `/internal/api/v1/shipping/shipments/by-order/{order_id}/cancel` | Tránh mơ hồ với `GET by-order/{order_id}` |
+| Chưa phát `NOTIFY_SHIPMENT_STATUS` | Thêm ở NOT-01 |
+
 ## WEB-01 — quyết định 2026-10-19
 
 `TASK:WEB-01`. Chủ dự án duyệt [spec](../superpowers/specs/2026-10-18-web-01-storefront-design.md) và chỉ đạo UI/UX đơn giản trước,
