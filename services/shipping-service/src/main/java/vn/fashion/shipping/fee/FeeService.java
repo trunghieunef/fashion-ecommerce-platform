@@ -104,14 +104,14 @@ public class FeeService {
     } catch (ArithmeticException e) {
       throw new Api.Problem(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "WEIGHT_OUT_OF_RANGE", List.of(new Api.FieldError("items", "total weight too large")));
     }
-    if (!unavailable.isEmpty()) throw new Api.Problem(HttpStatus.UNPROCESSABLE_CONTENT, "UNPROCESSABLE", "VARIANT_NOT_AVAILABLE", unavailable);
+    if (!unavailable.isEmpty()) throw new Api.Problem(HttpStatus.UNPROCESSABLE_CONTENT, "VALIDATION_ERROR", "VARIANT_NOT_AVAILABLE", unavailable);
     int grams = (int) weight;
     for (var rule : rules.active()) {
       var price = RuleConfig.parse(rule.ruleType(), rule.config()).price(input.provinceCode(), grams);
       if (price.isPresent())
         return new Fee(rule.id(), rule.version(), grams, price.get().fee(), input.cod() ? price.get().codFee() : 0);
     }
-    throw new Api.Problem(HttpStatus.UNPROCESSABLE_CONTENT, "UNPROCESSABLE", "NO_SHIPPING_RULE",
+    throw new Api.Problem(HttpStatus.UNPROCESSABLE_CONTENT, "VALIDATION_ERROR", "NO_SHIPPING_RULE",
         List.of(new Api.FieldError("province_code", "no active rule covers this destination and weight")));
   }
 

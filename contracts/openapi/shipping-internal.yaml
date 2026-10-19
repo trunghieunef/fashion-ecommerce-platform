@@ -1,0 +1,190 @@
+openapi: 3.1.0
+info:
+  title: Shipping internal API
+  version: 0.1.0
+  description: >
+    TASK:SHP-01 — quotes and SELF shipments for order-service (03 §4). ADR-19 ES256 service token, audience shipping-service,
+    caller order-service only; token and caller are checked before headers and body. Not routed by the public Gateway.
+    Every response is no-store. Addresses are accepted but never returned here.
+servers:
+- url: http://localhost:8085
+  description: Private shipping service; bypasses public Gateway
+tags:
+- name: Internal shipping
+  description: order-service only
+security:
+- serviceToken: []
+paths:
+  /internal/api/v1/shipping/quotes:
+    post:
+      tags: [Internal shipping]
+      operationId: createShippingQuote
+      summary: Stored fee quote the order snapshots
+      description: Same computation as the public estimate, stored with rule id/version and expires_at (+15 minutes). Same
+        Idempotency-Key and body replays the stored quote; another body is 409 IDEMPOTENCY_KEY_REUSED.
+      x-implementation-status: implemented
+      parameters:
+      - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: './shipping.yaml#/components/schemas/FeeRequest'}
+      responses:
+        '200':
+          description: Quote
+          headers: &headers
+            X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+            Cache-Control: {$ref: '#/components/headers/NoStore'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/QuoteResponse'}
+              examples:
+                quote:
+                  value:
+                    code: OK
+                    data: {quote_id: 6a1b2c3d-0000-4000-8000-000000000001, fee: 25000, cod_fee: 10000, carrier: SELF, weight_grams: 1000,
+                      rule_id: 5b0e7c1a-0000-4000-8000-000000000001, rule_version: 0, expires_at: '2026-10-19T03:15:00Z'}
+                    metadata: {request_id: shp01-synthetic-request, trace_id: shp01-synthetic-trace}
+        '400': &error
+          description: INVALID_FIELDS, INVALID_KEY, MALFORMED_JSON, WEIGHT_OUT_OF_RANGE
+          headers: *headers
+          content:
+            application/json:
+              schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+        '401': {<<: *error, description: INVALID_SERVICE_TOKEN}
+        '403': {<<: *error, description: CALLER_NOT_ALLOWED}
+        '409': {<<: *error, description: IDEMPOTENCY_KEY_REUSED}
+        '422': {<<: *error, description: VARIANT_NOT_AVAILABLE or NO_SHIPPING_RULE}
+        '503': {<<: *error, description: DEPENDENCY_UNAVAILABLE (catalog)}
+  /internal/api/v1/shipping/shipments:
+    post:
+      tags: [Internal shipping]
+      operationId: createShipment
+      summary: Create the SELF shipment of an order
+      description: >-
+        One shipment per order, created from one quote (fee is the quote's). One transaction: PENDING then CREATED with
+        tracking_code SELF-<order_no>, two history rows and outbox SHIPMENT_CREATED; handed_over_at stays null (SHP-02).
+        The quote must match the order: same province_code and cod = (cod_amount > 0), else 409 QUOTE_MISMATCH; a quote
+        already used by another order is 409 QUOTE_ALREADY_USED; unknown quote 404 QUOTE_NOT_FOUND. The same order with the
+        same body returns the existing shipment (any key); another body is 409 SHIPMENT_CONFLICT. Quote expiry is checked by
+        the order when it creates the order, not here (packing may happen later).
+      x-implementation-status: implemented
+      parameters:
+      - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ShipmentCreate'}
+      responses:
+        '200':
+          description: Shipment (new or existing)
+          headers: *headers
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ShipmentResponse'}
+              examples:
+                created:
+                  value:
+                    code: OK
+                    data: &shipment {shipment_id: 6a1b2c3d-0000-4000-8000-000000000002, order_id: 99999999-9999-4999-8999-999999999991,
+                      order_no: ORD202610000001, status: CREATED, carrier: SELF, tracking_code: SELF-ORD202610000001, fee: 25000,
+                      cod_amount: 250000, handed_over_at: null, version: 1}
+                    metadata: {request_id: shp01-synthetic-request, trace_id: shp01-synthetic-trace}
+        '400': *error
+        '401': {<<: *error, description: INVALID_SERVICE_TOKEN}
+        '403': {<<: *error, description: CALLER_NOT_ALLOWED}
+        '404': {<<: *error, description: QUOTE_NOT_FOUND}
+        '409': {<<: *error, description: 'SHIPMENT_CONFLICT, QUOTE_MISMATCH, QUOTE_ALREADY_USED or IDEMPOTENCY_KEY_REUSED'}
+  /internal/api/v1/shipping/shipments/by-order/{order_id}:
+    get:
+      tags: [Internal shipping]
+      operationId: getShipmentByOrder
+      summary: Shipment state and hand-over of an order
+      x-implementation-status: implemented
+      parameters:
+      - {name: order_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Shipment
+          headers: *headers
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ShipmentResponse'}
+              examples:
+                created:
+                  value: {code: OK, data: *shipment, metadata: {request_id: shp01-synthetic-request, trace_id: shp01-synthetic-trace}}
+        '401': {<<: *error, description: INVALID_SERVICE_TOKEN}
+        '403': {<<: *error, description: CALLER_NOT_ALLOWED}
+        '404': {<<: *error, description: SHIPMENT_NOT_FOUND}
+components:
+  securitySchemes:
+    serviceToken: {type: http, scheme: bearer, bearerFormat: 'JWT (ES256 service token, ADR-19; aud shipping-service; caller order-service)'}
+  headers:
+    NoStore:
+      description: Never cached, errors included.
+      schema: {type: string, const: no-store}
+  schemas:
+    Quote:
+      type: object
+      additionalProperties: false
+      required: [quote_id, fee, cod_fee, carrier, weight_grams, rule_id, rule_version, expires_at]
+      properties:
+        quote_id: {type: string, format: uuid}
+        fee: {type: integer, minimum: 0}
+        cod_fee: {type: integer, minimum: 0}
+        carrier: {type: string, const: SELF}
+        weight_grams: {type: integer, minimum: 1}
+        rule_id: {type: string, format: uuid}
+        rule_version: {type: integer, minimum: 0}
+        expires_at: {type: string, format: date-time}
+    QuoteResponse:
+      type: object
+      required: [code, data, metadata]
+      properties:
+        code: {type: string, const: OK}
+        data: {$ref: '#/components/schemas/Quote'}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
+    Code: {type: string, pattern: '^[A-Za-z0-9_-]{1,32}$'}
+    ShipmentCreate:
+      type: object
+      required: [order_id, order_no, quote_id, to_address, cod_amount]
+      properties:
+        order_id: {type: string, format: uuid}
+        order_no: {type: string, minLength: 1, maxLength: 32}
+        quote_id: {type: string, format: uuid}
+        cod_amount: {type: integer, minimum: 0, description: 0 for online payment; must agree with the quote's cod}
+        to_address:
+          type: object
+          additionalProperties: false
+          required: [recipient_name, phone, province_code, ward_code, address_line]
+          properties:
+            recipient_name: {type: string, minLength: 1, maxLength: 200}
+            phone: {type: string, pattern: '^[0-9+ ]{6,32}$'}
+            province_code: {$ref: '#/components/schemas/Code'}
+            district_code: {$ref: '#/components/schemas/Code'}
+            ward_code: {$ref: '#/components/schemas/Code'}
+            address_line: {type: string, minLength: 1, maxLength: 500}
+    Shipment:
+      type: object
+      additionalProperties: false
+      required: [shipment_id, order_id, order_no, status, carrier, tracking_code, fee, cod_amount, handed_over_at, version]
+      properties:
+        shipment_id: {type: string, format: uuid}
+        order_id: {type: string, format: uuid}
+        order_no: {type: string, minLength: 1, maxLength: 32}
+        status: {$ref: './shipping.yaml#/components/schemas/ShipmentStatus'}
+        carrier: {type: string, const: SELF}
+        tracking_code: {type: [string, 'null']}
+        fee: {type: integer, minimum: 0}
+        cod_amount: {type: integer, minimum: 0}
+        handed_over_at: {type: [string, 'null'], format: date-time}
+        version: {type: integer, minimum: 0}
+    ShipmentResponse:
+      type: object
+      required: [code, data, metadata]
+      properties:
+        code: {type: string, const: OK}
+        data: {$ref: '#/components/schemas/Shipment'}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
