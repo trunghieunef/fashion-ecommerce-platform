@@ -55,6 +55,15 @@ class IdempotencyStoreTest extends PostgresTestSupport {
   }
 
   @Test
+  void findReadsWithoutWriting() {
+    assertThat(store.find(ACTOR, OP, KEY, HASH)).isEmpty();
+    assertThat(store.begin(ACTOR, OP, KEY, HASH).status()).isEqualTo(Status.STARTED);
+    store.finish(ACTOR, OP, KEY, ORDER_ID, 201, "{}");
+    assertThat(store.find(ACTOR, OP, KEY, HASH).orElseThrow().status()).isEqualTo(Status.COMPLETED);
+    assertThat(store.find(ACTOR, OP, KEY, "b".repeat(64)).orElseThrow().status()).isEqualTo(Status.CONFLICT);
+  }
+
+  @Test
   void finishIsOneShot() {
     store.begin(ACTOR, OP, KEY, HASH);
     assertThat(store.finish(ACTOR, OP, KEY, ORDER_ID, 201, "{}")).isTrue();

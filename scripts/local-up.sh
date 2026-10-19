@@ -49,46 +49,36 @@ if ! grep -q '^USER_JWT_PUBLIC_KEYS=.' "$ENV_FILE"; then
   sed -i "s|^USER_JWT_PUBLIC_KEYS=.*|USER_JWT_PUBLIC_KEYS=${kid:-user-local}:$public|" "$ENV_FILE"
 fi
 
-# TASK:CART-01: ADR-19 caller key pair for cart-service (catalog quote, inventory stock); generated once.
-if ! grep -q '^CART_SERVICE_PRIVATE_KEY=.' "$ENV_FILE"; then
-  key="$(openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 |
-    openssl pkcs8 -topk8 -nocrypt -outform DER | base64 | tr -d '\r\n')"
-  sed -i "s|^CART_SERVICE_PRIVATE_KEY=.*|CART_SERVICE_PRIVATE_KEY=$key|" "$ENV_FILE"
-  sed -i "s|^CART_SERVICE_PUBLIC_KEY=.*|CART_SERVICE_PUBLIC_KEY=|" "$ENV_FILE"
-fi
-if ! grep -q '^CART_SERVICE_PUBLIC_KEY=.' "$ENV_FILE"; then
-  private="$(grep '^CART_SERVICE_PRIVATE_KEY=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r')"
-  public="$(printf '%s' "$private" | base64 -d | openssl pkey -inform DER -pubout -outform DER | base64 | tr -d '\r\n')"
-  sed -i "s|^CART_SERVICE_PUBLIC_KEY=.*|CART_SERVICE_PUBLIC_KEY=$public|" "$ENV_FILE"
-fi
-# Allow cart-service on catalog and inventory internal APIs; existing callers are kept.
-cart_public="$(grep '^CART_SERVICE_PUBLIC_KEY=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r')"
-for callers_key in CATALOG_INTERNAL_CALLERS INVENTORY_INTERNAL_CALLERS; do
-  current="$(grep "^${callers_key}=" "$ENV_FILE" | cut -d= -f2- | tr -d '\r')"
-  if [[ "$current" != *"cart-service:${cart_public}"* ]]; then
-    others="$(printf '%s' "$current" | tr ',' '\n' | grep -v '^cart-service:' | paste -sd, - || true)"
-    sed -i "s|^${callers_key}=.*|${callers_key}=${others:+$others,}cart-service:${cart_public}|" "$ENV_FILE"
+# ADR-19 caller key pair for a service, generated once (PREFIX_SERVICE_PRIVATE/PUBLIC_KEY); its public key is merged
+# into each named *_INTERNAL_CALLERS list, keeping the other callers.
+service_key() {
+  local prefix="$1" name="$2" key private public current others callers_key
+  shift 2
+  if ! grep -q "^${prefix}_SERVICE_PRIVATE_KEY=." "$ENV_FILE"; then
+    key="$(openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 |
+      openssl pkcs8 -topk8 -nocrypt -outform DER | base64 | tr -d '
+')"
+    sed -i "s|^${prefix}_SERVICE_PRIVATE_KEY=.*|${prefix}_SERVICE_PRIVATE_KEY=$key|" "$ENV_FILE"
+    sed -i "s|^${prefix}_SERVICE_PUBLIC_KEY=.*|${prefix}_SERVICE_PUBLIC_KEY=|" "$ENV_FILE"
   fi
-done
-
-# TASK:SHP-01: ADR-19 caller key pair for shipping-service (catalog quote for weights); generated once.
-if ! grep -q '^SHIPPING_SERVICE_PRIVATE_KEY=.' "$ENV_FILE"; then
-  key="$(openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 |
-    openssl pkcs8 -topk8 -nocrypt -outform DER | base64 | tr -d '\r\n')"
-  sed -i "s|^SHIPPING_SERVICE_PRIVATE_KEY=.*|SHIPPING_SERVICE_PRIVATE_KEY=$key|" "$ENV_FILE"
-  sed -i "s|^SHIPPING_SERVICE_PUBLIC_KEY=.*|SHIPPING_SERVICE_PUBLIC_KEY=|" "$ENV_FILE"
-fi
-if ! grep -q '^SHIPPING_SERVICE_PUBLIC_KEY=.' "$ENV_FILE"; then
-  private="$(grep '^SHIPPING_SERVICE_PRIVATE_KEY=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r')"
-  public="$(printf '%s' "$private" | base64 -d | openssl pkey -inform DER -pubout -outform DER | base64 | tr -d '\r\n')"
-  sed -i "s|^SHIPPING_SERVICE_PUBLIC_KEY=.*|SHIPPING_SERVICE_PUBLIC_KEY=$public|" "$ENV_FILE"
-fi
-shipping_public="$(grep '^SHIPPING_SERVICE_PUBLIC_KEY=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r')"
-current="$(grep '^CATALOG_INTERNAL_CALLERS=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r')"
-if [[ "$current" != *"shipping-service:${shipping_public}"* ]]; then
-  others="$(printf '%s' "$current" | tr ',' '\n' | grep -v '^shipping-service:' | paste -sd, - || true)"
-  sed -i "s|^CATALOG_INTERNAL_CALLERS=.*|CATALOG_INTERNAL_CALLERS=${others:+$others,}shipping-service:${shipping_public}|" "$ENV_FILE"
-fi
+  if ! grep -q "^${prefix}_SERVICE_PUBLIC_KEY=." "$ENV_FILE"; then
+    private="$(grep "^${prefix}_SERVICE_PRIVATE_KEY=" "$ENV_FILE" | cut -d= -f2- | tr -d '')"
+    public="$(printf '%s' "$private" | base64 -d | openssl pkey -inform DER -pubout -outform DER | base64 | tr -d '
+')"
+    sed -i "s|^${prefix}_SERVICE_PUBLIC_KEY=.*|${prefix}_SERVICE_PUBLIC_KEY=$public|" "$ENV_FILE"
+  fi
+  public="$(grep "^${prefix}_SERVICE_PUBLIC_KEY=" "$ENV_FILE" | cut -d= -f2- | tr -d '')"
+  for callers_key in "$@"; do
+    current="$(grep "^${callers_key}=" "$ENV_FILE" | cut -d= -f2- | tr -d '')"
+    if [[ "$current" != *"${name}:${public}"* ]]; then
+      others="$(printf '%s' "$current" | tr ',' '
+' | grep -v "^${name}:" | paste -sd, - || true)"
+      sed -i "s|^${callers_key}=.*|${callers_key}=${others:+$others,}${name}:${public}|" "$ENV_FILE"
+    fi
+  done
+}
+service_key CART cart-service CATALOG_INTERNAL_CALLERS INVENTORY_INTERNAL_CALLERS  # TASK:CART-01: catalog quote, inventory stock
+service_key SHIPPING shipping-service CATALOG_INTERNAL_CALLERS                     # TASK:SHP-01: catalog quote for weights
 
 ./mvnw -q -DskipTests package
 npm ci

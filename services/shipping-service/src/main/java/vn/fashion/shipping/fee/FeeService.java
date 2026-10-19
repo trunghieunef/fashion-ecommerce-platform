@@ -1,12 +1,8 @@
 package vn.fashion.shipping.fee;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.UUID;
@@ -66,17 +62,14 @@ public class FeeService {
 
   /** Same key + body replays the stored quote; another body is 409. */
   public Object quote(String key, Input input) {
-    requireKey(key);
-    String hash = sha256(input.canonical());
+    String hash = Api.sha256(input.canonical());
     // Review I1: an UNKNOWN retry gets the stored quote even when catalog is down or the rules changed since.
-    var stored = stored(ACTOR, "shipping.quote", key, hash);
+    var stored = keys.find(ACTOR, "shipping.quote", key, hash).map(o -> Api.replay(o, json));
     if (stored.isPresent()) return stored.get();
     var fee = compute(input);
     return tx.execute(status -> {
-      var outcome = keys.begin(ACTOR, "shipping.quote", key, hash);
-      if (outcome.status() == IdempotencyStore.Status.CONFLICT)
-        throw new Api.Problem(HttpStatus.CONFLICT, "CONFLICT", "IDEMPOTENCY_KEY_REUSED", List.of());
-      if (outcome.status() == IdempotencyStore.Status.COMPLETED) return (Object) json.readTree(outcome.responseBody());
+      var replay = Api.replay(keys.begin(ACTOR, "shipping.quote", key, hash), json);
+      if (replay != null) return replay;
       UUID id = UUID.randomUUID();
       Instant expires = jdbc.sql("select now() + cast(:ttl as interval)").param("ttl", quoteTtl.toSeconds() + " seconds")
           .query(java.sql.Timestamp.class).single().toInstant();
@@ -90,18 +83,6 @@ public class FeeService {
       keys.finish(ACTOR, "shipping.quote", key, id, 200, json.writeValueAsString(quote));
       return quote;
     });
-  }
-
-  /** Completed identical request -> its stored body; same key with another body -> 409; else empty (no lock taken). */
-  public java.util.Optional<Object> stored(String actor, String operation, String key, String hash) {
-    return jdbc.sql("""
-        select request_hash, status, response_body::text as body from idempotency_requests
-        where actor_key = :a and operation = :o and key = :k""").param("a", actor).param("o", operation).param("k", key)
-        .query((rs, n) -> {
-          if (!rs.getString("request_hash").equals(hash))
-            throw new Api.Problem(HttpStatus.CONFLICT, "CONFLICT", "IDEMPOTENCY_KEY_REUSED", List.of());
-          return "COMPLETED".equals(rs.getString("status")) ? (Object) json.readTree(rs.getString("body")) : null;
-        }).optional();
   }
 
   Fee compute(Input input) {
@@ -122,7 +103,12 @@ public class FeeService {
     if (!unavailable.isEmpty()) throw new Api.Problem(HttpStatus.UNPROCESSABLE_CONTENT, "VALIDATION_ERROR", "VARIANT_NOT_AVAILABLE", unavailable);
     int grams = (int) weight;
     for (var rule : rules.active()) {
-      var price = RuleConfig.parse(rule.ruleType(), rule.config()).price(input.provinceCode(), grams);
+      RuleConfig config;
+      // Review PR #29 #4: a stored config the API would reject is a server fault (500), never the client's 400;
+      // skipping it would silently charge another rule's price.
+      try { config = RuleConfig.parse(rule.ruleType(), rule.config()); }
+      catch (Api.Problem e) { throw new IllegalStateException("shipping rule " + rule.id() + " has an invalid config: " + e.errors()); }
+      var price = config.price(input.provinceCode(), grams);
       if (price.isPresent())
         return new Fee(rule.id(), rule.version(), grams, price.get().fee(), input.cod() ? price.get().codFee() : 0);
     }
@@ -143,13 +129,7 @@ public class FeeService {
     if (!list.isArray() || list.isEmpty() || list.size() > 100) errors.add(new Api.FieldError("items", "must have 1..100 items"));
     else for (int i = 0; i < list.size(); i++) {
       JsonNode item = list.get(i);
-      UUID id = null;
-      try {
-        if (item.path("variant_id").isString()) {
-          id = UUID.fromString(item.path("variant_id").asString());
-          if (!id.toString().equals(item.path("variant_id").asString())) id = null;
-        }
-      } catch (IllegalArgumentException ignored) { }
+      UUID id = item.path("variant_id").isString() ? Api.uuid(item.path("variant_id").asString()) : null;
       JsonNode q = item.path("quantity");
       boolean qty = q.isIntegralNumber() && q.canConvertToInt() && q.intValue() >= 1 && q.intValue() <= 99;
       if (id == null) errors.add(new Api.FieldError("items[" + i + "].variant_id", "must be a lowercase UUID"));
@@ -161,12 +141,4 @@ public class FeeService {
     return new Input(province, List.copyOf(items.values()), cod.asBoolean());
   }
 
-  public static void requireKey(String key) {
-    if (key == null || key.isBlank() || key.length() > 128)
-      throw new Api.Problem(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "INVALID_KEY", List.of(new Api.FieldError("Idempotency-Key", "must be 1..128 characters")));
-  }
-  public static String sha256(String value) {
-    try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8))); }
-    catch (NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
-  }
 }

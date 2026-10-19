@@ -45,7 +45,9 @@ public class CatalogClient {
       var result = new HashMap<UUID, Variant>();
       for (JsonNode n : data) {
         UUID id = UUID.fromString(n.path("variant_id").asString());
-        if (!n.path("found").asBoolean(false)) { result.put(id, new Variant(id, false, false, 0)); continue; }
+        // Review PR #29 #5: a missing or non-boolean found is a malformed answer (503), not "variant unknown" (422).
+        if (!n.path("found").isBoolean()) throw new DependencyUnavailable("catalog");
+        if (!n.path("found").asBoolean()) { result.put(id, new Variant(id, false, false, 0)); continue; }
         var weight = n.path("weight_grams");
         if (!n.path("active").isBoolean() || !weight.isIntegralNumber() || !weight.canConvertToInt() || weight.intValue() < 1)
           throw new DependencyUnavailable("catalog");

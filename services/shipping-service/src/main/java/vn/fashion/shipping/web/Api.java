@@ -1,10 +1,17 @@
 package vn.fashion.shipping.web;
 
 import io.micrometer.tracing.Tracer;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import vn.fashion.platform.idempotency.IdempotencyStore;
 
 /** Response envelope (03 section 1.2), matching user-service. */
 public final class Api {
@@ -42,5 +49,33 @@ public final class Api {
   public static ResponseEntity<Error> error(HttpStatus status, String code, String message, List<FieldError> errors, Metadata meta) {
     return ResponseEntity.status(status).header("X-Correlation-Id", meta.traceId())
         .contentType(org.springframework.http.MediaType.APPLICATION_JSON).body(new Error(code, message, errors, meta));
+  }
+
+  /** Request body that must be a JSON object, else 400 MALFORMED_JSON. */
+  public static JsonNode object(ObjectMapper json, String body) {
+    try {
+      JsonNode node = body == null ? null : json.readTree(body);
+      if (node != null && node.isObject()) return node;
+    } catch (tools.jackson.core.JacksonException ignored) { }
+    throw new Problem(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "MALFORMED_JSON", List.of());
+  }
+  /** Lowercase canonical UUID, else null. */
+  public static UUID uuid(String raw) {
+    try { UUID id = UUID.fromString(raw); if (id.toString().equals(raw)) return id; } catch (RuntimeException ignored) { }
+    return null;
+  }
+  public static void requireKey(String key) {
+    if (key == null || key.isBlank() || key.length() > 128)
+      throw new Problem(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "INVALID_KEY", List.of(new FieldError("Idempotency-Key", "must be 1..128 characters")));
+  }
+  public static String sha256(String value) {
+    try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8))); }
+    catch (NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
+  }
+  /** Idempotency outcome: CONFLICT -> 409, COMPLETED -> the stored body, otherwise null (the caller does the work). */
+  public static Object replay(IdempotencyStore.Outcome outcome, ObjectMapper json) {
+    if (outcome.status() == IdempotencyStore.Status.CONFLICT)
+      throw new Problem(HttpStatus.CONFLICT, "CONFLICT", "IDEMPOTENCY_KEY_REUSED", List.of());
+    return outcome.status() == IdempotencyStore.Status.COMPLETED ? json.readTree(outcome.responseBody()) : null;
   }
 }

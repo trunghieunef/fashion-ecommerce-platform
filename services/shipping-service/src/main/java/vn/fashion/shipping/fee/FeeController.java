@@ -1,14 +1,12 @@
 package vn.fashion.shipping.fee;
 
 import io.micrometer.tracing.Tracer;
-import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import vn.fashion.shipping.internal.InternalCallers;
 import vn.fashion.shipping.web.Api;
@@ -27,7 +25,7 @@ public class FeeController {
 
   @PostMapping("/api/v1/shipping/fee/estimate")
   public ResponseEntity<?> estimate(@RequestBody(required = false) String body) {
-    return Api.ok(HttpStatus.OK, fees.estimate(FeeService.parse(object(json, body))), tracer);
+    return Api.ok(HttpStatus.OK, fees.estimate(FeeService.parse(Api.object(json, body))), tracer);
   }
 
   @PostMapping("/internal/api/v1/shipping/quotes")
@@ -35,15 +33,7 @@ public class FeeController {
                                  @RequestHeader(name = "Idempotency-Key", required = false) String key,
                                  @RequestBody(required = false) String body) {
     callers.require(authorization);
-    FeeService.requireKey(key);
-    return Api.ok(HttpStatus.OK, fees.quote(key, FeeService.parse(object(json, body))), tracer);
-  }
-
-  public static JsonNode object(ObjectMapper json, String body) {
-    try {
-      JsonNode node = body == null ? null : json.readTree(body);
-      if (node != null && node.isObject()) return node;
-    } catch (tools.jackson.core.JacksonException ignored) { }
-    throw new Api.Problem(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "MALFORMED_JSON", List.of());
+    Api.requireKey(key);
+    return Api.ok(HttpStatus.OK, fees.quote(key, FeeService.parse(Api.object(json, body))), tracer);
   }
 }

@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import vn.fashion.platform.idempotency.IdempotencyStore;
 import vn.fashion.shipping.web.AdminAuth;
 import vn.fashion.shipping.web.Api;
 
@@ -31,12 +32,11 @@ public class RulesController {
   private final TransactionTemplate tx;
   private final ObjectMapper json;
   private final Tracer tracer;
-  private final vn.fashion.platform.idempotency.IdempotencyStore keys;
-  private final vn.fashion.shipping.fee.FeeService fees;
+  private final IdempotencyStore keys;
 
   public RulesController(AdminAuth auth, RuleRepository rules, TransactionTemplate tx, ObjectMapper json, Tracer tracer,
-                         vn.fashion.platform.idempotency.IdempotencyStore keys, vn.fashion.shipping.fee.FeeService fees) {
-    this.auth = auth; this.rules = rules; this.tx = tx; this.json = json; this.tracer = tracer; this.keys = keys; this.fees = fees;
+                         IdempotencyStore keys) {
+    this.auth = auth; this.rules = rules; this.tx = tx; this.json = json; this.tracer = tracer; this.keys = keys;
   }
 
   @GetMapping
@@ -50,20 +50,17 @@ public class RulesController {
                                   @RequestHeader(name = "Idempotency-Key", required = false) String key,
                                   @RequestBody(required = false) String body) {
     UUID actor = auth.require(authorization, PERMISSION);
-    vn.fashion.shipping.fee.FeeService.requireKey(key);
-    var w = parse(object(body), false);
+    Api.requireKey(key);
+    var w = parse(Api.object(json, body), false);
     // Review I2 (03 section 1.3): an OPS retry after a timeout replays the first create instead of adding a rule.
     String actorKey = "user:" + actor, operation = "shipping.rule.create";
-    String hash = vn.fashion.shipping.fee.FeeService.sha256(json.writeValueAsString(w));
-    var stored = fees.stored(actorKey, operation, key, hash);
+    String hash = Api.sha256(json.writeValueAsString(w));
+    var stored = keys.find(actorKey, operation, key, hash).map(o -> Api.replay(o, json));
     if (stored.isPresent()) return Api.ok(HttpStatus.CREATED, stored.get(), tracer);
     UUID id = UUID.randomUUID();
     var created = tx.execute(status -> {
-      var outcome = keys.begin(actorKey, operation, key, hash);
-      if (outcome.status() == vn.fashion.platform.idempotency.IdempotencyStore.Status.CONFLICT)
-        throw new Api.Problem(HttpStatus.CONFLICT, "CONFLICT", "IDEMPOTENCY_KEY_REUSED", List.of());
-      if (outcome.status() == vn.fashion.platform.idempotency.IdempotencyStore.Status.COMPLETED)
-        return (Object) json.readTree(outcome.responseBody());
+      var replay = Api.replay(keys.begin(actorKey, operation, key, hash), json);
+      if (replay != null) return replay;
       rules.insert(id, w.name(), w.ruleType(), w.priority(), w.config(), w.active());
       var rule = rules.get(id);
       rules.audit(rule, actor, w.reason());
@@ -78,7 +75,7 @@ public class RulesController {
                                   @PathVariable String id, @RequestBody(required = false) String body) {
     UUID actor = auth.require(authorization, PERMISSION);
     UUID ruleId = uuid(id);
-    var w = parse(object(body), true);
+    var w = parse(Api.object(json, body), true);
     var updated = tx.execute(status -> {
       var current = rules.lock(ruleId).orElseThrow(RulesController::notFound);
       if (current.version() != w.expectedVersion())
@@ -120,16 +117,10 @@ public class RulesController {
     if (value.isEmpty() || value.length() > max) { errors.add(new Api.FieldError(field, "must be 1.." + max + " characters")); return null; }
     return value;
   }
-  private JsonNode object(String body) {
-    try {
-      JsonNode node = body == null ? null : json.readTree(body);
-      if (node != null && node.isObject()) return node;
-    } catch (tools.jackson.core.JacksonException ignored) { }
-    throw new Api.Problem(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "MALFORMED_JSON", List.of());
-  }
   private static UUID uuid(String raw) {
-    try { UUID id = UUID.fromString(raw); if (id.toString().equals(raw)) return id; } catch (IllegalArgumentException ignored) { }
-    throw notFound();
+    UUID id = Api.uuid(raw);
+    if (id == null) throw notFound();
+    return id;
   }
   static Api.Problem notFound() { return new Api.Problem(HttpStatus.NOT_FOUND, "NOT_FOUND", "RULE_NOT_FOUND", List.of()); }
 }

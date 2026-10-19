@@ -13,7 +13,6 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import tools.jackson.databind.ObjectMapper;
-import vn.fashion.shipping.fee.FeeController;
 import vn.fashion.shipping.internal.InternalCallers;
 import vn.fashion.shipping.web.Api;
 
@@ -35,9 +34,9 @@ public class ShipmentController {
                                   @RequestHeader(name = "Idempotency-Key", required = false) String key,
                                   @RequestBody(required = false) String body) {
     callers.require(authorization);
-    vn.fashion.shipping.fee.FeeService.requireKey(key);
+    Api.requireKey(key);
     var meta = Api.metadata(tracer);
-    var request = ShipmentService.parse(FeeController.object(json, body));
+    var request = ShipmentService.parse(Api.object(json, body));
     return Api.ok(HttpStatus.OK, shipments.create(key, request, meta.traceId()), meta);
   }
 
@@ -49,8 +48,9 @@ public class ShipmentController {
   }
 
   static UUID id(String raw) {
-    try { UUID id = UUID.fromString(raw); if (id.toString().equals(raw)) return id; } catch (IllegalArgumentException ignored) { }
-    throw notFound();
+    UUID id = Api.uuid(raw);
+    if (id == null) throw notFound();
+    return id;
   }
   static Api.Problem notFound() { return new Api.Problem(HttpStatus.NOT_FOUND, "NOT_FOUND", "SHIPMENT_NOT_FOUND", List.of()); }
 }

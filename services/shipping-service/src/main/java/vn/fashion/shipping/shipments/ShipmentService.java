@@ -16,7 +16,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import vn.fashion.platform.idempotency.IdempotencyStore;
-import vn.fashion.shipping.fee.FeeService;
 import vn.fashion.shipping.rules.RuleConfig;
 import vn.fashion.shipping.web.Api;
 
@@ -49,7 +48,6 @@ public class ShipmentService {
 
   /** Returns a fresh View or the stored response; the same order with another body is 409 SHIPMENT_CONFLICT. */
   public Object create(String key, Create c, String correlationId) {
-    FeeService.requireKey(key);
     // Review 4: canonical JSON (sorted keys), so moving text between fields is another body, never a retry.
     var canonical = new java.util.TreeMap<String, Object>();
     canonical.put("order_id", c.orderId().toString());
@@ -57,11 +55,10 @@ public class ShipmentService {
     canonical.put("quote_id", c.quoteId().toString());
     canonical.put("cod_amount", c.codAmount());
     canonical.put("to_address", new java.util.TreeMap<>(c.toAddress()));
-    String hash = FeeService.sha256(json.writeValueAsString(canonical));
+    String hash = Api.sha256(json.writeValueAsString(canonical));
     return tx.execute(status -> {
-      var outcome = keys.begin(ACTOR, "shipping.shipment.create", key, hash);
-      if (outcome.status() == IdempotencyStore.Status.CONFLICT) throw conflict("IDEMPOTENCY_KEY_REUSED");
-      if (outcome.status() == IdempotencyStore.Status.COMPLETED) return (Object) json.readTree(outcome.responseBody());
+      var replay = Api.replay(keys.begin(ACTOR, "shipping.shipment.create", key, hash), json);
+      if (replay != null) return replay;
       // Serialize every create that uses this quote (same order retried, or another order reusing it). Quotes are
       // insert-only for the runtime role, so a transaction-scoped advisory lock replaces SELECT ... FOR UPDATE.
       jdbc.sql("select pg_advisory_xact_lock(hashtextextended(:q, 0))").param("q", c.quoteId().toString()).query((rs, n) -> 1).list();
@@ -153,9 +150,8 @@ public class ShipmentService {
     return value;
   }
   private static UUID uuid(JsonNode node, String field, List<Api.FieldError> errors) {
-    try {
-      if (node.isString()) { UUID id = UUID.fromString(node.asString()); if (id.toString().equals(node.asString())) return id; }
-    } catch (IllegalArgumentException ignored) { }
+    UUID id = node.isString() ? Api.uuid(node.asString()) : null;
+    if (id != null) return id;
     errors.add(new Api.FieldError(field, "must be a lowercase UUID"));
     return null;
   }

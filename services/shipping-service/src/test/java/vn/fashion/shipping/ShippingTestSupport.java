@@ -73,7 +73,7 @@ public abstract class ShippingTestSupport {
     try (var c = DriverManager.getConnection(postgres.getJdbcUrl(), "postgres", "postgres"); var s = c.createStatement()) {
       s.execute("""
           delete from shipment_status_history; delete from shipments; delete from shipping_quotes; delete from idempotency_requests;
-          delete from outbox_events; delete from shipping_rule_changes;
+          delete from outbox_events; delete from shipping_rule_changes where actor_id is not null; -- keeps the V003 seed audit
           delete from shipping_rules where id not in ('5b0e7c1a-0000-4000-8000-000000000001','5b0e7c1a-0000-4000-8000-000000000002','5b0e7c1a-0000-4000-8000-000000000003');
           update shipping_rules set active = true""");
     }

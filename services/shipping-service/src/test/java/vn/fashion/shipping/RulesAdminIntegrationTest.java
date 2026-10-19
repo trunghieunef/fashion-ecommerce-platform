@@ -72,7 +72,15 @@ class RulesAdminIntegrationTest extends ShippingTestSupport {
     assertThat(problem(send("POST", RULES, FLAT.replace("1000", "2000"), "Authorization", ops(), "Idempotency-Key", "rule-1"), 409))
         .isEqualTo("IDEMPOTENCY_KEY_REUSED");
     assertThat(jdbc.queryForObject("select count(*) from shipping_rules", Integer.class)).isEqualTo(4);
-    assertThat(jdbc.queryForObject("select count(*) from shipping_rule_changes", Integer.class)).isEqualTo(1);
+    assertThat(jdbc.queryForObject("select count(*) from shipping_rule_changes where actor_id is not null", Integer.class)).isEqualTo(1);
+  }
+
+  @Test void sampleRulesHaveTheirVersionZeroAudit() {
+    // Review PR #29 #3: a quote priced by a sample rule at version 0 can be traced to the config after OPS edits it.
+    assertThat(jdbc.queryForObject("""
+        select count(*) from shipping_rule_changes c join shipping_rules r on r.id = c.rule_id
+        where c.version = 0 and c.actor_id is null and c.snapshot -> 'config' = r.config_json and c.snapshot ->> 'rule_type' = r.rule_type""",
+        Integer.class)).isEqualTo(3);
   }
 
   @Test void updateMustStateActive() {

@@ -1,5 +1,6 @@
 package vn.fashion.platform.idempotency;
 
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
@@ -33,6 +34,14 @@ public class IdempotencyStore {
     if (inserted == 1) {
       return new Outcome(Status.STARTED, null, null, null);
     }
+    return find(actorKey, operation, key, requestHash).orElseThrow();
+  }
+
+  /**
+   * Read-only lookup, no row is written or locked: lets a retry get its stored response before
+   * the caller repeats expensive or dependency-bound work. Empty when the key was never used.
+   */
+  public Optional<Outcome> find(String actorKey, String operation, String key, String requestHash) {
     return jdbc.sql("""
             select request_hash, status, resource_id, response_code, response_body::text as body
             from idempotency_requests
@@ -49,7 +58,7 @@ public class IdempotencyStore {
           return new Outcome(Status.COMPLETED, rs.getObject("resource_id", UUID.class),
               rs.getInt("response_code"), rs.getString("body"));
         })
-        .single();
+        .optional();
   }
 
   /** Stores the final response once; false when it was already completed. Never store secrets. */

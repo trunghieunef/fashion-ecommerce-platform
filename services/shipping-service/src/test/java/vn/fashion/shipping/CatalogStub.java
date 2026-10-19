@@ -17,6 +17,8 @@ public final class CatalogStub {
   public static final Map<String, Variant> VARIANTS = new ConcurrentHashMap<>();
   public static final List<String> AUTH = new CopyOnWriteArrayList<>();
   public static volatile int status = 200;
+  /** When set, sent as-is instead of the computed answer. */
+  public static volatile String answer;
   private static final Pattern UUID = Pattern.compile("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
   private static final HttpServer SERVER = start();
   private CatalogStub() { }
@@ -33,7 +35,7 @@ public final class CatalogStub {
           return v == null ? "{\"variant_id\":\"" + m.group() + "\",\"found\":false}"
               : "{\"variant_id\":\"" + m.group() + "\",\"found\":true,\"active\":" + v.active() + ",\"weight_grams\":" + v.weightGrams() + "}";
         }).toList();
-        byte[] out = (status == 200 ? "{\"code\":\"OK\",\"data\":[" + String.join(",", items) + "]}" : "{}").getBytes(StandardCharsets.UTF_8);
+        byte[] out = (answer != null ? answer : status == 200 ? "{\"code\":\"OK\",\"data\":[" + String.join(",", items) + "]}" : "{}").getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "application/json");
         exchange.sendResponseHeaders(status, out.length);
         exchange.getResponseBody().write(out);
@@ -44,5 +46,5 @@ public final class CatalogStub {
     } catch (IOException e) { throw new AssertionError(e); }
   }
   public static String url() { return "http://127.0.0.1:" + SERVER.getAddress().getPort(); }
-  public static void reset() { VARIANTS.clear(); AUTH.clear(); status = 200; }
+  public static void reset() { VARIANTS.clear(); AUTH.clear(); status = 200; answer = null; }
 }

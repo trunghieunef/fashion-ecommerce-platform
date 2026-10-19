@@ -53,6 +53,22 @@ class FeeIntegrationTest extends ShippingTestSupport {
     assertThat(problem(send("POST", ESTIMATE, feeBody("79", false, ok, 1)), 503)).isEqualTo("DEPENDENCY_UNAVAILABLE");
   }
 
+  @Test void brokenStoredRuleIsAServerFault() {
+    // Review PR #29 #4: a config the API would refuse (only reachable via migration/SQL) is 500, not the client's 400.
+    jdbc.update("""
+        insert into shipping_rules(id, name, rule_type, priority, config_json) values (gen_random_uuid(), 'broken', 'FLAT', 0, '{"fee":-1}')""");
+    var r = send("POST", ESTIMATE, feeBody("79", false, variant(500), 1));
+    assertThat(r.statusCode()).isEqualTo(500);
+    assertThat(json(r).path("code").asString()).isEqualTo("INTERNAL");
+  }
+
+  @Test void catalogAnswerWithoutFoundIsUnavailable() {
+    // Review PR #29 #5: a malformed catalog answer is temporary (503), never "variant not available" (422).
+    String v = UUID.randomUUID().toString();
+    CatalogStub.answer = "{\"code\":\"OK\",\"data\":[{\"variant_id\":\"" + v + "\"}]}";
+    assertThat(problem(send("POST", ESTIMATE, feeBody("79", false, v, 1)), 503)).isEqualTo("DEPENDENCY_UNAVAILABLE");
+  }
+
   @Test void weightOverflowIs400() {
     String huge = variant(Integer.MAX_VALUE);
     assertThat(problem(send("POST", ESTIMATE, feeBody("79", false, huge, 2)), 400)).isEqualTo("WEIGHT_OUT_OF_RANGE");

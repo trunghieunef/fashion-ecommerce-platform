@@ -55,7 +55,7 @@ Port 8085 (không publish ra host). Qua Gateway: `/api/v1/shipping/**`, `/admin/
 
 `V001__shipping.sql`: `shipping_rules`, `shipping_rule_changes` (audit), `shipping_quotes` (mới so với 05), `shipments`,
 `shipment_status_history`, `outbox_events`, `idempotency_requests`. Runtime không DELETE/TRUNCATE shipments/history/quotes/rules,
-không UPDATE history/quotes/audit. `V002__sample_rules.sql`: 3 rule mẫu. Local DB/role: `infra/local/postgres-init/05-shipping-db.sh`.
+không UPDATE history/quotes/audit. `V002__sample_rules.sql`: 3 rule mẫu; `V003__sample_rules_audit.sql`: audit version 0 của chúng. Local DB/role: `infra/local/postgres-init/05-shipping-db.sh`.
 
 ## Health, observability, giới hạn
 
@@ -63,4 +63,5 @@ Readiness `readinessState,db`; log JSON ECS có redaction (địa chỉ không v
 Chưa có: chuyển trạng thái sau CREATED, COD, cancel/tombstone (SHP-02), carrier thật (SHP-03), consumer `SHIPMENT_CREATED` (ORD).
 Estimate public không cần đăng nhập và gọi catalog (≤ 100 variant/request); chưa có rate limit riêng ở Gateway — thêm cùng
 rate-limit chung (03 §1) trước go-live. Mỗi lần tính phí kiểm lại config của mọi rule ACTIVE; một rule lỗi (chỉ có thể do
-migration, API đã validate) làm estimate trả 400 thay vì bỏ qua rule đó.
+migration, API đã validate) làm estimate/quote trả 500 `INTERNAL` (lỗi server, có log rule id) — không bỏ qua để tránh tính nhầm
+giá của rule khác. Catalog trả `found` thiếu/sai kiểu → 503, không phải 422.
