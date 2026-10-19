@@ -32,7 +32,7 @@ import vn.fashion.platform.security.ServiceTokenVerifier;
 @RestController
 public class VariantQuoteController {
   static final String PATH = "/internal/api/v1/catalog/variants/quote";
-  private static final Set<String> ALLOWED_CALLERS = Set.of("cart-service", "order-service");
+  private static final Set<String> ALLOWED_CALLERS = Set.of("cart-service", "order-service", "shipping-service");
   private static final List<MediaType> JSON_TYPES = List.of(MediaType.APPLICATION_JSON,
       MediaType.parseMediaType("application/*+json"));
   public static class QuoteRequest {

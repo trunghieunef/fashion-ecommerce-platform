@@ -12,5 +12,6 @@
   "ORDER_CONFIRMED": {"schema": "order-events.schema.json#/$defs/OrderState", "topic": "order.events", "partition_key": "order_no", "aggregate_id": "order_id"},
   "ORDER_PAID": {"schema": "order-events.schema.json#/$defs/OrderState", "topic": "order.events", "partition_key": "order_no", "aggregate_id": "order_id"},
   "ORDER_CANCELLED": {"schema": "order-events.schema.json#/$defs/OrderCancelled", "topic": "order.events", "partition_key": "order_no", "aggregate_id": "order_id"},
-  "ORDER_COMPLETED": {"schema": "order-events.schema.json#/$defs/OrderCompleted", "topic": "order.events", "partition_key": "order_no", "aggregate_id": "order_id"}
+  "ORDER_COMPLETED": {"schema": "order-events.schema.json#/$defs/OrderCompleted", "topic": "order.events", "partition_key": "order_no", "aggregate_id": "order_id"},
+  "SHIPMENT_CREATED": {"schema": "shipping-events.schema.json#/$defs/ShipmentStatus", "topic": "shipping.events", "partition_key": "order_no", "aggregate_id": "shipment_id"}
 }
