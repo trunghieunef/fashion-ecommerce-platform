@@ -33,7 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class VariantQuoteIntegrationTest extends CatalogAdminTestSupport {
   private static final String PATH = "/internal/api/v1/catalog/variants/quote";
   private static final Map<String, ECKey> KEYS = Map.of(
-      "cart-service", serviceKey(), "order-service", serviceKey(), "notification-service", serviceKey());
+      "cart-service", serviceKey(), "order-service", serviceKey(), "shipping-service", serviceKey(), "notification-service", serviceKey());
   private PublicCatalogFixtures fixtures;
   private UUID category;
 
@@ -126,7 +126,7 @@ class VariantQuoteIntegrationTest extends CatalogAdminTestSupport {
     UUID v2 = fixtures.variant(product, "QUOTE-2", "L", "White", 150000L, "ACTIVE");
     UUID missing = UUID.randomUUID();
     jdbc.update("update products set version=7 where id=?", product);
-    for (String caller : List.of("cart-service", "order-service")) {
+    for (String caller : List.of("cart-service", "order-service", "shipping-service")) {
       var response = quote(serviceToken(caller), List.of(v2.toString(), missing.toString(), v1.toString()));
       noStore(response);
       JsonNode items = data(response, 200);

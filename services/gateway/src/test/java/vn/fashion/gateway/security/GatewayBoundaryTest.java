@@ -58,6 +58,7 @@ class GatewayBoundaryTest {
     registry.add("USER_BASE_URL", CATALOG::baseUrl);
     registry.add("INVENTORY_BASE_URL", CATALOG::baseUrl);
     registry.add("CART_BASE_URL", CATALOG::baseUrl);
+    registry.add("SHIPPING_BASE_URL", CATALOG::baseUrl);
     registry.add("fashion.security.allowed-origins", () -> "http://localhost:4173");
     registry.add("GATEWAY_MANAGEMENT_PORT", () -> "0");
   }
@@ -105,6 +106,19 @@ class GatewayBoundaryTest {
   void cartInternalIsNotRouted() {
     client.get().uri("/internal/api/v1/carts/4c8a1f2e-0000-4000-8000-000000000011/snapshot").exchange().expectStatus().isNotFound();
     assertThat(CATALOG.requestCount()).isZero();
+  }
+
+  // TASK:SHP-01: public estimate and OPS admin reach shipping-service; /internal stays unrouted.
+  @Test
+  void shippingRoutesAreForwardedAndInternalIsNot() {
+    client.post().uri("/api/v1/shipping/fee/estimate").header("Origin", "http://localhost:4173").exchange().expectStatus().isOk();
+    assertThat(CATALOG.path()).isEqualTo("/api/v1/shipping/fee/estimate");
+    client.get().uri("/admin/api/v1/shipping/rules").exchange().expectStatus().isOk();
+    assertThat(CATALOG.path()).isEqualTo("/admin/api/v1/shipping/rules");
+    int before = CATALOG.requestCount();
+    client.post().uri("/internal/api/v1/shipping/quotes").exchange().expectStatus().isNotFound();
+    client.get().uri("/internal/api/v1/shipping/shipments/by-order/4c8a1f2e-0000-4000-8000-000000000011").exchange().expectStatus().isNotFound();
+    assertThat(CATALOG.requestCount()).isEqualTo(before);
   }
 
   @Test
