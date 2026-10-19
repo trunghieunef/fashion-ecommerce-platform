@@ -99,10 +99,11 @@ public class ShipmentService {
     return jdbc.sql(VIEW + " where order_id = :o").param("o", orderId).query(View.class).optional();
   }
 
+  /** clock_timestamp(), not now(): rows of one transaction must keep their order for (created_at, id) reads. */
   private void history(UUID shipment, String key, String from, String to) {
     jdbc.sql("""
-        insert into shipment_status_history(id, shipment_id, provider_event_key, from_status, to_status, applied)
-        values (:id, :s, :k, :f, :t, true)""")
+        insert into shipment_status_history(id, shipment_id, provider_event_key, from_status, to_status, applied, created_at)
+        values (:id, :s, :k, :f, :t, true, clock_timestamp())""")
         .param("id", UUID.randomUUID()).param("s", shipment).param("k", key).param("f", from).param("t", to).update();
   }
 
