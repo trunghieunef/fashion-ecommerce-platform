@@ -1,0 +1,21 @@
+{
+  "event_id": "77777777-7777-4777-8777-777777777792",
+  "event_type": "SHIPMENT_STATUS_UPDATED",
+  "version": 1,
+  "occurred_at": "2026-10-20T03:00:00Z",
+  "aggregate_id": "66666666-6666-4666-8666-666666666691",
+  "aggregate_version": 3,
+  "aggregate_sequence": 3,
+  "correlation_id": "synthetic-contract-example",
+  "payload": {
+    "order_id": "99999999-9999-4999-8999-999999999991",
+    "order_no": "ORD202610000001",
+    "shipment_id": "66666666-6666-4666-8666-666666666691",
+    "carrier": "SELF",
+    "tracking_code": "SELF-ORD202610000001",
+    "status": "DELIVERING",
+    "handed_over_at": "2026-10-20T02:55:00Z",
+    "provider_occurred_at": "2026-10-20T02:55:00Z",
+    "shipment_version": 3
+  }
+}

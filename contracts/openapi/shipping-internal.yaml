@@ -3,7 +3,7 @@ info:
   title: Shipping internal API
   version: 0.1.0
   description: >
-    TASK:SHP-01 — quotes and SELF shipments for order-service (03 §4). ADR-19 ES256 service token, audience shipping-service,
+    TASK:SHP-01 — quotes and SELF shipments for order-service (03 §4); TASK:SHP-02 — cancel with tombstone. ADR-19 ES256 service token, audience shipping-service,
     caller order-service only; token and caller are checked before headers and body. Not routed by the public Gateway.
     Every response is no-store. Addresses are accepted but never returned here.
 servers:
@@ -96,7 +96,47 @@ paths:
         '401': {<<: *error, description: INVALID_SERVICE_TOKEN}
         '403': {<<: *error, description: CALLER_NOT_ALLOWED}
         '404': {<<: *error, description: QUOTE_NOT_FOUND}
-        '409': {<<: *error, description: 'SHIPMENT_CONFLICT, QUOTE_MISMATCH, QUOTE_ALREADY_USED or IDEMPOTENCY_KEY_REUSED'}
+        '409': {<<: *error, description: 'SHIPMENT_CONFLICT, SHIPMENT_CANCELLED (cancelled or tombstone, any body), QUOTE_MISMATCH, QUOTE_ALREADY_USED or IDEMPOTENCY_KEY_REUSED'}
+  /internal/api/v1/shipping/shipments/by-order/{order_id}/cancel:
+    post:
+      tags: [Internal shipping]
+      operationId: cancelShipment
+      summary: Cancel the shipment of an order, or block a late create (tombstone)
+      description: >-
+        SHP-02. Body is the original create snapshot plus reason; order_id must equal the path. One transaction under the
+        same quote lock as create. No shipment yet: the quote must exist, match and be unused, then a CANCELLED tombstone
+        is stored so a later create is 409 SHIPMENT_CANCELLED. CREATED/PICKING with the same snapshot: CANCELLED at once
+        (SELF has no third party). Already CANCELLED: returned as is (any key). Handed over (DELIVERING and later): 409
+        SHIPMENT_HANDED_OVER with the status; the order must take the return flow and must not restore stock.
+      x-implementation-status: implemented
+      parameters:
+      - {name: order_id, in: path, required: true, schema: {type: string, format: uuid}}
+      - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ShipmentCancel'}
+      responses:
+        '200':
+          description: Shipment after cancel (status CANCELLED, handed_over_at null)
+          headers: *headers
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ShipmentResponse'}
+              examples:
+                cancelled:
+                  value:
+                    code: OK
+                    data: {shipment_id: 6a1b2c3d-0000-4000-8000-000000000002, order_id: 99999999-9999-4999-8999-999999999991,
+                      order_no: ORD202610000001, status: CANCELLED, carrier: SELF, tracking_code: SELF-ORD202610000001, fee: 25000,
+                      cod_amount: 250000, handed_over_at: null, version: 2}
+                    metadata: {request_id: shp02-synthetic-request, trace_id: shp02-synthetic-trace}
+        '400': *error
+        '401': {<<: *error, description: INVALID_SERVICE_TOKEN}
+        '403': {<<: *error, description: CALLER_NOT_ALLOWED}
+        '404': {<<: *error, description: QUOTE_NOT_FOUND (no shipment and unknown quote)}
+        '409': {<<: *error, description: 'SHIPMENT_HANDED_OVER (errors status), SHIPMENT_CONFLICT (snapshot differs), QUOTE_MISMATCH, QUOTE_ALREADY_USED or IDEMPOTENCY_KEY_REUSED'}
   /internal/api/v1/shipping/shipments/by-order/{order_id}:
     get:
       tags: [Internal shipping]
@@ -166,6 +206,13 @@ components:
             district_code: {$ref: '#/components/schemas/Code'}
             ward_code: {$ref: '#/components/schemas/Code'}
             address_line: {type: string, minLength: 1, maxLength: 500}
+    ShipmentCancel:
+      allOf:
+      - {$ref: '#/components/schemas/ShipmentCreate'}
+      - type: object
+        required: [reason]
+        properties:
+          reason: {type: string, minLength: 1, maxLength: 500}
     Shipment:
       type: object
       additionalProperties: false

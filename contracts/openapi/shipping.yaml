@@ -2,7 +2,8 @@ openapi: 3.1.0
 info:
   title: Shipping API
   version: 0.1.0
-  description: TASK:SHP-01 public SELF fee estimate (reference only, nothing stored) and OPS fee rules / shipment reads.
+  description: TASK:SHP-01 public SELF fee estimate (reference only, nothing stored) and OPS fee rules / shipment reads;
+    TASK:SHP-02 OPS SELF evidence events (hand-over, delivery, return, COD collected/remitted).
     Weight always comes from catalog, never from the client. Fee table is a SAMPLE until O04 is decided. Every response is no-store.
 servers:
 - url: http://localhost:8080
@@ -11,7 +12,7 @@ tags:
 - name: Shipping fee
   description: Public reference fee (no reservation, no final price)
 - name: Shipping admin
-  description: OPS rules and shipment reads (permission shipping.rules / shipping.read)
+  description: OPS rules, shipment reads and SELF events (permission shipping.rules / shipping.read / shipping.self_event)
 paths:
   /api/v1/shipping/fee/estimate:
     post:
@@ -159,9 +160,44 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /admin/api/v1/shipping/shipments/{id}/self-events:
+    post:
+      tags: [Shipping admin]
+      operationId: recordSelfEvent
+      summary: Record a SELF delivery or COD event with evidence
+      description: >-
+        SHP-02 implemented. Permission shipping.self_event. One transaction: lock the shipment, check expected_version and
+        the SELF edge, update status (or COD amounts), append history (actor, evidence_ref; no address) and outbox
+        SHIPMENT_STATUS_UPDATED / COD_COLLECTED / COD_REMITTED. Edges: ASSIGN CREATED|PICKING to PICKING (assigned_to);
+        HANDED_OVER PICKING to DELIVERING (evidence_ref, sets handed_over_at); DELIVERED DELIVERING to DELIVERED (evidence_ref);
+        DELIVERY_FAILED DELIVERING to FAILED (reason); REDELIVER FAILED to DELIVERING; RETURN_STARTED FAILED to RETURNING (reason);
+        RETURNED RETURNING to RETURNED (evidence_ref; stock is restored only through order and inventory after counting);
+        COD_COLLECTED on DELIVERED, amount = cod_amount, once; COD_REMITTED on DELIVERED, amount = collected minus remitted.
+        Fields a type does not use are rejected. Same Idempotency-Key and body replays the response.
+      security: [{bearerAuth: []}]
+      parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SelfEvent'}
+      responses:
+        '200':
+          description: Shipment detail after the event
+          headers: *headers
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ShipmentDetailResponse'}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
 components:
   securitySchemes:
-    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT, description: ADR-21 access token with shipping.read / shipping.rules}
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT, description: ADR-21 access token with shipping.read / shipping.rules / shipping.self_event}
   headers:
     NoStore:
       description: Never cached, errors included.
@@ -272,6 +308,18 @@ components:
         data: {type: array, items: {$ref: '#/components/schemas/Rule'}}
         metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
     ShipmentStatus: {type: string, enum: [PENDING, UNKNOWN, CREATED, PICKING, DELIVERING, DELIVERED, FAILED, RETURNING, RETURNED, CANCEL_PENDING, CANCELLED, MANUAL]}
+    SelfEvent:
+      type: object
+      additionalProperties: false
+      required: [event_type, expected_version]
+      properties:
+        event_type: {type: string, enum: [ASSIGN, HANDED_OVER, DELIVERED, DELIVERY_FAILED, REDELIVER, RETURN_STARTED, RETURNED, COD_COLLECTED, COD_REMITTED]}
+        expected_version: {type: integer, minimum: 0}
+        occurred_at: {type: string, format: date-time, description: 'Default now; not before the shipment was created, at most 5 minutes ahead'}
+        assigned_to: {type: string, format: uuid, description: ASSIGN only (shipper user id)}
+        evidence_ref: {type: string, minLength: 1, maxLength: 200, description: 'Receipt/photo reference; required for HANDED_OVER, DELIVERED, RETURNED, COD_*'}
+        reason: {type: string, minLength: 1, maxLength: 500, description: Required for DELIVERY_FAILED and RETURN_STARTED}
+        amount: {type: integer, minimum: 1, description: COD_COLLECTED / COD_REMITTED only (VND)}
     ShipmentSummary:
       type: object
       additionalProperties: false
@@ -359,7 +407,7 @@ components:
         application/json:
           schema: {$ref: ./common.yaml#/components/schemas/ApiError}
     Conflict:
-      description: VERSION_CONFLICT (errors expected_version current=N) or IDEMPOTENCY_KEY_REUSED
+      description: VERSION_CONFLICT (errors expected_version current=N), INVALID_TRANSITION (errors status current=S) or IDEMPOTENCY_KEY_REUSED
       headers: *headers
       content:
         application/json:

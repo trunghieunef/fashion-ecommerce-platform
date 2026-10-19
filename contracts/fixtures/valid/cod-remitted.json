@@ -1,0 +1,23 @@
+{
+  "event_id": "77777777-7777-4777-8777-777777777794",
+  "event_type": "COD_REMITTED",
+  "version": 1,
+  "occurred_at": "2026-10-20T05:00:00Z",
+  "aggregate_id": "66666666-6666-4666-8666-666666666691",
+  "aggregate_version": 6,
+  "aggregate_sequence": 6,
+  "correlation_id": "synthetic-contract-example",
+  "payload": {
+    "order_id": "99999999-9999-4999-8999-999999999991",
+    "order_no": "ORD202610000001",
+    "payment_id": null,
+    "shipment_id": "66666666-6666-4666-8666-666666666691",
+    "event_ref": "88888888-8888-4888-8888-888888888896",
+    "gross_amount": 275000,
+    "fee_amount": 0,
+    "net_amount": 275000,
+    "currency": "VND",
+    "evidence_ref": "BIEN-NHAN-MAU-06",
+    "occurred_at": "2026-10-20T04:59:00Z"
+  }
+}
