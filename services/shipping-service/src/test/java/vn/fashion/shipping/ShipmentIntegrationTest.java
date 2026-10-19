@@ -12,20 +12,6 @@ import org.junit.jupiter.api.Test;
 class ShipmentIntegrationTest extends ShippingTestSupport {
   static final String SHIPMENTS = "/internal/api/v1/shipping/shipments";
 
-  String quote(String province, boolean cod) {
-    String v = variant(700);
-    return data(send("POST", "/internal/api/v1/shipping/quotes", feeBody(province, cod, v, 1), "Authorization", serviceToken("order-service"),
-        "Idempotency-Key", UUID.randomUUID().toString()), 200).path("quote_id").asString();
-  }
-  static String body(String order, String orderNo, String quote, String province, long cod) {
-    return "{\"order_id\":\"" + order + "\",\"order_no\":\"" + orderNo + "\",\"quote_id\":\"" + quote + "\",\"cod_amount\":" + cod
-        + ",\"to_address\":{\"recipient_name\":\"Khách mẫu\",\"phone\":\"0900000000\",\"province_code\":\"" + province
-        + "\",\"ward_code\":\"26734\",\"address_line\":\"1 Đường Mẫu\"}}";
-  }
-  HttpResponse<String> create(String key, String body) {
-    return send("POST", SHIPMENTS, body, "Authorization", serviceToken("order-service"), "Idempotency-Key", key);
-  }
-
   @Test void createsSelfShipmentWithHistoryAndEvent() {
     String order = UUID.randomUUID().toString(), quote = quote("79", true);
     var s = data(create("k1", body(order, "ORD1", quote, "79", 250000)), 200);
