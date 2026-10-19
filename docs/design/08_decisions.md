@@ -454,7 +454,7 @@ Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác v
 | PICKING = đã gán shipper, chưa lấy hàng; `HANDED_OVER` là sự kiện riêng đặt `handed_over_at` | Order chỉ SHIPPING ở mốc bàn giao (T15) |
 | COD thu đủ `cod_amount` một lần (sau DELIVERED), nộp đủ phần còn lại một lần | Nộp nhiều đợt để sau nếu OPS cần |
 | `evidence_ref` là mã tham chiếu, chưa upload ảnh | Bằng chứng file làm sau (ADM-02) |
-| SELF event sai thứ tự/version → 409, không ghi `applied=false` | `applied=false` dành cho webhook carrier (SHP-03) |
+| SELF event sai thứ tự/version → 409, không ghi `applied=false`; riêng shipment CANCELLED: ghi `applied=false` làm bằng chứng, 409 `CANCELLED_EVIDENCE_RECORDED` (review PR #30) | **Câu hỏi mở cho chủ dự án**: có chuyển CANCELLED → MANUAL + incident khi có bằng chứng bàn giao/giao (06 §17.2) không; hiện OPS thấy dòng `applied=false` trong chi tiết shipment, order không được báo |
 | Cancel SELF trước bàn giao là tức thì; tombstone cần quote tồn tại và khớp | CANCEL_PENDING dành cho carrier |
 | Path cancel `/internal/api/v1/shipping/shipments/by-order/{order_id}/cancel` | Tránh mơ hồ với `GET by-order/{order_id}` |
 | Chưa phát `NOTIFY_SHIPMENT_STATUS` | Thêm ở NOT-01 |

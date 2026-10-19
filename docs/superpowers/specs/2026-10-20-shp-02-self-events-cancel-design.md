@@ -35,9 +35,13 @@ trạng thái UNKNOWN/MANUAL/retry (SELF không gọi bên ngoài nên không c�
 - Terminal: DELIVERED (chỉ còn hai sự kiện COD), RETURNED, CANCELLED. Không có cạnh lùi; cạnh không có trong bảng → 409
   `INVALID_TRANSITION` (errors: status hiện tại). CREATED/PICKING không bao giờ phát `handed_over_at` (T15: chưa SHIPPING
   trước bàn giao).
-- `occurred_at` tùy chọn (mặc định now), không trước `created_at` của shipment hay sự kiện trước (review M8), không quá
-  now + 5 phút; riêng `HANDED_OVER` không ở tương lai (mốc SHIPPING của order). ASSIGN lại khi đang PICKING tăng version
-  nhưng không phát event (không đổi status).
+- `occurred_at` tùy chọn, không trước `created_at` của shipment hay sự kiện trước (review M8), không quá
+  `clock_timestamp()` + 60 giây cho mọi loại (PR #30 M1: mốc bàn giao là mốc SHIPPING của order); thiếu thì lấy
+  max(now, sự kiện trước). ASSIGN lại khi đang PICKING tăng version nhưng không phát event (không đổi status).
+- **Sự kiện trên shipment CANCELLED** (PR #30 I1, 06 §17.2 "không âm thầm bỏ bằng chứng vật lý"): ghi history
+  `applied = false` kèm evidence/actor, status giữ CANCELLED, trả 409 `CANCELLED_EVIDENCE_RECORDED`; kiểm trước
+  `expected_version` (bản OPS đang cầm đã cũ vì cancel tăng version); 409 được lưu cho replay nên retry không ghi thêm.
+  Chuyển MANUAL + incident chờ chủ dự án quyết (08).
 - `evidence_ref` là mã tham chiếu bằng chứng (số biên nhận, mã ảnh…) 1–200 ký tự, không phải file; upload ảnh để sau.
 
 ## 3. API
@@ -118,7 +122,7 @@ như các bước OPS khác nếu sẵn có, nếu không thì chỉ integration
 | 1 | PICKING = "đã gán shipper, chưa lấy hàng"; bàn giao là sự kiện riêng `HANDED_OVER` | 06 yêu cầu định nghĩa rõ PICKING; order chỉ SHIPPING ở mốc bàn giao |
 | 2 | COD thu đủ một lần (`amount = cod_amount`), nộp đủ một lần | D08 không giao một phần; nộp nhiều đợt để sau nếu OPS cần |
 | 3 | `evidence_ref` là chuỗi tham chiếu, chưa upload ảnh | Upload ảnh qua media cần thêm hạ tầng; có thể bổ sung ở ADM-02 |
-| 4 | SELF event sai thứ tự/cũ → 409 (không ghi history `applied=false`) | `applied=false` dành cho webhook carrier (SHP-03), OPS cần thấy lỗi ngay |
+| 4 | SELF event sai thứ tự/cũ → 409 (không ghi history `applied=false`), **trừ** shipment CANCELLED: ghi `applied=false` làm bằng chứng (PR #30 I1) | OPS cần thấy lỗi ngay; bằng chứng vật lý sau hủy không được mất (06 §17.2) |
 | 5 | Tombstone cần quote tồn tại và khớp | Đủ dữ liệu cho các cột NOT NULL; không có quote thì create cũng không thể thành công |
 | 6 | Hủy SELF trước bàn giao là tức thì (không giữ CANCEL_PENDING) | SELF không có bên thứ ba cần xác nhận; CANCEL_PENDING cho carrier (SHP-03) |
 | 7 | Không phát NOTIFY_SHIPMENT_STATUS | Chưa có notification-service; thêm ở NOT-01 |

@@ -47,6 +47,8 @@ public class SelfEventService {
   private static final Set<String> FIELDS = Set.of("event_type", "expected_version", "occurred_at", "assigned_to", "evidence_ref",
       "reason", "amount");
   static final String OPERATION = "shipping.self_event";
+  /** Allowed OPS clock lead; hand-over is the order's SHIPPING mark, so it stays small for every type. */
+  static final java.time.Duration SKEW = java.time.Duration.ofSeconds(60);
   private final JdbcClient jdbc;
   private final TransactionTemplate tx;
   private final IdempotencyStore keys;
@@ -71,29 +73,38 @@ public class SelfEventService {
     canonical.put("amount", e.amount());
     String hash = Api.sha256(json.writeValueAsString(canonical));
     String actorKey = "user:" + actor;
-    return tx.execute(status -> {
+    var outcome = tx.execute(status -> {
       var replay = Api.replay(keys.begin(actorKey, OPERATION, key, hash), json);
       if (replay != null) return replay;
       var row = jdbc.sql("""
           select id, status, cod_amount, cod_collected_amount, cod_remitted_amount, version, created_at
           from shipments where id = :id for update""").param("id", shipmentId).query(Row.class).optional()
           .orElseThrow(ShipmentController::notFound);
+      var edge = EDGES.get(e.type());
+      Instant occurred = occurredAt(shipmentId, row, e);
+      UUID eventId = UUID.randomUUID(); // history row id, and event_ref of the COD events (spec section 5)
+      var audit = new LinkedHashMap<String, Object>();
+      audit.put("event_type", e.type());
+      audit.put("actor_id", actor.toString());
+      audit.put("evidence_ref", e.evidenceRef());
+      audit.put("assigned_to", e.assignedTo() == null ? null : e.assignedTo().toString());
+      audit.put("amount", e.amount());
+      if (row.status().equals("CANCELLED")) {
+        // PR #30 review I1 (06 section 17.2): physical evidence on a cancelled shipment is never dropped silently. It is kept
+        // as history applied=false for OPS reconciliation (checked before the version, which the cancel already moved), the
+        // status stays CANCELLED, and the answer is 409; the stored 409 makes a retry answer the same without a second row.
+        shipments.history(eventId, shipmentId, "self:" + eventId, "CANCELLED", edge.to(), occurred, e.reason(),
+            json.writeValueAsString(audit), false);
+        var rejected = new Api.Problem(HttpStatus.CONFLICT, "CONFLICT", "CANCELLED_EVIDENCE_RECORDED",
+            List.of(new Api.FieldError("status", "current=CANCELLED")));
+        keys.finish(actorKey, OPERATION, key, shipmentId, 409, json.writeValueAsString(Api.body(rejected)));
+        return (Object) rejected;
+      }
       if (row.version() != e.expectedVersion())
         throw new Api.Problem(HttpStatus.CONFLICT, "VERSION_CONFLICT", "VERSION_CONFLICT",
             List.of(new Api.FieldError("expected_version", "current=" + row.version())));
-      var edge = EDGES.get(e.type());
       if (!edge.from().contains(row.status()))
         throw new Api.Problem(HttpStatus.CONFLICT, "CONFLICT", "INVALID_TRANSITION", List.of(new Api.FieldError("status", "current=" + row.status())));
-      Instant now = jdbc.sql("select now()").query(java.sql.Timestamp.class).single().toInstant();
-      Instant occurred = e.occurredAt() == null ? now : e.occurredAt();
-      // Review SHP-02 M8: events never go back in time, and hand-over (the order's SHIPPING mark) is never in the future.
-      var previous = jdbc.sql("select max(provider_occurred_at) from shipment_status_history where shipment_id = :id")
-          .param("id", shipmentId).query(java.sql.Timestamp.class).optional().map(java.sql.Timestamp::toInstant);
-      if (occurred.isBefore(row.createdAt())) throw invalid("occurred_at", "must not be before the shipment was created");
-      if (previous.isPresent() && occurred.isBefore(previous.get()))
-        throw invalid("occurred_at", "must not be before the previous event (" + previous.get() + ")");
-      if (occurred.isAfter(e.type().equals("HANDED_OVER") ? now : now.plusSeconds(300)))
-        throw invalid("occurred_at", e.type().equals("HANDED_OVER") ? "must not be in the future" : "must be at most 5 minutes from now");
       long collected = 0, remitted = 0;
       if (e.type().equals("COD_COLLECTED")) {
         if (row.codAmount() == 0 || row.codCollectedAmount() > 0)
@@ -116,14 +127,7 @@ public class SelfEventService {
           .param("to", edge.to()).param("assigned", e.assignedTo()).param("handover", e.type().equals("HANDED_OVER"))
           .param("at", java.sql.Timestamp.from(occurred)).param("collected", collected).param("remitted", remitted)
           .param("id", shipmentId).update();
-      UUID eventId = UUID.randomUUID(); // history row id, and event_ref of the COD events (spec section 5)
-      var audit = new LinkedHashMap<String, Object>();
-      audit.put("event_type", e.type());
-      audit.put("actor_id", actor.toString());
-      audit.put("evidence_ref", e.evidenceRef());
-      audit.put("assigned_to", e.assignedTo() == null ? null : e.assignedTo().toString());
-      audit.put("amount", e.amount());
-      shipments.history(eventId, shipmentId, "self:" + eventId, row.status(), edge.to(), occurred, e.reason(), json.writeValueAsString(audit));
+      shipments.history(eventId, shipmentId, "self:" + eventId, row.status(), edge.to(), occurred, e.reason(), json.writeValueAsString(audit), true);
       var view = shipments.byId(shipmentId);
       if (e.type().startsWith("COD_"))
         events.cod(e.type(), view, eventId, e.amount(), e.evidenceRef(), occurred, correlationId);
@@ -136,6 +140,25 @@ public class SelfEventService {
       keys.finish(actorKey, OPERATION, key, shipmentId, 200, json.writeValueAsString(result));
       return (Object) result;
     });
+    if (outcome instanceof Api.Problem rejected) throw rejected; // after commit, so the evidence row stays
+    return outcome;
+  }
+
+  /**
+   * PR #30 review M1 / SHP-02 M8: clock_timestamp() (not the transaction start); never before the shipment or the previous
+   * event; at most SKEW ahead for every type. Without occurred_at the event takes max(now, previous), so a slightly fast
+   * OPS clock on an earlier event never blocks the next one.
+   */
+  private Instant occurredAt(UUID shipmentId, Row row, Event e) {
+    Instant now = jdbc.sql("select clock_timestamp()").query(java.sql.Timestamp.class).single().toInstant();
+    var previous = jdbc.sql("select max(provider_occurred_at) from shipment_status_history where shipment_id = :id")
+        .param("id", shipmentId).query(java.sql.Timestamp.class).optional().map(java.sql.Timestamp::toInstant);
+    Instant occurred = e.occurredAt() != null ? e.occurredAt() : previous.filter(now::isBefore).orElse(now);
+    if (occurred.isBefore(row.createdAt())) throw invalid("occurred_at", "must not be before the shipment was created");
+    if (previous.isPresent() && occurred.isBefore(previous.get()))
+      throw invalid("occurred_at", "must not be before the previous event (" + previous.get() + ")");
+    if (occurred.isAfter(now.plus(SKEW))) throw invalid("occurred_at", "must be at most " + SKEW.toSeconds() + " seconds from now");
+    return occurred;
   }
 
   /** Strict per type: unknown fields, fields the type does not use and missing required fields are 400. */

@@ -60,9 +60,9 @@ class ShipmentCancelIntegrationTest extends ShippingTestSupport {
     String otherId = data(create("k2", otherBody), 200).path("shipment_id").asString();
     data(selfEvent(otherId, "{\"event_type\":\"ASSIGN\",\"expected_version\":1,\"assigned_to\":\"11111111-1111-4111-8111-111111111111\"}"), 200);
     assertThat(data(cancel(other, "c2", withReason(otherBody, "hết hàng")), 200).path("status").asString()).isEqualTo("CANCELLED");
-    // A cancelled shipment takes no more SELF events.
+    // A cancelled shipment applies no more SELF events; the evidence is kept for reconciliation (PR #30 I1).
     assertThat(problem(selfEvent(otherId, "{\"event_type\":\"HANDED_OVER\",\"expected_version\":3,\"evidence_ref\":\"BG\"}"), 409))
-        .isEqualTo("INVALID_TRANSITION");
+        .isEqualTo("CANCELLED_EVIDENCE_RECORDED");
   }
 
   @Test void cancelBeforeCreateLeavesATombstone() {
@@ -92,6 +92,32 @@ class ShipmentCancelIntegrationTest extends ShippingTestSupport {
       assertThat(jdbc.queryForList("select status from shipments where order_id = cast(? as uuid)", String.class, order)).containsExactly("CANCELLED");
     }
   }
+  @Test void parallelCancelAndHandOverOfOneShipment() {
+    // PR #30 I1: whichever wins, the hand-over is either applied (cancel refused) or kept as evidence (shipment CANCELLED).
+    for (int i = 0; i < 4; i++) {
+      String order = UUID.randomUUID().toString(), body = body(order, "H" + i, quote("79", false), "79", 0), n = String.valueOf(i);
+      String id = data(create("k" + n, body), 200).path("shipment_id").asString();
+      data(selfEvent(id, "{\"event_type\":\"ASSIGN\",\"expected_version\":1,\"assigned_to\":\"11111111-1111-4111-8111-111111111111\"}"), 200);
+      var barrier = new CyclicBarrier(2);
+      var handOver = CompletableFuture.supplyAsync(() -> { await(barrier);
+        return selfEvent(id, "{\"event_type\":\"HANDED_OVER\",\"expected_version\":2,\"evidence_ref\":\"BG\"}"); });
+      var cancelled = CompletableFuture.supplyAsync(() -> { await(barrier); return cancel(order, "c" + n, withReason(body, "đua")); });
+      var h = handOver.join();
+      var c = cancelled.join();
+      String status = jdbc.queryForObject("select status from shipments where id = cast(? as uuid)", String.class, id);
+      if (h.statusCode() == 200) {
+        assertThat(problem(c, 409)).isEqualTo("SHIPMENT_HANDED_OVER");
+        assertThat(status).isEqualTo("DELIVERING");
+      } else {
+        assertThat(problem(h, 409)).isEqualTo("CANCELLED_EVIDENCE_RECORDED");
+        assertThat(c.statusCode()).isEqualTo(200);
+        assertThat(status).isEqualTo("CANCELLED");
+        assertThat(jdbc.queryForObject("select count(*) from shipment_status_history where shipment_id = cast(? as uuid) and not applied",
+            Integer.class, id)).isEqualTo(1);
+      }
+    }
+  }
+
   private static void await(CyclicBarrier barrier) {
     try { barrier.await(); } catch (Exception e) { throw new AssertionError(e); }
   }

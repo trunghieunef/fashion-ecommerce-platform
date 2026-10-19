@@ -33,7 +33,7 @@ class SelfEventIntegrationTest extends ShippingTestSupport {
     return jdbc.queryForList("select event_type from outbox_events order by created_at, aggregate_sequence", String.class);
   }
 
-  @Test void fullSelfPathWithCodAndEvents() {
+  @Test void fullSelfPathWithCodAndEvents() throws Exception {
     String id = shipment(250000);
     var picking = ok(id, ev("ASSIGN", 1, ASSIGN));
     assertThat(picking.path("status").asString()).isEqualTo("PICKING");
@@ -57,6 +57,15 @@ class SelfEventIntegrationTest extends ShippingTestSupport {
     assertThat(payloads.get(1).path("status").asString()).isEqualTo("PICKING");
     assertThat(payloads.get(1).path("handed_over_at").isNull()).isTrue();
     assertThat(payloads.get(2).path("handed_over_at").isNull()).isFalse();
+    // PR #30 M3: the emitted payloads carry exactly the fields of their schema (all required, additionalProperties false).
+    var schema = mapper.readTree(java.nio.file.Files.readString(java.nio.file.Path.of("../../contracts/events/shipping-events.schema.json")));
+    for (int i = 0; i < payloads.size(); i++) {
+      String def = i >= 4 ? "CodMovement" : "ShipmentStatus";
+      var expected = new java.util.TreeSet<String>();
+      schema.path("$defs").path(def).path("required").forEach(f -> expected.add(f.asString()));
+      assertThat(new java.util.TreeSet<>(payloads.get(i).propertyNames())).as(def).isEqualTo(expected);
+      assertThat(schema.path("$defs").path(def).path("properties").propertyNames()).containsExactlyInAnyOrderElementsOf(expected);
+    }
     var cod = payloads.get(4);
     assertThat(cod.path("gross_amount").asLong()).isEqualTo(250000);
     assertThat(cod.path("net_amount").asLong()).isEqualTo(250000);
@@ -193,17 +202,41 @@ class SelfEventIntegrationTest extends ShippingTestSupport {
     assertThat(jdbc.queryForObject("select version from shipments where id = cast(? as uuid)", Long.class, id)).isEqualTo(1);
   }
 
-  @Test void occurredAtNeverGoesBackAndHandOverIsNotInTheFuture() throws Exception {
+  @Test void occurredAtNeverGoesBackAndStaysNearNow() {
     String id = shipment(0);
-    ok(id, ev("ASSIGN", 1, ASSIGN));
-    // Review M8: hand-over is the SHIPPING mark, so it cannot be stamped in the future.
-    var future = event(id, "f1", ev("HANDED_OVER", 2, evidence("BG") + ",\"occurred_at\":\"" + Instant.now().plusSeconds(120) + "\""));
-    assertThat(problem(future, 400)).isEqualTo("INVALID_FIELDS");
-    Thread.sleep(1500);
-    String handedOver = ok(id, ev("HANDED_OVER", 2, evidence("BG"))).path("handed_over_at").asString();
-    var back = event(id, "f2", ev("DELIVERED", 3, evidence("GH") + ",\"occurred_at\":\"" + Instant.parse(handedOver).minusMillis(700) + "\""));
+    // PR #30 M1: an OPS clock 30 s fast on ASSIGN must not block the next event sent without occurred_at.
+    Instant ahead = Instant.now().plusSeconds(30);
+    ok(id, ev("ASSIGN", 1, ASSIGN + ",\"occurred_at\":\"" + ahead + "\""));
+    // Review M8: never before the previous event; at most 60 s ahead (hand-over is the order's SHIPPING mark).
+    var back = event(id, "f1", ev("HANDED_OVER", 2, evidence("BG") + ",\"occurred_at\":\"" + ahead.minusSeconds(10) + "\""));
     assertThat(problem(back, 400)).isEqualTo("INVALID_FIELDS");
     assertThat(json(back).path("errors").get(0).path("message").asString()).contains("previous event");
+    var future = event(id, "f2", ev("HANDED_OVER", 2, evidence("BG") + ",\"occurred_at\":\"" + Instant.now().plusSeconds(120) + "\""));
+    assertThat(problem(future, 400)).isEqualTo("INVALID_FIELDS");
+    var handedOver = ok(id, ev("HANDED_OVER", 2, evidence("BG")));
+    assertThat(Instant.parse(handedOver.path("handed_over_at").asString())).isAfterOrEqualTo(ahead.minusMillis(1));
+  }
+
+  @Test void evidenceOnACancelledShipmentIsKeptNotDropped() {
+    // PR #30 I1 (06 section 17.2): the shipper left with the parcel before OPS recorded it, and the order cancelled meanwhile.
+    String order = UUID.randomUUID().toString(), body = body(order, "X" + order.substring(0, 8), quote("79", true), "79", 90000);
+    String id = data(create(UUID.randomUUID().toString(), body), 200).path("shipment_id").asString();
+    ok(id, ev("ASSIGN", 1, ASSIGN));
+    data(send("POST", "/internal/api/v1/shipping/shipments/by-order/" + order + "/cancel",
+        body.substring(0, body.length() - 1) + ",\"reason\":\"khách hủy\"}", "Authorization", serviceToken("order-service"),
+        "Idempotency-Key", "cancel-1"), 200);
+    // OPS still holds version 2 from before the cancel: the evidence is recorded anyway, the answer is 409.
+    var late = event(id, "late-1", ev("HANDED_OVER", 2, evidence("BG-LATE")));
+    assertThat(problem(late, 409)).isEqualTo("CANCELLED_EVIDENCE_RECORDED");
+    assertThat(problem(event(id, "late-1", ev("HANDED_OVER", 2, evidence("BG-LATE"))), 409)).isEqualTo("CANCELLED_EVIDENCE_RECORDED");
+    var rows = jdbc.queryForList("""
+        select to_status, applied, sanitized_payload ->> 'evidence_ref' as evidence from shipment_status_history
+        where shipment_id = cast(? as uuid) and not applied""", id);
+    assertThat(rows).hasSize(1);
+    assertThat(rows.get(0)).containsEntry("to_status", "DELIVERING").containsEntry("evidence", "BG-LATE");
+    assertThat(jdbc.queryForObject("select status from shipments where id = cast(? as uuid)", String.class, id)).isEqualTo("CANCELLED");
+    var history = data(send("GET", ADMIN + id, null, "Authorization", ops), 200).path("history");
+    assertThat(history.get(history.size() - 1).path("applied").asBoolean()).isFalse();
   }
 
   @Test void databaseRefusesStatusAfterHandOverWithoutIt() {

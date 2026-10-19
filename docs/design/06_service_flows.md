@@ -743,4 +743,9 @@ Refund REQUESTED → PROCESSING trước network; PROCESSING → UNKNOWN khi tim
 | CANCEL_PENDING → DELIVERING / RETURNING | Phát hiện đã bàn giao: giữ evidence, order không restore; return khi carrier xác nhận |
 | CANCELLED nhận evidence đã bàn giao/giao | Mâu thuẫn cần MANUAL + incident/reconcile; không âm thầm bỏ bằng chứng vật lý |
 
+`SHP-02` (SELF, OPS ghi tay) dùng tập cạnh hẹp hơn: CREATED → PICKING chỉ khi gán shipper, bàn giao chỉ từ PICKING
+(`HANDED_OVER`), hoàn chỉ qua FAILED → RETURNING, hủy CREATED/PICKING → CANCELLED ngay (không CANCEL_PENDING). Sự kiện SELF
+trên CANCELLED được ghi history `applied=false` kèm bằng chứng và trả 409 `CANCELLED_EVIDENCE_RECORDED`; chuyển MANUAL +
+incident chưa làm (chờ quyết định ở 08).
+
 Nếu webhook nhảy từ CREATED sang DELIVERED, query carrier để xác minh mốc bàn giao và lịch sử thiếu trước apply; không bắt provider phải gửi mọi intermediate status. Shipment đã DELIVERED chỉ xử lý return sau giao bằng chứng từ OPS/order_returns theo D10, không xóa lịch sử giao.

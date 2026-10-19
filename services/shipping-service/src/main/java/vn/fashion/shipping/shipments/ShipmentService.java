@@ -216,16 +216,17 @@ public class ShipmentService {
     history(shipment, key, from, to, null, null, "{}");
   }
   private void history(UUID shipment, String key, String from, String to, Instant occurredAt, String reason, String payload) {
-    history(UUID.randomUUID(), shipment, key, from, to, occurredAt, reason, payload);
+    history(UUID.randomUUID(), shipment, key, from, to, occurredAt, reason, payload, true);
   }
   /** clock_timestamp(), not now(): rows of one transaction must keep their order for (created_at, id) reads. */
-  void history(UUID id, UUID shipment, String key, String from, String to, Instant occurredAt, String reason, String payload) {
+  void history(UUID id, UUID shipment, String key, String from, String to, Instant occurredAt, String reason, String payload,
+               boolean applied) {
     jdbc.sql("""
         insert into shipment_status_history(id, shipment_id, provider_event_key, from_status, to_status, provider_occurred_at,
           sanitized_payload, applied, reason, created_at)
-        values (:id, :s, :k, :f, :t, :at, cast(:p as jsonb), true, :r, clock_timestamp())""")
+        values (:id, :s, :k, :f, :t, :at, cast(:p as jsonb), :applied, :r, clock_timestamp())""")
         .param("id", id).param("s", shipment).param("k", key).param("f", from).param("t", to)
-        .param("at", occurredAt == null ? null : Timestamp.from(occurredAt)).param("p", payload).param("r", reason).update();
+        .param("at", occurredAt == null ? null : Timestamp.from(occurredAt)).param("p", payload).param("r", reason).param("applied", applied).update();
   }
 
   /** order_id, order_no 1..32, quote_id, cod_amount >= 0, to_address with recipient/phone/province/ward/address line. */
