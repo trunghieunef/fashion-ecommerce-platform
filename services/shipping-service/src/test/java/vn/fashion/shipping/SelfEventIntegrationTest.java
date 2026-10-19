@@ -66,9 +66,16 @@ class SelfEventIntegrationTest extends ShippingTestSupport {
     assertThat(cod.path("payment_id").isNull()).isTrue();
     assertThat(jdbc.queryForList("select aggregate_sequence from outbox_events order by aggregate_sequence", Long.class))
         .containsExactly(1L, 2L, 3L, 4L, 5L, 6L);
+    // Review I2: event_ref is the id of the history row that recorded the COD movement.
+    assertThat(jdbc.queryForObject("select provider_event_key from shipment_status_history where id = cast(? as uuid)", String.class,
+        cod.path("event_ref").asString())).isEqualTo("self:" + cod.path("event_ref").asString());
+    // Review I3: the stored replay body carries no address or phone; the OPS detail is a separate GET.
+    assertThat(remitted.has("to_address")).isFalse();
+    assertThat(jdbc.queryForList("select response_body::text from idempotency_requests where operation = 'shipping.self_event'", String.class))
+        .hasSize(5).noneMatch(b -> b.contains("0900000000") || b.contains("Khách mẫu"));
 
     // History keeps actor and evidence, never the address or phone.
-    var history = remitted.path("history");
+    var history = data(send("GET", ADMIN + id, null, "Authorization", ops), 200).path("history");
     assertThat(history).hasSize(7);
     assertThat(history.get(3).path("evidence").path("evidence_ref").asString()).isEqualTo("BG-1");
     assertThat(history.get(3).path("evidence").path("actor_id").asString()).isNotEmpty();
@@ -83,7 +90,7 @@ class SelfEventIntegrationTest extends ShippingTestSupport {
   @Test void failedThenRedeliveredOrReturned() {
     String id = shipment(0);
     ok(id, ev("ASSIGN", 1, ASSIGN));
-    String handedOver = ok(id, ev("HANDED_OVER", 2, evidence("BG-2") + ",\"occurred_at\":\"" + Instant.now().plusSeconds(1) + "\""))
+    String handedOver = ok(id, ev("HANDED_OVER", 2, evidence("BG-2")))
         .path("handed_over_at").asString();
     assertThat(ok(id, ev("DELIVERY_FAILED", 3, ",\"reason\":\"khách vắng nhà\"")).path("status").asString()).isEqualTo("FAILED");
     assertThat(ok(id, ev("REDELIVER", 4, "")).path("status").asString()).isEqualTo("DELIVERING"); // T15: valid re-delivery branch
@@ -184,6 +191,19 @@ class SelfEventIntegrationTest extends ShippingTestSupport {
     assertThat(problem(event(id, "t2", ev("ASSIGN", 1, ASSIGN + ",\"occurred_at\":\"2020-01-01T00:00:00Z\"")), 400)).isEqualTo("INVALID_FIELDS");
     assertThat(problem(event(UUID.randomUUID().toString(), "n1", ev("ASSIGN", 1, ASSIGN)), 404)).isEqualTo("SHIPMENT_NOT_FOUND");
     assertThat(jdbc.queryForObject("select version from shipments where id = cast(? as uuid)", Long.class, id)).isEqualTo(1);
+  }
+
+  @Test void occurredAtNeverGoesBackAndHandOverIsNotInTheFuture() throws Exception {
+    String id = shipment(0);
+    ok(id, ev("ASSIGN", 1, ASSIGN));
+    // Review M8: hand-over is the SHIPPING mark, so it cannot be stamped in the future.
+    var future = event(id, "f1", ev("HANDED_OVER", 2, evidence("BG") + ",\"occurred_at\":\"" + Instant.now().plusSeconds(120) + "\""));
+    assertThat(problem(future, 400)).isEqualTo("INVALID_FIELDS");
+    Thread.sleep(1500);
+    String handedOver = ok(id, ev("HANDED_OVER", 2, evidence("BG"))).path("handed_over_at").asString();
+    var back = event(id, "f2", ev("DELIVERED", 3, evidence("GH") + ",\"occurred_at\":\"" + Instant.parse(handedOver).minusMillis(700) + "\""));
+    assertThat(problem(back, 400)).isEqualTo("INVALID_FIELDS");
+    assertThat(json(back).path("errors").get(0).path("message").asString()).contains("previous event");
   }
 
   @Test void databaseRefusesStatusAfterHandOverWithoutIt() {

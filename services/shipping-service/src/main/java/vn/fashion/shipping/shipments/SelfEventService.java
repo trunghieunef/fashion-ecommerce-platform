@@ -29,6 +29,9 @@ public class SelfEventService {
   private record Edge(Set<String> from, String to, Set<String> required, Set<String> allowed) { }
   private record Row(UUID id, String status, long codAmount, long codCollectedAmount, long codRemittedAmount, long version,
                      Instant createdAt) { }
+  /** Response and stored replay: state only, never addresses (Review SHP-02 I3). */
+  public record Result(UUID shipmentId, UUID orderId, String status, long version, UUID assignedTo, Instant handedOverAt, long codAmount,
+                       long codCollectedAmount, long codRemittedAmount) { }
   private static final Set<String> NONE = Set.of();
   /** event_type -> edge; COD events keep DELIVERED. Missing edge or source status -> 409 INVALID_TRANSITION. */
   private static final Map<String, Edge> EDGES = Map.of(
@@ -83,8 +86,14 @@ public class SelfEventService {
         throw new Api.Problem(HttpStatus.CONFLICT, "CONFLICT", "INVALID_TRANSITION", List.of(new Api.FieldError("status", "current=" + row.status())));
       Instant now = jdbc.sql("select now()").query(java.sql.Timestamp.class).single().toInstant();
       Instant occurred = e.occurredAt() == null ? now : e.occurredAt();
-      if (occurred.isBefore(row.createdAt()) || occurred.isAfter(now.plusSeconds(300)))
-        throw invalid("occurred_at", "must be between the shipment creation and 5 minutes from now");
+      // Review SHP-02 M8: events never go back in time, and hand-over (the order's SHIPPING mark) is never in the future.
+      var previous = jdbc.sql("select max(provider_occurred_at) from shipment_status_history where shipment_id = :id")
+          .param("id", shipmentId).query(java.sql.Timestamp.class).optional().map(java.sql.Timestamp::toInstant);
+      if (occurred.isBefore(row.createdAt())) throw invalid("occurred_at", "must not be before the shipment was created");
+      if (previous.isPresent() && occurred.isBefore(previous.get()))
+        throw invalid("occurred_at", "must not be before the previous event (" + previous.get() + ")");
+      if (occurred.isAfter(e.type().equals("HANDED_OVER") ? now : now.plusSeconds(300)))
+        throw invalid("occurred_at", e.type().equals("HANDED_OVER") ? "must not be in the future" : "must be at most 5 minutes from now");
       long collected = 0, remitted = 0;
       if (e.type().equals("COD_COLLECTED")) {
         if (row.codAmount() == 0 || row.codCollectedAmount() > 0)
@@ -107,22 +116,25 @@ public class SelfEventService {
           .param("to", edge.to()).param("assigned", e.assignedTo()).param("handover", e.type().equals("HANDED_OVER"))
           .param("at", java.sql.Timestamp.from(occurred)).param("collected", collected).param("remitted", remitted)
           .param("id", shipmentId).update();
-      UUID eventId = UUID.randomUUID();
+      UUID eventId = UUID.randomUUID(); // history row id, and event_ref of the COD events (spec section 5)
       var audit = new LinkedHashMap<String, Object>();
       audit.put("event_type", e.type());
       audit.put("actor_id", actor.toString());
       audit.put("evidence_ref", e.evidenceRef());
       audit.put("assigned_to", e.assignedTo() == null ? null : e.assignedTo().toString());
       audit.put("amount", e.amount());
-      shipments.history(shipmentId, "self:" + eventId, row.status(), edge.to(), occurred, e.reason(), json.writeValueAsString(audit));
+      shipments.history(eventId, shipmentId, "self:" + eventId, row.status(), edge.to(), occurred, e.reason(), json.writeValueAsString(audit));
       var view = shipments.byId(shipmentId);
       if (e.type().startsWith("COD_"))
         events.cod(e.type(), view, eventId, e.amount(), e.evidenceRef(), occurred, correlationId);
       else if (!row.status().equals(edge.to()))
         events.statusUpdated(view, occurred, correlationId);
-      var detail = shipments.adminDetail(shipmentId);
-      keys.finish(actorKey, OPERATION, key, shipmentId, 200, json.writeValueAsString(detail));
-      return (Object) detail;
+      // Review SHP-02 I3: the stored replay body holds no address or phone; OPS reads the detail with GET.
+      var result = jdbc.sql("""
+          select id as shipment_id, order_id, status, version, assigned_to, handed_over_at, cod_amount, cod_collected_amount,
+            cod_remitted_amount from shipments where id = :id""").param("id", shipmentId).query(Result.class).single();
+      keys.finish(actorKey, OPERATION, key, shipmentId, 200, json.writeValueAsString(result));
+      return (Object) result;
     });
   }
 

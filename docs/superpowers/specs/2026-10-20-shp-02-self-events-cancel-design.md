@@ -35,7 +35,9 @@ trạng thái UNKNOWN/MANUAL/retry (SELF không gọi bên ngoài nên không c�
 - Terminal: DELIVERED (chỉ còn hai sự kiện COD), RETURNED, CANCELLED. Không có cạnh lùi; cạnh không có trong bảng → 409
   `INVALID_TRANSITION` (errors: status hiện tại). CREATED/PICKING không bao giờ phát `handed_over_at` (T15: chưa SHIPPING
   trước bàn giao).
-- `occurred_at` tùy chọn (mặc định now), không trước `created_at` của shipment và không quá now + 5 phút.
+- `occurred_at` tùy chọn (mặc định now), không trước `created_at` của shipment hay sự kiện trước (review M8), không quá
+  now + 5 phút; riêng `HANDED_OVER` không ở tương lai (mốc SHIPPING của order). ASSIGN lại khi đang PICKING tăng version
+  nhưng không phát event (không đổi status).
 - `evidence_ref` là mã tham chiếu bằng chứng (số biên nhận, mã ảnh…) 1–200 ký tự, không phải file; upload ảnh để sau.
 
 ## 3. API
@@ -51,7 +53,9 @@ trạng thái UNKNOWN/MANUAL/retry (SELF không gọi bên ngoài nên không c�
 5. History: `provider_event_key = self:<event_id>`, from/to status, `provider_occurred_at`, `applied = true`, `reason`,
    `sanitized_payload = {event_type, actor_id, evidence_ref, assigned_to, amount}` (không địa chỉ/điện thoại).
 6. Outbox: đổi status → `SHIPMENT_STATUS_UPDATED`; COD → `COD_COLLECTED` / `COD_REMITTED`.
-7. `finish`; trả 200 = chi tiết shipment (như GET admin, có history).
+7. `finish`; trả 200 = **trạng thái** (`shipment_id, order_id, status, version, assigned_to, handed_over_at, cod_*`), không
+   địa chỉ, để body lưu cho replay không chứa PII (review I3); chi tiết + history đọc bằng GET. COD sai điều kiện → 409
+   `COD_NOT_COLLECTABLE` / `COD_NOT_REMITTABLE`, sai số tiền → 400.
 
 ### 3.2 Internal `POST /internal/api/v1/shipping/shipments/by-order/{order_id}/cancel` (caller `order-service`)
 
@@ -68,8 +72,9 @@ Body = **snapshot create gốc** (`order_id, order_no, quote_id, cod_amount, to_
 | CANCELLED | 200 trạng thái hiện tại (idempotent theo order, mọi key) |
 | DELIVERING / DELIVERED / FAILED / RETURNING / RETURNED | 409 `SHIPMENT_HANDED_OVER` (errors: status) — order đi luồng return, **không restore kho** (SHP-06, T16) |
 
-Create sau tombstone hoặc sau khi hủy → 409 `SHIPMENT_CANCELLED` (kể cả cùng body). Response cancel/409 kèm `status`,
-`handed_over_at`, `version` để order quyết định restore.
+Create sau tombstone hoặc sau khi hủy → 409 `SHIPMENT_CANCELLED` (kể cả cùng body, kể cả replay cùng key của create trước
+khi hủy — review I1). Response 200 cancel là shipment view (`status`, `handed_over_at`, `version`); 409 `SHIPMENT_HANDED_OVER`
+chỉ kèm `errors[status]` và được kiểm **trước** so snapshot (review M5); order đọc thêm bằng GET by-order nếu cần.
 
 ## 4. Schema (V004, append-only)
 

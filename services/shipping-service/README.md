@@ -28,7 +28,7 @@ Port 8085 (không publish ra host). Qua Gateway: `/api/v1/shipping/**`, `/admin/
 | `GET /internal/api/v1/shipping/shipments/by-order/{order_id}` | `order-service` | Trạng thái, tracking, `handed_over_at`, version (không trả địa chỉ) |
 | `GET,POST /admin/api/v1/shipping/rules`, `PUT /…/{id}` | `shipping.rules` | Rule FLAT/PROVINCE/WEIGHT; POST cần `Idempotency-Key` (retry cùng user → rule cũ); PUT cần `expected_version` và `active`; `reason` bắt buộc, audit |
 | `GET /admin/api/v1/shipping/shipments`, `/{id}` | `shipping.read` | Danh sách (status, cursor) / chi tiết có địa chỉ + history (kèm evidence) |
-| `POST /admin/api/v1/shipping/shipments/{id}/self-events` | `shipping.self_event` | SHP-02: `event_type`, `expected_version`, `Idempotency-Key`; trả chi tiết |
+| `POST /admin/api/v1/shipping/shipments/{id}/self-events` | `shipping.self_event` | SHP-02: `event_type`, `expected_version`, `Idempotency-Key`; trả trạng thái (không địa chỉ), chi tiết đọc bằng GET |
 | `POST /internal/api/v1/shipping/shipments/by-order/{order_id}/cancel` | `order-service` | SHP-02: snapshot create + `reason`, key → shipment CANCELLED / tombstone; sau bàn giao 409 |
 
 - **Phí**: trọng lượng = Σ `weight_grams` (catalog quote, service token `shipping-service`) × quantity; rule ACTIVE có `priority`
@@ -42,9 +42,12 @@ Port 8085 (không publish ra host). Qua Gateway: `/api/v1/shipping/**`, `/admin/
 - **SELF events (SHP-02)**: ASSIGN CREATED/PICKING→PICKING; HANDED_OVER PICKING→DELIVERING (đặt `handed_over_at`); DELIVERED;
   DELIVERY_FAILED→FAILED; REDELIVER FAILED→DELIVERING; RETURN_STARTED FAILED→RETURNING; RETURNED. COD_COLLECTED (DELIVERED,
   đúng `cod_amount`, một lần) / COD_REMITTED (đủ phần chưa nộp). Một TX: khóa hàng, version, history `self:<id>` (actor,
-  evidence, không địa chỉ), outbox `SHIPMENT_STATUS_UPDATED` / `COD_COLLECTED` / `COD_REMITTED`. Cạnh sai → 409 `INVALID_TRANSITION`.
+  evidence, không địa chỉ; `event_ref` của COD = id dòng history), outbox `SHIPMENT_STATUS_UPDATED` / `COD_COLLECTED` /
+  `COD_REMITTED`. Cạnh sai → 409 `INVALID_TRANSITION`. `occurred_at` không lùi so với sự kiện trước, HANDED_OVER không ở
+  tương lai. ASSIGN lại (PICKING→PICKING) tăng version nhưng không phát event.
 - **Cancel (SHP-02)**: cùng advisory lock quote với create. Chưa có shipment → tombstone CANCELLED; CREATED/PICKING → CANCELLED;
-  đã bàn giao → 409 `SHIPMENT_HANDED_OVER` (order đi return, không cộng kho).
+  đã bàn giao → 409 `SHIPMENT_HANDED_OVER` (kiểm trước snapshot; order đi return, không cộng kho). Create replay cùng key sau
+  khi hủy → 409 `SHIPMENT_CANCELLED`.
 
 ## Cấu hình
 

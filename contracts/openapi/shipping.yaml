@@ -173,7 +173,10 @@ paths:
         DELIVERY_FAILED DELIVERING to FAILED (reason); REDELIVER FAILED to DELIVERING; RETURN_STARTED FAILED to RETURNING (reason);
         RETURNED RETURNING to RETURNED (evidence_ref; stock is restored only through order and inventory after counting);
         COD_COLLECTED on DELIVERED, amount = cod_amount, once; COD_REMITTED on DELIVERED, amount = collected minus remitted.
-        Fields a type does not use are rejected. Same Idempotency-Key and body replays the response.
+        Fields a type does not use are rejected. occurred_at (default now) is never before the shipment creation or the
+        previous event, at most 5 minutes ahead, and never in the future for HANDED_OVER. Re-ASSIGN while PICKING changes the
+        shipper and bumps version without an outbox event. The response is state only (no address); same Idempotency-Key
+        and body replays it. Read the detail with GET.
       security: [{bearerAuth: []}]
       parameters:
       - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
@@ -185,11 +188,19 @@ paths:
             schema: {$ref: '#/components/schemas/SelfEvent'}
       responses:
         '200':
-          description: Shipment detail after the event
+          description: Shipment state after the event (no address)
           headers: *headers
           content:
             application/json:
-              schema: {$ref: '#/components/schemas/ShipmentDetailResponse'}
+              schema: {$ref: '#/components/schemas/SelfEventResponse'}
+              examples:
+                handedOver:
+                  value:
+                    code: OK
+                    data: {shipment_id: 6a1b2c3d-0000-4000-8000-000000000002, order_id: 99999999-9999-4999-8999-999999999991,
+                      status: DELIVERING, version: 3, assigned_to: 11111111-1111-4111-8111-111111111111,
+                      handed_over_at: '2026-10-20T02:55:00Z', cod_amount: 250000, cod_collected_amount: 0, cod_remitted_amount: 0}
+                    metadata: {request_id: shp02-synthetic-request, trace_id: shp02-synthetic-trace}
         '400': {$ref: '#/components/responses/Invalid'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -320,6 +331,26 @@ components:
         evidence_ref: {type: string, minLength: 1, maxLength: 200, description: 'Receipt/photo reference; required for HANDED_OVER, DELIVERED, RETURNED, COD_*'}
         reason: {type: string, minLength: 1, maxLength: 500, description: Required for DELIVERY_FAILED and RETURN_STARTED}
         amount: {type: integer, minimum: 1, description: COD_COLLECTED / COD_REMITTED only (VND)}
+    SelfEventResponse:
+      type: object
+      required: [code, data, metadata]
+      properties:
+        code: {type: string, const: OK}
+        data:
+          type: object
+          additionalProperties: false
+          required: [shipment_id, order_id, status, version, assigned_to, handed_over_at, cod_amount, cod_collected_amount, cod_remitted_amount]
+          properties:
+            shipment_id: {type: string, format: uuid}
+            order_id: {type: string, format: uuid}
+            status: {$ref: '#/components/schemas/ShipmentStatus'}
+            version: {type: integer, minimum: 0}
+            assigned_to: {type: [string, 'null'], format: uuid}
+            handed_over_at: {type: [string, 'null'], format: date-time}
+            cod_amount: {type: integer, minimum: 0}
+            cod_collected_amount: {type: integer, minimum: 0}
+            cod_remitted_amount: {type: integer, minimum: 0}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
     ShipmentSummary:
       type: object
       additionalProperties: false
@@ -407,7 +438,7 @@ components:
         application/json:
           schema: {$ref: ./common.yaml#/components/schemas/ApiError}
     Conflict:
-      description: VERSION_CONFLICT (errors expected_version current=N), INVALID_TRANSITION (errors status current=S) or IDEMPOTENCY_KEY_REUSED
+      description: VERSION_CONFLICT (errors expected_version current=N), INVALID_TRANSITION (errors status current=S), COD_NOT_COLLECTABLE, COD_NOT_REMITTABLE or IDEMPOTENCY_KEY_REUSED
       headers: *headers
       content:
         application/json:

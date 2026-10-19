@@ -96,7 +96,7 @@ paths:
         '401': {<<: *error, description: INVALID_SERVICE_TOKEN}
         '403': {<<: *error, description: CALLER_NOT_ALLOWED}
         '404': {<<: *error, description: QUOTE_NOT_FOUND}
-        '409': {<<: *error, description: 'SHIPMENT_CONFLICT, SHIPMENT_CANCELLED (cancelled or tombstone, any body), QUOTE_MISMATCH, QUOTE_ALREADY_USED or IDEMPOTENCY_KEY_REUSED'}
+        '409': {<<: *error, description: 'SHIPMENT_CONFLICT, SHIPMENT_CANCELLED (cancelled or tombstone, any body, also a same-key replay after the cancel), QUOTE_MISMATCH, QUOTE_ALREADY_USED or IDEMPOTENCY_KEY_REUSED'}
   /internal/api/v1/shipping/shipments/by-order/{order_id}/cancel:
     post:
       tags: [Internal shipping]
@@ -107,7 +107,8 @@ paths:
         same quote lock as create. No shipment yet: the quote must exist, match and be unused, then a CANCELLED tombstone
         is stored so a later create is 409 SHIPMENT_CANCELLED. CREATED/PICKING with the same snapshot: CANCELLED at once
         (SELF has no third party). Already CANCELLED: returned as is (any key). Handed over (DELIVERING and later): 409
-        SHIPMENT_HANDED_OVER with the status; the order must take the return flow and must not restore stock.
+        SHIPMENT_HANDED_OVER (errors status current=S; checked before the snapshot) — the order must take the return flow
+        and must not restore stock.
       x-implementation-status: implemented
       parameters:
       - {name: order_id, in: path, required: true, schema: {type: string, format: uuid}}

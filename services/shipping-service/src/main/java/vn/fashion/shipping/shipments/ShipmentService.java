@@ -57,7 +57,11 @@ public class ShipmentService {
     String hash = hash(c);
     return tx.execute(status -> {
       var replay = Api.replay(keys.begin(ACTOR, "shipping.shipment.create", key, hash), json);
-      if (replay != null) return replay;
+      if (replay != null) {
+        // Review SHP-02 I1: the order's UNKNOWN retry after a cancel gets the current fact, not the stale CREATED answer.
+        if (byOrder(c.orderId()).filter(v -> v.status().equals("CANCELLED")).isPresent()) throw conflict("SHIPMENT_CANCELLED");
+        return replay;
+      }
       lockQuote(c.quoteId());
       // Review 5: an order that already has a shipment answers first (same body -> it, other body -> 409).
       var existing = byOrder(c.orderId());
@@ -102,17 +106,22 @@ public class ShipmentService {
       if (current.isEmpty()) {
         var quote = usableQuote(c);
         UUID id = UUID.randomUUID();
-        if (!insert(id, c, quote, hash, "CANCELLED")) throw lateConflict(c.orderId());
-        history(id, "cancel-before-create", null, "CANCELLED", null, reason, "{}");
-        view = byId(id);
-        events.statusUpdated(view, null, correlationId);
+        if (insert(id, c, quote, hash, "CANCELLED")) {
+          history(id, "cancel-before-create", null, "CANCELLED", null, reason, "{}");
+          view = byId(id);
+          events.statusUpdated(view, null, correlationId);
+        } else {
+          // Another snapshot of this order won the insert meanwhile: a cancelled row answers as cancelled, anything else is 409.
+          view = byOrder(c.orderId()).filter(v -> v.status().equals("CANCELLED")).orElseThrow(() -> conflict("SHIPMENT_CONFLICT"));
+        }
       } else if (current.get().status().equals("CANCELLED")) {
         view = byId(current.get().id());
       } else {
-        if (!current.get().requestHash().equals(hash)) throw conflict("SHIPMENT_CONFLICT");
+        // Review SHP-02 M5: the hand-over fact wins over a snapshot mismatch, so the order starts the return flow.
         if (!CANCELLABLE.contains(current.get().status()))
           throw new Api.Problem(HttpStatus.CONFLICT, "CONFLICT", "SHIPMENT_HANDED_OVER",
               List.of(new Api.FieldError("status", "current=" + current.get().status())));
+        if (!current.get().requestHash().equals(hash)) throw conflict("SHIPMENT_CONFLICT");
         jdbc.sql("update shipments set status = 'CANCELLED', version = version + 1, updated_at = now() where id = :id")
             .param("id", current.get().id()).update();
         history(current.get().id(), "cancel", current.get().status(), "CANCELLED", null, reason, "{}");
@@ -206,13 +215,16 @@ public class ShipmentService {
   private void history(UUID shipment, String key, String from, String to) {
     history(shipment, key, from, to, null, null, "{}");
   }
+  private void history(UUID shipment, String key, String from, String to, Instant occurredAt, String reason, String payload) {
+    history(UUID.randomUUID(), shipment, key, from, to, occurredAt, reason, payload);
+  }
   /** clock_timestamp(), not now(): rows of one transaction must keep their order for (created_at, id) reads. */
-  void history(UUID shipment, String key, String from, String to, Instant occurredAt, String reason, String payload) {
+  void history(UUID id, UUID shipment, String key, String from, String to, Instant occurredAt, String reason, String payload) {
     jdbc.sql("""
         insert into shipment_status_history(id, shipment_id, provider_event_key, from_status, to_status, provider_occurred_at,
           sanitized_payload, applied, reason, created_at)
         values (:id, :s, :k, :f, :t, :at, cast(:p as jsonb), true, :r, clock_timestamp())""")
-        .param("id", UUID.randomUUID()).param("s", shipment).param("k", key).param("f", from).param("t", to)
+        .param("id", id).param("s", shipment).param("k", key).param("f", from).param("t", to)
         .param("at", occurredAt == null ? null : Timestamp.from(occurredAt)).param("p", payload).param("r", reason).update();
   }
 

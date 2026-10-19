@@ -40,6 +40,8 @@ class ShipmentCancelIntegrationTest extends ShippingTestSupport {
         .containsExactly("SHIPMENT_CREATED", "SHIPMENT_STATUS_UPDATED");
     // A late create, even the same body under the first key's twin, is refused.
     assertThat(problem(create("k3", body), 409)).isEqualTo("SHIPMENT_CANCELLED");
+    // Review I1: the order's UNKNOWN retry with its original key must not replay the stale CREATED answer.
+    assertThat(problem(create("k1", body), 409)).isEqualTo("SHIPMENT_CANCELLED");
   }
 
   @Test void pickingCanBeCancelledButNotAfterHandOver() {
@@ -50,6 +52,8 @@ class ShipmentCancelIntegrationTest extends ShippingTestSupport {
     var refused = cancel(order, "c1", withReason(body, "khách hủy"));
     assertThat(problem(refused, 409)).isEqualTo("SHIPMENT_HANDED_OVER");
     assertThat(json(refused).path("errors").get(0).path("message").asString()).isEqualTo("current=DELIVERING");
+    // Review M5: the hand-over fact wins over a snapshot mismatch, so the order starts the return flow.
+    assertThat(problem(cancel(order, "c9", withReason(body.replace("1 Đường Mẫu", "2 Khác"), "x")), 409)).isEqualTo("SHIPMENT_HANDED_OVER");
     assertThat(jdbc.queryForObject("select status from shipments where id = cast(? as uuid)", String.class, id)).isEqualTo("DELIVERING");
 
     String other = UUID.randomUUID().toString(), otherBody = body(other, "C3", quote("79", false), "79", 0);
