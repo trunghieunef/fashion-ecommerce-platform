@@ -251,6 +251,11 @@ curl -sS -X POST -H "Authorization: Bearer $access" "$GATEWAY_URL/api/v1/carts" 
   python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["owner"]=="MEMBER", d'
 rm -f "$cart_jar"
 echo 'CART-01 guest/member cart PASS'
+# TASK:SHP-01: estimate through the Gateway; shipping reads weight from catalog with its own service token.
+curl -sS -X POST -H 'Content-Type: application/json' -H 'Origin: http://localhost:4173'   -d "{\"province_code\":\"79\",\"cod\":true,\"items\":[{\"variant_id\":\"$variant_id\",\"quantity\":2}]}"   "$GATEWAY_URL/api/v1/shipping/fee/estimate" |   python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["carrier"]=="SELF" and d["weight_grams"]==200 and d["fee"]>0 and d["estimate"], d'
+test "$(status -X POST -H 'Content-Type: application/json' -H 'Origin: http://localhost:4173'   -d '{"province_code":"79","cod":false,"items":[{"variant_id":"00000000-0000-4000-8000-000000000000","quantity":1}]}'   "$GATEWAY_URL/api/v1/shipping/fee/estimate")" = 422
+test "$(status -X POST "$GATEWAY_URL/internal/api/v1/shipping/quotes")" = 404
+echo 'SHP-01 shipping estimate PASS'
 # TASK:CAT-02b: public detail is cacheable for 5 s (Redis keeps it 300 s until invalidated).
 curl -sS -o /dev/null -D "$headers" "$GATEWAY_URL/api/v1/catalog/products/$product_id"
 grep -qi '^cache-control: public, max-age=5' "$headers"

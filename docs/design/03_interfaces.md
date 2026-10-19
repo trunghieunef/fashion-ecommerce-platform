@@ -181,7 +181,7 @@ attach kiểm APPROVED/ownership/target trong DB; chưa đủ validation không 
 | GET | /orders/{order_no}/payment | Order owner / 1 | Payment status, URL đã có nếu còn mở/hợp lệ; không create/đổi amount |
 | POST | /promotions/vouchers/validate | Actor / 2 | cart_id,version,code → server preview |
 | GET | /promotions/flash-sales/active | Public / 2 | Server now, start/end, sale price, quota tham khảo |
-| POST | /shipping/fee/estimate | Actor / 1 | Cart/version,to,method → preview fee/cod_fee,carrier,expiry |
+| POST | /shipping/fee/estimate | Public / 1 | `SHP-01` implemented ([shipping.yaml](../../contracts/openapi/shipping.yaml)): province_code,cod,items {variant_id,quantity} (thay cart/version, 08) → fee/cod_fee/carrier SELF/weight_grams/estimate/expires_at (+1 h); trọng lượng từ catalog; không lưu; 422 NO_SHIPPING_RULE/VARIANT_NOT_AVAILABLE; no-store |
 
 Không còn POST /payments public nhận amount. Browser redirect/notify provider xem §6. Guest order credential gắn session và order; refresh trang giữ cookie, mất cookie đi hỗ trợ xác minh theo policy, không có API truy cập bằng phone/order_no đơn thuần.
 
@@ -456,9 +456,9 @@ reference/lease được GC sau 7 ngày từ terminal, suy ra upload_id, không 
 | GET /payments/{id}/refunds/{refund_id} | FINANCE | Trạng thái UNKNOWN/SUCCESS/FAILED / 1 |
 | POST /payments/{id}/cod-settlements | FINANCE | settlement_ref,gross,fees,net,evidence / 1 |
 | GET /payments/reconciliation; POST /payments/reconciliation/{id}/resolve | FINANCE | Giải trình/evidence, không force success không xác minh / 1 |
-| GET /shipping/shipments; GET /shipping/shipments/{id} | OPS | Tracking/UNKNOWN/handed_over_at / 1 |
+| GET /shipping/shipments; GET /shipping/shipments/{id} | OPS | Tracking/UNKNOWN/handed_over_at / 1 — `SHP-01` implemented (`shipping.read`; list status/cursor, detail có địa chỉ + history) |
 | POST /shipping/shipments/{id}/self-events | OPS | Event/status/evidence/thu COD, không trực tiếp sửa order / 1 |
-| GET,POST /shipping/rules; PUT /shipping/rules/{id} | OPS | Fee rule/version/active / 1 |
+| GET,POST /shipping/rules; PUT /shipping/rules/{id} | OPS | Fee rule/version/active / 1 — `SHP-01` implemented (`shipping.rules`; config theo FLAT/PROVINCE/WEIGHT, expected_version, reason + audit) |
 | GET /catalog/reviews; POST /catalog/reviews/{id}/approve; POST /catalog/reviews/{id}/reject | OPS | Moderation reason / 2 |
 | GET,POST /promotions/vouchers; PUT /promotions/vouchers/{id} | MARKETING | Voucher/version / 2 |
 | GET,POST /promotions/campaigns; PUT /promotions/campaigns/{id} | MARKETING | Campaign/items/overlap guard / 2 |
@@ -493,9 +493,9 @@ Report orders do order sở hữu, cash do payment, stock do inventory; dashboar
 | POST /payments/{order_id}/close | order → payment | Original snapshot/hash,key → closed intent/tombstone |
 | POST /payments/{payment_id}/refunds | order → payment | operation_key,amount,reason,order context → refund |
 | GET /payments/{payment_id}/refunds/{refund_id} | order → payment | Result/cumulative refunded amount |
-| POST /shipping/fee | order,cart → shipping | Address + catalog weight/items/method → quote_id,fee,cod_fee,expiry |
-| POST /shipping/shipments | order → shipping | Snapshot/hash,ready proof/version,key → shipment state |
-| GET /shipping/shipments/by-order/{order_id} | order → shipping | Status,handed_over_at,tracking |
+| POST /shipping/fee | order,cart → shipping | `SHP-01` implemented: `/internal/api/v1/shipping/quotes` ([shipping-internal.yaml](../../contracts/openapi/shipping-internal.yaml)), caller order-service; province_code,cod,items + key → quote_id,fee,cod_fee,carrier,weight_grams,rule_id/version,expires_at (+15 phút), lưu `shipping_quotes` |
+| POST /shipping/shipments | order → shipping | `SHP-01` implemented: `/internal/api/v1/shipping/shipments`; order_id,order_no,quote_id,cod_amount,to_address + key → shipment SELF CREATED; quote phải khớp tỉnh/COD (409 QUOTE_MISMATCH), một quote một shipment (409 QUOTE_ALREADY_USED), cùng order khác body 409 SHIPMENT_CONFLICT; ready proof/PACKING do order kiểm (ORD) |
+| GET /shipping/shipments/by-order/{order_id} | order → shipping | Status,handed_over_at,tracking — `SHP-01` implemented (không trả địa chỉ) |
 | POST /shipping/shipments/{order_id}/cancel | order → shipping | Original snapshot/hash,key → cancellation/tombstone |
 | POST /users/recipients/resolve | notification,inventory → user | Scoped IDs/purpose → minimal recipient/locale/verified |
 | GET /users/notification-secrets/{challenge_id} | notification → user | Purpose/expiry/caller check → secret tạm, no-store. Thực thi: [`user-internal.yaml`](../../contracts/openapi/user-internal.yaml) (`TASK:USR-01` phần 1b-i); service token ADR-19 gửi qua `Authorization: Bearer` |
