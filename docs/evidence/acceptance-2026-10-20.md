@@ -118,8 +118,8 @@ acceptance ở [10](../delivery/10_backlog.md) dòng ORD-01 theo
 | Guest checkout xác minh bằng checkout token (08 CART-03) | `CheckoutTokenIntegrationTest`, `badCredentialsAreRefused`, race/reload guest (`parallelGuestSubmits...`, `aGuestWhoLostItsKey...`) | Pass |
 | Đơn tiến tới CONFIRMED/WAITING_PAYMENT (201) | Chưa có saga: đơn dừng PENDING/PROCESSING | **Ngoại lệ (ORD-02)** |
 
-**`TASK:ORD-01`: Done (local, trước G0) — đơn dừng ở PENDING/PROCESSING tới ORD-02**; CI trên `8a4f7f5` PASS, chờ re-review
-(nếu chủ dự án muốn) và chủ dự án merge PR #32 vào `main`.
+**`TASK:ORD-01`: Done (local, trước G0) — đơn dừng ở PENDING/PROCESSING tới ORD-02**; CI trên `8a4f7f5` PASS; chủ dự án đã
+merge PR #32 vào `main` (`d60f6a0`, 2026-10-20).
 
 ### Ngoại lệ và việc còn lại (không chặn Done local)
 
