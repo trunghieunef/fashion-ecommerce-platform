@@ -85,7 +85,7 @@ paths:
         and confirm, T24). One transaction writes the PENDING order, items, history, the saga row and ORDER_CREATED. Another
         key on the same cart state is 409 CART_ALREADY_ORDERED (order_no in errors for the same actor). 4xx store nothing;
         COD expires_at is created_at + 24 h. A guest gets the order_access cookie (HttpOnly, Secure, SameSite=Lax,
-        Path=/api/v1/orders/{order_no}, 90 days); a retry with the same key issues a new one and the old one stops working.
+        Path=/api/v1/orders/{order_no}, 90 days); a retry with the same key issues one more and earlier cookies stay valid.
       security: [{memberBearer: []}, {checkoutToken: []}]
       x-implementation-status: implemented
       parameters:

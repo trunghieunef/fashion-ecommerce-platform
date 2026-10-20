@@ -24,6 +24,7 @@ class OrderReadIntegrationTest extends OrderTestSupport {
         insert into order_items(id, order_id, variant_id, sku, name, size, color, quantity, unit_price, line_total, catalog_version,
           cart_item_id, cart_item_version) values (gen_random_uuid(), ?, ?, 'TEE-M', 'Ao thun', 'M', 'Den', 1, 100000, 100000, 7,
           gen_random_uuid(), 1)""", id, V1);
+    if (accessHash != null) jdbc.update("insert into order_guest_access(access_hash, order_id) values (?, ?)", accessHash, id);
     return orderNo;
   }
   static String sha256(String value) { return OrderCreateIntegrationTest.sha256(value); }
@@ -58,15 +59,33 @@ class OrderReadIntegrationTest extends OrderTestSupport {
     assertThat(problem(get("/api/v1/orders/" + order, "Authorization", memberToken()), 404)).isEqualTo("ORDER_NOT_FOUND");
   }
 
-  @Test void theReissuedCookieReplacesTheOldOne() {
+  @Test void aReissuedCookieIsAddedAndEarlierCookiesStayValid() {
     UUID cart = UUID.randomUUID();
     stubCheckout(cart, 150000, 99000);
     String checkout = checkoutToken(GUEST_HASH, cart), body = createBody(cart, 4, quoteToken(cart, "Checkout-Token", checkout));
     var first = create("g1", body, "Checkout-Token", checkout);
     String orderNo = data(first, 202).path("order_no").asString();
     String old = cookieValue(first), fresh = cookieValue(create("g1", body, "Checkout-Token", checkout));
-    assertThat(problem(get("/api/v1/orders/" + orderNo, "Cookie", "order_access=" + old), 404)).isEqualTo("ORDER_NOT_FOUND");
+    assertThat(fresh).isNotEqualTo(old);
+    // Review I1: whichever Set-Cookie the browser keeps last, it can read its order.
+    assertThat(data(get("/api/v1/orders/" + orderNo, "Cookie", "order_access=" + old), 200).path("order_no").asString()).isEqualTo(orderNo);
     assertThat(data(get("/api/v1/orders/" + orderNo, "Cookie", "order_access=" + fresh), 200).path("order_no").asString()).isEqualTo(orderNo);
+  }
+
+  @Test void parallelGuestSubmitsBothGetAWorkingCookie() {
+    UUID cart = UUID.randomUUID();
+    stubCheckout(cart, 150000, 99000);
+    String checkout = checkoutToken(GUEST_HASH, cart), body = createBody(cart, 4, quoteToken(cart, "Checkout-Token", checkout));
+    var barrier = new java.util.concurrent.CyclicBarrier(2);
+    var a = java.util.concurrent.CompletableFuture.supplyAsync(() -> { OrderCreateIntegrationTest.await(barrier); return create("same", body, "Checkout-Token", checkout); });
+    var b = java.util.concurrent.CompletableFuture.supplyAsync(() -> { OrderCreateIntegrationTest.await(barrier); return create("same", body, "Checkout-Token", checkout); });
+    var ra = a.join(); var rb = b.join();
+    String orderNo = data(ra, 202).path("order_no").asString();
+    assertThat(data(rb, 202).path("order_no").asString()).isEqualTo(orderNo);
+    for (var response : java.util.List.of(ra, rb))
+      assertThat(data(get("/api/v1/orders/" + orderNo, "Cookie", "order_access=" + cookieValue(response)), 200).path("order_no").asString())
+          .isEqualTo(orderNo);
+    assertThat(count("select count(*) from orders")).isEqualTo(1);
   }
   static String cookieValue(HttpResponse<String> response) {
     String set = OrderCreateIntegrationTest.cookie(response);

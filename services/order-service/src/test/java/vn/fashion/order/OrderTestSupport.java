@@ -91,7 +91,7 @@ public abstract class OrderTestSupport {
   @BeforeEach protected void reset() throws Exception {
     try (var c = DriverManager.getConnection(postgres.getJdbcUrl(), "postgres", "postgres"); var s = c.createStatement()) {
       s.execute("""
-          delete from order_sagas; delete from order_status_history; delete from order_items; delete from orders;
+          delete from order_sagas; delete from order_guest_access; delete from order_status_history; delete from order_items; delete from orders;
           delete from outbox_events""");
     }
     StubServers.CART.reset(); StubServers.CATALOG.reset(); StubServers.SHIPPING.reset();

@@ -458,7 +458,7 @@ Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác v
 | Giá đổi → 409 `PRICE_CHANGED`, khách quote lại (không kèm quote mới) | FE gọi lại quote và xin xác nhận (T24) |
 | UNIQUE `(cart_id, cart_version)` → 409 `CART_ALREADY_ORDERED` | Double-click/tab thứ hai không tạo hai đơn |
 | Email bắt buộc với guest | Có kênh thông báo đơn (NOT-01) |
-| Cookie `order_access` Path theo từng `order_no`, 90 ngày; retry cấp lại cookie | Nhiều đơn guest không ghi đè nhau; cookie cũ hết hiệu lực |
+| Cookie `order_access` Path theo từng `order_no`, 90 ngày; retry cấp thêm cookie, cookie cũ vẫn hợp lệ (bảng `order_guest_access`) | Nhiều đơn guest không ghi đè nhau; hai response đua nhau không làm guest mất quyền xem đơn (review I1) |
 | Quote không kiểm tồn kho; chưa rate limit checkout | Hết hàng phát hiện ở reserve (ORD-02); limiter chung là việc sau |
 | Mã lỗi chi tiết nằm ở `message` (enum `code` chung giữ nguyên); tràn số tiền → 422 `AMOUNT_OUT_OF_RANGE` | Không đổi `common.yaml` |
 

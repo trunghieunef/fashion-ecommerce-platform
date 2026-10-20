@@ -168,20 +168,29 @@ public class OrderService {
         .param("id", UUID.randomUUID()).param("order", id).param("actor", actor.userId()).update();
     jdbc.sql("insert into order_sagas(order_id, intent, step, status) values (:order, 'FULFILL', 'RESERVE', 'RUNNING')")
         .param("order", id).update();
+    if (access != null) grantAccess(id, access);
     events.created(view(id), actor.userId(), correlationId);
     return true;
   }
 
-  /** Same key: the same request gets its order (a guest a new access cookie, the old one stops working); another is 409. */
+  /**
+   * Same key: the same request gets its order; another body is 409. A guest gets one more access cookie; earlier ones stay
+   * valid (review I1: racing responses may reach the browser in any order, and a lost one never reached anybody).
+   */
   private Created replay(Row row, String hash) {
     if (!row.checkoutHash().equals(hash)) throw new Api.Problem(HttpStatus.CONFLICT, "CONFLICT", "IDEMPOTENCY_KEY_REUSED", List.of());
     String access = null;
     if (row.userId() == null) {
       access = newAccessToken();
-      jdbc.sql("update orders set guest_access_hash = :h where id = :id").param("h", Api.sha256(access)).param("id", row.id()).update();
+      grantAccess(row.id(), access);
       LOG.info("Guest order access reissued: order_no={} event=ACCESS_REISSUED", row.orderNo());
     }
     return new Created(view(row.id()), true, access);
+  }
+
+  private void grantAccess(UUID orderId, String access) {
+    jdbc.sql("insert into order_guest_access(access_hash, order_id) values (:h, :o)").param("h", Api.sha256(access)).param("o", orderId)
+        .update();
   }
 
   Optional<Row> byCheckout(String actorKey, String key) {
@@ -213,7 +222,8 @@ public class OrderService {
   /** Spec section 8: member by user_id, guest by its access cookie; anything else is the same 404 (T21). */
   public OrderView readable(String orderNo, UUID userId, String accessToken) {
     var row = byNo(orderNo).filter(r -> userId != null ? userId.equals(r.userId())
-        : accessToken != null && r.guestAccessHash() != null && r.guestAccessHash().equals(Api.sha256(accessToken)));
+        : accessToken != null && r.userId() == null && jdbc.sql("select count(*) from order_guest_access where access_hash = :h and order_id = :o")
+            .param("h", Api.sha256(accessToken)).param("o", r.id()).query(Long.class).single() > 0);
     return view(row.orElseThrow(() -> new Api.Problem(HttpStatus.NOT_FOUND, "NOT_FOUND", "ORDER_NOT_FOUND", List.of())));
   }
 

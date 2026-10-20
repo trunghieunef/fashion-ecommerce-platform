@@ -71,6 +71,15 @@ CREATE TABLE order_items (
   CHECK (line_total = quantity * unit_price)
 );
 
+-- Guest read credentials (spec section 7, review I1): every issued access token stays valid; a retry adds one, never
+-- replaces, so two racing responses cannot leave the browser with a dead cookie. orders.guest_access_hash is the first.
+CREATE TABLE order_guest_access (
+  access_hash char(64) PRIMARY KEY,
+  order_id uuid NOT NULL REFERENCES orders(id),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX order_guest_access_order_idx ON order_guest_access (order_id);
+
 CREATE TABLE order_status_history (
   id uuid PRIMARY KEY,
   order_id uuid NOT NULL REFERENCES orders(id),
@@ -134,5 +143,5 @@ CREATE TABLE outbox_events (
 CREATE INDEX outbox_events_unsent_idx ON outbox_events (next_attempt_at, created_at) WHERE status <> 'SENT';
 
 -- Orders and their history are never deleted by the runtime; history is append-only.
-REVOKE DELETE, TRUNCATE ON orders, order_items, order_status_history FROM order_runtime;
+REVOKE DELETE, TRUNCATE ON orders, order_items, order_status_history, order_guest_access FROM order_runtime;
 REVOKE UPDATE ON order_status_history FROM order_runtime;

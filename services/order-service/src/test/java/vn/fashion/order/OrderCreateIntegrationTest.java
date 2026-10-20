@@ -166,6 +166,7 @@ class OrderCreateIntegrationTest extends OrderTestSupport {
     String value = set.substring("order_access=".length(), set.indexOf(';'));
     String stored = jdbc.queryForObject("select guest_access_hash from orders", String.class);
     assertThat(stored).isEqualTo(sha256(value)).doesNotContain(value);
+    assertThat(count("select count(*) from order_guest_access where access_hash = ?", stored)).isEqualTo(1);
     assertThat(jdbc.queryForObject("select actor_key from orders", String.class)).isEqualTo("guest:" + GUEST_HASH);
     assertThat(jdbc.queryForObject("select contact_email from orders", String.class)).isEqualTo("guest@example.test");
     long version = jdbc.queryForObject("select version from orders", Long.class);
@@ -173,8 +174,8 @@ class OrderCreateIntegrationTest extends OrderTestSupport {
     assertThat(data(retry, 202).path("order_no").asString()).isEqualTo(orderNo);
     String again = cookie(retry);
     assertThat(again).isNotEqualTo(set);
-    assertThat(jdbc.queryForObject("select guest_access_hash from orders", String.class))
-        .isEqualTo(sha256(again.substring("order_access=".length(), again.indexOf(';'))));
+    assertThat(count("select count(*) from order_guest_access where access_hash = ?",
+        sha256(again.substring("order_access=".length(), again.indexOf(';'))))).isEqualTo(1);
     assertThat(jdbc.queryForObject("select version from orders", Long.class)).isEqualTo(version);
   }
 }

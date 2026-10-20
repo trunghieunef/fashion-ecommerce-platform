@@ -317,7 +317,8 @@ Order status: PENDING, WAITING_PAYMENT, CONFIRMED, PAID, PACKING, SHIPPING, DELI
 
 `ORD-01` (V001 order-service) thêm so với bảng trên: `created_at`/`updated_at` cho `orders`/`order_sagas`, UNIQUE
 `(cart_id, cart_version)` (một đơn cho một trạng thái giỏ), CHECK guest ⇔ `guest_access_hash` và `actor_key` khớp
-`user_id`, sequence `order_no_seq` (`ORD` + yyyyMM giờ VN + 6 số), bảng `outbox_events`. Runtime không DELETE/TRUNCATE
+`user_id`, sequence `order_no_seq` (`ORD` + yyyyMM giờ VN + 6 số), bảng `outbox_events` và `order_guest_access` (`access_hash` PK,
+`order_id`; mọi credential đã cấp cho guest, `guest_access_hash` là cái đầu tiên). Runtime không DELETE/TRUNCATE
 `orders`/`order_items`/`order_status_history`, không UPDATE history. `shipping_quote` là quote shipping trong quote_token;
 `order_items.image_url` là đường dẫn ảnh public của catalog (`/api/v1/catalog/images/{asset_id}?kind=thumb`).
 

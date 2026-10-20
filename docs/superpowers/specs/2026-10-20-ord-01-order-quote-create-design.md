@@ -119,8 +119,10 @@ key nhận cùng đơn.
 - Khi tạo đơn guest: token ngẫu nhiên 32 byte (base64url) → cookie `order_access`, `HttpOnly; Secure; SameSite=Lax;
   Path=/api/v1/orders/{order_no}; Max-Age = 90 ngày` (O06 ≤ 90 ngày); DB chỉ lưu `guest_access_hash = sha256`. Path theo
   từng đơn nên nhiều đơn guest trên một trình duyệt không ghi đè nhau.
-- Retry tạo đơn của cùng guest actor (bước 2 §6) cấp **lại** token mới và thay hash (client mất response chưa từng nhận
-  cookie cũ); ghi log audit có cấu trúc (`order_no`, `ACCESS_REISSUED`, không token). Không tăng `version` đơn.
+- Retry tạo đơn của cùng guest actor (bước 2 §6) cấp **thêm** một token mới (bảng `order_guest_access`); token đã cấp
+  trước vẫn hợp lệ — hai request đua cùng key có thể về trình duyệt theo thứ tự bất kỳ, và response bị mất chưa tới tay
+  ai nên thu hồi không có lợi (review nhánh I1, sửa 2026-10-20). Ghi log audit có cấu trúc (`order_no`, `ACCESS_REISSUED`,
+  không token). Không tăng `version` đơn.
 - Không có API tra đơn bằng `order_no`/phone đơn thuần (03 §2.3). Mất cookie → hỗ trợ xác minh theo policy (ngoài phạm vi).
 
 ## 8. Đọc đơn
@@ -153,13 +155,13 @@ cart_version)`; `order_items.image_url` lấy từ ảnh catalog; `shipping_quot
     đơn; cùng giỏ/version key khác 409 `CART_ALREADY_ORDERED`; giá đổi 409 `PRICE_CHANGED` không tạo đơn (T24); token giả
     mạo/đổi actor 400; quote hết hạn 409; outbox `ORDER_CREATED` một dòng; saga row RESERVE;
   - đọc: member chỉ đơn mình, guest cookie đúng đơn, cookie đơn khác/đoán `order_no` 404 (T21), retry guest cấp lại cookie
-    và cookie cũ hết hiệu lực; mine cursor/filter;
+    và cookie cũ vẫn đọc được (kể cả hai request guest song song); mine cursor/filter;
   - cart: checkout token cho guest, Bearer 400, giỏ người khác 404, token hết hạn/sai aud bị order từ chối;
   - schema: CHECK tổng, REVOKE runtime; Gateway: route `/api/v1/orders/**`, `/internal` không route.
 - Mutation check như PAY-01 (idempotency lookup trước expiry, so giá, unique giỏ/version, ownership đọc).
 - Tài liệu: 03 (§2.3 implemented + mã lỗi), 05 (§7 bổ sung UNIQUE/sequence), 06 (§5.1 ghi phần ORD-01), 08 (quyết định
   ORD-01), 10, 12 (lệnh), README service + root, CLAUDE.md, compose/local-up/.env.example, smoke (`ORD-01 quote/create
-  PASS` qua Gateway với member synthetic), evidence.
+  PASS` qua Gateway — làm theo luồng guest: checkout token → quote → create → đọc bằng cookie), evidence.
 
 ## 11. Lựa chọn mặc định của agent (chủ dự án duyệt cùng spec 2026-10-20)
 
@@ -174,6 +176,6 @@ cart_version)`; `order_items.image_url` lấy từ ảnh catalog; `shipping_quot
 7. Giá đổi → 409 `PRICE_CHANGED` yêu cầu quote lại (không trả kèm quote mới trong lỗi).
 8. Thêm UNIQUE `(cart_id, cart_version)` chặn hai đơn từ một trạng thái giỏ.
 9. Email bắt buộc với guest (nhận thông báo đơn NOT-01), tùy chọn với member.
-10. Cookie truy cập đơn guest Path theo từng `order_no`, 90 ngày; retry cấp lại cookie.
+10. Cookie truy cập đơn guest Path theo từng `order_no`, 90 ngày; retry cấp thêm cookie, cookie cũ vẫn hợp lệ.
 11. Đơn COD `expires_at = +24h` lưu ngay; xử lý hết hạn ở ORD-03.
 12. Không gọi inventory ở quote; không rate limit checkout trong ORD-01 (ghi rủi ro ở evidence).

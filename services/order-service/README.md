@@ -41,7 +41,8 @@ Port 8087 (không publish ra host). Qua Gateway: `/api/v1/orders/**`; không có
   (FULFILL/RESERVE/RUNNING cho ORD-02) + outbox `ORDER_CREATED`. Key khác cùng giỏ/version → 409 `CART_ALREADY_ORDERED`
   (order_no chỉ lộ cho cùng actor). COD `expires_at = +24h`. `order_no = ORD + yyyyMM (giờ VN) + 6 số sequence`.
 - **Guest credential**: cookie `order_access` (HttpOnly, Secure, SameSite=Lax, `Path=/api/v1/orders/{order_no}`, 90 ngày —
-  O06); DB chỉ lưu sha256. Retry create cùng key cấp cookie mới, cookie cũ hết hiệu lực; log audit `ACCESS_REISSUED`.
+  O06); DB chỉ lưu sha256 (bảng `order_guest_access`). Retry create cùng key cấp thêm cookie mới, cookie cũ vẫn hợp lệ (hai
+  response đua nhau không làm guest mất đơn); log audit `ACCESS_REISSUED`.
 
 ## Cấu hình
 
@@ -60,7 +61,7 @@ Port 8087 (không publish ra host). Qua Gateway: `/api/v1/orders/**`; không có
 ## Database
 
 `V001__order.sql`: `orders` (05 §7 + `created_at`/`updated_at`, UNIQUE `(actor_key, checkout_key)` và `(cart_id, cart_version)`,
-CHECK tổng tiền, guest ⇔ `guest_access_hash`), `order_items`, `order_status_history`, `order_sagas`, `outbox_events`,
+CHECK tổng tiền, guest ⇔ `guest_access_hash`), `order_guest_access` (mọi access hash đã cấp cho guest), `order_items`, `order_status_history`, `order_sagas`, `outbox_events`,
 sequence `order_no_seq`. Runtime không DELETE/TRUNCATE đơn/items/history, không UPDATE history. Local DB/role:
 `infra/local/postgres-init/07-order-db.sh`. Retention: PII đơn ẩn danh sau 12 tháng từ khi đơn kết thúc (O06) — job chưa làm.
 
