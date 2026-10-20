@@ -12,6 +12,8 @@ public record Outcome(Result result, String code, JsonNode data) {
   public static Outcome ok(JsonNode data) { return new Outcome(Result.OK, null, data); }
   public static Outcome rejected(String code) { return new Outcome(Result.REJECTED, code, MissingNode.getInstance()); }
   public static Outcome unknown(String code) { return new Outcome(Result.UNKNOWN, code, MissingNode.getInstance()); }
+  /** Code of a 400 from dependency: UNKNOWN, but the message kept so a caller can recognise a specific one. */
+  public static String invalid(String dependency, String message) { return dependency + "_400 " + message; }
 
   /**
    * 2xx OK; 404/409/422 REJECTED with the message; anything else UNKNOWN: 401/403 config, 5xx, and 400 - our own request is
@@ -24,6 +26,7 @@ public record Outcome(Result result, String code, JsonNode data) {
     int s = reply.status();
     if (s >= 200 && s < 300) return ok(reply.data());
     if (s == 404 || s == 409 || s == 422) return rejected(reply.message());
+    if (s == 400) return unknown(invalid(dependency, reply.message()));
     return unknown(dependency + "_" + s);
   }
 }

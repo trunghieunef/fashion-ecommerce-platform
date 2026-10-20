@@ -55,13 +55,13 @@ Port 8087 (không publish ra host). Qua Gateway: `/api/v1/orders/**`; không có
 `SagaWorker.runOnce()` mỗi `ORDER_SAGA_POLL`: claim ≤ 10 saga đến hạn (`FOR UPDATE SKIP LOCKED`, lease 30 s). Mỗi bước ghi
 intent (`*_state = UNKNOWN`) dưới lease, gọi HTTP ngoài transaction, ghi kết quả bằng CAS lease token; mất lease → bỏ kết quả.
 
-| Step | Gọi (key) | OK | Từ chối (404/409/422) | Chưa rõ (400/401/403/5xx/timeout, exception) |
+| Step | Gọi (key) | OK | Từ chối nghiệp vụ | Còn lại (400/404/`*_CONFLICT`/401/403/5xx/timeout, exception) |
 |---|---|---|---|---|
-| `RESERVE` | inventory reserve (`reserve:{order_id}`, hash 03 §4) | HELD → `CREATE_PAYMENT` | CANCEL `OUT_OF_STOCK`/`RESERVE_FAILED` | retry cùng key |
-| `CREATE_PAYMENT` | payment create (`payment:{order_id}`) | đơn `CONFIRMED`, saga `WAIT_OPS` tới `expires_at`, enqueue `CART_CLEANUP` | CANCEL `PAYMENT_FAILED` | retry cùng key |
-| `COMPENSATE` | release (`release:{order_id}`, snapshot + hash gốc) nếu HELD/UNKNOWN, rồi luôn close (`close:{order_id}`) | `CANCELLED` | `MANUAL` (COMMITTED; tiền đã thu hoặc đã ghi `PAYMENT_COMPLETED` → `PAID_NEEDS_REFUND`) | retry |
+| `RESERVE` | inventory reserve (`reserve:{order_id}`, hash 03 §4) | HELD → `CREATE_PAYMENT` | `OUT_OF_STOCK` → CANCEL `OUT_OF_STOCK`; `RESERVATION_CLOSED` → `RESERVE_FAILED` | retry cùng key |
+| `CREATE_PAYMENT` | payment create (`payment:{order_id}`) | đơn `CONFIRMED`, saga `WAIT_OPS` tới `expires_at`, enqueue `CART_CLEANUP` | `PAYMENT_CLOSED`/`PAYMENT_METHOD_UNAVAILABLE`/`PAYMENT_AMOUNT_UNSUPPORTED` → CANCEL `PAYMENT_FAILED` | retry cùng key |
+| `COMPENSATE` | release (`release:{order_id}`, snapshot + hash gốc) trừ khi RELEASED (NONE + 400 `INVALID_INPUT` = SKU lạ, không giữ gì), rồi luôn close (`close:{order_id}`) | `CANCELLED` | `MANUAL` (COMMITTED/RESTORED; tiền đã thu hoặc đã ghi `PAYMENT_COMPLETED` → `PAID_NEEDS_REFUND`) | retry |
 
-Quá `expires_at` (COD 24 h) ở bất kỳ bước FULFILL → CANCEL `EXPIRED`. Backoff `min(2^n s, 5 phút)` ±20 %, 30 lần → `MANUAL`
+Quá `expires_at` (COD 24 h) ở bất kỳ bước FULFILL, kể cả trong lúc gọi payment → CANCEL `EXPIRED`, không `CONFIRMED` muộn. Intent tính một lần thử + backoff trước mỗi lời gọi xuôi; claim saga đã hết ngân sách → `MANUAL`. Backoff `min(2^n s, 5 phút)` ±20 %, 30 lần → `MANUAL`
 (metric `order_saga_manual_total`, log `last_error`), nghĩa vụ giữ nguyên. Chuyển trạng thái đơn ghi history (`SYSTEM`) +
 outbox `ORDER_CONFIRMED`/`ORDER_CANCELLED` cùng transaction.
 

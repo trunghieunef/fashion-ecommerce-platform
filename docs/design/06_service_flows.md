@@ -416,8 +416,8 @@ flowchart TD
 
 `ORD-02` (2026-10-20) hiện thực phần hệ thống tự hủy: lỗi chắc chắn (reserve 409 → `OUT_OF_STOCK`/`RESERVE_FAILED`, payment
 từ chối → `PAYMENT_FAILED`) hoặc quá `expires_at` (`EXPIRED`, kể cả khi bước đang `UNKNOWN`) ghi intent CANCEL + `CANCELLING`
-cùng transaction, rồi release (snapshot + hash gốc, nếu `inventory_state` HELD/UNKNOWN), luôn close payment (tombstone), mới
-`CANCELLED`. Release trả COMMITTED, hoặc tiền đã thu (close thấy COD_COLLECTED/SUCCESS hay đã ghi `PAYMENT_COMPLETED` — `PAID_NEEDS_REFUND`) → `MANUAL` ngay; lỗi chưa rõ (gồm 400 và exception trong bước) backoff
+cùng transaction, rồi release (snapshot + hash gốc, mọi trạng thái trừ RELEASED — tombstone chặn reserve cùng key còn đang bay), luôn close payment (tombstone), mới
+`CANCELLED`. Release trả COMMITTED, hoặc tiền đã thu (close thấy COD_COLLECTED/SUCCESS hay đã ghi `PAYMENT_COMPLETED` — `PAID_NEEDS_REFUND`) → `MANUAL` ngay; mã từ chối khác danh sách nghiệp vụ (400, 404, `*_CONFLICT`), lỗi chưa rõ và exception trong bước backoff
 `min(2^n s, 5 phút)` ±20 %, 30 lần → `MANUAL` + metric `order_saga_manual_total`. Mỗi ghi kết quả là CAS theo lease token;
 worker mất lease bỏ kết quả. Khách/OPS hủy, return/restore khi đã commit là ORD-03/04.
 

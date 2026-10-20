@@ -48,7 +48,9 @@ ORD-02: create luôn trả 202 (không có 201), FE poll GET đơn: `processing_
 hoặc đang hủy) → poll tiếp theo `retry_after_seconds`; `READY` (`CONFIRMED`, COD chờ shop xác nhận) và `FINISHED`
 (`CANCELLED`, `reason_code` OUT_OF_STOCK/RESERVE_FAILED/PAYMENT_FAILED/EXPIRED) dừng poll. Hết hàng: giỏ được giữ nguyên, hướng
 khách về giỏ để sửa rồi đặt lại. FE giữ `cart_id` + `cart_version` đã submit (sessionStorage được, không phải secret): mất
-response và key, gửi lại nhận `409 CART_ALREADY_ORDERED` + `order_no` của đơn chưa hủy (08 ORD-02).
+response và key, gửi lại nhận `409 CART_ALREADY_ORDERED` + `order_no` của đơn chưa hủy (08 ORD-02). Đơn saga `MANUAL` vẫn trả
+`PROCESSING` không giới hạn: FE giới hạn poll (ví dụ dừng sau khoảng 2 phút), hiển thị "đơn đang được xử lý, shop sẽ liên hệ" và
+link xem lại đơn, không tự tạo đơn mới.
 
 409 PRICE_CHANGED/QUOTE_EXPIRED: highlight số cũ/mới nếu có, yêu cầu xác nhận lại. 409 VERSION_CONFLICT: reload cart, không ghi đè thay đổi thiết bị khác. 429: chờ; 503: thông báo thử lại nhưng giữ key của mutation chưa biết kết quả.
 

@@ -26,6 +26,11 @@ public class SagaWorker {
   static final Duration LEASE = Duration.ofSeconds(30);
   static final Duration MAX_BACKOFF = Duration.ofMinutes(5);
   static final String CART_CLEANUP = "CART_CLEANUP";
+  // Only these answers are about the order itself (spec section 3, PR #33 review I1); any other refusal (404, *_CONFLICT,
+  // IDEMPOTENCY_KEY_REUSED) means our own request or a deploy is wrong: retried into MANUAL, never a cancelled order.
+  static final java.util.Set<String> RESERVE_REFUSALS = java.util.Set.of("OUT_OF_STOCK", "RESERVATION_CLOSED");
+  static final java.util.Set<String> PAYMENT_REFUSALS =
+      java.util.Set.of("PAYMENT_CLOSED", "PAYMENT_METHOD_UNAVAILABLE", "PAYMENT_AMOUNT_UNSUPPORTED");
   private final SagaRepository sagas;
   private final OrderTransitions transitions;
   private final InventoryClient inventory;
@@ -47,11 +52,13 @@ public class SagaWorker {
   public int runOnce() {
     var claims = sagas.claimDue(10, LEASE);
     for (var claim : claims) {
+      int before = sagas.saga(claim.orderId()).retryCount();
       try { advance(claim); }
       catch (RuntimeException e) {
-        // A bug or bad answer (e.g. 200 without payment_id) spends the retry budget like UNKNOWN, so it ends MANUAL.
+        // A bug or bad answer (e.g. 200 without payment_id) spends the retry budget like UNKNOWN, so it ends MANUAL; an
+        // intent written in this pass already counted the attempt.
         LOG.error("Saga step failed: order_id={}", claim.orderId(), e);
-        try { retry(claim, sagas.saga(claim.orderId()), Outcome.unknown(e.getClass().getSimpleName())); }
+        try { retry(claim, Math.max(sagas.saga(claim.orderId()).retryCount(), before + 1), Outcome.unknown(e.getClass().getSimpleName())); }
         catch (RuntimeException again) { LOG.error("Saga retry not recorded: order_id={}", claim.orderId(), again); }  // lease expires
       }
     }
@@ -62,6 +69,8 @@ public class SagaWorker {
     while (true) {
       var saga = sagas.saga(c.orderId());
       var order = sagas.order(c.orderId());
+      // The intent spends the budget too, so a worker dying mid-call on every attempt still ends MANUAL (review M1).
+      if (saga.retryCount() >= maxRetries) { manual(c, saga, "RETRY_BUDGET"); return; }
       // Deadline passed (online 15 min / COD 24 h, also while a call is UNKNOWN): cancel, never confirm late.
       boolean more = saga.intent().equals("FULFILL") && !clock.instant().isBefore(order.expiresAt())
           ? startCancel(c, "EXPIRED")
@@ -76,10 +85,11 @@ public class SagaWorker {
   }
 
   private boolean reserve(SagaRepository.Claim c, SagaRepository.Saga saga, SagaOrder order) {
-    if (!sagas.write(c, jdbc -> state(jdbc, c.orderId(), "inventory_state", "UNKNOWN"), false)) return false;
+    if (!intent(c, saga, "inventory_state")) return false;
     var out = inventory.reserve(order);
-    if (out.result() == Outcome.Result.REJECTED) {
-      // A refused reserve holds nothing (inventory rolls every SKU back), so there is nothing to release.
+    if (out.result() == Outcome.Result.REJECTED && RESERVE_REFUSALS.contains(out.code())) {
+      // This call holds nothing, but an earlier attempt with the same key may still be in flight: compensation releases
+      // anyway (tombstone, review I2). NONE marks "refused, never held".
       if (!sagas.write(c, jdbc -> jdbc.sql("update order_sagas set inventory_state = 'NONE' where order_id = :id")
           .param("id", c.orderId()).update(), false)) return false;
       return startCancel(c, "OUT_OF_STOCK".equals(out.code()) ? "OUT_OF_STOCK" : "RESERVE_FAILED");
@@ -91,10 +101,12 @@ public class SagaWorker {
   }
 
   private boolean createPayment(SagaRepository.Claim c, SagaRepository.Saga saga, SagaOrder order) {
-    if (!sagas.write(c, jdbc -> state(jdbc, c.orderId(), "payment_state", "UNKNOWN"), false)) return false;
+    if (!intent(c, saga, "payment_state")) return false;
     var out = payments.create(order);
-    if (out.result() == Outcome.Result.REJECTED) return startCancel(c, "PAYMENT_FAILED");
+    if (out.result() == Outcome.Result.REJECTED && PAYMENT_REFUSALS.contains(out.code())) return startCancel(c, "PAYMENT_FAILED");
     if (out.result() != Outcome.Result.OK) return retry(c, saga, out);
+    // The deadline passed during the call: never confirm late (review M2); the next pass cancels EXPIRED and closes it.
+    if (!clock.instant().isBefore(order.expiresAt())) return true;
     UUID paymentId = UUID.fromString(out.data().path("payment_id").asString());
     sagas.write(c, jdbc -> {
       // COD: the shop accepted the order and waits for OPS until expires_at (06 section 5.2, ORD-03 confirms).
@@ -126,11 +138,19 @@ public class SagaWorker {
   /** One obligation per pass: release what may be held, close the payment (always: tombstone), then CANCELLED. */
   private boolean compensate(SagaRepository.Claim c, SagaRepository.Saga saga, SagaOrder order) {
     String reason = sagas.cancelReason(c.orderId());
-    if (saga.inventoryState().equals("HELD") || saga.inventoryState().equals("UNKNOWN")) {
+    String stock = saga.inventoryState();
+    // Committed or restored stock needs return/restore (ORD-03/04), never a plain release (review M3).
+    if (stock.equals("COMMITTED") || stock.equals("RESTORED")) return manual(c, saga, "inventory " + stock);
+    if (!stock.equals("RELEASED")) {
+      // Always release, even NONE: the tombstone stops a reserve still in flight from holding stock (review I2).
       var out = inventory.release(order, reason);
-      if (out.result() == Outcome.Result.REJECTED) return manual(c, saga, "release " + out.code());
-      if (out.result() != Outcome.Result.OK) return retry(c, saga, out);
-      return sagas.write(c, jdbc -> state(jdbc, c.orderId(), "inventory_state", "RELEASED", "HELD", "UNKNOWN"), false);
+      // NONE + INVALID_INPUT: an unknown SKU (inventory answered OUT_OF_STOCK, rolls the tombstone back) was never held.
+      boolean nothingHeld = stock.equals("NONE") && Outcome.invalid("inventory", "INVALID_INPUT").equals(out.code());
+      if (!nothingHeld) {
+        if (out.result() == Outcome.Result.REJECTED) return manual(c, saga, "release " + out.code());
+        if (out.result() != Outcome.Result.OK) return retry(c, saga, out);
+      }
+      return sagas.write(c, jdbc -> state(jdbc, c.orderId(), "inventory_state", "RELEASED", "NONE", "HELD", "UNKNOWN"), false);
     }
     // PAYMENT_COMPLETED already recorded: the money is in, the order owes a refund (PAY-04/ORD-04).
     if (saga.paymentState().equals("PAID")) return manual(c, saga, "PAID_NEEDS_REFUND");
@@ -155,23 +175,44 @@ public class SagaWorker {
   }
 
   /** A business refusal that retrying cannot change: MANUAL now, every obligation kept for OPS. */
-  private boolean manual(SagaRepository.Claim c, SagaRepository.Saga saga, String error) {
+  private boolean manual(SagaRepository.Claim c, SagaRepository.Saga saga, String error) { return manual(c, saga.retryCount() + 1, error); }
+
+  private boolean manual(SagaRepository.Claim c, int attempts, String error) {
     if (sagas.write(c, jdbc -> jdbc.sql("""
         update order_sagas set status = 'MANUAL', retry_count = :n, last_error = :e where order_id = :id""")
-        .param("n", saga.retryCount() + 1).param("e", error).param("id", c.orderId()).update(), true)) {
+        .param("n", attempts).param("e", error).param("id", c.orderId()).update(), true)) {
       manual.increment();
       LOG.warn("Saga moved to MANUAL: order_id={} last_error={}", c.orderId(), error);
     }
     return false;
   }
 
-  /** UNKNOWN: back off with jitter; after the budget the saga is MANUAL, obligations kept. */
-  private boolean retry(SagaRepository.Claim c, SagaRepository.Saga saga, Outcome out) {
+  /**
+   * Before a forward call: column = UNKNOWN and the attempt counted with its backoff (spec section 3), so a crash before the
+   * result is retried later and still ends MANUAL. A result resets retry_count; retry() records the same attempt number.
+   */
+  private boolean intent(SagaRepository.Claim c, SagaRepository.Saga saga, String column) {
     int attempts = saga.retryCount() + 1;
-    String error = out.result() + " " + out.code();
-    if (attempts >= maxRetries) return manual(c, saga, error);
+    var next = backoff(attempts);
+    return sagas.write(c, jdbc -> {
+      state(jdbc, c.orderId(), column, "UNKNOWN");
+      jdbc.sql("update order_sagas set retry_count = :n, next_retry_at = :next where order_id = :id")
+          .param("n", attempts).param("next", Timestamp.from(next)).param("id", c.orderId()).update();
+    }, false);
+  }
+
+  private java.time.Instant backoff(int attempts) {
     long seconds = Math.min(1L << Math.min(attempts, 30), MAX_BACKOFF.toSeconds());
-    var next = clock.instant().plusMillis((long) (seconds * 1000 * ThreadLocalRandom.current().nextDouble(0.8, 1.2)));
+    return clock.instant().plusMillis((long) (seconds * 1000 * ThreadLocalRandom.current().nextDouble(0.8, 1.2)));
+  }
+
+  /** UNKNOWN: back off with jitter; after the budget the saga is MANUAL, obligations kept. */
+  private boolean retry(SagaRepository.Claim c, SagaRepository.Saga saga, Outcome out) { return retry(c, saga.retryCount() + 1, out); }
+
+  private boolean retry(SagaRepository.Claim c, int attempts, Outcome out) {
+    String error = out.result() + " " + out.code();
+    if (attempts >= maxRetries) return manual(c, attempts, error);
+    var next = backoff(attempts);
     sagas.write(c, jdbc -> jdbc.sql("""
         update order_sagas set retry_count = :n, last_error = :e, next_retry_at = :next where order_id = :id""")
         .param("n", attempts).param("e", error).param("next", Timestamp.from(next)).param("id", c.orderId()).update(), true);

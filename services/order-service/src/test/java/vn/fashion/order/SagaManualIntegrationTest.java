@@ -42,6 +42,25 @@ class SagaManualIntegrationTest extends OrderTestSupport {
     assertThat(StubServers.INVENTORY.seen).isEmpty();                    // MANUAL is never picked up again
   }
 
+  @Test void aCrashAfterTheIntentStillSpendsTheBudget() {
+    // PR #33 review M1: the worker dies after the intent (simulated: the lease is gone, the result is dropped) every time.
+    UUID id = placeOrder();
+    StubServers.INVENTORY.reply(s -> {
+      asOwner("update order_sagas set lease_until = now() - interval '1 second' where order_id = '" + id + "'");
+      return new StubServers.Reply(200, StubServers.ok("{\"status\":\"ACTIVE\"}"));
+    });
+    for (int i = 1; i <= 3; i++) {
+      worker.runOnce();
+      assertThat(saga(id)).containsEntry("retry_count", i).containsEntry("status", "RUNNING");
+      assertThat(((Timestamp) saga(id).get("next_retry_at")).toInstant()).isAfter(clock.instant());   // backs off
+      clock.shift(Duration.ofMinutes(10));
+    }
+    StubServers.INVENTORY.seen.clear();
+    worker.runOnce();
+    assertThat(saga(id)).containsEntry("status", "MANUAL");
+    assertThat(StubServers.INVENTORY.seen).isEmpty();
+  }
+
   @Test void aStepThatThrowsCountsAsARetryAndEndsManual() {
     // Review I2: payment 200 without payment_id throws; it must spend the retry budget, not loop every lease forever.
     UUID id = placeOrder();

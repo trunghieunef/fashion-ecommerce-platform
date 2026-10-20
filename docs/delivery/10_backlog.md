@@ -9,7 +9,7 @@ Update 2026-10-20 — `TASK:ORD-02` **In review (local)**: saga checkout COD b�
 chối/quá hạn → `CANCELLING` → release + close → `CANCELLED` có `reason_code`; UNKNOWN retry cùng key, 30 lần → `MANUAL`;
 dọn giỏ bằng background task khi đơn `CONFIRMED` (REQ ORD-09); inbox `payment.events`; V002 unique một phần cho phép đặt lại
 sau hủy; `REQ:ORD-02/09`; dependency ORD-01, INV-02, PAY-01, PLT-03; T03/T07/T23 (T09 commit thuộc ORD-03);
-[spec](../superpowers/specs/2026-10-20-ord-02-checkout-saga-design.md), [evidence](../evidence/ord-02-local-2026-10-20.md).
+[spec](../superpowers/specs/2026-10-20-ord-02-checkout-saga-design.md), [evidence](../evidence/ord-02-local-2026-10-20.md); PR #33.
 
 Update 2026-10-20 — `TASK:ORD-01` **Done (local, trước G0)** ([nghiệm thu](../evidence/acceptance-2026-10-20.md#taskord-01--order-service-quotecreateread-guest-checkout-token)), PR #32 merge `d60f6a0`: order-service quote ký 2 phút (giá catalog, phí SELF + COD),
 create idempotent `PENDING`/202 với snapshot bất biến (lookup key trước kiểm quote, `PRICE_CHANGED`), đọc đơn theo

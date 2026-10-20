@@ -42,10 +42,10 @@ worker mới; `CANCELLED` trước khi release/close xong; event payment cũ h�
 
 | Step | Việc | Thành công | Lỗi chắc chắn | Chưa rõ |
 |---|---|---|---|---|
-| `RESERVE` | reserve mọi SKU của `order_items`, `expires_at` = đơn, `request_hash` theo 03 §4, key `reserve:{order_id}` | `inventory_state=HELD` → `CREATE_PAYMENT` | 409 `OUT_OF_STOCK`/`RESERVATION_CLOSED`/`RESERVATION_CONFLICT` → CANCEL (`OUT_OF_STOCK` hoặc `RESERVE_FAILED`) | `UNKNOWN`, retry cùng key/hash |
-| `CREATE_PAYMENT` | payment create từ snapshot đơn (order_id, order_no, user_id, method, amount = total, VND, expires_at), key `payment:{order_id}` | lưu `payment_id`; COD `COD_PENDING` → đơn `CONFIRMED`, saga `WAIT_OPS`/`WAITING`, `next_retry_at = expires_at` | 409 `PAYMENT_CLOSED`/422 → CANCEL (`PAYMENT_FAILED`) | `payment_state=UNKNOWN`, retry cùng key |
+| `RESERVE` | reserve mọi SKU của `order_items`, `expires_at` = đơn, `request_hash` theo 03 §4, key `reserve:{order_id}` | `inventory_state=HELD` → `CREATE_PAYMENT` | 409 `OUT_OF_STOCK`/`RESERVATION_CLOSED` → CANCEL (`OUT_OF_STOCK` hoặc `RESERVE_FAILED`); `RESERVATION_CONFLICT`, 404, 400 là lỗi của chính request → retry rồi MANUAL (review PR #33) | `UNKNOWN`, retry cùng key/hash |
+| `CREATE_PAYMENT` | payment create từ snapshot đơn (order_id, order_no, user_id, method, amount = total, VND, expires_at), key `payment:{order_id}` | lưu `payment_id`; COD `COD_PENDING` → đơn `CONFIRMED`, saga `WAIT_OPS`/`WAITING`, `next_retry_at = expires_at` | 409 `PAYMENT_CLOSED`, 422 `PAYMENT_METHOD_UNAVAILABLE`/`PAYMENT_AMOUNT_UNSUPPORTED` → CANCEL (`PAYMENT_FAILED`); `PAYMENT_CONFLICT`/`IDEMPOTENCY_KEY_REUSED`/404/400 → retry rồi MANUAL | `payment_state=UNKNOWN`, retry cùng key |
 | `WAIT_OPS` | chờ OPS (ORD-03) | — | quá `expires_at` → CANCEL (`EXPIRED`) | — |
-| `COMPENSATE` (intent CANCEL) | release reservation (snapshot + hash gốc, reason) nếu `inventory_state` ≠ NONE; close payment (snapshot + reason) **luôn** (tombstone chặn create đến muộn) | cả hai xác nhận → đơn `CANCELLED`, saga `DONE` | release trả `COMMITTED` → `MANUAL` (không xảy ra trước ORD-03) | retry |
+| `COMPENSATE` (intent CANCEL) | release reservation (snapshot + hash gốc, reason) trừ khi đã RELEASED — kể cả NONE để tombstone chặn reserve còn đang bay (review PR #33); NONE + 400 `INVALID_INPUT` (SKU lạ) coi như không giữ gì; close payment (snapshot + reason) **luôn** (tombstone chặn create đến muộn) | cả hai xác nhận → đơn `CANCELLED`, saga `DONE` | release trả `COMMITTED` → `MANUAL` (không xảy ra trước ORD-03) | retry |
 
 - Đơn: `PENDING → CONFIRMED` (COD), `PENDING → CANCELLING → CANCELLED`, `CONFIRMED → CANCELLING → CANCELLED` (hết hạn).
   Mỗi chuyển trạng thái ghi `order_status_history` (actor `SYSTEM`) + outbox cùng transaction, `orders.version + 1`.

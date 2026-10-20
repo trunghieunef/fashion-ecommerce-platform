@@ -79,4 +79,58 @@ class SagaForwardIntegrationTest extends OrderTestSupport {
     assertThat(saga(id).get("lease_token")).isNull();
     assertThat(sagas.write(b, jdbc -> { }, true)).isFalse();             // released: the token is gone
   }
+
+  @Test void aWorkerThatLostItsLeaseDuringACallDropsItsResult() {
+    // PR #33 review I3: worker A's payment answer arrives after its lease expired; B finishes, A leaves no trace.
+    UUID id = placeOrder();
+    stubSagaOk();
+    var first = new java.util.concurrent.atomic.AtomicBoolean(true);
+    StubServers.PAYMENT.reply(s -> {
+      if (first.getAndSet(false)) asOwner("update order_sagas set lease_until = now() - interval '1 second' where order_id = '" + id + "'");
+      return new StubServers.Reply(200, StubServers.ok("{\"payment_id\":\"55555555-5555-4555-8555-555555555591\",\"status\":\"COD_PENDING\"}"));
+    });
+    worker.runOnce();                                                       // A: result dropped by the lease CAS
+    assertThat(status(id)).isEqualTo("PENDING");
+    assertThat(count("select count(*) from outbox_events where event_type = 'ORDER_CONFIRMED'")).isZero();
+    assertThat(count("select count(*) from background_tasks")).isZero();
+    clock.shift(Duration.ofMinutes(10));
+    worker.runOnce();                                                       // B: same key again, confirms once
+    assertThat(status(id)).isEqualTo("CONFIRMED");
+    assertThat(count("select count(*) from outbox_events where event_type = 'ORDER_CONFIRMED'")).isEqualTo(1);
+    assertThat(count("select count(*) from background_tasks where kind = 'CART_CLEANUP'")).isEqualTo(1);
+    var creates = StubServers.PAYMENT.seen.stream().filter(s -> s.path().endsWith("/payments")).toList();
+    assertThat(creates).hasSize(2);
+    assertThat(creates.get(1).idempotencyKey()).isEqualTo(creates.get(0).idempotencyKey());
+  }
+
+  @Test void aFailedTransitionRollsBackTheSagaAndTheOutbox() {
+    // T23: the order changed under the saga; the CONFIRMED transition throws and nothing of it is committed.
+    UUID id = placeOrder();
+    stubSagaOk();
+    StubServers.PAYMENT.reply(s -> {
+      asOwner("update orders set status = 'CANCELLING' where id = '" + id + "'");
+      return new StubServers.Reply(200, StubServers.ok("{\"payment_id\":\"55555555-5555-4555-8555-555555555591\",\"status\":\"COD_PENDING\"}"));
+    });
+    worker.runOnce();
+    assertThat(saga(id)).containsEntry("step", "CREATE_PAYMENT").containsEntry("payment_state", "UNKNOWN").containsEntry("status", "RUNNING");
+    assertThat(saga(id).get("payment_id")).isNull();
+    assertThat(count("select count(*) from outbox_events where event_type = 'ORDER_CONFIRMED'")).isZero();
+    assertThat(count("select count(*) from background_tasks")).isZero();
+  }
+
+  @Test void aPaymentAnsweredAfterTheDeadlineNeverConfirms() {
+    // PR #33 review M2: the deadline passes during the payment call: cancel EXPIRED, never CONFIRMED then cancelled.
+    UUID id = placeOrder();
+    stubSagaOk();
+    StubServers.PAYMENT.reply(s -> {
+      if (s.path().endsWith("/close")) return new StubServers.Reply(200, StubServers.ok("{\"status\":\"FAILED\"}"));
+      clock.shift(Duration.ofHours(25));
+      return new StubServers.Reply(200, StubServers.ok("{\"payment_id\":\"55555555-5555-4555-8555-555555555591\",\"status\":\"COD_PENDING\"}"));
+    });
+    worker.runOnce();
+    assertThat(status(id)).isEqualTo("CANCELLED");
+    assertThat(jdbc.queryForObject("select cancel_reason from orders where id = ?", String.class, id)).isEqualTo("EXPIRED");
+    assertThat(count("select count(*) from outbox_events where event_type = 'ORDER_CONFIRMED'")).isZero();
+    assertThat(count("select count(*) from order_status_history where order_id = ? and to_status = 'CONFIRMED'", id)).isZero();
+  }
 }

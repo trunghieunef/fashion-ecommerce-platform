@@ -18,12 +18,14 @@ class SagaCompensationIntegrationTest extends OrderTestSupport {
     UUID id = placeOrder();
     UUID cart = jdbc.queryForObject("select cart_id from orders where id = ?", UUID.class, id);
     stubSagaOk();
-    StubServers.INVENTORY.reply(s -> new StubServers.Reply(409, StubServers.error("OUT_OF_STOCK", "OUT_OF_STOCK")));
+    StubServers.INVENTORY.reply(s -> s.path().endsWith("/release")
+        ? new StubServers.Reply(200, StubServers.ok("{\"status\":\"RELEASED\"}"))
+        : new StubServers.Reply(409, StubServers.error("OUT_OF_STOCK", "OUT_OF_STOCK")));
     worker.runOnce();
     assertThat(status(id)).isEqualTo("CANCELLED");
     assertThat(jdbc.queryForObject("select cancel_reason from orders where id = ?", String.class, id)).isEqualTo("OUT_OF_STOCK");
     assertThat(saga(id)).containsEntry("intent", "CANCEL").containsEntry("status", "DONE").containsEntry("payment_state", "CLOSED");
-    assertThat(calls(StubServers.INVENTORY, "/release")).isZero();           // nothing was held
+    assertThat(calls(StubServers.INVENTORY, "/release")).isEqualTo(1);       // tombstone: a reserve still in flight cannot hold
     assertThat(calls(StubServers.PAYMENT, "/close")).isEqualTo(1);           // tombstone blocks a late create (PAY-08)
     assertThat(StubServers.PAYMENT.seen.stream().filter(s -> s.path().endsWith("/payments")).count()).isZero();
     assertThat(count("select count(*) from background_tasks")).isZero();
@@ -54,6 +56,63 @@ class SagaCompensationIntegrationTest extends OrderTestSupport {
     worker.runOnce();
     assertThat(status(id)).isEqualTo("CANCELLING");
     assertThat(saga(id)).containsEntry("status", "MANUAL").containsEntry("payment_state", "PAID").containsEntry("last_error", "PAID_NEEDS_REFUND");
+  }
+
+  @Test void aReserveStillInFlightCannotHoldStockForACancelledOrder() {
+    // PR #33 review I2: reserve #1 timed out (UNKNOWN), retry #2 says OUT_OF_STOCK; #1 may still land, so release (tombstone).
+    UUID id = placeOrder();
+    stubSagaOk();
+    StubServers.INVENTORY.reply(s -> new StubServers.Reply(503, StubServers.error("TEMPORARILY_UNAVAILABLE", "DEPENDENCY_UNAVAILABLE")));
+    worker.runOnce();
+    StubServers.INVENTORY.reply(s -> s.path().endsWith("/release")
+        ? new StubServers.Reply(200, StubServers.ok("{\"status\":\"RELEASED\"}"))
+        : new StubServers.Reply(409, StubServers.error("OUT_OF_STOCK", "OUT_OF_STOCK")));
+    clock.shift(Duration.ofMinutes(10));
+    worker.runOnce();
+    assertThat(status(id)).isEqualTo("CANCELLED");
+    assertThat(saga(id)).containsEntry("inventory_state", "RELEASED");
+    var release = StubServers.INVENTORY.seen.stream().filter(s -> s.path().endsWith("/release")).toList();
+    assertThat(release).hasSize(1);
+    assertThat(release.get(0).idempotencyKey()).isEqualTo("release:" + id);
+  }
+
+  @Test void anUnknownSkuThatWasNeverHeldNeedsNoRelease() {
+    // Inventory answers OUT_OF_STOCK for an unknown SKU and refuses its tombstone with 400 INVALID_INPUT: nothing to free.
+    UUID id = placeOrder();
+    stubSagaOk();
+    StubServers.INVENTORY.reply(s -> s.path().endsWith("/release")
+        ? new StubServers.Reply(400, StubServers.error("VALIDATION_ERROR", "INVALID_INPUT"))
+        : new StubServers.Reply(409, StubServers.error("OUT_OF_STOCK", "OUT_OF_STOCK")));
+    worker.runOnce();
+    assertThat(status(id)).isEqualTo("CANCELLED");
+    assertThat(jdbc.queryForObject("select cancel_reason from orders where id = ?", String.class, id)).isEqualTo("OUT_OF_STOCK");
+  }
+
+  @Test void contractConflictsAndMissingRoutesNeverCancelTheOrder() {
+    // PR #33 review I1: 404 (wrong URL, old deploy) or a *_CONFLICT on our own key/hash is not an answer about the order.
+    UUID a = placeOrder();
+    stubSagaOk();
+    StubServers.INVENTORY.reply(s -> new StubServers.Reply(404, StubServers.error("NOT_FOUND", "NOT_FOUND")));
+    worker.runOnce();
+    assertThat(status(a)).isEqualTo("PENDING");
+    assertThat(saga(a)).containsEntry("intent", "FULFILL").containsEntry("retry_count", 1);
+    UUID b = placeOrder();
+    stubSagaOk();
+    StubServers.PAYMENT.reply(s -> new StubServers.Reply(409, StubServers.error("CONFLICT", "PAYMENT_CONFLICT")));
+    worker.runOnce();
+    assertThat(status(b)).isEqualTo("PENDING");
+    assertThat(saga(b)).containsEntry("intent", "FULFILL").containsEntry("step", "CREATE_PAYMENT").containsEntry("retry_count", 1);
+  }
+
+  @Test void committedStockIsNeverTreatedAsReleased() {
+    // PR #33 review M3: COMMITTED/RESTORED stock needs return/restore (ORD-04), not CANCELLED.
+    UUID id = placeOrder();
+    asOwner("update orders set status = 'CANCELLING', cancel_reason = 'EXPIRED' where id = '" + id + "'");
+    asOwner("update order_sagas set intent = 'CANCEL', step = 'COMPENSATE', status = 'COMPENSATING', inventory_state = 'COMMITTED' where order_id = '" + id + "'");
+    worker.runOnce();
+    assertThat(saga(id)).containsEntry("status", "MANUAL");
+    assertThat(status(id)).isEqualTo("CANCELLING");
+    assertThat(StubServers.INVENTORY.seen).isEmpty();
   }
 
   @Test void aContractErrorGoesManualInsteadOfCancellingTheOrder() {
