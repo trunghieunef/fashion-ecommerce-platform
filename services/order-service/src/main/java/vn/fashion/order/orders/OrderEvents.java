@@ -26,7 +26,10 @@ public class OrderEvents {
   }
 
   /** ORDER_CREATED (OrderState): appended in the create transaction. */
-  public void created(OrderView view, UUID userId, String correlationId) {
+  public void created(OrderView view, UUID userId, String correlationId) { lifecycle("ORDER_CREATED", view, userId, null, correlationId); }
+
+  /** ORDER_CREATED/ORDER_CONFIRMED (OrderState) or ORDER_CANCELLED (OrderCancelled, with reason), in the transition's transaction. */
+  public void lifecycle(String type, OrderView view, UUID userId, String reason, String correlationId) {
     var payload = new LinkedHashMap<String, Object>();
     payload.put("order_id", view.orderId().toString());
     payload.put("order_no", view.orderNo());
@@ -38,9 +41,10 @@ public class OrderEvents {
     payload.put("total_amount", view.totals().totalAmount());
     payload.put("currency", view.totals().currency());
     payload.put("method", view.method());
-    var route = routes.required("ORDER_CREATED");
+    if (reason != null) payload.put("reason", reason);
+    var route = routes.required(type);
     outbox.append(new OutboxEvent(UUID.randomUUID(), "order", (String) payload.get(route.required("aggregate_id").asString()),
-        view.version(), "ORDER_CREATED", 1, route.required("topic").asString(),
+        view.version(), type, 1, route.required("topic").asString(),
         (String) payload.get(route.required("partition_key").asString()), correlationId, json.writeValueAsString(payload)));
   }
 }

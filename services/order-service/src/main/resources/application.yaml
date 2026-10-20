@@ -3,6 +3,8 @@ server:
 
 spring:
   kafka:
+    consumer:
+      group-id: order-service
     bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:19092}
   task:
     scheduling:
@@ -57,6 +59,9 @@ fashion:
     cart-url: ${ORDER_CART_URL:http://localhost:8084}
     catalog-url: ${ORDER_CATALOG_URL:http://localhost:8081}
     shipping-url: ${ORDER_SHIPPING_URL:http://localhost:8085}
+    # TASK:ORD-02 saga: inventory reserve/release, payment create/close.
+    inventory-url: ${ORDER_INVENTORY_URL:http://localhost:8083}
+    payment-url: ${ORDER_PAYMENT_URL:http://localhost:8086}
     dependency-timeout: ${ORDER_DEPENDENCY_TIMEOUT:2s}
     # TASK:ORD-01 guest checkout token from cart-service: kid:base64-X.509 public keys (several for rotation).
     checkout-public-keys: ${ORDER_CHECKOUT_PUBLIC_KEYS:}
@@ -66,6 +71,10 @@ fashion:
     quote-ttl: 2m
     # Only COD until PAY-02/03.
     payment-methods: ${ORDER_PAYMENT_METHODS:COD}
+    saga:
+      enabled: ${ORDER_SAGA_ENABLED:true}
+      poll: ${ORDER_SAGA_POLL:1s}
+      max-retries: ${ORDER_SAGA_MAX_RETRIES:30}
 
 management:
   # PLT-05: no OTLP endpoint here on purpose: an empty value still creates the exporter. Traces leave

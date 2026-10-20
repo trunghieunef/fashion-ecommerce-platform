@@ -4,7 +4,14 @@ B1 · 2026-09-19 · Work package mặc định: **Planned; Assignee TBD; Reviewe
 
 ## 1. Cách nhận việc
 
-Update 2026-10-20 — `TASK:ORD-01` **Done (local, trước G0)** ([nghiệm thu](../evidence/acceptance-2026-10-20.md#taskord-01--order-service-quotecreateread-guest-checkout-token)), PR #32: order-service quote ký 2 phút (giá catalog, phí SELF + COD),
+Update 2026-10-21 — `TASK:ORD-02` **Done (local, trước G0)** ([nghiệm thu](../evidence/acceptance-2026-10-21.md#taskord-02--saga-checkout-cod-bù-trừ-hết-hạn-dọn-giỏ)), PR #33 CI PASS trên `3b8ee5b`, re-review đồng ý merge: saga checkout COD bằng worker nền (lease + CAS) — reserve
+(`reserve:{order_id}`) → payment COD (`payment:{order_id}`) → `CONFIRMED` chờ OPS tới `expires_at`; hết hàng/payment từ
+chối/quá hạn → `CANCELLING` → release + close → `CANCELLED` có `reason_code`; UNKNOWN retry cùng key, 30 lần → `MANUAL`;
+dọn giỏ bằng background task khi đơn `CONFIRMED` (REQ ORD-09); inbox `payment.events`; V002 unique một phần cho phép đặt lại
+sau hủy; `REQ:ORD-02/09`; dependency ORD-01, INV-02, PAY-01, PLT-03; T03/T07/T23 (T09 commit thuộc ORD-03);
+[spec](../superpowers/specs/2026-10-20-ord-02-checkout-saga-design.md), [evidence](../evidence/ord-02-local-2026-10-20.md); PR #33.
+
+Update 2026-10-20 — `TASK:ORD-01` **Done (local, trước G0)** ([nghiệm thu](../evidence/acceptance-2026-10-20.md#taskord-01--order-service-quotecreateread-guest-checkout-token)), PR #32 merge `d60f6a0`: order-service quote ký 2 phút (giá catalog, phí SELF + COD),
 create idempotent `PENDING`/202 với snapshot bất biến (lookup key trước kiểm quote, `PRICE_CHANGED`), đọc đơn theo
 ownership (member Bearer, guest cookie `order_access`), checkout token guest do cart ký; `REQ:ORD-01/05/07`; dependency
 CAT-02, CART-03, SHP-01; [spec](../superpowers/specs/2026-10-20-ord-01-order-quote-create-design.md),

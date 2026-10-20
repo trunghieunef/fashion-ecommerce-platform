@@ -50,6 +50,22 @@ class OrderReadIntegrationTest extends OrderTestSupport {
     assertThat(problem(get("/api/v1/orders/" + mine, "Authorization", "Bearer nope"), 401)).isEqualTo("INVALID_ACCESS_TOKEN");
   }
 
+  @Test void processingStatusFollowsTheSaga() {
+    // ORD-02 spec section 8: CONFIRMED is READY, CANCELLED is FINISHED with its reason; only PROCESSING asks to poll.
+    String confirmed = seed(MEMBER, null, "CONFIRMED", 1), cancelled = seed(MEMBER, null, "CANCELLED", 2);
+    jdbc.update("update orders set cancel_reason = 'OUT_OF_STOCK' where order_no = ?", cancelled);
+    var c = data(get("/api/v1/orders/" + confirmed, "Authorization", memberToken()), 200);
+    assertThat(c.path("processing_status").asString()).isEqualTo("READY");
+    assertThat(c.path("retry_after_seconds").isNull()).isTrue();
+    assertThat(c.path("reason_code").isNull()).isTrue();
+    var x = data(get("/api/v1/orders/" + cancelled, "Authorization", memberToken()), 200);
+    assertThat(x.path("processing_status").asString()).isEqualTo("FINISHED");
+    assertThat(x.path("reason_code").asString()).isEqualTo("OUT_OF_STOCK");
+    String cancelling = seed(MEMBER, null, "CANCELLING", 3);
+    assertThat(data(get("/api/v1/orders/" + cancelling, "Authorization", memberToken()), 200).path("processing_status").asString())
+        .isEqualTo("PROCESSING");
+  }
+
   @Test void guestsReadOnlyTheOrderOfTheirCookie() {
     String token = "t".repeat(43), otherToken = "u".repeat(43);
     String order = seed(null, sha256(token), "PENDING", 1), other = seed(null, sha256(otherToken), "PENDING", 2);

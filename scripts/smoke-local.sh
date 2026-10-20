@@ -276,8 +276,17 @@ grep -q 'order_access' "$order_jar"
 curl -sS -b "$order_jar" "$GATEWAY_URL/api/v1/orders/$order_no" | \
   python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["order_no"]==sys.argv[1] and d["items"][0]["quantity"]==1, d' "$order_no"
 test "$(status "$GATEWAY_URL/api/v1/orders/$order_no")" = 404
-rm -f "$order_jar"
 echo 'ORD-01 guest quote/create/read PASS'
+# TASK:ORD-02: the saga reserves the stock (inventory) and creates the COD payment (payment), then the order is CONFIRMED.
+for _ in $(seq 1 30); do
+  order_status="$(curl -sS -b "$order_jar" "$GATEWAY_URL/api/v1/orders/$order_no" | \
+    python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; print(d["status"] + " " + d["processing_status"])')"
+  [[ "$order_status" == CONFIRMED* || "$order_status" == CANCELLED* ]] && break
+  sleep 1
+done
+test "$order_status" = "CONFIRMED READY" || { echo "ORD-02 saga FAIL: $order_status" >&2; exit 1; }
+rm -f "$order_jar"
+echo 'ORD-02 saga confirm PASS'
 # TASK:SHP-02: OPS self-events go through the Gateway and need shipping.self_event; internal cancel is never routed.
 # No shipment exists without order-service, so an unknown id answering 404 proves route + permission, not a transition.
 shipping_ops="$(local_ops_token shipping.self_event)"

@@ -111,7 +111,7 @@ paths:
               examples:
                 processing:
                   value: {code: OK, data: &order {order_id: 22222222-2222-4222-8222-222222222222, order_no: ORD202610000001,
-                      status: PENDING, processing_status: PROCESSING, status_url: /api/v1/orders/ORD202610000001,
+                      status: PENDING, processing_status: PROCESSING, reason_code: null, status_url: /api/v1/orders/ORD202610000001,
                       retry_after_seconds: 3, version: 0, method: COD, items: *items, totals: *totals, shipping_address: *address,
                       contact: {phone: '0912345678', email: null}, note: null, created_at: '2026-10-20T03:00:30Z',
                       expires_at: '2026-10-21T03:00:30Z', allowed_actions: []}, metadata: *meta}
@@ -158,7 +158,8 @@ paths:
       summary: One order for its owner
       description: ORD-01 implemented. A member reads its own orders (Bearer); a guest reads only the order of its
         order_access cookie (90 days from issue, checked by the server). Missing, foreign or guessed order numbers are the same 404
-        ORDER_NOT_FOUND (T21). No lookup by
+        ORDER_NOT_FOUND (T21). In ORD-02 a background saga reserves stock and creates the COD payment, so a new order goes
+        PENDING (PROCESSING) -> CONFIRMED (READY, waiting for OPS) or -> CANCELLING -> CANCELLED (FINISHED, reason_code). No lookup by
         order_no or phone alone. PENDING is processing_status PROCESSING; allowed_actions is empty until ORD-04.
       security: [{memberBearer: []}, {orderAccess: []}]
       x-implementation-status: implemented
@@ -268,13 +269,14 @@ components:
     Order:
       type: object
       additionalProperties: false
-      required: [order_id, order_no, status, processing_status, status_url, retry_after_seconds, version, method, items, totals,
+      required: [order_id, order_no, status, processing_status, reason_code, status_url, retry_after_seconds, version, method, items, totals,
         shipping_address, contact, note, created_at, expires_at, allowed_actions]
       properties:
         order_id: {type: string, format: uuid}
         order_no: {type: string, minLength: 1, maxLength: 32}
         status: {$ref: '#/components/schemas/OrderStatus'}
-        processing_status: {type: string, enum: [PROCESSING, READY, ACTION_REQUIRED, FINISHED]}
+        processing_status: {type: string, enum: [PROCESSING, READY, ACTION_REQUIRED, FINISHED], description: 'ORD-02: PENDING/CANCELLING PROCESSING (poll after retry_after_seconds), CONFIRMED READY, CANCELLED FINISHED'}
+        reason_code: {type: [string, 'null'], description: 'CANCELLED only: OUT_OF_STOCK, RESERVE_FAILED, PAYMENT_FAILED or EXPIRED'}
         status_url: {type: string}
         retry_after_seconds: {type: [integer, 'null'], minimum: 1}
         version: {type: integer, minimum: 0}

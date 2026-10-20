@@ -34,7 +34,8 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 @Testcontainers
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = "fashion.messaging.relay.enabled=false")
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {"fashion.messaging.relay.enabled=false", "fashion.order.saga.enabled=false",
+    "spring.kafka.listener.auto-startup=false"})
 @org.springframework.context.annotation.Import(OrderTestSupport.Clocks.class)
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 public abstract class OrderTestSupport {
@@ -83,6 +84,8 @@ public abstract class OrderTestSupport {
     registry.add("fashion.order.cart-url", StubServers.CART::url);
     registry.add("fashion.order.catalog-url", StubServers.CATALOG::url);
     registry.add("fashion.order.shipping-url", StubServers.SHIPPING::url);
+    registry.add("fashion.order.inventory-url", StubServers.INVENTORY::url);
+    registry.add("fashion.order.payment-url", StubServers.PAYMENT::url);
     registry.add("fashion.order.dependency-timeout", () -> "1s");
     registry.add("fashion.order.checkout-public-keys", () -> "cart-checkout-test:" + publicKey());
     registry.add("fashion.order.quote-secret", () -> QUOTE_SECRET);
@@ -91,10 +94,11 @@ public abstract class OrderTestSupport {
   @BeforeEach protected void reset() throws Exception {
     try (var c = DriverManager.getConnection(postgres.getJdbcUrl(), "postgres", "postgres"); var s = c.createStatement()) {
       s.execute("""
-          delete from order_sagas; delete from order_guest_access; delete from order_status_history; delete from order_items; delete from orders;
+          delete from background_tasks; delete from processed_events; delete from order_sagas; delete from order_guest_access; delete from order_status_history; delete from order_items; delete from orders;
           delete from outbox_events""");
     }
     StubServers.CART.reset(); StubServers.CATALOG.reset(); StubServers.SHIPPING.reset();
+    StubServers.INVENTORY.reset(); StubServers.PAYMENT.reset();
     clock.reset();
   }
   /** Runs SQL as the superuser (fixtures the runtime role may not write). */
@@ -185,6 +189,26 @@ public abstract class OrderTestSupport {
     return data(quote(quoteBody(cart, 4, "COD", auth[0].equals("Checkout-Token") ? "guest@example.test" : null), auth), 200)
         .path("quote_token").asString();
   }
+
+  /** ORD-02: a member COD order created through the ORD-01 API; returns its order_id. */
+  protected UUID placeOrder() {
+    UUID cart = UUID.randomUUID();
+    stubCheckout(cart, 150000, 99000);
+    String member = memberToken();
+    return UUID.fromString(data(create(UUID.randomUUID().toString(), createBody(cart, 4, quoteToken(cart, "Authorization", member)),
+        "Authorization", member), 202).path("order_id").asString());
+  }
+  /** Inventory and payment answer OK (reservation ACTIVE, payment COD_PENDING); cart cleanup OK. */
+  protected void stubSagaOk() {
+    StubServers.INVENTORY.reply(s -> new StubServers.Reply(200, StubServers.ok(s.path().endsWith("/release")
+        ? "{\"status\":\"RELEASED\"}" : "{\"status\":\"ACTIVE\"}")));
+    StubServers.PAYMENT.reply(s -> new StubServers.Reply(200, StubServers.ok(s.path().endsWith("/close")
+        ? "{\"status\":\"FAILED\"}" : "{\"payment_id\":\"55555555-5555-4555-8555-555555555591\",\"status\":\"COD_PENDING\"}")));
+  }
+  protected java.util.Map<String, Object> saga(UUID orderId) {
+    return jdbc.queryForMap("select * from order_sagas where order_id = ?", orderId);
+  }
+  protected String status(UUID orderId) { return jdbc.queryForObject("select status from orders where id = ?", String.class, orderId); }
 
   /** headers: alternating name, value. */
   protected HttpResponse<String> send(String method, String path, String body, String... headers) {
