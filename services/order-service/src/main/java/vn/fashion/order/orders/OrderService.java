@@ -46,7 +46,7 @@ public class OrderService {
   public record Row(UUID id, String orderNo, UUID userId, String actorKey, String guestAccessHash, String checkoutHash, String status,
              String paymentMethod, long subtotal, long discountAmount, long shippingFee, long shippingDiscount, long codFee,
              long totalAmount, String contactEmail, String contactPhone, String shippingAddress, String note, Instant createdAt,
-             Instant expiresAt, long version) { }
+             Instant expiresAt, long version, String cancelReason) { }
 
   private final JdbcClient jdbc;
   private final TransactionTemplate tx;
@@ -236,8 +236,14 @@ public class OrderService {
     var items = jdbc.sql("""
         select variant_id, sku, name, size, color, image_url, quantity, unit_price, line_total from order_items
         where order_id = :id order by sku, variant_id""").param("id", row.id()).query(OrderController.Item.class).list();
-    boolean processing = row.status().equals("PENDING");
-    return new OrderView(row.id(), row.orderNo(), row.status(), processing ? "PROCESSING" : "READY", "/api/v1/orders/" + row.orderNo(),
+    String processingStatus = switch (row.status()) {
+      case "PENDING", "CANCELLING" -> "PROCESSING";
+      case "CANCELLED" -> "FINISHED";
+      default -> "READY";
+    };
+    boolean processing = processingStatus.equals("PROCESSING");
+    return new OrderView(row.id(), row.orderNo(), row.status(), processingStatus,
+        row.status().equals("CANCELLED") ? row.cancelReason() : null, "/api/v1/orders/" + row.orderNo(),
         processing ? RETRY_AFTER_SECONDS : null, row.version(), row.paymentMethod(), items,
         new Quote.Totals(row.subtotal(), row.discountAmount(), row.shippingFee(), row.shippingDiscount(), row.codFee(), row.totalAmount(), "VND"),
         json.readValue(row.shippingAddress(), Quote.Address.class), new Quote.Contact(row.contactPhone(), row.contactEmail()), row.note(),
@@ -305,5 +311,5 @@ public class OrderService {
   private static final String ROW = """
       select id, order_no, user_id, actor_key, guest_access_hash, checkout_hash, status, payment_method, subtotal, discount_amount,
         shipping_fee, shipping_discount, cod_fee, total_amount, contact_email, contact_phone, shipping_address::text as shipping_address,
-        note, created_at, expires_at, version from orders""";
+        note, created_at, expires_at, version, cancel_reason from orders""";
 }
