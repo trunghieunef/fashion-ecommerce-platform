@@ -22,12 +22,27 @@ public class CartController {
   private final CartRepository carts;
   private final CartPreview preview;
   private final CartMergeService merges;
+  private final CheckoutTokens checkoutTokens;
   private final tools.jackson.databind.ObjectMapper json;
   private final Tracer tracer;
 
   public CartController(CartIdentity identity, CartRepository carts, CartPreview preview, CartMergeService merges,
-                        tools.jackson.databind.ObjectMapper json, Tracer tracer) {
-    this.identity = identity; this.carts = carts; this.preview = preview; this.merges = merges; this.json = json; this.tracer = tracer;
+                        CheckoutTokens checkoutTokens, tools.jackson.databind.ObjectMapper json, Tracer tracer) {
+    this.identity = identity; this.carts = carts; this.preview = preview; this.merges = merges;
+    this.checkoutTokens = checkoutTokens; this.json = json; this.tracer = tracer;
+  }
+
+  public record CheckoutToken(String checkoutToken, java.time.Instant expiresAt) { }
+
+  /** ORD-01: guest only (a member uses its Bearer at order). A read: no sliding expiry, no Idempotency-Key. */
+  @PostMapping("/{cartId}/checkout-token")
+  public ResponseEntity<Api.Response<CheckoutToken>> checkoutToken(@PathVariable UUID cartId, HttpServletRequest request) {
+    var actor = identity.resolve(request).orElseThrow(CartIdentity::unauthorized);
+    if (actor.member())
+      throw new Api.Problem(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "CHECKOUT_TOKEN_GUEST_ONLY", java.util.List.of());
+    carts.findOwned(cartId, actor).orElseThrow(CartRepository::notFound);
+    var issued = checkoutTokens.issue(cartId, actor.guestHash());
+    return Api.ok(HttpStatus.OK, new CheckoutToken(issued.token(), issued.expiresAt()), tracer);
   }
 
   /** Member: the ACTIVE cart (201 when created). Guest: the cookie's cart, else a new cart and cookie (201). */
