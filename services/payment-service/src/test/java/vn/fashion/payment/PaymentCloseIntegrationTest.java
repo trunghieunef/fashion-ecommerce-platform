@@ -25,6 +25,9 @@ class PaymentCloseIntegrationTest extends PaymentTestSupport {
     assertThat(problem(create("k2", body), 409)).isEqualTo("PAYMENT_CLOSED");
     // The order's UNKNOWN retry of the original create gets the current fact, not the stored COD_PENDING answer.
     assertThat(problem(create("k", body), 409)).isEqualTo("PAYMENT_CLOSED");
+    // PR review 4: COD collected after the close; the order's retry of the same close gets the money fact, not FAILED.
+    jdbc.update("update payments set status = 'COD_COLLECTED' where id = cast(? as uuid)", id);
+    assertThat(data(close(order, "c1", withReason(body, "khách hủy")), 200).path("status").asString()).isEqualTo("COD_COLLECTED");
   }
 
   @Test void closeBeforeCreateLeavesATombstoneThatBlocksTheCreate() {

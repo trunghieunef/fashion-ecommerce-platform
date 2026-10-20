@@ -89,7 +89,8 @@ public class PaymentService {
     String hash = hash(s);
     return tx.execute(status -> {
       var replay = Api.replay(keys.begin(ACTOR, "payment.close", key, Api.sha256(hash + "\n" + reason)), json);
-      if (replay != null) return replay;
+      // A retry gets the current fact: COD collected after the close must reach the order (spec section 4).
+      if (replay != null) return byOrder(s.orderId()).orElseThrow();
       lockOrder(s.orderId());
       var current = byOrder(s.orderId());
       View view;

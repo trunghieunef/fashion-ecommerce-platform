@@ -42,7 +42,8 @@ public class CodEvidence {
     boolean collected = event.eventType().equals("COD_COLLECTED");
     payments.lockOrder(order);
     // The payment is created before the shipment, so a missing row is first a short race and is retried. Past the grace
-    // (counted from the event) it goes to shipping.events.DLT (messaging_dlt_total), so one orphan never stalls its partition.
+    // (counted from the envelope occurred_at, shipping's clock) it goes to shipping.events.DLT (messaging_dlt_total). Until then
+    // the error handler re-seeks the record, so every later event of that partition waits up to the grace.
     var target = jdbc.sql("select id, method, amount, status, closed_at from payments where order_id = :o").param("o", order)
         .query(Target.class).optional().orElseThrow(() -> event.occurredAt().plus(orphanGrace).isBefore(Instant.now())
             ? new PermanentEventException("No payment for COD evidence after the grace period")

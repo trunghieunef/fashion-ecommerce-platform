@@ -143,7 +143,7 @@ PLT-04/05, AWS/K3s/ECR/ArgoCD, provider sandbox và các task business Phase 1 k
   data inventory theo field và permission codes ở 13, cách nạp secret. Còn mở: JWT người dùng,
   `auth_version` và U03/U24 (USR-01/02), service đầu tiên nối service token. Actuator Gateway
   đã tách sang management port 9080 không publish (2026-10-04). Chủ dự án (PO) đã duyệt toàn bộ [bảng retention và ngoại lệ](../operations/13_operations_security.md)
-  ngày 2026-10-04; ngày 2026-10-20 chốt giá trị cụ thể từng nhóm (13 §3), O06 chỉ còn xác minh pháp lý và nội dung
+  ngày 2026-10-04; ngày 2026-10-20 agent đề xuất giá trị cụ thể từng nhóm (13 §3), **chờ chủ dự án xác nhận** trước ORD-01; sau đó O06 còn xác minh pháp lý và nội dung
   điều khoản/consent, hạn trước G2; chưa triển khai cleanup/purge.
   O01 chỉ chặn phần cloud, không chặn PLT-02/03 local; chưa provision/deploy.
 - `TASK:PLT-05` — **In progress, phần local** (2026-10-05, assignee Claude Code, reviewer chủ dự án):

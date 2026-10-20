@@ -202,13 +202,13 @@ Notification/consent, traces, media và retention kỹ thuật outbox/inbox vẫ
 cần chính sách được duyệt theo từng nhóm dữ liệu, gồm các nhóm còn mở này, và kế hoạch
 cleanup/retention/restore có kiểm thử; chưa bật purge dữ liệu tài chính.
 
-### Giá trị cụ thể O06 — chủ dự án chốt ngày 2026-10-20
+### Giá trị cụ thể O06 — đề xuất 2026-10-20, chờ chủ dự án xác nhận
 
-Chủ dự án (PO) yêu cầu "chốt O06" trong phiên làm việc ngày 2026-10-20; agent chọn giá trị trong khung đã duyệt
-2026-10-04 và bổ sung các nhóm còn thiếu. Đây là **chính sách dự án**, không phải kết luận pháp lý; ORD-01 thiết kế theo
-bảng này. Chưa triển khai cleanup/purge; mỗi job dọn phải có test và chạy theo task riêng.
+Chủ dự án (PO) yêu cầu "chốt O06" trong phiên làm việc ngày 2026-10-20; **agent đề xuất** giá trị trong khung đã duyệt
+2026-10-04 và bổ sung các nhóm còn thiếu. Bảng này **chưa phải quyết định đã duyệt** (review PR #31): chủ dự án cần xác
+nhận hoặc sửa từng giá trị trước khi ORD-01 thiết kế theo. Đây là chính sách dự án, không phải kết luận pháp lý. Chưa triển khai cleanup/purge; mỗi job dọn phải có test và chạy theo task riêng.
 
-| Nhóm dữ liệu | Giá trị chốt | Mốc tính / ghi chú |
+| Nhóm dữ liệu | Giá trị đề xuất | Mốc tính / ghi chú |
 |---|---|---|
 | Tài khoản, email, địa chỉ đã lưu | Ẩn danh sau **24 tháng** không hoạt động | "Hoạt động" = đăng nhập/refresh thành công hoặc tạo đơn; email báo trước 30 ngày; yêu cầu xóa hợp lệ xử lý ngay, không chờ 24 tháng |
 | Giỏ hàng bỏ quên | **30 ngày** | Khớp cookie `cart_token` 30 ngày trượt; không dọn giỏ đang checkout |

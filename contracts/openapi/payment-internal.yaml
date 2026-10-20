@@ -71,7 +71,7 @@ paths:
         No payment yet: a FAILED tombstone with the snapshot and closed_at is stored and PAYMENT_FAILED (reason CLOSED) is
         sent, so a later create is 409 PAYMENT_CLOSED. Not collected (COD_PENDING): FAILED + closed_at + PAYMENT_FAILED.
         Money already collected (COD_COLLECTED/SUCCESS): closed_at is set and the money state is kept, so the order owes a
-        refund. Already closed: returned as is (any key). Another snapshot: 409 PAYMENT_CONFLICT. closed_at never changes later;
+        refund. Already closed, or a same-key retry: the current state (money collected after the close shows). Another snapshot: 409 PAYMENT_CONFLICT. closed_at never changes later;
         COD collected after the close is still recorded (06 §17.1).
       x-implementation-status: implemented
       parameters:

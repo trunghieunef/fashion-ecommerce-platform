@@ -42,10 +42,10 @@ class ShippingEventsListenerIntegrationTest extends PaymentTestSupport {
     payload.put("order_id", order); payload.put("order_no", "K" + order.substring(0, 8)); payload.put("payment_id", null);
     payload.put("shipment_id", UUID.randomUUID().toString()); payload.put("event_ref", UUID.randomUUID().toString());
     payload.put("gross_amount", gross); payload.put("fee_amount", 0); payload.put("net_amount", gross); payload.put("currency", "VND");
-    payload.put("evidence_ref", "BIEN-NHAN-K"); payload.put("occurred_at", "2026-10-20T05:00:00Z");
+    payload.put("evidence_ref", "BIEN-NHAN-K"); payload.put("occurred_at", java.time.Instant.now().toString());
     var envelope = new LinkedHashMap<String, Object>();
     envelope.put("event_id", UUID.randomUUID().toString()); envelope.put("event_type", type); envelope.put("version", 1);
-    envelope.put("occurred_at", "2026-10-20T05:00:01Z"); envelope.put("aggregate_id", payload.get("shipment_id"));
+    envelope.put("occurred_at", java.time.Instant.now().toString()); envelope.put("aggregate_id", payload.get("shipment_id"));
     envelope.put("aggregate_version", 5); envelope.put("aggregate_sequence", 5); envelope.put("correlation_id", "kafka-test");
     envelope.put("payload", payload);
     return mapper.writeValueAsBytes(envelope);

@@ -31,7 +31,8 @@ thu; coi DELIVERED/COD_REMITTED là tiền đã về; tự ép khớp khi số t
 - Gateway: `/admin/api/v1/payments/**` → payment; không có route public; `/internal` không route.
 - Kafka: phát `payment.events` (key `order_no`); tiêu thụ `shipping.events` (group `payment-service`), chỉ xử lý
   `COD_COLLECTED`/`COD_REMITTED`, bỏ qua loại khác. local-up tạo topic `payment.events` idempotent.
-- Internal callers: `PAYMENT_INTERNAL_CALLERS` (mặc định `order-service`; local-up sinh key, rỗng tới khi có order-service).
+- Internal callers: `PAYMENT_INTERNAL_CALLERS` (mặc định `order-service`, rỗng tới khi có order-service). local-up không sinh
+  `service_key PAYMENT`: payment không gọi service nào (review PR #31 ghi nhận lệch so với bản đầu của spec/plan).
 
 ## 3. Schema (V001, theo 05 §9)
 
@@ -118,7 +119,7 @@ Smoke local: admin route qua Gateway (403 không quyền, 404 id lạ). Mutation
 compose), contract, docs, CI. Tài liệu: README service, contracts, 03 (§3/§4 payment implemented, path close), 05 (cột
 `snapshot`, source CLOSE/SETTLEMENT), 06 §7.2, 08, 10, 12, CLAUDE.md, compose/local-up/.env.example, evidence.
 
-## 9. Lựa chọn mặc định của agent (cần chủ dự án xác nhận)
+## 9. Lựa chọn mặc định của agent (chủ dự án duyệt cùng spec 2026-10-20)
 
 1. Service mới `payment-service`, port 8086, DB `payment`; PAY-01 **chỉ COD**, VNPAY/MOMO trả 422 tới PAY-02/03.
 2. `provider_request_id = order_no` làm business reference cố định (PAY-07).

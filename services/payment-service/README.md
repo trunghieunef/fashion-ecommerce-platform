@@ -34,7 +34,7 @@ Port 8086 (không publish ra host). Qua Gateway chỉ `/admin/api/v1/payments/**
   `order_no` với order khác → 409 `DUPLICATE`.
 - **Close (PAY-08)**: cùng lock. Chưa có payment → tombstone FAILED + `closed_at` + snapshot; COD_PENDING → FAILED + `closed_at`;
   hai trường hợp này phát `PAYMENT_FAILED` (reason `CLOSED`). Tiền đã thu (COD_COLLECTED/SUCCESS) → chỉ đặt `closed_at`, giữ
-  trạng thái tiền (order xử lý refund). Đã close → trả hiện trạng. UNKNOWN không bị close đổi thành FAILED.
+  trạng thái tiền (order xử lý refund). Đã close, hoặc retry cùng key → trả hiện trạng (COD thu sau close vẫn hiện ra). UNKNOWN không bị close đổi thành FAILED.
 - **Bằng chứng COD** (consumer `shipping.events`, group `payment-service`, inbox `processed_events`, ACK sau commit):
   `COD_COLLECTED` khớp method COD và `gross_amount = amount` → COD_COLLECTED (cả payment FAILED đã close; `closed_at` giữ);
   lệch → `reconciliation_items` OPEN (`COD_AMOUNT_MISMATCH`/`COD_METHOD_MISMATCH`), trạng thái giữ; `COD_REMITTED` chỉ ghi
@@ -66,5 +66,7 @@ Retention: chứng từ tài chính 10 năm, không purge (13 §3, O06).
 Readiness `readinessState,db`; log JSON ECS có redaction; trace OTLP khi đặt endpoint; `/actuator/prometheus`; DLT
 `shipping.events.DLT` cho event hỏng. Payment chỉ lưu `user_id`, không liên hệ/địa chỉ.
 Chưa có: smoke internal (cần order-service), consumer `payment.events` (ORD-02/03), alert COD outstanding/discrepancy (PAY-05),
-`NOTIFY_PAYMENT_SUCCESS` (NOT-01). Một `COD_COLLECTED` của đơn không có payment chặn partition tối đa thời gian grace rồi vào
-DLT; alert trên `messaging_dlt_total` thuộc PLT-05 dashboard/alert.
+`NOTIFY_PAYMENT_SUCCESS` (NOT-01). Một `COD_COLLECTED` của đơn không có payment chặn **cả partition** (mọi shipping event sau nó,
+gồm COD của đơn khác; FINANCE settle nhận 409 trong lúc đó) tối đa thời gian grace rồi vào DLT; grace tính từ `occurred_at`
+của shipping (đồng hồ khác). Replay: sau khi tạo payment, publish lại bản ghi từ `shipping.events.DLT` vào `shipping.events`
+(inbox + `event_ref` chặn trùng). Alert trên `messaging_dlt_total` thuộc PLT-05 dashboard/alert.

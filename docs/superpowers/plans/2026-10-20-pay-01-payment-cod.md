@@ -44,8 +44,8 @@ không HTTP trong TX.
 - [ ] `V001__payment.sql`: `payments` (05 + `snapshot jsonb`, `created_at`, `updated_at`, CHECK spec §3),
   `payment_transactions` (source thêm CLOSE/SETTLEMENT), `cod_settlements`, `reconciliation_items`, `idempotency_requests`,
   `outbox_events`, `processed_events`; grant runtime: không DELETE, không UPDATE `payment_transactions`/`cod_settlements`.
-- [ ] Root pom module; `06-payment-db.sh` (mẫu `05-shipping-db.sh`); compose service + env; local-up `service_key PAYMENT
-  payment-service` (không thêm vào caller nào), giữ credential role qua restart, topic `payment.events`; Gateway route
+- [ ] Root pom module; `06-payment-db.sh` (mẫu `05-shipping-db.sh`); compose service + env; ~~local-up `service_key PAYMENT
+  payment-service`~~ (bỏ khi làm: payment không gọi service nào), giữ credential role qua restart, topic `payment.events`; Gateway route
   `payment-admin`; `.env.example`.
 - [ ] Test `PaymentSchemaIntegrationTest`: CHECK `gross = fee + net`, `refunded + reserved <= amount`, UNIQUE order_id;
   runtime DELETE `payments` và UPDATE `cod_settlements` → lỗi quyền.
