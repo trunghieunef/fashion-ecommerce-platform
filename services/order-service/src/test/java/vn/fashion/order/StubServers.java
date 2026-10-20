@@ -50,6 +50,8 @@ public final class StubServers {
   public static final Stub CART = new Stub();
   public static final Stub CATALOG = new Stub();
   public static final Stub SHIPPING = new Stub();
+  public static final Stub INVENTORY = new Stub();
+  public static final Stub PAYMENT = new Stub();
   private StubServers() { }
 
   public static String ok(String data) { return "{\"code\":\"OK\",\"data\":" + data + ",\"metadata\":{\"request_id\":\"r\",\"trace_id\":\"t\"}}"; }

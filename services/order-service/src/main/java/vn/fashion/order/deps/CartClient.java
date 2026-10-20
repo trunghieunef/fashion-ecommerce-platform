@@ -19,6 +19,15 @@ public class CartClient {
 
   public CartClient(JsonHttp http, @Value("${fashion.order.cart-url}") String url) { this.http = http; this.url = url; }
 
+  /** ORD-09 cleanup of the ordered lines, keyed by order_id (CART-03); retained/missing items are a normal result. */
+  public Outcome cleanup(vn.fashion.order.saga.SagaOrder o) {
+    var body = java.util.Map.of("order_id", o.id().toString(), "items", o.items().stream()
+        .map(i -> java.util.Map.of("item_id", i.cartItemId().toString(), "item_version", i.cartItemVersion(), "quantity", i.quantity()))
+        .toList());
+    return Outcome.of("cart", http, "cart-service", url + "/internal/api/v1/carts/" + o.cartId() + "/checkout-cleanup", body,
+        "Idempotency-Key", o.id().toString(), "Cart-Actor", o.actorKey());
+  }
+
   /** 404 CART_NOT_FOUND and 409 VERSION_CONFLICT pass through; anything else unexpected is 503. */
   public Snapshot snapshot(UUID cartId, long expectedVersion, String actorKey) {
     var reply = http.call("cart", "cart-service",

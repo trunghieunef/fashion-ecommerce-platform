@@ -84,6 +84,8 @@ public abstract class OrderTestSupport {
     registry.add("fashion.order.cart-url", StubServers.CART::url);
     registry.add("fashion.order.catalog-url", StubServers.CATALOG::url);
     registry.add("fashion.order.shipping-url", StubServers.SHIPPING::url);
+    registry.add("fashion.order.inventory-url", StubServers.INVENTORY::url);
+    registry.add("fashion.order.payment-url", StubServers.PAYMENT::url);
     registry.add("fashion.order.dependency-timeout", () -> "1s");
     registry.add("fashion.order.checkout-public-keys", () -> "cart-checkout-test:" + publicKey());
     registry.add("fashion.order.quote-secret", () -> QUOTE_SECRET);
@@ -92,10 +94,11 @@ public abstract class OrderTestSupport {
   @BeforeEach protected void reset() throws Exception {
     try (var c = DriverManager.getConnection(postgres.getJdbcUrl(), "postgres", "postgres"); var s = c.createStatement()) {
       s.execute("""
-          delete from order_sagas; delete from order_guest_access; delete from order_status_history; delete from order_items; delete from orders;
+          delete from background_tasks; delete from processed_events; delete from order_sagas; delete from order_guest_access; delete from order_status_history; delete from order_items; delete from orders;
           delete from outbox_events""");
     }
     StubServers.CART.reset(); StubServers.CATALOG.reset(); StubServers.SHIPPING.reset();
+    StubServers.INVENTORY.reset(); StubServers.PAYMENT.reset();
     clock.reset();
   }
   /** Runs SQL as the superuser (fixtures the runtime role may not write). */
