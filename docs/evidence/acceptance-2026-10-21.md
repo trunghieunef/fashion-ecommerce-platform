@@ -35,8 +35,8 @@ Phạm vi: acceptance ở [10](../delivery/10_backlog.md) dòng ORD-02 và REQ O
 | GET đơn phản ánh `processing_status`/`reason_code`; đặt lại sau hủy; guest tìm lại đơn | `processingStatusFollowsTheSaga`, `outOfStockCancels…` (đặt lại cùng giỏ, actor khác 409), `aGuestWhoseCartWasCleanedFindsItsOrderAgain`; contract `order.yaml` 83 test | Pass |
 | Worker chết sau inventory commit (T09) | Không có commit kho trong ORD-02; `COMMITTED` khi bù trừ → MANUAL | **Ngoại lệ (ORD-03)** |
 
-**`TASK:ORD-02`: Done (local, trước G0)**; CI trên `3b8ee5b` PASS, re-review PR #33 đồng ý merge, chờ chủ dự án merge vào
-`main`.
+**`TASK:ORD-02`: Done (local, trước G0)**; CI trên `3b8ee5b` PASS, re-review PR #33 đồng ý merge; chủ dự án đã merge vào
+`main` (`a11ec41`, 2026-10-21).
 
 ### Ngoại lệ và việc còn lại (không chặn Done local)
 

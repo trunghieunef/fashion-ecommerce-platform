@@ -13,7 +13,7 @@ dependency ORD-02, SHP-02 (Done local); T09/T12/T27. Hủy đơn `CONFIRMED` (ch
 ý 2026-10-21; phần hủy còn lại vẫn ORD-04. [spec](../superpowers/specs/2026-10-21-ord-03-cod-confirm-fulfil-design.md),
 [evidence](../evidence/ord-03-local-2026-10-21.md).
 
-Update 2026-10-21 — `TASK:ORD-02` **Done (local, trước G0)** ([nghiệm thu](../evidence/acceptance-2026-10-21.md#taskord-02--saga-checkout-cod-bù-trừ-hết-hạn-dọn-giỏ)), PR #33 CI PASS trên `3b8ee5b`, re-review đồng ý merge: saga checkout COD bằng worker nền (lease + CAS) — reserve
+Update 2026-10-21 — `TASK:ORD-02` **Done (local, trước G0)** ([nghiệm thu](../evidence/acceptance-2026-10-21.md#taskord-02--saga-checkout-cod-bù-trừ-hết-hạn-dọn-giỏ)), PR #33 merge `a11ec41`: saga checkout COD bằng worker nền (lease + CAS) — reserve
 (`reserve:{order_id}`) → payment COD (`payment:{order_id}`) → `CONFIRMED` chờ OPS tới `expires_at`; hết hàng/payment từ
 chối/quá hạn → `CANCELLING` → release + close → `CANCELLED` có `reason_code`; UNKNOWN retry cùng key, 30 lần → `MANUAL`;
 dọn giỏ bằng background task khi đơn `CONFIRMED` (REQ ORD-09); inbox `payment.events`; V002 unique một phần cho phép đặt lại
