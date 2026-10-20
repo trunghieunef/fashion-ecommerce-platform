@@ -93,7 +93,8 @@ Không có event riêng khi COD_COLLECTED: order nhận `COD_COLLECTED` trực t
   partition (review PR, I1). Không tạo payment từ event.
 - `COD_COLLECTED`: insert transaction `COD` (`provider_event_key = event_ref`, amount = gross). Method khác COD hoặc
   `gross_amount ≠ amount` → **không** đổi trạng thái, mở `reconciliation_items` (`kind` `COD_METHOD_MISMATCH`/
-  `COD_AMOUNT_MISMATCH`, expected/observed, evidence = event ref) — không tự ép khớp. Khớp → chuyển theo §4; trạng thái
+  `COD_AMOUNT_MISMATCH`, expected/observed, evidence = event ref) — không tự ép khớp. Thu lần hai với `event_ref` khác trên
+  payment đã thu → `COD_DUPLICATE_COLLECTION` (review PR #31). Khớp → chuyển theo §4; trạng thái
   khác COD_PENDING/FAILED-đã-close → chỉ giữ bằng chứng.
 - `COD_REMITTED`: chỉ insert transaction `COD` (status `REMITTED`), không đổi trạng thái (T27, 06 §13).
 

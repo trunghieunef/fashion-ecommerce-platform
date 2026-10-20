@@ -51,6 +51,7 @@ class SettlementIntegrationTest extends PaymentTestSupport {
     assertThat(problem(readOnly, 403)).isEqualTo("PERMISSION_REQUIRED");
   }
 
+  /** Every settlement bumps the version, so the parallel loser is VERSION_CONFLICT; the sum guard has its sequential test. */
   @Test void parallelSettlementsNeverExceedTheAmount() {
     String id = collected(UUID.randomUUID().toString(), 80000);
     var barrier = new CyclicBarrier(2);

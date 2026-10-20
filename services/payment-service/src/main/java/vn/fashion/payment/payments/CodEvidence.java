@@ -33,9 +33,8 @@ public class CodEvidence {
   public Object apply(EventEnvelope event) {
     JsonNode p = event.payload();
     UUID order = uuid(p, "order_id"), ref = uuid(p, "event_ref");
-    JsonNode g = p.path("gross_amount");
-    if (!g.isIntegralNumber() || !g.canConvertToLong() || g.longValue() < 0) throw new PermanentEventException("Invalid COD amount");
-    long gross = g.longValue();
+    long gross = amount(p, "gross_amount"), fee = amount(p, "fee_amount"), net = amount(p, "net_amount");
+    if (!"VND".equals(p.path("currency").asString(null))) throw new PermanentEventException("Invalid COD currency");
     Instant occurred;
     try { occurred = Instant.parse(p.path("occurred_at").asString()); }
     catch (RuntimeException e) { throw new PermanentEventException("Invalid COD occurred_at"); }
@@ -54,14 +53,17 @@ public class CodEvidence {
     evidence.put("event_ref", ref.toString());
     evidence.put("evidence_ref", p.path("evidence_ref").asString());
     evidence.put("gross_amount", gross);
-    evidence.put("fee_amount", p.path("fee_amount").asLong());
-    evidence.put("net_amount", p.path("net_amount").asLong());
+    evidence.put("fee_amount", fee);
+    evidence.put("net_amount", net);
     String payload = json.writeValueAsString(evidence);
     if (!payments.transaction(target.id(), "COD", ref.toString(), collected ? "COLLECTED" : "REMITTED", gross, occurred, payload))
       return null; // same carrier fact delivered again
     if (!collected) return null;
     if (!target.method().equals("COD")) return mismatch(target, ref, "COD_METHOD_MISMATCH", gross, payload);
     if (gross != target.amount()) return mismatch(target, ref, "COD_AMOUNT_MISMATCH", gross, payload);
+    // Money of this order was already reported under another event_ref: never collected twice silently (FINANCE resolves it).
+    if (target.status().equals("COD_COLLECTED") || target.status().equals("SUCCESS"))
+      return mismatch(target, ref, "COD_DUPLICATE_COLLECTION", gross, payload);
     boolean open = target.status().equals("COD_PENDING") || (target.status().equals("FAILED") && target.closedAt() != null);
     if (open)
       jdbc.sql("update payments set status = 'COD_COLLECTED', version = version + 1, updated_at = now() where id = :id")
@@ -77,6 +79,11 @@ public class CodEvidence {
         .param("id", UUID.randomUUID()).param("p", target.id()).param("ref", ref.toString()).param("kind", kind)
         .param("expected", target.amount()).param("observed", observed).param("evidence", payload).update();
     return null;
+  }
+  private static long amount(JsonNode payload, String field) {
+    JsonNode v = payload.path(field);
+    if (!v.isIntegralNumber() || !v.canConvertToLong() || v.longValue() < 0) throw new PermanentEventException("Invalid COD " + field);
+    return v.longValue();
   }
   private static UUID uuid(JsonNode payload, String field) {
     try { return UUID.fromString(payload.path(field).asString()); }

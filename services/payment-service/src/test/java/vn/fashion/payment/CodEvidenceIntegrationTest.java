@@ -19,6 +19,10 @@ class CodEvidenceIntegrationTest extends PaymentTestSupport {
   /** Delivers one shipping event through the inbox, as the listener does. */
   void deliver(String type, String order, String eventRef, long gross) { deliver(type, order, eventRef, gross, Instant.now()); }
   void deliver(String type, String order, String eventRef, long gross, Instant sentAt) {
+    deliver(type, order, eventRef, gross, sentAt, p -> { });
+  }
+  void deliver(String type, String order, String eventRef, long gross, Instant sentAt,
+               java.util.function.Consumer<Map<String, Object>> edit) {
     var payload = new LinkedHashMap<String, Object>();
     payload.put("order_id", order);
     payload.put("order_no", "P" + order.substring(0, 8));
@@ -31,6 +35,7 @@ class CodEvidenceIntegrationTest extends PaymentTestSupport {
     payload.put("currency", "VND");
     payload.put("evidence_ref", "BIEN-NHAN-1");
     payload.put("occurred_at", "2026-10-20T05:00:00Z");
+    edit.accept(payload);
     var envelope = new EventEnvelope(UUID.randomUUID(), type, 1, sentAt, UUID.randomUUID().toString(), 1, 1, "corr",
         mapper.valueToTree(payload));
     inbox.applyOnce("payment-service", envelope.eventId(), () -> evidence.apply(envelope));
@@ -65,6 +70,29 @@ class CodEvidenceIntegrationTest extends PaymentTestSupport {
     deliver("COD_COLLECTED", online, UUID.randomUUID().toString(), 5000);
     assertThat(status(onlineId)).isEqualTo("CREATED");
     assertThat(count("select count(*) from reconciliation_items where kind = 'COD_METHOD_MISMATCH'")).isEqualTo(1);
+  }
+
+  @Test void aSecondCollectionOfACollectedPaymentOpensADuplicateItem() {
+    // PR review 5: the carrier reports the money of one order twice (another event_ref): FINANCE must see it.
+    String order = UUID.randomUUID().toString(), id = cod(order, 40000);
+    deliver("COD_COLLECTED", order, UUID.randomUUID().toString(), 40000);
+    deliver("COD_COLLECTED", order, UUID.randomUUID().toString(), 40000);
+    assertThat(status(id)).isEqualTo("COD_COLLECTED");
+    assertThat(jdbc.queryForObject("select version from payments where id = cast(? as uuid)", Long.class, id)).isEqualTo(1);
+    assertThat(count("select count(*) from reconciliation_items where kind = 'COD_DUPLICATE_COLLECTION' and status = 'OPEN'"))
+        .isEqualTo(1);
+  }
+
+  @Test void malformedFeeNetOrCurrencyGoesToTheDlt() {
+    // PR review 7: a missing fee/net is never read as 0 and another currency is never booked as VND.
+    String order = UUID.randomUUID().toString();
+    cod(order, 20000);
+    for (java.util.function.Consumer<Map<String, Object>> bad : java.util.List.<java.util.function.Consumer<Map<String, Object>>>of(
+        p -> p.remove("fee_amount"), p -> p.put("net_amount", "20000"), p -> p.put("fee_amount", -1), p -> p.put("currency", "USD"),
+        p -> p.remove("currency")))
+      assertThatThrownBy(() -> deliver("COD_COLLECTED", order, UUID.randomUUID().toString(), 20000, Instant.now(), bad))
+          .isInstanceOf(vn.fashion.platform.messaging.PermanentEventException.class);
+    assertThat(count("select count(*) from payment_transactions where source = 'COD'")).isZero();
   }
 
   @Test void lateCollectionOnAClosedPaymentIsRecordedAndKeepsClosedAt() {

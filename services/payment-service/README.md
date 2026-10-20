@@ -37,7 +37,9 @@ Port 8086 (không publish ra host). Qua Gateway chỉ `/admin/api/v1/payments/**
   trạng thái tiền (order xử lý refund). Đã close, hoặc retry cùng key → trả hiện trạng (COD thu sau close vẫn hiện ra). UNKNOWN không bị close đổi thành FAILED.
 - **Bằng chứng COD** (consumer `shipping.events`, group `payment-service`, inbox `processed_events`, ACK sau commit):
   `COD_COLLECTED` khớp method COD và `gross_amount = amount` → COD_COLLECTED (cả payment FAILED đã close; `closed_at` giữ);
-  lệch → `reconciliation_items` OPEN (`COD_AMOUNT_MISMATCH`/`COD_METHOD_MISMATCH`), trạng thái giữ; `COD_REMITTED` chỉ ghi
+  lệch → `reconciliation_items` OPEN (`COD_AMOUNT_MISMATCH`/`COD_METHOD_MISMATCH`), trạng thái giữ; thu lần hai (khác
+  `event_ref`) trên payment đã COD_COLLECTED/SUCCESS → `COD_DUPLICATE_COLLECTION`; thiếu/sai `gross`/`fee`/`net` hoặc currency khác
+  VND → DLT; `COD_REMITTED` chỉ ghi
   transaction (T27: chưa SUCCESS). Mỗi `event_ref` một dòng. Chưa có payment → retry (backoff tới 30 s, không ACK); quá `PAYMENT_COD_ORPHAN_GRACE`
   (mặc định 10 phút từ lúc event phát) → `shipping.events.DLT`, đếm `messaging_dlt_total`.
 - **Settlement (PAY-03)**: chỉ khi COD_COLLECTED; `gross = fee + net`, > 0; `settlement_ref` một lần mỗi payment; Σgross ≤ amount.
