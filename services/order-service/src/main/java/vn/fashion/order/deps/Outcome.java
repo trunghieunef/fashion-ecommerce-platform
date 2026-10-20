@@ -13,14 +13,17 @@ public record Outcome(Result result, String code, JsonNode data) {
   public static Outcome rejected(String code) { return new Outcome(Result.REJECTED, code, MissingNode.getInstance()); }
   public static Outcome unknown(String code) { return new Outcome(Result.UNKNOWN, code, MissingNode.getInstance()); }
 
-  /** 2xx OK; 400/404/409/422 REJECTED with the message; anything else (401/403 config, 5xx) UNKNOWN. */
+  /**
+   * 2xx OK; 404/409/422 REJECTED with the message; anything else UNKNOWN: 401/403 config, 5xx, and 400 - our own request is
+   * wrong (hash, fields, clock drift), which says nothing about the order, so it retries into MANUAL instead of cancelling.
+   */
   static Outcome of(String dependency, JsonHttp http, String audience, String url, Object body, String... headers) {
     JsonHttp.Reply reply;
     try { reply = http.call(dependency, audience, url, body, headers); }
     catch (DependencyUnavailable e) { return unknown(dependency + "_UNAVAILABLE"); }
     int s = reply.status();
     if (s >= 200 && s < 300) return ok(reply.data());
-    if (s == 400 || s == 404 || s == 409 || s == 422) return rejected(reply.message());
+    if (s == 404 || s == 409 || s == 422) return rejected(reply.message());
     return unknown(dependency + "_" + s);
   }
 }

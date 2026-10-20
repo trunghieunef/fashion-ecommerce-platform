@@ -103,7 +103,7 @@ public class OrderService {
     // Lost a race: the same key committed first (replay), or another key already ordered this cart state.
     var winner = byCheckout(actor.key(), key);
     if (winner.isPresent()) return replay(winner.get(), hash);
-    var ordered = jdbc.sql("select order_no, actor_key from orders where cart_id = :c and cart_version = :v")
+    var ordered = jdbc.sql("select order_no, actor_key from orders where cart_id = :c and cart_version = :v and status <> 'CANCELLED'")
         .param("c", request.cartId()).param("v", request.cartVersion()).query((rs, n) -> new String[] {rs.getString(1), rs.getString(2)})
         .optional().orElseThrow(() -> new IllegalStateException("insert skipped without a conflicting order"));
     boolean same = ordered[1].equals(actor.key());

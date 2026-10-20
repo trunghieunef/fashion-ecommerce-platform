@@ -45,17 +45,22 @@ class CartCleanupTaskIntegrationTest extends OrderTestSupport {
   }
 
   @Test void aCancelledOrderNeverEmptiesTheCart() {
-    // Payment refused after the stock was held: cleanup was enqueued, but the customer keeps the cart.
+    // Review M4: stock held but payment UNKNOWN, cleanup runs, then payment refused: the customer keeps the cart.
     UUID id = placeOrder();
     stubSagaOk();
-    StubServers.PAYMENT.reply(s -> s.path().endsWith("/close")
-        ? new StubServers.Reply(200, StubServers.ok("{\"status\":\"FAILED\"}"))
-        : new StubServers.Reply(409, StubServers.error("CONFLICT", "PAYMENT_CLOSED")));
+    StubServers.PAYMENT.reply(s -> new StubServers.Reply(503, StubServers.error("TEMPORARILY_UNAVAILABLE", "DEPENDENCY_UNAVAILABLE")));
     saga.runOnce();
-    assertThat(status(id)).isEqualTo("CANCELLED");
     StubServers.CART.reset();
     cleanup.runOnce();
     assertThat(StubServers.CART.seen).isEmpty();
-    assertThat(task(id)).isEqualTo("DONE");
+    StubServers.PAYMENT.reply(s -> s.path().endsWith("/close")
+        ? new StubServers.Reply(200, StubServers.ok("{\"status\":\"FAILED\"}"))
+        : new StubServers.Reply(409, StubServers.error("CONFLICT", "PAYMENT_CLOSED")));
+    clock.shift(java.time.Duration.ofMinutes(10));
+    saga.runOnce();
+    assertThat(status(id)).isEqualTo("CANCELLED");
+    cleanup.runOnce();
+    assertThat(StubServers.CART.seen).isEmpty();
+    assertThat(count("select count(*) from background_tasks")).isZero();      // only a CONFIRMED order cleans its cart
   }
 }

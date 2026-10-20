@@ -7,7 +7,7 @@ B1 · 2026-09-19 · Work package mặc định: **Planned; Assignee TBD; Reviewe
 Update 2026-10-20 — `TASK:ORD-02` **In review (local)**: saga checkout COD bằng worker nền (lease + CAS) — reserve
 (`reserve:{order_id}`) → payment COD (`payment:{order_id}`) → `CONFIRMED` chờ OPS tới `expires_at`; hết hàng/payment từ
 chối/quá hạn → `CANCELLING` → release + close → `CANCELLED` có `reason_code`; UNKNOWN retry cùng key, 30 lần → `MANUAL`;
-dọn giỏ bằng background task sau khi giữ hàng (REQ ORD-09); inbox `payment.events`; V002 unique một phần cho phép đặt lại
+dọn giỏ bằng background task khi đơn `CONFIRMED` (REQ ORD-09); inbox `payment.events`; V002 unique một phần cho phép đặt lại
 sau hủy; `REQ:ORD-02/09`; dependency ORD-01, INV-02, PAY-01, PLT-03; T03/T07/T23 (T09 commit thuộc ORD-03);
 [spec](../superpowers/specs/2026-10-20-ord-02-checkout-saga-design.md), [evidence](../evidence/ord-02-local-2026-10-20.md).
 

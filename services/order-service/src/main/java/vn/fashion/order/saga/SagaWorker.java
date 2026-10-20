@@ -48,7 +48,12 @@ public class SagaWorker {
     var claims = sagas.claimDue(10, LEASE);
     for (var claim : claims) {
       try { advance(claim); }
-      catch (RuntimeException e) { LOG.error("Saga step failed: order_id={}", claim.orderId(), e); }  // lease expires, retried
+      catch (RuntimeException e) {
+        // A bug or bad answer (e.g. 200 without payment_id) spends the retry budget like UNKNOWN, so it ends MANUAL.
+        LOG.error("Saga step failed: order_id={}", claim.orderId(), e);
+        try { retry(claim, sagas.saga(claim.orderId()), Outcome.unknown(e.getClass().getSimpleName())); }
+        catch (RuntimeException again) { LOG.error("Saga retry not recorded: order_id={}", claim.orderId(), again); }  // lease expires
+      }
     }
     return claims.size();
   }
@@ -80,13 +85,9 @@ public class SagaWorker {
       return startCancel(c, "OUT_OF_STOCK".equals(out.code()) ? "OUT_OF_STOCK" : "RESERVE_FAILED");
     }
     if (out.result() != Outcome.Result.OK) return retry(c, saga, out);
-    return sagas.write(c, jdbc -> {
-      jdbc.sql("""
-          update order_sagas set inventory_state = 'HELD', step = 'CREATE_PAYMENT', retry_count = 0, last_error = null
-          where order_id = :id""").param("id", c.orderId()).update();
-      // ORD-09: cleanup is its own durable work, enqueued once the stock is held; its failure never touches the order.
-      tasks.enqueue(CART_CLEANUP, c.orderId().toString(), "{\"order_id\":\"" + c.orderId() + "\"}");
-    }, false);
+    return sagas.write(c, jdbc -> jdbc.sql("""
+        update order_sagas set inventory_state = 'HELD', step = 'CREATE_PAYMENT', retry_count = 0, last_error = null
+        where order_id = :id""").param("id", c.orderId()).update(), false);
   }
 
   private boolean createPayment(SagaRepository.Claim c, SagaRepository.Saga saga, SagaOrder order) {
@@ -103,6 +104,9 @@ public class SagaWorker {
           where order_id = :id""")
           .param("p", paymentId).param("deadline", Timestamp.from(order.expiresAt())).param("id", c.orderId()).update();
       transitions.move(c.orderId(), "PENDING", "CONFIRMED", null);
+      // ORD-09: cleanup is its own durable work, enqueued once the order is accepted (stock held, payment created), so an
+      // order cancelled before that keeps the cart; its failure never touches the order.
+      tasks.enqueue(CART_CLEANUP, c.orderId().toString(), "{\"order_id\":\"" + c.orderId() + "\"}");
     }, true);
     return false;
   }
@@ -128,6 +132,8 @@ public class SagaWorker {
       if (out.result() != Outcome.Result.OK) return retry(c, saga, out);
       return sagas.write(c, jdbc -> state(jdbc, c.orderId(), "inventory_state", "RELEASED", "HELD", "UNKNOWN"), false);
     }
+    // PAYMENT_COMPLETED already recorded: the money is in, the order owes a refund (PAY-04/ORD-04).
+    if (saga.paymentState().equals("PAID")) return manual(c, saga, "PAID_NEEDS_REFUND");
     if (!saga.paymentState().equals("CLOSED")) {
       var out = payments.close(order, reason);
       if (out.result() == Outcome.Result.REJECTED) return manual(c, saga, "close " + out.code());
@@ -135,7 +141,9 @@ public class SagaWorker {
       String money = out.data().path("status").asString("");
       // Money already collected: closing keeps it, the order owes a refund (PAY-04/ORD-04) - not a plain CANCELLED.
       if (money.equals("COD_COLLECTED") || money.equals("SUCCESS")) return manual(c, saga, "PAID_NEEDS_REFUND");
-      return sagas.write(c, jdbc -> jdbc.sql("update order_sagas set payment_state = 'CLOSED' where order_id = :id")
+      // A PAYMENT_COMPLETED recorded meanwhile stays PAID (paid_at kept too).
+      return sagas.write(c, jdbc -> jdbc.sql("""
+          update order_sagas set payment_state = case when payment_state = 'PAID' then 'PAID' else 'CLOSED' end where order_id = :id""")
           .param("id", c.orderId()).update(), false);
     }
     sagas.write(c, jdbc -> {

@@ -28,19 +28,29 @@ public class CartCleanupWorker {
   public int runOnce() {
     var claimed = tasks.claimDue(SagaWorker.CART_CLEANUP, 10, SagaWorker.LEASE);
     for (var task : claimed) {
-      UUID orderId = UUID.fromString(task.businessKey());
-      String status = sagas.orderStatus(orderId);
-      if (status.equals("CANCELLING") || status.equals("CANCELLED")) { tasks.complete(task.id(), task.leaseToken()); continue; }
-      var out = carts.cleanup(sagas.order(orderId));
-      if (out.result() == Outcome.Result.UNKNOWN) {
-        long seconds = Math.min(1L << Math.min(task.attempts() + 1, 30), SagaWorker.MAX_BACKOFF.toSeconds());
-        tasks.fail(task.id(), task.leaseToken(), out.code(), Duration.ofSeconds(seconds), MAX_ATTEMPTS);
-        continue;
+      try { clean(task); }
+      catch (RuntimeException e) {
+        // One bad task never drops the batch; it spends its attempts like UNKNOWN and ends MANUAL.
+        LOG.error("Cart cleanup failed: task_id={}", task.id(), e);
+        try { tasks.fail(task.id(), task.leaseToken(), e.getClass().getSimpleName(), SagaWorker.MAX_BACKOFF, MAX_ATTEMPTS); }
+        catch (RuntimeException again) { LOG.error("Cart cleanup failure not recorded: task_id={}", task.id(), again); }
       }
-      // OK (removed/retained/missing) or a refusal that will not change (cart gone, key reused): nothing left to do.
-      if (out.result() == Outcome.Result.REJECTED) LOG.warn("Cart cleanup refused: order_id={} code={}", orderId, out.code());
-      tasks.complete(task.id(), task.leaseToken());
     }
     return claimed.size();
+  }
+
+  private void clean(BackgroundTaskRepository.ClaimedTask task) {
+    UUID orderId = UUID.fromString(task.businessKey());
+    String status = sagas.orderStatus(orderId);
+    if (status.equals("CANCELLING") || status.equals("CANCELLED")) { tasks.complete(task.id(), task.leaseToken()); return; }
+    var out = carts.cleanup(sagas.order(orderId));
+    if (out.result() == Outcome.Result.UNKNOWN) {
+      long seconds = Math.min(1L << Math.min(task.attempts() + 1, 30), SagaWorker.MAX_BACKOFF.toSeconds());
+      tasks.fail(task.id(), task.leaseToken(), out.code(), Duration.ofSeconds(seconds), MAX_ATTEMPTS);
+      return;
+    }
+    // OK (removed/retained/missing) or a refusal that will not change (cart gone, key reused): nothing left to do.
+    if (out.result() == Outcome.Result.REJECTED) LOG.warn("Cart cleanup refused: order_id={} code={}", orderId, out.code());
+    tasks.complete(task.id(), task.leaseToken());
   }
 }

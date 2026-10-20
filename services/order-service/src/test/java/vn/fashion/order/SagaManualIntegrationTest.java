@@ -41,4 +41,18 @@ class SagaManualIntegrationTest extends OrderTestSupport {
     worker.runOnce();
     assertThat(StubServers.INVENTORY.seen).isEmpty();                    // MANUAL is never picked up again
   }
+
+  @Test void aStepThatThrowsCountsAsARetryAndEndsManual() {
+    // Review I2: payment 200 without payment_id throws; it must spend the retry budget, not loop every lease forever.
+    UUID id = placeOrder();
+    stubSagaOk();
+    StubServers.PAYMENT.reply(s -> new StubServers.Reply(200, StubServers.ok("{\"status\":\"COD_PENDING\"}")));
+    for (int i = 1; i <= 3; i++) {
+      worker.runOnce();
+      clock.shift(Duration.ofMinutes(10));
+    }
+    assertThat(saga(id)).containsEntry("status", "MANUAL").containsEntry("retry_count", 3).containsEntry("payment_state", "UNKNOWN");
+    assertThat(saga(id).get("lease_token")).isNull();
+    assertThat(status(id)).isEqualTo("PENDING");
+  }
 }

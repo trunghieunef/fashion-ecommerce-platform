@@ -320,7 +320,7 @@ bằng checkout token do cart ký (08 CART-03).
 
 `ORD-02` (2026-10-20) hiện thực phần COD của bước 3–4: worker nền claim saga (lease 30 s, `SKIP LOCKED`), `RESERVE`
 (key `reserve:{order_id}`, hash 03 §4) → `CREATE_PAYMENT` (key `payment:{order_id}`) → đơn `CONFIRMED`, saga
-`WAIT_OPS`/`WAITING` tới `expires_at`; giữ hàng xong thì enqueue task `CART_CLEANUP` (REQ ORD-09, lỗi không đụng đơn). Create
+`WAIT_OPS`/`WAITING` tới `expires_at`; cùng transaction `CONFIRMED` enqueue task `CART_CLEANUP` (REQ ORD-09, lỗi không đụng đơn). Create
 luôn 202, FE poll (08 ORD-02). Nhánh online `WAIT_PAYMENT` chưa đạt được tới PAY-02/03; OPS xác nhận/commit kho là ORD-03.
 
 Trong Phase 1 chưa promotion: các bước promotion là no-op với discount = 0; chưa tích hợp carrier thì shipping-service dùng SELF và bảng phí nội bộ. Đây là phạm vi MVP hiện hành trong 02; không bỏ tính phí/giao hàng.
@@ -417,7 +417,7 @@ flowchart TD
 `ORD-02` (2026-10-20) hiện thực phần hệ thống tự hủy: lỗi chắc chắn (reserve 409 → `OUT_OF_STOCK`/`RESERVE_FAILED`, payment
 từ chối → `PAYMENT_FAILED`) hoặc quá `expires_at` (`EXPIRED`, kể cả khi bước đang `UNKNOWN`) ghi intent CANCEL + `CANCELLING`
 cùng transaction, rồi release (snapshot + hash gốc, nếu `inventory_state` HELD/UNKNOWN), luôn close payment (tombstone), mới
-`CANCELLED`. Release trả COMMITTED hoặc close thấy tiền đã thu (`PAID_NEEDS_REFUND`) → `MANUAL` ngay; lỗi chưa rõ backoff
+`CANCELLED`. Release trả COMMITTED, hoặc tiền đã thu (close thấy COD_COLLECTED/SUCCESS hay đã ghi `PAYMENT_COMPLETED` — `PAID_NEEDS_REFUND`) → `MANUAL` ngay; lỗi chưa rõ (gồm 400 và exception trong bước) backoff
 `min(2^n s, 5 phút)` ±20 %, 30 lần → `MANUAL` + metric `order_saga_manual_total`. Mỗi ghi kết quả là CAS theo lease token;
 worker mất lease bỏ kết quả. Khách/OPS hủy, return/restore khi đã commit là ORD-03/04.
 

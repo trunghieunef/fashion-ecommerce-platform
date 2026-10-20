@@ -35,6 +35,35 @@ class SagaCompensationIntegrationTest extends OrderTestSupport {
     stubCheckout(cart, 150000, 99000);
     String member = memberToken();
     data(create("again", createBody(cart, 4, quoteToken(cart, "Authorization", member)), "Authorization", member), 202);
+    // Review I1: a cancelled and an open order now share (cart_id, cart_version); losing the insert is still a 409, not 500.
+    String other = memberToken(UUID.randomUUID());
+    var lost = create("other-actor", createBody(cart, 4, quoteToken(cart, "Authorization", other)), "Authorization", other);
+    assertThat(problem(lost, 409)).isEqualTo("CART_ALREADY_ORDERED");
+    assertThat(json(lost).path("errors").get(0).path("message").asString()).isEmpty();   // another actor's order_no stays hidden
+  }
+
+  @Test void aPaymentCompletedDuringCompensationGoesManualForARefund() {
+    // Review M5: PAYMENT_COMPLETED lands while the order is cancelling; never overwritten by CLOSED, never a plain CANCELLED.
+    UUID id = placeOrder();
+    stubSagaOk();
+    StubServers.PAYMENT.reply(s -> new StubServers.Reply(409, StubServers.error("CONFLICT", "PAYMENT_CLOSED")));
+    StubServers.INVENTORY.reply(s -> {
+      if (s.path().endsWith("/release")) jdbc.update("update order_sagas set payment_state = 'PAID' where order_id = ?", id);
+      return new StubServers.Reply(200, StubServers.ok(s.path().endsWith("/release") ? "{\"status\":\"RELEASED\"}" : "{\"status\":\"ACTIVE\"}"));
+    });
+    worker.runOnce();
+    assertThat(status(id)).isEqualTo("CANCELLING");
+    assertThat(saga(id)).containsEntry("status", "MANUAL").containsEntry("payment_state", "PAID").containsEntry("last_error", "PAID_NEEDS_REFUND");
+  }
+
+  @Test void aContractErrorGoesManualInsteadOfCancellingTheOrder() {
+    // Review I3: a 400 (our own request is wrong: hash, fields, clock drift) is not an answer about the order.
+    UUID id = placeOrder();
+    stubSagaOk();
+    StubServers.INVENTORY.reply(s -> new StubServers.Reply(400, StubServers.error("INVALID_INPUT", "REQUEST_HASH_MISMATCH")));
+    worker.runOnce();
+    assertThat(status(id)).isEqualTo("PENDING");
+    assertThat(saga(id)).containsEntry("intent", "FULFILL").containsEntry("inventory_state", "UNKNOWN").containsEntry("retry_count", 1);
   }
 
   @Test void aRefusedPaymentReleasesTheReservation() throws Exception {
@@ -51,7 +80,7 @@ class SagaCompensationIntegrationTest extends OrderTestSupport {
     var release = StubServers.INVENTORY.seen.stream().filter(s -> s.path().endsWith("/release")).findFirst().orElseThrow();
     assertThat(release.idempotencyKey()).isEqualTo("release:" + id);
     assertThat(mapper.readTree(release.body()).path("original_request_hash").asString()).isEqualTo(reserve.path("request_hash").asString());
-    assertThat(count("select count(*) from background_tasks where kind = 'CART_CLEANUP'")).isEqualTo(1);  // stock was held once
+    assertThat(count("select count(*) from background_tasks")).isZero();     // never CONFIRMED: the cart is kept
   }
 
   @Test void anExpiredConfirmedOrderIsCancelledOnlyOnceEverythingIsReleased() {
