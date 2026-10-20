@@ -190,6 +190,26 @@ public abstract class OrderTestSupport {
         .path("quote_token").asString();
   }
 
+  /** ORD-02: a member COD order created through the ORD-01 API; returns its order_id. */
+  protected UUID placeOrder() {
+    UUID cart = UUID.randomUUID();
+    stubCheckout(cart, 150000, 99000);
+    String member = memberToken();
+    return UUID.fromString(data(create(UUID.randomUUID().toString(), createBody(cart, 4, quoteToken(cart, "Authorization", member)),
+        "Authorization", member), 202).path("order_id").asString());
+  }
+  /** Inventory and payment answer OK (reservation ACTIVE, payment COD_PENDING); cart cleanup OK. */
+  protected void stubSagaOk() {
+    StubServers.INVENTORY.reply(s -> new StubServers.Reply(200, StubServers.ok(s.path().endsWith("/release")
+        ? "{\"status\":\"RELEASED\"}" : "{\"status\":\"ACTIVE\"}")));
+    StubServers.PAYMENT.reply(s -> new StubServers.Reply(200, StubServers.ok(s.path().endsWith("/close")
+        ? "{\"status\":\"FAILED\"}" : "{\"payment_id\":\"55555555-5555-4555-8555-555555555591\",\"status\":\"COD_PENDING\"}")));
+  }
+  protected java.util.Map<String, Object> saga(UUID orderId) {
+    return jdbc.queryForMap("select * from order_sagas where order_id = ?", orderId);
+  }
+  protected String status(UUID orderId) { return jdbc.queryForObject("select status from orders where id = ?", String.class, orderId); }
+
   /** headers: alternating name, value. */
   protected HttpResponse<String> send(String method, String path, String body, String... headers) {
     try {

@@ -14,6 +14,9 @@ public class OrderBeans {
   @Bean OutboxRepository outboxRepository(JdbcClient jdbc, io.micrometer.tracing.Tracer tracer) {
     return new OutboxRepository(jdbc, vn.fashion.platform.messaging.TraceParents.current(tracer));
   }
+  @Bean vn.fashion.platform.work.BackgroundTaskRepository backgroundTasks(JdbcClient jdbc) {
+    return new vn.fashion.platform.work.BackgroundTaskRepository(jdbc);
+  }
   /** Quote expiry and order deadlines; tests replace it to move time. */
   @Bean Clock clock() { return Clock.systemUTC(); }
 }
