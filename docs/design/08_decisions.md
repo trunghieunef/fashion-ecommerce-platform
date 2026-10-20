@@ -481,7 +481,7 @@ Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác v
 
 ## ORD-03 — quyết định 2026-10-21
 
-`TASK:ORD-03` · `REQ:ORD-03/06` (COD; phần online `REQ:PAY-03` hoãn tới PAY-02/03). Chủ dự án duyệt
+`TASK:ORD-03` · `REQ:ORD-03/06`, `REQ:PAY-03` (COD: thu có bằng chứng → FINANCE xác nhận → `SUCCESS`) kiểm end-to-end qua smoke (sửa khi nghiệm thu: trước ghi nhầm là "phần online hoãn" — online là TASK PAY-02/03). Chủ dự án duyệt
 [spec](../superpowers/specs/2026-10-21-ord-03-cod-confirm-fulfil-design.md) ngày 2026-10-21 (cả các mặc định §11); các dòng
 "(SDD)" là phán quyết của controller khi triển khai, ghi lại để review PR.
 

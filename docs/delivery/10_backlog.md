@@ -4,11 +4,11 @@ B1 · 2026-09-19 · Work package mặc định: **Planned; Assignee TBD; Reviewe
 
 ## 1. Cách nhận việc
 
-Update 2026-10-21 — `TASK:ORD-03` **In review (local)** — chưa nghiệm thu, chờ review PR: OPS xác nhận/hủy đơn COD
+Update 2026-10-21 — `TASK:ORD-03` **Done (local, trước G0)** ([nghiệm thu](../evidence/acceptance-2026-10-21.md#taskord-03--ops-xác-nhậnhủy-cod-commit-kho-vận-đơn-self-giao-hàng)), PR #34 review "có thể merge", chủ dự án quyết định merge: OPS xác nhận/hủy đơn COD
 (`/admin/api/v1/orders`: list/detail `order.read`, PII chỉ với `order.fulfill`; `confirm-cod` `order.fulfill`, `cancel`
 `order.cancel`, key + `expected_version`, `audit_logs`), saga `COMMIT_STOCK` (inventory là trọng tài hạn, T12; key
 `commit:{order_id}`, T09) → `PACKING` → vận đơn SELF tự động (`shipment:{order_id}`), consumer `shipping.events` →
-`SHIPPING`/`DELIVERED` + `ORDER_COMPLETED`, V003; `REQ:ORD-03/06` — `REQ:PAY-03` (phần online) hoãn tới PAY-02/03;
+`SHIPPING`/`DELIVERED` + `ORDER_COMPLETED`, V003; `REQ:ORD-03/06`, `REQ:PAY-03` (COD: thu có bằng chứng → FINANCE xác nhận → `SUCCESS`) kiểm end-to-end qua smoke (TASK PAY-02/03 VNPay/MoMo là việc riêng);
 dependency ORD-02, SHP-02 (Done local); T09/T12/T27. Hủy đơn `CONFIRMED` (chờ OPS) kéo từ ORD-04 vào ORD-03, chủ dự án đồng
 ý 2026-10-21; phần hủy còn lại vẫn ORD-04. [spec](../superpowers/specs/2026-10-21-ord-03-cod-confirm-fulfil-design.md),
 [evidence](../evidence/ord-03-local-2026-10-21.md).
@@ -274,7 +274,7 @@ Subtasks PLT-04.A–F, owner theo vai trò, dependencies và acceptance ở [16 
 | PAY-01 | BE / 2–3 | PLT-03, USR-02, SHP-02 | PAY-03/07/08 | Payment/COD/close/query schema, closed_at, settlement gross-fee-net; T27; close-before-create ngăn URL mới, late success vẫn ghi tiền |
 | ORD-01 | BE / 2–4 | CAT-02, CART-03, SHP-01 | ORD-01/05/07 | Order quote/create/read/ownership, immutable snapshots, idempotency lookup trước quote expiry; PRICE_CHANGED/202 contract; T21/T24 |
 | ORD-02 | BE / 3–5 | ORD-01, INV-02, PAY-01, PLT-03 | ORD-02/09 | Durable saga steps/recovery, WAITING deadlines, lease token; background cart cleanup; T03/T07/T09/T23; no HTTP trong DB TX |
-| ORD-03 | BE / 2–3 | ORD-02, SHP-02 | ORD-03/06, PAY-03 (online hoãn tới PAY-02/03) | COD confirm/expire/packing, shipment create, delivered event; T12; end-to-end qua SELF + FINANCE settlement; thêm OPS hủy đơn CONFIRMED chờ OPS (từ ORD-04, chủ dự án đồng ý 2026-10-21). **In review (local)** 2026-10-21 ([evidence](../evidence/ord-03-local-2026-10-21.md)) |
+| ORD-03 | BE / 2–3 | ORD-02, SHP-02 | ORD-03/06, PAY-03 | COD confirm/expire/packing, shipment create, delivered event; T12; end-to-end qua SELF + FINANCE settlement; thêm OPS hủy đơn CONFIRMED chờ OPS (từ ORD-04, chủ dự án đồng ý 2026-10-21). **Done (local)** 2026-10-21 ([nghiệm thu](../evidence/acceptance-2026-10-21.md#taskord-03--ops-xác-nhậnhủy-cod-commit-kho-vận-đơn-self-giao-hàng), [evidence](../evidence/ord-03-local-2026-10-21.md)) |
 | ORD-04 | BE / 2–4 | ORD-03, INV-03 | ORD-04/10, SHP-06 | Cancel/return intent, evidence rows, shipment UNKNOWN handling; T04/T16/T17; không báo CANCELLED trước giải phóng xong; hủy đơn CONFIRMED chờ OPS đã làm ở ORD-03 |
 | PAY-02 | BE / 2–4 | PAY-01, ORD-02 | PAY-01/04/07 | VNPay adapter + profile fixture/source ở 15; create/query/IPN/return sandbox; amount/merchant/signature invalid không SUCCESS; T06/T07; O03 gate |
 | PAY-03 | BE / 2–4 | PAY-01, ORD-02 | PAY-02/04/07 | MoMo adapter + callback/query fixtures; sandbox create/notify/return, pending/result-code mapping; duplicate callback một effect; O03 gate |

@@ -7,7 +7,7 @@ snapshot bất biến, đọc đơn theo ownership; guest checkout bằng checko
 `TASK:ORD-02` · `REQ:ORD-02`, `REQ:ORD-09`: saga checkout COD bền vững (worker nền, lease + CAS), bù trừ, hết hạn, dọn giỏ,
 inbox `payment.events`. [Spec](../../docs/superpowers/specs/2026-10-20-ord-02-checkout-saga-design.md) ·
 [evidence](../../docs/evidence/ord-02-local-2026-10-20.md).
-`TASK:ORD-03` · `REQ:ORD-03`, `REQ:ORD-06` (COD; `REQ:PAY-03` online chờ PAY-02/03): admin orders cho OPS/FINANCE, OPS xác nhận/hủy
+`TASK:ORD-03` · `REQ:ORD-03`, `REQ:ORD-06`, `REQ:PAY-03` (COD: thu có bằng chứng → FINANCE xác nhận → `SUCCESS`) kiểm end-to-end qua smoke: admin orders cho OPS/FINANCE, OPS xác nhận/hủy
 đơn COD chờ OPS, saga commit kho → `PACKING` → vận đơn SELF, consumer `shipping.events` → `SHIPPING`/`DELIVERED` +
 `ORDER_COMPLETED`. [Spec](../../docs/superpowers/specs/2026-10-21-ord-03-cod-confirm-fulfil-design.md) ·
 [evidence](../../docs/evidence/ord-03-local-2026-10-21.md) (In review).

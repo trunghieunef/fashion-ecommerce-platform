@@ -1,6 +1,6 @@
 # ORD-03 — OPS xác nhận/hủy đơn COD, commit kho, tạo vận đơn SELF, theo dõi giao hàng
 
-`TASK:ORD-03` · `REQ:ORD-03`, `REQ:ORD-06` (COD; phần online `PAY-03` chờ PAY-02/03) · dependency ORD-02, SHP-02 (Done local);
+`TASK:ORD-03` · `REQ:ORD-03`, `REQ:ORD-06`, `REQ:PAY-03` (COD thu → FINANCE → SUCCESS, kiểm qua smoke; sửa khi nghiệm thu — trước ghi nhầm là phần online) · dependency ORD-02, SHP-02 (Done local);
 T09, T12, T27.
 Trạng thái: **đã duyệt** 2026-10-21 (chủ dự án); đã qua builder check (subagent), các điểm sửa đánh dấu "(builder check)".
 Nguồn: 06 §5.1 bước 8–9, §5.2, §5.3, bảng shipping/payment §8–§9; 03 §2 (admin orders), §3 (inventory commit, shipping create),
