@@ -67,7 +67,7 @@ Không mở rộng DLT cho mọi loại event chưa được service sử dụng
 | O03 | Merchant sandbox/production, callback domains, quyền query/refund VNPay/MoMo | PO + FINANCE | PAY-02/03 / G2 | Mock và negative tests |
 | O04 | Phí ship/COD, vùng SELF, nguồn địa chỉ, carrier account/SLA | PO + OPS | SHP-01/03 | Fixture giả và adapter |
 | O05 | Đổi trả, phí, hàng hỏng, bằng chứng, đơn tổng 0; giá đã gồm thuế hay chưa và yêu cầu hóa đơn | PO + FINANCE | ORD-01/04 / G2 | Baseline không cộng thuế ngoài giá niêm yết; chặn checkout total <= 0; nếu cần thuế tách dòng phải sửa pricing/schema trước code |
-| O06 | Retention PII, điều khoản/consent, nghĩa vụ pháp lý hiện hành | PO + phụ trách pháp lý | SEC-01 / G2; ngày hạn hoàn tất: trước G2 | Chủ dự án (PO) duyệt toàn bộ bảng retention và ngoại lệ tại [13 §3](../operations/13_operations_security.md) ngày 2026-10-04, theo xác nhận trong phiên làm việc. Ngày 2026-10-20 agent **đề xuất** giá trị cụ thể cho từng nhóm (gồm traces, outbox/inbox, idempotency, notification, consent, guest credential) tại 13 §3 theo yêu cầu "chốt O06" của chủ dự án; **chờ chủ dự án xác nhận** trước ORD-01. Còn mở tới G2: phụ trách pháp lý xác minh áp dụng luật và mốc 10 năm chứng từ, nội dung điều khoản/consent; chưa bật purge tài chính |
+| O06 | Retention PII, điều khoản/consent, nghĩa vụ pháp lý hiện hành | PO + phụ trách pháp lý | SEC-01 / G2; ngày hạn hoàn tất: trước G2 | Chủ dự án (PO) duyệt toàn bộ bảng retention và ngoại lệ tại [13 §3](../operations/13_operations_security.md) ngày 2026-10-04, theo xác nhận trong phiên làm việc. Ngày 2026-10-20 agent **đề xuất** giá trị cụ thể cho từng nhóm (gồm traces, outbox/inbox, idempotency, notification, consent, guest credential) tại 13 §3 theo yêu cầu "chốt O06" của chủ dự án; chủ dự án **xác nhận giữ nguyên** cùng ngày (sau review PR #31) — đủ cho ORD-01. Còn mở tới G2: phụ trách pháp lý xác minh áp dụng luật và mốc 10 năm chứng từ, nội dung điều khoản/consent; chưa bật purge tài chính |
 | O07 | Email/SMS provider, domain gửi, consent, query/retry hỗ trợ | PO + DEVOPS | NOT-01 / G2; OTP trước G3 | Mail sink và contract |
 | O08 | Headcount, capacity, người QA, tên owner/reviewer | PO + TL | Planning đầu | Estimate theo role; chưa cam kết ngày |
 | O09 | Bộ tải/dữ liệu/hạ tầng/ngân sách chứng minh SLO | TL + QA + DEVOPS | QA-03 / G2 | Script và synthetic dataset |
@@ -543,8 +543,8 @@ hoặc cơ chế khác). CART-03 không đổi cookie. Phải chốt trước kh
 
 **Cập nhật 2026-10-20:** agent đề xuất giá trị retention O06 (13 §3 "Giá trị cụ thể O06"): giỏ 30 ngày, PII trong đơn
 ẩn danh sau 12 tháng từ khi đơn kết thúc, guest credential tối đa 90 ngày, log 30 ngày, traces 7 ngày, backup 30 ngày,
-idempotency 30 ngày, tài khoản không hoạt động 24 tháng, chứng từ tài chính 10 năm. Điều kiện "chốt O06 trước ORD-01"
-**chưa đạt** cho tới khi chủ dự án xác nhận bảng đề xuất (review PR #31); xác minh pháp lý còn mở tới G2. ORD-01 vẫn chờ câu hỏi mở về cách xác minh guest checkout (mục CART-03 bên trên).
+idempotency 30 ngày, tài khoản không hoạt động 24 tháng, chứng từ tài chính 10 năm. Chủ dự án xác nhận giữ nguyên
+toàn bộ giá trị cùng ngày (sau review PR #31), nên điều kiện "chốt O06 trước ORD-01" **đã đạt**; xác minh pháp lý còn mở tới G2. ORD-01 vẫn chờ câu hỏi mở về cách xác minh guest checkout (mục CART-03 bên trên).
 
 ## CAT-02a — quyết định chủ dự án 2026-10-11
 
