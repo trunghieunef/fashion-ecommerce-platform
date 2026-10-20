@@ -30,6 +30,7 @@ Qua Gateway: `http://localhost:8080/api/v1/carts`. Service không publish port t
 | DELETE | `/api/v1/carts/{cart_id}/items/{item_id}?expected_version=N` | Xóa dòng |
 | DELETE | `/api/v1/carts/{cart_id}?expected_version=N` | Xóa mọi dòng; giỏ vẫn ACTIVE |
 | POST | `/api/v1/carts/merge` | CART-02: Bearer **và** cookie guest; `Idempotency-Key`; `guest_cart_id`, `guest_expected_version`, `member_expected_version` → giỏ member + `adjustments`; đã gộp → `already_merged`; xóa cookie guest |
+| POST | `/api/v1/carts/{cart_id}/checkout-token` | ORD-01: chỉ guest (cookie sở hữu giỏ ACTIVE; Bearer → 400 `CHECKOUT_TOKEN_GUEST_ONLY`, giỏ khác → 404) → JWT ES256 `aud=order-service`, `sub=guest:<sha256 cookie>`, `cart_id`, 15 phút; không trượt hạn giỏ, không cần key; order đọc qua header `Checkout-Token` |
 
 Internal (CART-03, không qua Gateway; service token ADR-19 `aud=cart-service`, chỉ caller `order-service`;
 header `Cart-Actor: user:<uuid>|guest:<sha256 cookie>` do order đã xác minh):
@@ -58,7 +59,8 @@ Mọi response `Cache-Control: no-store`. Chi tiết mã lỗi trong contract.
 | `CART_SERVICE_PRIVATE_KEY`, `CART_SERVICE_PUBLIC_KEY` | trống | ADR-19 caller `cart-service`; local-up sinh và thêm public key vào `CATALOG_INTERNAL_CALLERS`, `INVENTORY_INTERNAL_CALLERS`. Trống → mọi gọi dependency 503 |
 | `CART_CATALOG_URL`, `CART_INVENTORY_URL` | `localhost:8081`, `:8083` | internal API |
 | `CART_DEPENDENCY_TIMEOUT` | `1s` | mỗi lần gọi catalog/inventory |
-| `CART_INTERNAL_CALLERS` | trống | `order-service:<base64 X.509>` cho route internal; trống → mọi call internal 401. local-up chưa sinh (order-service chưa có, ORD-01) |
+| `CART_INTERNAL_CALLERS` | trống | `order-service:<base64 X.509>` cho route internal; trống → mọi call internal 401. local-up sinh khóa `order-service` (ORD-01) |
+| `CART_CHECKOUT_PRIVATE_KEY`, `CART_CHECKOUT_KID` | trống, `cart-checkout-1` | Khóa ký checkout token (PKCS#8 base64); local-up sinh, public key vào `ORDER_CHECKOUT_PUBLIC_KEYS` |
 
 ## Database
 

@@ -13,7 +13,7 @@ OPERATIONS = {
     ("post", "/api/v1/carts"), ("get", "/api/v1/carts/mine"), ("get", "/api/v1/carts/{cart_id}"),
     ("delete", "/api/v1/carts/{cart_id}"), ("post", "/api/v1/carts/{cart_id}/items"),
     ("put", "/api/v1/carts/{cart_id}/items/{item_id}"), ("delete", "/api/v1/carts/{cart_id}/items/{item_id}"),
-    ("post", "/api/v1/carts/merge"),
+    ("post", "/api/v1/carts/merge"), ("post", "/api/v1/carts/{cart_id}/checkout-token"),  # ORD-01
 }
 
 
@@ -41,7 +41,7 @@ class CartContractTest(unittest.TestCase):
         return Draft202012Validator({"$ref": BASE + "cart.yaml#/components/schemas/" + name},
                                     registry=self.registry, format_checker=FormatChecker())
 
-    def test_eight_operations_exist(self):
+    def test_operations_exist(self):
         self.assertIsNotNone(self.doc, "cart contract is missing")
         actual = {(m, p) for p, item in self.doc["paths"].items() for m in item if m != "parameters"}
         self.assertEqual(actual, OPERATIONS)

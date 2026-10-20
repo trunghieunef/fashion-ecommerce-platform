@@ -256,6 +256,28 @@ curl -sS -X POST -H 'Content-Type: application/json' -H 'Origin: http://localhos
 test "$(status -X POST -H 'Content-Type: application/json' -H 'Origin: http://localhost:4173'   -d '{"province_code":"79","cod":false,"items":[{"variant_id":"00000000-0000-4000-8000-000000000000","quantity":1}]}'   "$GATEWAY_URL/api/v1/shipping/fee/estimate")" = 422
 test "$(status -X POST "$GATEWAY_URL/internal/api/v1/shipping/quotes")" = 404
 echo 'SHP-01 shipping estimate PASS'
+# TASK:ORD-01: guest checkout through the Gateway: cart checkout token -> server quote (SELF fee of province 79) ->
+# order 202 PENDING with the order_access cookie -> read it with that cookie only.
+order_jar="$(mktemp)"
+order_cart="$(curl -sS -c "$order_jar" -X POST "$GATEWAY_URL/api/v1/carts" | python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["cart_id"])')"
+curl -sS -b "$order_jar" -H "Origin: $STOREFRONT_URL" -H 'Content-Type: application/json' -H "Idempotency-Key: smoke-$catalog_suffix-order-cart" \
+  -d "{\"variant_id\":\"$variant_id\",\"quantity\":1,\"expected_version\":0}" "$GATEWAY_URL/api/v1/carts/$order_cart/items" >/dev/null
+checkout="$(curl -sS -b "$order_jar" -X POST -H "Origin: $STOREFRONT_URL" "$GATEWAY_URL/api/v1/carts/$order_cart/checkout-token" | \
+  python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["checkout_token"])')"
+quote_token="$(curl -sS -X POST -H "Origin: $STOREFRONT_URL" -H 'Content-Type: application/json' -H "Checkout-Token: $checkout" \
+  -d "{\"cart_id\":\"$order_cart\",\"cart_version\":1,\"method\":\"COD\",\"shipping_address\":{\"recipient_name\":\"Smoke\",\"phone\":\"0912345678\",\"province_code\":\"79\",\"ward_code\":\"26734\",\"address_line\":\"1 Smoke St\"},\"contact\":{\"phone\":\"0912345678\",\"email\":\"smoke@example.test\"}}" \
+  "$GATEWAY_URL/api/v1/orders/quote" | \
+  python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; t=d["totals"]; assert t["shipping_fee"]>0 and t["total_amount"]==t["subtotal"]+t["shipping_fee"]+t["cod_fee"], d; print(d["quote_token"])')"
+order_no="$(curl -sS -b "$order_jar" -c "$order_jar" -X POST -H "Origin: $STOREFRONT_URL" -H 'Content-Type: application/json' \
+  -H "Checkout-Token: $checkout" -H "Idempotency-Key: smoke-$catalog_suffix-order" \
+  -d "{\"cart_id\":\"$order_cart\",\"cart_version\":1,\"quote_token\":\"$quote_token\"}" "$GATEWAY_URL/api/v1/orders" | \
+  python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["status"]=="PENDING" and d["processing_status"]=="PROCESSING", d; print(d["order_no"])')"
+grep -q 'order_access' "$order_jar"
+curl -sS -b "$order_jar" "$GATEWAY_URL/api/v1/orders/$order_no" | \
+  python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["order_no"]==sys.argv[1] and d["items"][0]["quantity"]==1, d' "$order_no"
+test "$(status "$GATEWAY_URL/api/v1/orders/$order_no")" = 404
+rm -f "$order_jar"
+echo 'ORD-01 guest quote/create/read PASS'
 # TASK:SHP-02: OPS self-events go through the Gateway and need shipping.self_event; internal cancel is never routed.
 # No shipment exists without order-service, so an unknown id answering 404 proves route + permission, not a transition.
 shipping_ops="$(local_ops_token shipping.self_event)"

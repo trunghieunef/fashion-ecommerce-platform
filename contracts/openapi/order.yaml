@@ -1,0 +1,381 @@
+openapi: 3.1.0
+info:
+  title: Order API (customer)
+  version: 0.1.0
+  description: >
+    TASK:ORD-01 quote, create and read for members (Bearer) and guests (cart checkout token, then an order access cookie).
+    Prices and fees come from the server; the order is durable PENDING with an immutable snapshot and stays PROCESSING until
+    ORD-02 reserves stock and creates the payment. Only COD until PAY-02/03. Every response is no-store.
+servers:
+- url: http://localhost:8080
+  description: Local Gateway
+tags:
+- name: Orders
+  description: Member or guest checkout and order reads
+paths:
+  /api/v1/orders/quote:
+    post:
+      tags: [Orders]
+      operationId: quoteOrder
+      summary: Server quote for the actor's cart, address and method (2 minutes, nothing reserved)
+      description: >-
+        ORD-01 implemented. A Bearer decides alone (invalid is 401 INVALID_ACCESS_TOKEN, no fallback); without one the
+        Checkout-Token header from POST /api/v1/carts/{cart_id}/checkout-token makes a guest bound to that cart (another
+        cart_id is 404 CART_NOT_FOUND). The cart is read at cart_version (changed is 409 VERSION_CONFLICT, empty is 422
+        CART_EMPTY); unit prices are the catalog effective prices (a missing or inactive variant is 409 ITEM_UNAVAILABLE,
+        errors per variant_id); shipping fee and COD fee come from a stored SELF shipping quote (422 NO_SHIPPING_RULE).
+        total = subtotal + shipping_fee + cod_fee; total 0 is 422 PAYMENT_AMOUNT_UNSUPPORTED, an overflow 422
+        AMOUNT_OUT_OF_RANGE. VNPAY/MOMO are 422 PAYMENT_METHOD_UNAVAILABLE until PAY-02/03. A guest must give contact.email.
+        quote_token is signed by order and binds actor, cart, version, address, contact, note, lines, fees and totals; it is
+        not a secret and must not be logged. Dependency failure is 503 and nothing is written.
+      security: [{memberBearer: []}, {checkoutToken: []}]
+      x-implementation-status: implemented
+      parameters:
+      - {name: Accept-Language, in: header, schema: {type: string}, description: 'en gives English item names; default vi'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/QuoteRequest'}
+      responses:
+        '200':
+          description: Quote
+          headers: &headers
+            X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+            Cache-Control: {$ref: '#/components/headers/NoStore'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/QuoteResponse'}
+              examples:
+                cod:
+                  value:
+                    code: OK
+                    data:
+                      quote_token: example-signed-quote
+                      expires_at: '2026-10-20T03:02:00Z'
+                      cart_id: 11111111-1111-4111-8111-111111111111
+                      cart_version: 4
+                      method: COD
+                      shipping_address: &address {recipient_name: Synthetic Person, phone: '0912345678', province_code: '79',
+                        ward_code: '26734', address_line: 1 Synthetic St}
+                      items: &items
+                      - {variant_id: 33333333-3333-4333-8333-333333333333, sku: TEE-M, name: Ao thun, size: M, color: Den,
+                        image_url: '/api/v1/catalog/images/66666666-6666-4666-8666-666666666666?kind=thumb', quantity: 2,
+                        unit_price: 150000, line_total: 300000}
+                      totals: &totals {subtotal: 300000, discount_amount: 0, shipping_fee: 30000, shipping_discount: 0,
+                        cod_fee: 10000, total_amount: 340000, currency: VND}
+                    metadata: &meta {request_id: ord01-synthetic-request, trace_id: ord01-synthetic-trace}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /api/v1/orders:
+    post:
+      tags: [Orders]
+      operationId: createOrder
+      summary: Durable order from a confirmed quote
+      description: >-
+        ORD-01 implemented. The (actor, Idempotency-Key) lookup runs right after authentication and before any quote check:
+        the same body returns the same order (also after the quote expired or prices moved); another body is 409
+        IDEMPOTENCY_KEY_REUSED. Then the quote must be valid for this actor, cart_id and cart_version (else 400
+        INVALID_QUOTE) and unexpired (409 QUOTE_EXPIRED). The cart must still hold exactly the quoted lines (409
+        VERSION_CONFLICT) and catalog the quoted prices (409 PRICE_CHANGED, errors variant_id old=..,new=..; quote again
+        and confirm, T24). One transaction writes the PENDING order, items, history, the saga row and ORDER_CREATED. Another
+        key on the same cart state is 409 CART_ALREADY_ORDERED (order_no in errors for the same actor). 4xx store nothing;
+        COD expires_at is created_at + 24 h. A guest gets the order_access cookie (HttpOnly, Secure, SameSite=Lax,
+        Path=/api/v1/orders/{order_no}, 90 days); a retry with the same key issues a new one and the old one stops working.
+      security: [{memberBearer: []}, {checkoutToken: []}]
+      x-implementation-status: implemented
+      parameters:
+      - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateOrderRequest'}
+      responses:
+        '202':
+          description: Order durable, being prepared (always in ORD-01); poll status_url after Retry-After
+          headers:
+            X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+            Cache-Control: {$ref: '#/components/headers/NoStore'}
+            Location: {description: status_url, schema: {type: string}}
+            Retry-After: {description: Seconds before the first poll, schema: {type: integer}}
+            Set-Cookie: {description: 'Guest only: order_access=...; HttpOnly; Secure; SameSite=Lax; Path=/api/v1/orders/{order_no}; Max-Age=7776000', schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OrderResponse'}
+              examples:
+                processing:
+                  value: {code: OK, data: &order {order_id: 22222222-2222-4222-8222-222222222222, order_no: ORD202610000001,
+                      status: PENDING, processing_status: PROCESSING, status_url: /api/v1/orders/ORD202610000001,
+                      retry_after_seconds: 3, version: 0, method: COD, items: *items, totals: *totals, shipping_address: *address,
+                      contact: {phone: '0912345678', email: null}, note: null, created_at: '2026-10-20T03:00:30Z',
+                      expires_at: '2026-10-21T03:00:30Z', allowed_actions: []}, metadata: *meta}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /api/v1/orders/mine:
+    get:
+      tags: [Orders]
+      operationId: listMyOrders
+      summary: The member's orders, newest first
+      description: ORD-01 implemented. Member Bearer only (a guest is 401). Keyset cursor bound to the status filter (another
+        filter or a broken cursor is 400 INVALID_CURSOR).
+      security: [{memberBearer: []}]
+      x-implementation-status: implemented
+      parameters:
+      - {name: status, in: query, schema: {$ref: '#/components/schemas/OrderStatus'}}
+      - {name: cursor, in: query, schema: {type: string}}
+      - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+      responses:
+        '200':
+          description: Page
+          headers: *headers
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OrderPageResponse'}
+              examples:
+                page:
+                  value:
+                    code: OK
+                    data:
+                      items: [{order_no: ORD202610000001, status: PENDING, total_amount: 340000, currency: VND,
+                        created_at: '2026-10-20T03:00:30Z', item_count: 1}]
+                      next_cursor: null
+                    metadata: *meta
+        '400': {$ref: '#/components/responses/Invalid'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/orders/{order_no}:
+    get:
+      tags: [Orders]
+      operationId: getOrder
+      summary: One order for its owner
+      description: ORD-01 implemented. A member reads its own orders (Bearer); a guest reads only the order of its
+        order_access cookie. Missing, foreign or guessed order numbers are the same 404 ORDER_NOT_FOUND (T21). No lookup by
+        order_no or phone alone. PENDING is processing_status PROCESSING; allowed_actions is empty until ORD-04.
+      security: [{memberBearer: []}, {orderAccess: []}]
+      x-implementation-status: implemented
+      parameters:
+      - {name: order_no, in: path, required: true, schema: {type: string, minLength: 1, maxLength: 32}}
+      responses:
+        '200':
+          description: Order
+          headers: *headers
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OrderResponse'}
+              examples:
+                order:
+                  value: {code: OK, data: *order, metadata: *meta}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+components:
+  securitySchemes:
+    memberBearer: {type: http, scheme: bearer, bearerFormat: JWT, description: ADR-21 access token; decides alone when present}
+    checkoutToken: {type: apiKey, in: header, name: Checkout-Token, description: 'Guest proof from cart (ES256, aud order-service, 15 minutes)'}
+    orderAccess: {type: apiKey, in: cookie, name: order_access, description: Guest credential of one order (sha256 stored)}
+  headers:
+    NoStore:
+      description: Orders are per actor and hold PII; never cached, errors included.
+      schema: {type: string, const: no-store}
+  schemas:
+    OrderStatus:
+      type: string
+      enum: [PENDING, WAITING_PAYMENT, CONFIRMED, PAID, PACKING, SHIPPING, DELIVERED, CANCELLING, CANCELLED, REFUNDING, REFUNDED,
+        RETURNING, RETURNED]
+    Address:
+      type: object
+      additionalProperties: false
+      required: [recipient_name, phone, province_code, ward_code, address_line]
+      properties:
+        recipient_name: {type: string, minLength: 1, maxLength: 100}
+        phone: {type: string, pattern: '^\+?[0-9]{9,15}$'}
+        province_code: {type: string, minLength: 1, maxLength: 10}
+        ward_code: {type: string, minLength: 1, maxLength: 10}
+        address_line: {type: string, minLength: 1, maxLength: 255}
+    Contact:
+      type: object
+      additionalProperties: false
+      required: [phone]
+      properties:
+        phone: {type: string, pattern: '^\+?[0-9]{9,15}$'}
+        email: {type: [string, 'null'], maxLength: 254, description: Required for a guest}
+    QuoteRequest:
+      type: object
+      additionalProperties: false
+      required: [cart_id, cart_version, method, shipping_address, contact]
+      properties:
+        cart_id: {type: string, format: uuid}
+        cart_version: {type: integer, minimum: 0}
+        method: {type: string, enum: [COD, VNPAY, MOMO]}
+        shipping_address: {$ref: '#/components/schemas/Address'}
+        contact: {$ref: '#/components/schemas/Contact'}
+        note: {type: [string, 'null'], maxLength: 500}
+    CreateOrderRequest:
+      type: object
+      additionalProperties: false
+      required: [cart_id, cart_version, quote_token]
+      properties:
+        cart_id: {type: string, format: uuid}
+        cart_version: {type: integer, minimum: 0}
+        quote_token: {type: string, minLength: 1, maxLength: 65536}
+    Item:
+      type: object
+      additionalProperties: false
+      required: [variant_id, sku, name, size, color, image_url, quantity, unit_price, line_total]
+      properties:
+        variant_id: {type: string, format: uuid}
+        sku: {type: string}
+        name: {type: string}
+        size: {type: string}
+        color: {type: string}
+        image_url: {type: [string, 'null']}
+        quantity: {type: integer, minimum: 1, maximum: 99}
+        unit_price: {type: integer, minimum: 0}
+        line_total: {type: integer, minimum: 0}
+    Totals:
+      type: object
+      additionalProperties: false
+      required: [subtotal, discount_amount, shipping_fee, shipping_discount, cod_fee, total_amount, currency]
+      properties:
+        subtotal: {type: integer, minimum: 0}
+        discount_amount: {type: integer, minimum: 0}
+        shipping_fee: {type: integer, minimum: 0}
+        shipping_discount: {type: integer, minimum: 0}
+        cod_fee: {type: integer, minimum: 0}
+        total_amount: {type: integer, minimum: 1}
+        currency: {type: string, const: VND}
+    Quote:
+      type: object
+      additionalProperties: false
+      required: [quote_token, expires_at, cart_id, cart_version, method, shipping_address, items, totals]
+      properties:
+        quote_token: {type: string, minLength: 1}
+        expires_at: {type: string, format: date-time}
+        cart_id: {type: string, format: uuid}
+        cart_version: {type: integer, minimum: 0}
+        method: {type: string, enum: [COD, VNPAY, MOMO]}
+        shipping_address: {$ref: '#/components/schemas/Address'}
+        items: {type: array, minItems: 1, maxItems: 100, items: {$ref: '#/components/schemas/Item'}}
+        totals: {$ref: '#/components/schemas/Totals'}
+    Order:
+      type: object
+      additionalProperties: false
+      required: [order_id, order_no, status, processing_status, status_url, retry_after_seconds, version, method, items, totals,
+        shipping_address, contact, note, created_at, expires_at, allowed_actions]
+      properties:
+        order_id: {type: string, format: uuid}
+        order_no: {type: string, minLength: 1, maxLength: 32}
+        status: {$ref: '#/components/schemas/OrderStatus'}
+        processing_status: {type: string, enum: [PROCESSING, READY, ACTION_REQUIRED, FINISHED]}
+        status_url: {type: string}
+        retry_after_seconds: {type: [integer, 'null'], minimum: 1}
+        version: {type: integer, minimum: 0}
+        method: {type: string, enum: [COD, VNPAY, MOMO]}
+        items: {type: array, minItems: 1, items: {$ref: '#/components/schemas/Item'}}
+        totals: {$ref: '#/components/schemas/Totals'}
+        shipping_address: {$ref: '#/components/schemas/Address'}
+        contact: {$ref: '#/components/schemas/Contact'}
+        note: {type: [string, 'null']}
+        created_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        allowed_actions: {type: array, items: {type: string}}
+    Summary:
+      type: object
+      additionalProperties: false
+      required: [order_no, status, total_amount, currency, created_at, item_count]
+      properties:
+        order_no: {type: string}
+        status: {$ref: '#/components/schemas/OrderStatus'}
+        total_amount: {type: integer, minimum: 0}
+        currency: {type: string, const: VND}
+        created_at: {type: string, format: date-time}
+        item_count: {type: integer, minimum: 0}
+    QuoteResponse:
+      type: object
+      required: [code, data, metadata]
+      properties:
+        code: {type: string, const: OK}
+        data: {$ref: '#/components/schemas/Quote'}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
+    OrderResponse:
+      type: object
+      required: [code, data, metadata]
+      properties:
+        code: {type: string, const: OK}
+        data: {$ref: '#/components/schemas/Order'}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
+    OrderPageResponse:
+      type: object
+      required: [code, data, metadata]
+      properties:
+        code: {type: string, const: OK}
+        data:
+          type: object
+          additionalProperties: false
+          required: [items, next_cursor]
+          properties:
+            items: {type: array, items: {$ref: '#/components/schemas/Summary'}}
+            next_cursor: {type: [string, 'null']}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
+  responses:
+    Invalid:
+      description: INVALID_FIELDS, INVALID_KEY, MALFORMED_JSON, INVALID_QUOTE or INVALID_CURSOR
+      headers: *headers
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+          examples:
+            quote:
+              value: {code: VALIDATION_ERROR, message: INVALID_QUOTE, metadata: *meta}
+    Unauthorized:
+      description: No credential, INVALID_ACCESS_TOKEN (Bearer) or INVALID_CHECKOUT_TOKEN
+      headers: *headers
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+          examples:
+            checkout:
+              value: {code: UNAUTHORIZED, message: INVALID_CHECKOUT_TOKEN, metadata: *meta}
+    NotFound:
+      description: CART_NOT_FOUND or ORDER_NOT_FOUND; identical for missing and foreign resources
+      headers: *headers
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+          examples:
+            order:
+              value: {code: NOT_FOUND, message: ORDER_NOT_FOUND, metadata: *meta}
+    Conflict:
+      description: VERSION_CONFLICT, ITEM_UNAVAILABLE, PRICE_CHANGED, QUOTE_EXPIRED, IDEMPOTENCY_KEY_REUSED or CART_ALREADY_ORDERED
+      headers: *headers
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+          examples:
+            price:
+              value: {code: PRICE_CHANGED, message: PRICE_CHANGED,
+                errors: [{field: 33333333-3333-4333-8333-333333333333, message: 'old=150000,new=155000'}], metadata: *meta}
+    Unprocessable:
+      description: CART_EMPTY, PAYMENT_METHOD_UNAVAILABLE, NO_SHIPPING_RULE, VARIANT_NOT_AVAILABLE, AMOUNT_OUT_OF_RANGE or PAYMENT_AMOUNT_UNSUPPORTED
+      headers: *headers
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+          examples:
+            empty:
+              value: {code: VALIDATION_ERROR, message: CART_EMPTY, metadata: *meta}
+    Unavailable:
+      description: Cart, catalog or shipping could not answer; nothing was written. Retry with the same Idempotency-Key.
+      headers: *headers
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+          examples:
+            dependency:
+              value: {code: TEMPORARILY_UNAVAILABLE, message: DEPENDENCY_UNAVAILABLE, metadata: *meta}
