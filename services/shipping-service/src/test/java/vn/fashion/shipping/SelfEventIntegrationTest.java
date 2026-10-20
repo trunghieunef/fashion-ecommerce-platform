@@ -237,6 +237,14 @@ class SelfEventIntegrationTest extends ShippingTestSupport {
     assertThat(jdbc.queryForObject("select status from shipments where id = cast(? as uuid)", String.class, id)).isEqualTo("CANCELLED");
     var history = data(send("GET", ADMIN + id, null, "Authorization", ops), 200).path("history");
     assertThat(history.get(history.size() - 1).path("applied").asBoolean()).isFalse();
+    // PR #30 re-review: evidence stamped before an earlier recorded one (BG-LATE) is still kept, not refused with 400.
+    Instant beforeCancel = jdbc.queryForObject("""
+        select max(provider_occurred_at) from shipment_status_history where shipment_id = cast(? as uuid)""",
+        java.sql.Timestamp.class, id).toInstant().minusMillis(1);
+    var earlier = event(id, "late-2", ev("DELIVERED", 2, evidence("GH-EARLY") + ",\"occurred_at\":\"" + beforeCancel + "\""));
+    assertThat(problem(earlier, 409)).isEqualTo("CANCELLED_EVIDENCE_RECORDED");
+    assertThat(jdbc.queryForObject("select count(*) from shipment_status_history where shipment_id = cast(? as uuid) and not applied",
+        Integer.class, id)).isEqualTo(2);
   }
 
   @Test void databaseRefusesStatusAfterHandOverWithoutIt() {

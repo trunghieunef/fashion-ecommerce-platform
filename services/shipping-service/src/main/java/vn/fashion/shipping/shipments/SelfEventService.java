@@ -155,7 +155,8 @@ public class SelfEventService {
         .param("id", shipmentId).query(java.sql.Timestamp.class).optional().map(java.sql.Timestamp::toInstant);
     Instant occurred = e.occurredAt() != null ? e.occurredAt() : previous.filter(now::isBefore).orElse(now);
     if (occurred.isBefore(row.createdAt())) throw invalid("occurred_at", "must not be before the shipment was created");
-    if (previous.isPresent() && occurred.isBefore(previous.get()))
+    // Acceptance follow-up of PR #30: on CANCELLED the evidence usually predates the cancel row, so order is not enforced.
+    if (!row.status().equals("CANCELLED") && previous.isPresent() && occurred.isBefore(previous.get()))
       throw invalid("occurred_at", "must not be before the previous event (" + previous.get() + ")");
     if (occurred.isAfter(now.plus(SKEW))) throw invalid("occurred_at", "must be at most " + SKEW.toSeconds() + " seconds from now");
     return occurred;

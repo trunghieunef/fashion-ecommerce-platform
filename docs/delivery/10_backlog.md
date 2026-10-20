@@ -4,7 +4,8 @@ B1 · 2026-09-19 · Work package mặc định: **Planned; Assignee TBD; Reviewe
 
 ## 1. Cách nhận việc
 
-Update 2026-10-20 — `TASK:SHP-02` **In review (local)**, PR #30: OPS SELF events có bằng chứng (gán shipper, bàn giao đặt
+Update 2026-10-20 — `TASK:SHP-02` **Done (local, trước G0) — MANUAL + incident cho bằng chứng sau hủy chờ quyết định (08)**
+theo [nghiệm thu](../evidence/acceptance-2026-10-20.md) (PR #30 CI PASS trên `eb0b7c1`, đã merge `main` `03b3aa6`): OPS SELF events có bằng chứng (gán shipper, bàn giao đặt
 `handed_over_at`, giao/thất bại/giao lại/hoàn), COD thu/nộp là event tài chính riêng, cancel trước bàn giao + tombstone
 hủy-trước-tạo, 409 sau bàn giao; `REQ:SHP-02/04/06`; dependency SHP-01;
 [spec](../superpowers/specs/2026-10-20-shp-02-self-events-cancel-design.md), [evidence](../evidence/shp-02-local-2026-10-20.md).
