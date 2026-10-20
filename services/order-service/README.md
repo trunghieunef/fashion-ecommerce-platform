@@ -91,8 +91,8 @@ outbox `ORDER_CONFIRMED`/`ORDER_CANCELLED` cùng transaction.
 - **`payment.events`** (group `order-service`, inbox `processed_events`, ACK sau commit, retry/DLT platform-messaging):
   `PAYMENT_COMPLETED` ghi `paid_at` + `payment_state = PAID`, không đổi `status`; đơn lạ ACK + log; event hỏng → DLT.
 - **`shipping.events`** (ORD-03, cùng group/inbox; khóa `order_sagas` rồi `orders`): `shipment_version` ≤
-  `order_sagas.shipment_version` bỏ qua; `SHIPMENT_STATUS_UPDATED` `DELIVERING` có `handed_over_at` → `SHIPPING`
-  (`shipped_at`); `DELIVERED` → (`SHIPPING` nếu còn `PACKING`) `DELIVERED` (`delivered_at`) + outbox `ORDER_COMPLETED`; trạng
+  `order_sagas.shipment_version` bỏ qua; `SHIPMENT_STATUS_UPDATED` `DELIVERING` → `SHIPPING`
+  (`shipped_at` = `handed_over_at`, thiếu thì `provider_occurred_at`, rồi giờ nhận); `DELIVERED` → (`SHIPPING` nếu còn `PACKING`) `DELIVERED` (`delivered_at`) + outbox `ORDER_COMPLETED`; trạng
   thái khác chỉ ghi version; `SHIPMENT_CREATED` ghi `shipment_id` nếu saga chưa có; `COD_COLLECTED`/`COD_REMITTED` chỉ ACK.
   `processing_status`: CONFIRMED đã qua `WAIT_OPS` và PACKING chưa có shipment → PROCESSING; PACKING có shipment, SHIPPING →
   READY; DELIVERED → FINISHED.
@@ -131,3 +131,4 @@ Readiness `readinessState,db`; log JSON ECS có redaction (token, cookie không 
 instance dựa vào `SKIP LOCKED` + lease, chưa đo tải; online `WAIT_PAYMENT` chưa đạt được tới PAY-02/03. Admin: list đọc
 saga từng dòng CONFIRMED (N+1), chưa index `contact_phone` (seq scan); consumer shipping chưa đối chiếu `shipment_id` với saga
 (một shipment/đơn ở shipping hiện tại, cần khi ORD-04 tạo lại vận đơn).
+Admin `q` chỉ coi `ORD` + 12 chữ số là order_no (`OrderAdminQueries.ORDER_NO`); mọi chuỗi khác là tìm theo số điện thoại.

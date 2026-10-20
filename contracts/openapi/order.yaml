@@ -562,7 +562,7 @@ components:
         created_at: {type: string, format: date-time}
         expires_at: {type: string, format: date-time}
         confirmed_at: {type: [string, 'null'], format: date-time}
-        shipped_at: {type: [string, 'null'], format: date-time, description: handed_over_at of the shipping event (ORD-03)}
+        shipped_at: {type: [string, 'null'], format: date-time, description: handed_over_at of the shipping event; falls back to provider_occurred_at then receive time when DELIVERED overtakes DELIVERING (ORD-03)}
         delivered_at: {type: [string, 'null'], format: date-time}
         cancel_reason: {type: [string, 'null'], description: 'OUT_OF_STOCK, RESERVE_FAILED, PAYMENT_FAILED, EXPIRED or OPS_CANCELLED'}
         contact_phone: {type: string, description: order.fulfill only}

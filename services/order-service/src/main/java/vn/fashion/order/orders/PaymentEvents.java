@@ -30,6 +30,8 @@ public class PaymentEvents {
       String paid = event.payload().path("paid_at").asString(null);
       paidAt = paid == null ? event.occurredAt() : Instant.parse(paid);
     } catch (RuntimeException e) { throw new PermanentEventException("Invalid PAYMENT_COMPLETED payload"); }
+    // Service-wide lock order: order_sagas then orders (as saga worker, OPS commands, ShippingEvents). No saga row: nothing to lock.
+    jdbc.sql("select order_id from order_sagas where order_id = :id for update").param("id", orderId).query().listOfRows();
     int orders = jdbc.sql("update orders set paid_at = coalesce(paid_at, :paid) where id = :id")
         .param("paid", Timestamp.from(paidAt)).param("id", orderId).update();
     if (orders == 0) { LOG.warn("PAYMENT_COMPLETED for an unknown order: order_id={}", orderId); return null; }
