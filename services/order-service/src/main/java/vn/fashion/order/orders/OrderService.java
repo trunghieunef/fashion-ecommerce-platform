@@ -205,6 +205,54 @@ public class OrderService {
         row.createdAt(), row.expiresAt(), List.of());
   }
 
+  public record Summary(String orderNo, String status, long totalAmount, String currency, Instant createdAt, int itemCount) { }
+  public record Page(List<Summary> items, String nextCursor) { }
+  static final Set<String> STATUSES = Set.of("PENDING", "WAITING_PAYMENT", "CONFIRMED", "PAID", "PACKING", "SHIPPING", "DELIVERED",
+      "CANCELLING", "CANCELLED", "REFUNDING", "REFUNDED", "RETURNING", "RETURNED");
+
+  /** Spec section 8: member by user_id, guest by its access cookie; anything else is the same 404 (T21). */
+  public OrderView readable(String orderNo, UUID userId, String accessToken) {
+    var row = byNo(orderNo).filter(r -> userId != null ? userId.equals(r.userId())
+        : accessToken != null && r.guestAccessHash() != null && r.guestAccessHash().equals(Api.sha256(accessToken)));
+    return view(row.orElseThrow(() -> new Api.Problem(HttpStatus.NOT_FOUND, "NOT_FOUND", "ORDER_NOT_FOUND", List.of())));
+  }
+
+  /** Newest first, cursor = base64url(status filter | created_at micros | id) so it cannot be reused with another filter. */
+  public Page mine(UUID userId, String status, String cursor, int limit) {
+    if (status != null && !STATUSES.contains(status))
+      throw new Api.Problem(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "INVALID_FIELDS", List.of(new Api.FieldError("status", "unknown status")));
+    if (limit < 1 || limit > 100)
+      throw new Api.Problem(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "INVALID_FIELDS", List.of(new Api.FieldError("limit", "must be 1..100")));
+    Instant after = null;
+    UUID afterId = null;
+    if (cursor != null) {
+      try {
+        String[] parts = new String(Base64.getUrlDecoder().decode(cursor), java.nio.charset.StandardCharsets.UTF_8).split("[|]", -1);
+        if (parts.length != 3 || !parts[0].equals(status == null ? "" : status)) throw new IllegalArgumentException();
+        long micros = Long.parseLong(parts[1]);
+        after = Instant.ofEpochSecond(Math.floorDiv(micros, 1_000_000), Math.floorMod(micros, 1_000_000) * 1000L);
+        afterId = UUID.fromString(parts[2]);
+      } catch (RuntimeException e) { throw new Api.Problem(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "INVALID_CURSOR", List.of()); }
+    }
+    record Item(UUID id, String orderNo, String status, long totalAmount, Instant createdAt, int itemCount) { }
+    var rows = jdbc.sql("""
+        select o.id, o.order_no, o.status, o.total_amount, o.created_at, (select count(*) from order_items i where i.order_id = o.id) as item_count
+        from orders o where o.user_id = :u and (cast(:s as text) is null or o.status = :s)
+          and (cast(:after as timestamptz) is null or (o.created_at, o.id) < (cast(:after as timestamptz), :afterId))
+        order by o.created_at desc, o.id desc limit :n""")
+        .param("u", userId).param("s", status).param("after", after == null ? null : Timestamp.from(after))
+        .param("afterId", afterId).param("n", limit + 1).query(Item.class).list();
+    String next = null;
+    if (rows.size() > limit) {
+      var last = rows.get(limit - 1);
+      long micros = last.createdAt().getEpochSecond() * 1_000_000 + last.createdAt().getNano() / 1000;
+      next = Base64.getUrlEncoder().withoutPadding().encodeToString(((status == null ? "" : status) + "|" + micros + "|" + last.id())
+          .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+    return new Page(rows.stream().limit(limit).map(r -> new Summary(r.orderNo(), r.status(), r.totalAmount(), "VND", r.createdAt(),
+        r.itemCount())).toList(), next);
+  }
+
   private String newAccessToken() {
     byte[] bytes = new byte[32];
     random.nextBytes(bytes);

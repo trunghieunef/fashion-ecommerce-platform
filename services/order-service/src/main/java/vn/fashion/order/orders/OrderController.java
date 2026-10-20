@@ -10,10 +10,13 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import tools.jackson.databind.ObjectMapper;
 import vn.fashion.order.quotes.Quote;
@@ -61,6 +64,23 @@ public class OrderController {
       builder.header(HttpHeaders.SET_COOKIE, ResponseCookie.from(ACCESS_COOKIE, created.guestAccessToken()).httpOnly(true).secure(true)
           .sameSite("Lax").path("/api/v1/orders/" + view.orderNo()).maxAge(ACCESS_TTL).build().toString());
     return builder.body(response.getBody());
+  }
+
+  @GetMapping("/mine")
+  public ResponseEntity<Api.Response<OrderService.Page>> mine(@RequestParam(required = false) String status,
+      @RequestParam(required = false) String cursor, @RequestParam(defaultValue = "20") int limit, HttpServletRequest request) {
+    var actor = identity.member(request).orElseThrow(OrderIdentity::unauthorized);
+    return Api.ok(HttpStatus.OK, orders.mine(actor.userId(), status, cursor, limit), tracer);
+  }
+
+  /** Member by Bearer, guest by the order_access cookie of this order; never by order_no alone (03 section 2.3). */
+  @GetMapping("/{orderNo}")
+  public ResponseEntity<Api.Response<OrderView>> get(@PathVariable String orderNo, HttpServletRequest request) {
+    var member = identity.member(request);
+    String access = null;
+    if (member.isEmpty() && request.getCookies() != null)
+      for (var cookie : request.getCookies()) if (ACCESS_COOKIE.equals(cookie.getName())) access = cookie.getValue();
+    return Api.ok(HttpStatus.OK, orders.readable(orderNo, member.map(OrderActor::userId).orElse(null), access), tracer);
   }
 
   @PostMapping("/quote")

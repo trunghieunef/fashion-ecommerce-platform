@@ -47,6 +47,11 @@ public class OrderIdentity {
     String checkout = request.getHeader("Checkout-Token");
     return checkout == null ? Optional.empty() : Optional.of(guest(checkout));
   }
+  /** Reads: only a Bearer counts (a checkout token proves a cart, not an order); invalid Bearer is 401. */
+  public Optional<OrderActor> member(HttpServletRequest request) {
+    if (request.getHeader("Authorization") == null) return Optional.empty();
+    return resolve(request);
+  }
   public OrderActor require(HttpServletRequest request) { return resolve(request).orElseThrow(OrderIdentity::unauthorized); }
 
   private OrderActor guest(String token) {
