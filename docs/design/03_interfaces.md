@@ -173,10 +173,10 @@ attach kiểm APPROVED/ownership/target trong DB; chưa đủ validation không 
 
 | Method | Path | Auth / phase | Input → output |
 |---|---|---|---|
-| POST | /orders/quote | Cart owner / 1 | cart_id,cart_version,address,contact,method,note,voucher nếu bật → quote |
-| POST | /orders | Actor bound quote / 1 | quote_token,cart_id,cart_version + key → order durable |
-| GET | /orders/mine | Member / 1 | status/cursor → đơn của mình |
-| GET | /orders/{order_no} | Owner/member hoặc guest order cookie / 1 | State/totals/items/tracking/payment/refund và allowed_actions |
+| POST | /orders/quote | Cart owner / 1 | `ORD-01` implemented ([order.yaml](../../contracts/openapi/order.yaml)): cart_id,cart_version,method,shipping_address,contact,note (voucher Phase 2) → quote_token ký HMAC + totals, hạn 2 phút; member Bearer hoặc guest `Checkout-Token` (cart cấp); 409 VERSION_CONFLICT/ITEM_UNAVAILABLE, 422 CART_EMPTY/PAYMENT_METHOD_UNAVAILABLE/NO_SHIPPING_RULE; chỉ COD tới PAY-02/03 |
+| POST | /orders | Actor bound quote / 1 | `ORD-01` implemented: quote_token,cart_id,cart_version + key → 202 PENDING/PROCESSING + Location/Retry-After; lookup key trước kiểm quote; 400 INVALID_QUOTE, 409 QUOTE_EXPIRED/PRICE_CHANGED/VERSION_CONFLICT/IDEMPOTENCY_KEY_REUSED/CART_ALREADY_ORDERED; guest nhận cookie `order_access` (Path theo order_no, 90 ngày) |
+| GET | /orders/mine | Member / 1 | `ORD-01` implemented: status/cursor/limit → đơn của mình, cursor gắn filter |
+| GET | /orders/{order_no} | Owner/member hoặc guest order cookie / 1 | State/totals/items/tracking/payment/refund và allowed_actions. `ORD-01` implemented phần state/totals/items/địa chỉ/liên hệ, allowed_actions rỗng; không thuộc actor → 404 ORDER_NOT_FOUND (T21) |
 | POST | /orders/{order_no}/cancel | Owner / 1 | reason,expected_version,key → 202 CANCELLING hoặc trạng thái hiện hành |
 | GET | /orders/{order_no}/payment | Order owner / 1 | Payment status, URL đã có nếu còn mở/hợp lệ; không create/đổi amount |
 | POST | /promotions/vouchers/validate | Actor / 2 | cart_id,version,code → server preview |

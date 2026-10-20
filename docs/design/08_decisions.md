@@ -445,6 +445,23 @@ Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác v
 | SELF tạo PENDING → CREATED trong một TX, tracking `SELF-<order_no>`; advisory lock theo quote (quote insert-only) | Bàn giao/giao/COD/cancel là SHP-02 |
 | Phát `SHIPMENT_CREATED` qua outbox từ SHP-01 | Schema + registry mới; chưa có consumer |
 
+## ORD-01 — quyết định 2026-10-20
+
+`TASK:ORD-01` · `REQ:ORD-01/05/07`. Chủ dự án giao agent tự chốt và duyệt [spec](../superpowers/specs/2026-10-20-ord-01-order-quote-create-design.md) (cả các mặc định §11):
+
+| Quyết định | Hệ quả |
+|---|---|
+| Service mới `order-service` (port 8087, DB `orders` vì `order` là từ khóa SQL); chỉ COD, VNPAY/MOMO 422 | Online thêm ở PAY-02/03 |
+| Đơn dừng ở `PENDING`/`PROCESSING`, create luôn 202; saga row RESERVE ghi sẵn | ORD-02 tiếp tục, không phải backfill |
+| quote_token tự chứa, ký HMAC, không lưu DB | Không bảng/job dọn quote; token dài và chứa địa chỉ/liên hệ của chính khách (chỉ base64) |
+| Quote 2 phút; checkout token guest 15 phút, dùng lại được, header `Checkout-Token`, chỉ guest | Retry sau timeout dùng lại token; member dùng Bearer |
+| Giá đổi → 409 `PRICE_CHANGED`, khách quote lại (không kèm quote mới) | FE gọi lại quote và xin xác nhận (T24) |
+| UNIQUE `(cart_id, cart_version)` → 409 `CART_ALREADY_ORDERED`; cùng guest thì kèm cookie truy cập đơn đó (review PR #32) | Double-click/tab thứ hai không tạo hai đơn; guest mất key sau reload vẫn xem được đơn. ORD-02 phải bump version giỏ khi cleanup/compensate (hoặc giới hạn UNIQUE cho đơn chưa terminal) để đặt lại được sau hủy |
+| Email bắt buộc với guest | Có kênh thông báo đơn (NOT-01) |
+| Cookie `order_access` Path theo từng `order_no`, 90 ngày kiểm ở server (`created_at`); retry cấp thêm cookie, cookie cũ vẫn hợp lệ, tối đa 10 mỗi đơn (bảng `order_guest_access`) | Nhiều đơn guest không ghi đè nhau; hai response đua nhau không làm guest mất quyền xem đơn (review I1) |
+| Quote không kiểm tồn kho; chưa rate limit checkout | Hết hàng phát hiện ở reserve (ORD-02); limiter chung là việc sau |
+| Mã lỗi chi tiết nằm ở `message` (enum `code` chung giữ nguyên); tràn số tiền → 422 `AMOUNT_OUT_OF_RANGE` | Không đổi `common.yaml` |
+
 ## PAY-01 — quyết định 2026-10-20
 
 `TASK:PAY-01` · `REQ:PAY-03/07/08`. Chủ dự án giao agent tự chốt và duyệt [spec](../superpowers/specs/2026-10-20-pay-01-payment-cod-design.md) (cả các mặc định §9):

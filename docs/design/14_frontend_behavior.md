@@ -38,6 +38,12 @@ Lookbook/size guide và giá hiển thị có VI/EN nội dung từ O10. Nếu c
 6. Khi tab hidden pause poll; khi resume fetch trạng thái; delay theo Retry-After, exponential backoff có cap khi network fail. Không tự sinh order mới khi countdown về 0.
 7. Terminal hoặc ACTION_REQUIRED dừng poll dày, hiển thị hướng dẫn và link order. Guest cookie mất → hỗ trợ xác minh; không có public phone/order_no bypass.
 
+Guest (ORD-01, 08 CART-03): trước quote gọi `POST /api/v1/carts/{cart_id}/checkout-token`, giữ `checkout_token` trong memory
+(không localStorage/URL) và gửi header `Checkout-Token` cho quote và tạo đơn. `401 INVALID_CHECKOUT_TOKEN` (hết 15 phút): lấy
+token mới rồi gửi lại **cùng** Idempotency-Key và body. Credential xem đơn của guest là cookie HttpOnly `order_access` do
+server đặt (FE không đọc được); `409 CART_ALREADY_ORDERED` có `order_no` ở `errors[0].message` và với cùng guest kèm cookie
+mới → chuyển tới order detail, không tạo đơn khác. Member dùng Bearer, không cần checkout token.
+
 409 PRICE_CHANGED/QUOTE_EXPIRED: highlight số cũ/mới nếu có, yêu cầu xác nhận lại. 409 VERSION_CONFLICT: reload cart, không ghi đè thay đổi thiết bị khác. 429: chờ; 503: thông báo thử lại nhưng giữ key của mutation chưa biết kết quả.
 
 ## 4. Trạng thái đơn, tiền và nội dung UI

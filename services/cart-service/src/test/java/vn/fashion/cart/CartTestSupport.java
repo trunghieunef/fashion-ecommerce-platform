@@ -70,6 +70,8 @@ public abstract class CartTestSupport {
     registry.add("fashion.cart.service-public-key", CartTestSupport::publicKey);
     registry.add("fashion.cart.catalog-url", StubServers.CATALOG::url);
     registry.add("fashion.cart.inventory-url", StubServers.INVENTORY::url);
+    registry.add("fashion.cart.checkout.private-key", CartTestSupport::privateKey);
+    registry.add("fashion.cart.checkout.kid", () -> "cart-checkout-test");
     registry.add("fashion.cart.internal-callers", () -> "order-service:" + publicKey() + ",cart-service:" + publicKey());
   }
   @BeforeEach protected void clearCarts() throws Exception {

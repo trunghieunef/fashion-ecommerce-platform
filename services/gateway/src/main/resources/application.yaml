@@ -77,6 +77,11 @@ spring:
               uri: ${PAYMENT_BASE_URL:http://localhost:8086}
               predicates:
                 - Path=/admin/api/v1/payments/**
+            # TASK:ORD-01: quote, create and read for members (Bearer) and guests (checkout token / order cookie).
+            - id: order-public
+              uri: ${ORDER_BASE_URL:http://localhost:8087}
+              predicates:
+                - Path=/api/v1/orders/**,/api/v1/orders
             - id: user-auth-public
               uri: ${USER_BASE_URL:http://localhost:8082}
               predicates:

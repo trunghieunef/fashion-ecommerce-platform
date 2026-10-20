@@ -4,7 +4,13 @@ B1 · 2026-09-19 · Work package mặc định: **Planned; Assignee TBD; Reviewe
 
 ## 1. Cách nhận việc
 
-Update 2026-10-20 — `TASK:PAY-01` **Done (local, trước G0)** ([nghiệm thu](../evidence/acceptance-2026-10-20.md#taskpay-01--payment-service-cod)), PR #31: payment-service COD — một payment/đơn từ snapshot order
+Update 2026-10-20 — `TASK:ORD-01` **Done (local, trước G0)** ([nghiệm thu](../evidence/acceptance-2026-10-20.md#taskord-01--order-service-quotecreateread-guest-checkout-token)), PR #32: order-service quote ký 2 phút (giá catalog, phí SELF + COD),
+create idempotent `PENDING`/202 với snapshot bất biến (lookup key trước kiểm quote, `PRICE_CHANGED`), đọc đơn theo
+ownership (member Bearer, guest cookie `order_access`), checkout token guest do cart ký; `REQ:ORD-01/05/07`; dependency
+CAT-02, CART-03, SHP-01; [spec](../superpowers/specs/2026-10-20-ord-01-order-quote-create-design.md),
+[evidence](../evidence/ord-01-local-2026-10-20.md).
+
+Update 2026-10-20 — `TASK:PAY-01` **Done (local, trước G0)** ([nghiệm thu](../evidence/acceptance-2026-10-20.md#taskpay-01--payment-service-cod)), PR #31 merge `7412f01`: payment-service COD — một payment/đơn từ snapshot order
 (`provider_request_id = order_no`), close + tombstone close-before-create, bằng chứng COD từ `shipping.events` (lệch →
 reconciliation item, REMITTED chỉ là bằng chứng — T27), FINANCE settlement gross = fee + net nhiều đợt → SUCCESS +
 `PAYMENT_COMPLETED`; `REQ:PAY-03/07/08`; dependency PLT-03, USR-02, SHP-02;

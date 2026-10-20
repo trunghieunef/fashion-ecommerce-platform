@@ -1,0 +1,91 @@
+server:
+  port: ${SERVER_PORT:8087}
+
+spring:
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:19092}
+  task:
+    scheduling:
+      pool:
+        size: 1
+  jackson:
+    property-naming-strategy: SNAKE_CASE
+    deserialization:
+      fail-on-unknown-properties: false
+      accept-float-as-int: false
+  application:
+    name: order-service
+  datasource:
+    url: ${ORDER_DB_URL:jdbc:postgresql://localhost:5432/orders}
+    username: ${ORDER_DB_USERNAME:order_runtime}
+    password: ${ORDER_DB_PASSWORD:order_runtime_local}
+    hikari:
+      maximum-pool-size: ${ORDER_DB_MAX_POOL_SIZE:10}
+  cloud:
+    # Nacos is off by default; profile nacos-compat enables it (O02 proof).
+    nacos:
+      config:
+        enabled: false
+        import-check:
+          enabled: false
+      discovery:
+        enabled: false
+  flyway:
+    url: ${ORDER_MIGRATION_DB_URL:jdbc:postgresql://localhost:5432/orders}
+    user: ${ORDER_MIGRATION_DB_USERNAME:order_migration}
+    password: ${ORDER_MIGRATION_DB_PASSWORD:order_migration_local}
+    locations: classpath:db/migration
+
+logging:
+  structured:
+    format:
+      # PLT-05: JSON (ECS) logs with trace ids; every string value is redacted (XCT-06).
+      console: ecs
+    json:
+      customizer: vn.fashion.platform.security.PiiRedactingJsonCustomizer
+
+fashion:
+  messaging:
+    relay:
+      enabled: ${ORDER_RELAY_ENABLED:true}
+  order:
+    jwt:
+      public-keys: ${ORDER_JWT_PUBLIC_KEYS}
+    # ADR-19 caller identity for cart snapshot, catalog quote and shipping quote (local-up generates the pair).
+    service-private-key: ${ORDER_SERVICE_PRIVATE_KEY:}
+    service-public-key: ${ORDER_SERVICE_PUBLIC_KEY:}
+    cart-url: ${ORDER_CART_URL:http://localhost:8084}
+    catalog-url: ${ORDER_CATALOG_URL:http://localhost:8081}
+    shipping-url: ${ORDER_SHIPPING_URL:http://localhost:8085}
+    dependency-timeout: ${ORDER_DEPENDENCY_TIMEOUT:2s}
+    # TASK:ORD-01 guest checkout token from cart-service: kid:base64-X.509 public keys (several for rotation).
+    checkout-public-keys: ${ORDER_CHECKOUT_PUBLIC_KEYS:}
+    # Signed quote (HMAC-SHA256): kid and base64 secret (>= 32 bytes); 2 minutes (02 ORD-01).
+    quote-kid: ${ORDER_QUOTE_KID:q1}
+    quote-secret: ${ORDER_QUOTE_SECRET:}
+    quote-ttl: 2m
+    # Only COD until PAY-02/03.
+    payment-methods: ${ORDER_PAYMENT_METHODS:COD}
+
+management:
+  # PLT-05: no OTLP endpoint here on purpose: an empty value still creates the exporter. Traces leave
+  # the process only when MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT is set (local compose: Tempo).
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:0.1}
+  observations:
+    enable:
+      tasks.scheduled: false
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,db

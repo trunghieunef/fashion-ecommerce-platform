@@ -182,6 +182,39 @@ paths:
         '400': {$ref: '#/components/responses/Invalid'}
         '404': {$ref: '#/components/responses/CartNotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/carts/{cart_id}/checkout-token:
+    post:
+      tags: [Carts]
+      operationId: createCheckoutToken
+      summary: Short-lived token proving a guest owns the cart, for order-service
+      security: [{guestCookie: []}]
+      description: >-
+        ORD-01 implemented (08 CART-03, option C). Guest only: the cart_token cookie must own the ACTIVE, unexpired cart
+        (missing, foreign or expired is 404); a member Bearer is 400 CHECKOUT_TOKEN_GUEST_ONLY (members use the Bearer at
+        order). ES256 JWT, iss cart-service, aud order-service, sub guest:<sha256 hex of cart_token>, claim cart_id, jti,
+        15 minutes; reusable until it expires (quote, create and their retries). Sent to order as the Checkout-Token header.
+        A read: no Idempotency-Key, the sliding guest expiry is not touched, no cookie is set.
+      x-implementation-status: implemented
+      parameters:
+      - {$ref: '#/components/parameters/CartId'}
+      responses:
+        '200':
+          description: Token and its expiry
+          headers:
+            X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+            Cache-Control: {$ref: '#/components/headers/NoStore'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CheckoutTokenResponse'}
+              examples:
+                issued:
+                  value:
+                    code: OK
+                    data: {checkout_token: example-checkout-token, expires_at: '2026-10-20T03:15:00Z'}
+                    metadata: {request_id: ord01-synthetic-request, trace_id: ord01-synthetic-trace}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/CartNotFound'}
   /api/v1/carts/{cart_id}/items:
     parameters:
     - {$ref: '#/components/parameters/CartId'}
@@ -379,6 +412,19 @@ components:
               maxItems: 100
               items: {$ref: '#/components/schemas/Adjustment'}
         metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
+    CheckoutTokenResponse:
+      type: object
+      required: [code, data, metadata]
+      properties:
+        code: {type: string, const: OK}
+        data:
+          type: object
+          additionalProperties: false
+          required: [checkout_token, expires_at]
+          properties:
+            checkout_token: {type: string, minLength: 1}
+            expires_at: {type: string, format: date-time}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
     CartResponse:
       type: object
       required: [code, data, metadata]
@@ -406,7 +452,7 @@ components:
             token:
               value: {code: UNAUTHORIZED, message: INVALID_ACCESS_TOKEN, metadata: {request_id: cart01-synthetic-request, trace_id: cart01-synthetic-trace}}
     Invalid:
-      description: INVALID_FIELDS, VERSION_REQUIRED, INVALID_KEY, QUANTITY_LIMIT, CART_ITEM_LIMIT or MALFORMED_JSON
+      description: INVALID_FIELDS, VERSION_REQUIRED, INVALID_KEY, QUANTITY_LIMIT, CART_ITEM_LIMIT, MALFORMED_JSON or CHECKOUT_TOKEN_GUEST_ONLY
       headers: *cartHeaders
       content:
         application/json:

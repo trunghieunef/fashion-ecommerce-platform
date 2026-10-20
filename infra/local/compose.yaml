@@ -46,6 +46,8 @@ services:
       SHIPPING_DB_PASSWORD: ${SHIPPING_DB_PASSWORD:?run scripts/local-up.sh}
       PAYMENT_MIGRATION_DB_PASSWORD: ${PAYMENT_MIGRATION_DB_PASSWORD:?run scripts/local-up.sh}
       PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:?run scripts/local-up.sh}
+      ORDER_MIGRATION_DB_PASSWORD: ${ORDER_MIGRATION_DB_PASSWORD:?run scripts/local-up.sh}
+      ORDER_DB_PASSWORD: ${ORDER_DB_PASSWORD:?run scripts/local-up.sh}
     ports:
       - "127.0.0.1:${CATALOG_POSTGRES_PORT:-5432}:5432"
     volumes:
@@ -56,6 +58,7 @@ services:
       - ./postgres-init/04-cart-db.sh:/docker-entrypoint-initdb.d/04-cart-db.sh:ro
       - ./postgres-init/05-shipping-db.sh:/docker-entrypoint-initdb.d/05-shipping-db.sh:ro
       - ./postgres-init/06-payment-db.sh:/docker-entrypoint-initdb.d/06-payment-db.sh:ro
+      - ./postgres-init/07-order-db.sh:/docker-entrypoint-initdb.d/07-order-db.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
@@ -206,6 +209,8 @@ services:
       CART_CATALOG_URL: http://catalog:8081
       CART_INVENTORY_URL: http://inventory:8083
       CART_INTERNAL_CALLERS: ${CART_INTERNAL_CALLERS:-}
+      CART_CHECKOUT_PRIVATE_KEY: ${CART_CHECKOUT_PRIVATE_KEY:?run scripts/local-up.sh}
+      CART_CHECKOUT_KID: ${CART_CHECKOUT_KID:-cart-checkout-1}
     depends_on:
       postgres:
         condition: service_healthy
@@ -266,6 +271,36 @@ services:
       timeout: 3s
       retries: 30
 
+  # TASK:ORD-01: quote, order create/read, guest checkout token check; private, reachable through the Gateway.
+  order:
+    build: ../../services/order-service
+    environment:
+      MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT: http://tempo:4318/v1/traces
+      TRACING_SAMPLING_PROBABILITY: ${TRACING_SAMPLING_PROBABILITY:-1.0}
+      ORDER_DB_URL: jdbc:postgresql://postgres:5432/orders
+      ORDER_DB_PASSWORD: ${ORDER_DB_PASSWORD:?run scripts/local-up.sh}
+      ORDER_MIGRATION_DB_URL: jdbc:postgresql://postgres:5432/orders
+      ORDER_MIGRATION_DB_PASSWORD: ${ORDER_MIGRATION_DB_PASSWORD:?run scripts/local-up.sh}
+      ORDER_JWT_PUBLIC_KEYS: ${USER_JWT_PUBLIC_KEYS:?run scripts/local-up.sh}
+      ORDER_SERVICE_PRIVATE_KEY: ${ORDER_SERVICE_PRIVATE_KEY:-}
+      ORDER_SERVICE_PUBLIC_KEY: ${ORDER_SERVICE_PUBLIC_KEY:-}
+      ORDER_CART_URL: http://cart:8084
+      ORDER_CATALOG_URL: http://catalog:8081
+      ORDER_SHIPPING_URL: http://shipping:8085
+      ORDER_CHECKOUT_PUBLIC_KEYS: ${ORDER_CHECKOUT_PUBLIC_KEYS:?run scripts/local-up.sh}
+      ORDER_QUOTE_SECRET: ${ORDER_QUOTE_SECRET:?run scripts/local-up.sh}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8087/actuator/health/readiness"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
   user-service:
     build: ../../services/user-service
     environment:
@@ -309,6 +344,7 @@ services:
       CART_BASE_URL: http://cart:8084
       SHIPPING_BASE_URL: http://shipping:8085
       PAYMENT_BASE_URL: http://payment:8086
+      ORDER_BASE_URL: http://order:8087
       # nacos-compat proof sets GATEWAY_CATALOG_BASE_URL=lb://catalog-service.
       CATALOG_BASE_URL: ${GATEWAY_CATALOG_BASE_URL:-http://catalog:8081}
       USER_BASE_URL: http://user-service:8082

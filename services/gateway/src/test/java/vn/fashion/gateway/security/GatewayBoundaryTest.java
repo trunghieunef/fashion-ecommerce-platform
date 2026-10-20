@@ -60,6 +60,7 @@ class GatewayBoundaryTest {
     registry.add("CART_BASE_URL", CATALOG::baseUrl);
     registry.add("SHIPPING_BASE_URL", CATALOG::baseUrl);
     registry.add("PAYMENT_BASE_URL", CATALOG::baseUrl);
+    registry.add("ORDER_BASE_URL", CATALOG::baseUrl);
     registry.add("fashion.security.allowed-origins", () -> "http://localhost:4173");
     registry.add("GATEWAY_MANAGEMENT_PORT", () -> "0");
   }
@@ -131,6 +132,18 @@ class GatewayBoundaryTest {
     client.post().uri("/internal/api/v1/payments").exchange().expectStatus().isNotFound();
     client.get().uri("/internal/api/v1/payments/by-order/4c8a1f2e-0000-4000-8000-000000000011").exchange().expectStatus().isNotFound();
     client.get().uri("/api/v1/payments").exchange().expectStatus().isNotFound();
+    assertThat(CATALOG.requestCount()).isEqualTo(before);
+  }
+
+  @Test
+  void orderPublicIsRoutedAndInternalIsNot() {
+    // TASK:ORD-01: customer quote/create/read go to order-service; /internal never leaves the cluster.
+    client.post().uri("/api/v1/orders/quote").exchange().expectStatus().isOk();
+    assertThat(CATALOG.path()).isEqualTo("/api/v1/orders/quote");
+    client.get().uri("/api/v1/orders/mine").exchange().expectStatus().isOk();
+    assertThat(CATALOG.path()).isEqualTo("/api/v1/orders/mine");
+    int before = CATALOG.requestCount();
+    client.get().uri("/internal/api/v1/orders/4c8a1f2e-0000-4000-8000-000000000011/snapshot").exchange().expectStatus().isNotFound();
     assertThat(CATALOG.requestCount()).isEqualTo(before);
   }
 

@@ -314,6 +314,10 @@ sequenceDiagram
 8. **Commit kho/promotion:** chưa đóng order và reservation còn hạn thì commit inventory; promotion commit phần đã giữ. PAID chỉ khi hoàn thành các bước này. Nếu kho đã nhả hoặc quá hạn, chạy refund toàn bộ. Nếu promotion tạm lỗi sau commit kho, tiếp tục retry, chưa giao; lỗi vĩnh viễn thì restore kho và refund.
 9. **Đóng gói:** OPS chuyển PAID → PACKING sau khi kiểm tra saga sẵn sàng. Order ghi durable step CREATE_SHIPMENT; shipment tạo thành công vẫn PACKING. Carrier nhận hàng mới SHIPPING.
 
+`ORD-01` (2026-10-20) hiện thực bước 1–2 và phần phản hồi 202: quote không ghi DB, create ghi đơn PENDING + saga
+RESERVE + `ORDER_CREATED` trong một transaction và dừng ở `PROCESSING`; bước 3 trở đi thuộc ORD-02/03. Guest xác minh
+bằng checkout token do cart ký (08 CART-03).
+
 Trong Phase 1 chưa promotion: các bước promotion là no-op với discount = 0; chưa tích hợp carrier thì shipping-service dùng SELF và bảng phí nội bộ. Đây là phạm vi MVP hiện hành trong 02; không bỏ tính phí/giao hàng.
 
 ### 5.2 Luồng COD
