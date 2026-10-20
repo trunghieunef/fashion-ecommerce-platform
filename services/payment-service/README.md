@@ -30,14 +30,16 @@ Port 8086 (không publish ra host). Qua Gateway chỉ `/admin/api/v1/payments/**
 - **Create**: một TX dưới advisory lock theo `order_id`; `provider_request_id = order_no` (PAY-07); transaction `CREATE`, outbox
   `PAYMENT_CREATED` (`payment.events`, key `order_no`). Cùng order + cùng snapshot → payment cũ (mọi key); khác → 409
   `PAYMENT_CONFLICT`; đã close/tombstone → 409 `PAYMENT_CLOSED` (kiểm trước snapshot, cả khi replay cùng key). amount ≤ 0 → 422
-  `PAYMENT_AMOUNT_UNSUPPORTED`; field lạ/thiếu, currency khác VND, amount > 10^12 → 400.
+  `PAYMENT_AMOUNT_UNSUPPORTED` (kiểm sau closed); field lạ/thiếu, currency khác VND, amount âm hoặc > 10^12 → 400. Trùng
+  `order_no` với order khác → 409 `DUPLICATE`.
 - **Close (PAY-08)**: cùng lock. Chưa có payment → tombstone FAILED + `closed_at` + snapshot; COD_PENDING → FAILED + `closed_at`;
   hai trường hợp này phát `PAYMENT_FAILED` (reason `CLOSED`). Tiền đã thu (COD_COLLECTED/SUCCESS) → chỉ đặt `closed_at`, giữ
   trạng thái tiền (order xử lý refund). Đã close → trả hiện trạng. UNKNOWN không bị close đổi thành FAILED.
 - **Bằng chứng COD** (consumer `shipping.events`, group `payment-service`, inbox `processed_events`, ACK sau commit):
   `COD_COLLECTED` khớp method COD và `gross_amount = amount` → COD_COLLECTED (cả payment FAILED đã close; `closed_at` giữ);
   lệch → `reconciliation_items` OPEN (`COD_AMOUNT_MISMATCH`/`COD_METHOD_MISMATCH`), trạng thái giữ; `COD_REMITTED` chỉ ghi
-  transaction (T27: chưa SUCCESS). Mỗi `event_ref` một dòng. Chưa có payment → lỗi retryable (retry backoff tới 30 s, không ACK).
+  transaction (T27: chưa SUCCESS). Mỗi `event_ref` một dòng. Chưa có payment → retry (backoff tới 30 s, không ACK); quá `PAYMENT_COD_ORPHAN_GRACE`
+  (mặc định 10 phút từ lúc event phát) → `shipping.events.DLT`, đếm `messaging_dlt_total`.
 - **Settlement (PAY-03)**: chỉ khi COD_COLLECTED; `gross = fee + net`, > 0; `settlement_ref` một lần mỗi payment; Σgross ≤ amount.
   Đủ amount → SUCCESS + `paid_at` + `PAYMENT_COMPLETED` (cả khi đã close). Thiếu → giữ COD_COLLECTED, đợt sau cộng tiếp.
 
@@ -49,6 +51,7 @@ Port 8086 (không publish ra host). Qua Gateway chỉ `/admin/api/v1/payments/**
 | `PAYMENT_MIGRATION_DB_URL`, `PAYMENT_MIGRATION_DB_PASSWORD` | local | Flyway role `payment_migration` |
 | `PAYMENT_JWT_PUBLIC_KEYS` | — | verifier access token FINANCE |
 | `PAYMENT_INTERNAL_CALLERS` | trống | `order-service:<base64 X.509>`; trống → mọi call internal 401 (order-service chưa có) |
+| `PAYMENT_COD_ORPHAN_GRACE` | `10m` | COD evidence không có payment: retry trong khoảng này rồi vào DLT |
 | `PAYMENT_RELAY_ENABLED`, `SPRING_KAFKA_BOOTSTRAP_SERVERS` | `true`, `localhost:19092` | outbox relay và consumer (platform-messaging) |
 
 ## Database
@@ -63,5 +66,5 @@ Retention: chứng từ tài chính 10 năm, không purge (13 §3, O06).
 Readiness `readinessState,db`; log JSON ECS có redaction; trace OTLP khi đặt endpoint; `/actuator/prometheus`; DLT
 `shipping.events.DLT` cho event hỏng. Payment chỉ lưu `user_id`, không liên hệ/địa chỉ.
 Chưa có: smoke internal (cần order-service), consumer `payment.events` (ORD-02/03), alert COD outstanding/discrepancy (PAY-05),
-`NOTIFY_PAYMENT_SUCCESS` (NOT-01). Một `COD_COLLECTED` của đơn không có payment sẽ retry mãi và giữ partition — chỉ xảy ra nếu
-order tạo shipment COD mà không tạo payment; theo dõi qua consumer lag.
+`NOTIFY_PAYMENT_SUCCESS` (NOT-01). Một `COD_COLLECTED` của đơn không có payment chặn partition tối đa thời gian grace rồi vào
+DLT; alert trên `messaging_dlt_total` thuộc PLT-05 dashboard/alert.

@@ -81,12 +81,15 @@ Không có event riêng khi COD_COLLECTED: order nhận `COD_COLLECTED` trực t
   (sai → 400); Σgross (kể cả dòng mới) > amount → 409 `SETTLEMENT_EXCEEDS_AMOUNT`; `settlement_ref` đã dùng cho payment này
   → 409 `SETTLEMENT_REF_REUSED`; version sai → 409 `VERSION_CONFLICT`. Σgross < amount: lưu, giữ COD_COLLECTED (nhiều đợt).
   Σgross = amount → SUCCESS. `confirmed_by` = actor. Transaction `SETTLEMENT`.
-- Lỗi 4xx đã lưu theo idempotency được trả lại khi retry (như shipping `Api.replay`).
+- Lỗi 4xx không được lưu: TX rollback cả key, retry được đánh giá lại và nhận cùng lỗi. Create kiểm closed trước các luật 422.
+  amount âm là 400 (snapshot sai), amount 0 là 422.
 
 ## 6. Bằng chứng COD từ shipping (consumer)
 
 - Inbox dedupe theo `event_id`; ACK sau commit (InboxListenerSupport). Lock payment theo `order_id`.
-- Không tìm thấy payment → lỗi retryable (retry/DLT của platform-messaging); không tạo payment từ event.
+- Không tìm thấy payment → lỗi retryable; quá `fashion.payment.cod-orphan-grace` (mặc định 10 phút, tính từ `occurred_at` của
+  envelope) → `PermanentEventException` vào `shipping.events.DLT` (`messaging_dlt_total`) để một event mồ côi không chặn
+  partition (review PR, I1). Không tạo payment từ event.
 - `COD_COLLECTED`: insert transaction `COD` (`provider_event_key = event_ref`, amount = gross). Method khác COD hoặc
   `gross_amount ≠ amount` → **không** đổi trạng thái, mở `reconciliation_items` (`kind` `COD_METHOD_MISMATCH`/
   `COD_AMOUNT_MISMATCH`, expected/observed, evidence = event ref) — không tự ép khớp. Khớp → chuyển theo §4; trạng thái

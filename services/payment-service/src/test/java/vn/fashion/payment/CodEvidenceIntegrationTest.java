@@ -17,7 +17,8 @@ class CodEvidenceIntegrationTest extends PaymentTestSupport {
   @Autowired InboxGuard inbox;
 
   /** Delivers one shipping event through the inbox, as the listener does. */
-  void deliver(String type, String order, String eventRef, long gross) {
+  void deliver(String type, String order, String eventRef, long gross) { deliver(type, order, eventRef, gross, Instant.now()); }
+  void deliver(String type, String order, String eventRef, long gross, Instant sentAt) {
     var payload = new LinkedHashMap<String, Object>();
     payload.put("order_id", order);
     payload.put("order_no", "P" + order.substring(0, 8));
@@ -30,7 +31,7 @@ class CodEvidenceIntegrationTest extends PaymentTestSupport {
     payload.put("currency", "VND");
     payload.put("evidence_ref", "BIEN-NHAN-1");
     payload.put("occurred_at", "2026-10-20T05:00:00Z");
-    var envelope = new EventEnvelope(UUID.randomUUID(), type, 1, Instant.now(), UUID.randomUUID().toString(), 1, 1, "corr",
+    var envelope = new EventEnvelope(UUID.randomUUID(), type, 1, sentAt, UUID.randomUUID().toString(), 1, 1, "corr",
         mapper.valueToTree(payload));
     inbox.applyOnce("payment-service", envelope.eventId(), () -> evidence.apply(envelope));
   }
@@ -81,5 +82,12 @@ class CodEvidenceIntegrationTest extends PaymentTestSupport {
         .isNotInstanceOf(vn.fashion.platform.messaging.PermanentEventException.class);
     assertThat(count("select count(*) from processed_events")).isZero();
     assertThat(count("select count(*) from payment_transactions")).isZero();
+  }
+
+  @Test void evidenceStillWithoutAPaymentAfterTheGraceGoesToTheDltInsteadOfBlockingThePartition() {
+    // PR review I1: an orphan COD event must not retry forever and stall every later event of its partition.
+    assertThatThrownBy(() -> deliver("COD_COLLECTED", UUID.randomUUID().toString(), UUID.randomUUID().toString(), 1000,
+        Instant.now().minusSeconds(11 * 60))).isInstanceOf(vn.fashion.platform.messaging.PermanentEventException.class);
+    assertThat(count("select count(*) from processed_events")).isZero();
   }
 }

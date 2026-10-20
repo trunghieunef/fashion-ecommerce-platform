@@ -37,6 +37,9 @@ class PaymentCloseIntegrationTest extends PaymentTestSupport {
     assertThat(count("select count(*) from outbox_events where event_type = 'PAYMENT_FAILED'")).isEqualTo(1);
     assertThat(problem(create("k1", body), 409)).isEqualTo("PAYMENT_CLOSED");
     assertThat(problem(create("k2", snapshot(order, "C-2", "COD", 1)), 409)).isEqualTo("PAYMENT_CLOSED");
+    // Review M2: closed is checked before the 422 input rules (spec section 5).
+    assertThat(problem(create("k3", snapshot(order, "C-2", "COD", 0)), 409)).isEqualTo("PAYMENT_CLOSED");
+    assertThat(problem(create("k4", snapshot(order, "C-2", "VNPAY", 120000)), 409)).isEqualTo("PAYMENT_CLOSED");
     assertThat(count("select count(*) from outbox_events where event_type = 'PAYMENT_CREATED'")).isZero();
   }
 
@@ -60,6 +63,9 @@ class PaymentCloseIntegrationTest extends PaymentTestSupport {
     assertThat(problem(close(order, "e", withReason(body, "x".repeat(501))), 400)).isEqualTo("INVALID_FIELDS");
     assertThat(problem(close(order, "f", "{\"reason\":\"x\"}"), 400)).isEqualTo("INVALID_FIELDS");
     assertThat(problem(close(order, "g", withReason(body, "x").replace("}", ",\"extra\":1}")), 400)).isEqualTo("INVALID_FIELDS");
+    // Review M3: a negative amount is a bad snapshot (400), never a 500 from the CHECK constraint.
+    String fresh = UUID.randomUUID().toString();
+    assertThat(problem(close(fresh, "h", withReason(snapshot(fresh, "C-5", "COD", -1), "x")), 400)).isEqualTo("INVALID_FIELDS");
     assertThat(jdbc.queryForObject("select status from payments where order_id = cast(? as uuid)", String.class, order)).isEqualTo("COD_PENDING");
   }
 

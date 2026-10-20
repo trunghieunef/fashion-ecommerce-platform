@@ -24,7 +24,7 @@ paths:
         One payment per order for its whole life; provider_request_id = order_no (PAY-07). COD becomes COD_PENDING at once
         with a CREATE evidence row and outbox PAYMENT_CREATED. The same order and snapshot returns the existing payment (any
         key); another snapshot is 409 PAYMENT_CONFLICT. A closed order (tombstone or closed payment) is 409 PAYMENT_CLOSED,
-        checked before the snapshot and also for a same-key replay after the close. amount <= 0 is 422
+        checked before the snapshot and the 422 rules, also for a same-key replay after the close. amount 0 is 422
         PAYMENT_AMOUNT_UNSUPPORTED; VNPAY/MOMO are 422 PAYMENT_METHOD_UNAVAILABLE until PAY-02/03.
       x-implementation-status: implemented
       parameters:
@@ -59,7 +59,7 @@ paths:
               schema: {$ref: ./common.yaml#/components/schemas/ApiError}
         '401': {<<: *error, description: INVALID_SERVICE_TOKEN}
         '403': {<<: *error, description: CALLER_NOT_ALLOWED}
-        '409': {<<: *error, description: 'PAYMENT_CLOSED, PAYMENT_CONFLICT or IDEMPOTENCY_KEY_REUSED'}
+        '409': {<<: *error, description: 'PAYMENT_CLOSED (checked first, before the 422 rules), PAYMENT_CONFLICT, DUPLICATE (order_no already used by another order_id) or IDEMPOTENCY_KEY_REUSED'}
         '422': {<<: *error, description: 'PAYMENT_AMOUNT_UNSUPPORTED (code PAYMENT_AMOUNT_UNSUPPORTED) or PAYMENT_METHOD_UNAVAILABLE'}
   /internal/api/v1/payments/by-order/{order_id}/close:
     post:
@@ -100,7 +100,7 @@ paths:
         '400': *error
         '401': {<<: *error, description: INVALID_SERVICE_TOKEN}
         '403': {<<: *error, description: CALLER_NOT_ALLOWED}
-        '409': {<<: *error, description: 'PAYMENT_CONFLICT (snapshot differs) or IDEMPOTENCY_KEY_REUSED'}
+        '409': {<<: *error, description: 'PAYMENT_CONFLICT (snapshot differs), DUPLICATE (order_no already used by another order_id) or IDEMPOTENCY_KEY_REUSED'}
   /internal/api/v1/payments/by-order/{order_id}:
     get:
       tags: [Internal payment]
@@ -139,7 +139,7 @@ components:
         order_no: {type: string, minLength: 1, maxLength: 32}
         user_id: {type: [string, 'null'], format: uuid, description: null for a guest order}
         method: {$ref: './payment.yaml#/components/schemas/Method'}
-        amount: {type: integer, maximum: 1000000000000, description: Order total in VND from the order snapshot; <= 0 is 422}
+        amount: {type: integer, minimum: 0, maximum: 1000000000000, description: 'Order total in VND from the order snapshot; 0 is 422 on create'}
         currency: {type: string, const: VND}
         expires_at: {type: string, format: date-time}
     PaymentClose:
@@ -151,7 +151,7 @@ components:
         order_no: {type: string, minLength: 1, maxLength: 32}
         user_id: {type: [string, 'null'], format: uuid}
         method: {$ref: './payment.yaml#/components/schemas/Method'}
-        amount: {type: integer, maximum: 1000000000000}
+        amount: {type: integer, minimum: 0, maximum: 1000000000000}
         currency: {type: string, const: VND}
         expires_at: {type: string, format: date-time}
         reason: {type: string, minLength: 1, maxLength: 500}

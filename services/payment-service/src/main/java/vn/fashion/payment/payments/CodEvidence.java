@@ -1,8 +1,10 @@
 package vn.fashion.payment.payments;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
@@ -21,9 +23,11 @@ public class CodEvidence {
   private final JdbcClient jdbc;
   private final PaymentService payments;
   private final ObjectMapper json;
+  private final Duration orphanGrace;
 
-  public CodEvidence(JdbcClient jdbc, PaymentService payments, ObjectMapper json) {
-    this.jdbc = jdbc; this.payments = payments; this.json = json;
+  public CodEvidence(JdbcClient jdbc, PaymentService payments, ObjectMapper json,
+                     @Value("${fashion.payment.cod-orphan-grace:10m}") Duration orphanGrace) {
+    this.jdbc = jdbc; this.payments = payments; this.json = json; this.orphanGrace = orphanGrace;
   }
 
   public Object apply(EventEnvelope event) {
@@ -37,9 +41,12 @@ public class CodEvidence {
     catch (RuntimeException e) { throw new PermanentEventException("Invalid COD occurred_at"); }
     boolean collected = event.eventType().equals("COD_COLLECTED");
     payments.lockOrder(order);
-    // Retryable on purpose: the payment is created before the shipment, so a missing row is a short race, never a reason to drop.
+    // The payment is created before the shipment, so a missing row is first a short race and is retried. Past the grace
+    // (counted from the event) it goes to shipping.events.DLT (messaging_dlt_total), so one orphan never stalls its partition.
     var target = jdbc.sql("select id, method, amount, status, closed_at from payments where order_id = :o").param("o", order)
-        .query(Target.class).optional().orElseThrow(() -> new IllegalStateException("No payment yet for COD evidence"));
+        .query(Target.class).optional().orElseThrow(() -> event.occurredAt().plus(orphanGrace).isBefore(Instant.now())
+            ? new PermanentEventException("No payment for COD evidence after the grace period")
+            : new IllegalStateException("No payment yet for COD evidence"));
     var evidence = new LinkedHashMap<String, Object>();
     evidence.put("event_type", event.eventType());
     evidence.put("shipment_id", p.path("shipment_id").asString());

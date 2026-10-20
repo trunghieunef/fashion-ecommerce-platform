@@ -46,10 +46,6 @@ public class PaymentService {
 
   /** COD -> COD_PENDING; a closed order (tombstone or closed payment) is 409 PAYMENT_CLOSED, another snapshot 409 PAYMENT_CONFLICT. */
   public Object create(String key, Snapshot s, String correlationId) {
-    if (s.amount() <= 0)
-      throw new Api.Problem(HttpStatus.UNPROCESSABLE_CONTENT, "PAYMENT_AMOUNT_UNSUPPORTED", "PAYMENT_AMOUNT_UNSUPPORTED", List.of());
-    if (!s.method().equals("COD"))
-      throw new Api.Problem(HttpStatus.UNPROCESSABLE_CONTENT, "VALIDATION_ERROR", "PAYMENT_METHOD_UNAVAILABLE", List.of());
     String hash = hash(s);
     return tx.execute(status -> {
       var replay = Api.replay(keys.begin(ACTOR, "payment.create", key, hash), json);
@@ -60,8 +56,14 @@ public class PaymentService {
       }
       lockOrder(s.orderId());
       var existing = byOrder(s.orderId());
+      // Checked before the hash (spec section 5).
+      if (existing.filter(v -> v.closedAt() != null).isPresent()) throw conflict("PAYMENT_CLOSED");
+      // After the closed check (review M2): a closed order answers 409 whatever the snapshot.
+      if (s.amount() == 0)
+        throw new Api.Problem(HttpStatus.UNPROCESSABLE_CONTENT, "PAYMENT_AMOUNT_UNSUPPORTED", "PAYMENT_AMOUNT_UNSUPPORTED", List.of());
+      if (!s.method().equals("COD"))
+        throw new Api.Problem(HttpStatus.UNPROCESSABLE_CONTENT, "VALIDATION_ERROR", "PAYMENT_METHOD_UNAVAILABLE", List.of());
       if (existing.isPresent()) {
-        if (existing.get().closedAt() != null) throw conflict("PAYMENT_CLOSED"); // checked before the hash (spec section 5)
         if (!requestHash(s.orderId()).equals(hash)) throw conflict("PAYMENT_CONFLICT");
         keys.finish(ACTOR, "payment.create", key, existing.get().paymentId(), 200, json.writeValueAsString(existing.get()));
         return existing.get();
@@ -179,8 +181,8 @@ public class PaymentService {
     String method = m.isString() ? m.asString() : null;
     if (method == null || !Set.of("COD", "VNPAY", "MOMO").contains(method)) errors.add(new Api.FieldError("method", "must be COD, VNPAY or MOMO"));
     JsonNode a = body.path("amount");
-    long amount = a.isIntegralNumber() && a.canConvertToLong() && a.longValue() <= MAX_AMOUNT ? a.longValue() : Long.MIN_VALUE;
-    if (amount == Long.MIN_VALUE) errors.add(new Api.FieldError("amount", "must be an integer VND <= " + MAX_AMOUNT));
+    long amount = a.isIntegralNumber() && a.canConvertToLong() && a.longValue() >= 0 && a.longValue() <= MAX_AMOUNT ? a.longValue() : -1;
+    if (amount < 0) errors.add(new Api.FieldError("amount", "must be an integer VND 0.." + MAX_AMOUNT));
     if (!"VND".equals(body.path("currency").asString(null))) errors.add(new Api.FieldError("currency", "must be VND"));
     Instant expires = null;
     JsonNode e = body.path("expires_at");

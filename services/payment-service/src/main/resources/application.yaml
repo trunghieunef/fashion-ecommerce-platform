@@ -55,6 +55,8 @@ fashion:
       public-keys: ${PAYMENT_JWT_PUBLIC_KEYS}
     # ADR-19: callers allowed on /internal (order-service only); empty = every internal call 401.
     internal-callers: ${PAYMENT_INTERNAL_CALLERS:}
+    # COD evidence for an order without a payment is retried this long (from the event time), then sent to the DLT.
+    cod-orphan-grace: ${PAYMENT_COD_ORPHAN_GRACE:10m}
 
 management:
   # PLT-05: no OTLP endpoint here on purpose: an empty value still creates the exporter. Traces leave

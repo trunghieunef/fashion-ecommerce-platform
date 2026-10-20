@@ -459,7 +459,7 @@ Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác v
 | Không phát event khi COD_COLLECTED; `PAYMENT_COMPLETED` phát cả khi payment đã close | Order đọc COD từ `shipping.events`; late money báo order refund |
 | Settlement nhiều đợt, thiếu giữ COD_COLLECTED, vượt amount 409; gross 0 bị từ chối | SLA/discrepancy phần thiếu thuộc O04/PAY-05 |
 | Lệch method/amount từ shipping → `reconciliation_items` OPEN, không đổi trạng thái | Resolve ở PAY-05 |
-| COD evidence cho đơn chưa có payment → retry (không ACK) | Partition chờ tới khi payment có; chỉ xảy ra nếu order tạo shipment COD không có payment |
+| COD evidence cho đơn chưa có payment → retry (không ACK) tối đa 10 phút từ lúc event phát (`PAYMENT_COD_ORPHAN_GRACE`), rồi DLT | Review PR I1: event mồ côi không chặn partition vô hạn; FINANCE/BE xem DLT + `messaging_dlt_total` |
 
 ## SHP-02 — quyết định 2026-10-20
 
