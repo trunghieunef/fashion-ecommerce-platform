@@ -238,7 +238,7 @@ public class OrderService {
         where order_id = :id order by sku, variant_id""").param("id", row.id()).query(OrderController.Item.class).list();
     String processingStatus = switch (row.status()) {
       case "PENDING", "CANCELLING" -> "PROCESSING";
-      case "CANCELLED" -> "FINISHED";
+      case "CANCELLED", "DELIVERED" -> "FINISHED";
       // PACKING: PROCESSING until the saga stored the SELF shipment, then READY.
       case "PACKING" -> jdbc.sql("select shipment_id is not null from order_sagas where order_id = :id").param("id", row.id())
           .query(Boolean.class).optional().filter(has -> !has).map(has -> "PROCESSING").orElse("READY");
