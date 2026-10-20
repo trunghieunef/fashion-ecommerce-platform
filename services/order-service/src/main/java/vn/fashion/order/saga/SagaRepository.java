@@ -62,6 +62,14 @@ public class SagaRepository {
         .param("id", orderId).query(Saga.class).single();
   }
 
+  public String orderStatus(UUID orderId) {
+    return jdbc.sql("select status from orders where id = :id").param("id", orderId).query(String.class).single();
+  }
+  public String cancelReason(UUID orderId) {
+    return jdbc.sql("select coalesce(cancel_reason, 'CANCELLED') from orders where id = :id").param("id", orderId)
+        .query(String.class).single();
+  }
+
   public SagaOrder order(UUID orderId) {
     var items = jdbc.sql("""
         select cart_item_id, cart_item_version, sku, quantity from order_items where order_id = :id order by sku, cart_item_id""")
