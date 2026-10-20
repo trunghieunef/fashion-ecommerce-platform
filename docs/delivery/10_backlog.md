@@ -4,7 +4,7 @@ B1 · 2026-09-19 · Work package mặc định: **Planned; Assignee TBD; Reviewe
 
 ## 1. Cách nhận việc
 
-Update 2026-10-20 — `TASK:ORD-01` **In review (local)**, PR #32: order-service quote ký 2 phút (giá catalog, phí SELF + COD),
+Update 2026-10-20 — `TASK:ORD-01` **Done (local, trước G0)** ([nghiệm thu](../evidence/acceptance-2026-10-20.md#taskord-01--order-service-quotecreateread-guest-checkout-token)), PR #32: order-service quote ký 2 phút (giá catalog, phí SELF + COD),
 create idempotent `PENDING`/202 với snapshot bất biến (lookup key trước kiểm quote, `PRICE_CHANGED`), đọc đơn theo
 ownership (member Bearer, guest cookie `order_access`), checkout token guest do cart ký; `REQ:ORD-01/05/07`; dependency
 CAT-02, CART-03, SHP-01; [spec](../superpowers/specs/2026-10-20-ord-01-order-quote-create-design.md),
