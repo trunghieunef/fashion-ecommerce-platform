@@ -516,9 +516,16 @@ tinh chỉnh thẩm mỹ sau (task riêng):
 | Giỏ vẫn ACTIVE sau cleanup (không `CHECKED_OUT`); version chỉ tăng khi có xóa | Giữ unique ACTIVE member và item còn lại |
 | Cart không gọi shipping: `subtotal_preview` (chỉ khi preview OK) + `shipping_fee_status: NOT_CALCULATED` | Fee preview là SHP-01 `POST /shipping/fee/estimate`; tổng chốt chỉ ở order quote |
 
-**Câu hỏi mở cho ORD-01/WEB-03 (chưa quyết định):** cookie `cart_token` có `Path=/api/v1/carts` nên trình duyệt không
-gửi nó tới `/api/v1/orders`; order-service cần một cách xác minh guest để điền `Cart-Actor` (mở rộng Path cookie
-hoặc cơ chế khác). CART-03 không đổi cookie. Phải chốt trước khi ORD-01 triển khai guest checkout.
+**Câu hỏi mở cho ORD-01/WEB-03 — đã quyết định 2026-10-20:** cookie `cart_token` có `Path=/api/v1/carts` nên trình
+duyệt không gửi nó tới `/api/v1/orders`; order-service cần một cách xác minh guest để điền `Cart-Actor`.
+
+| Quyết định (chủ dự án chọn C, 2026-10-20) | Hệ quả |
+|---|---|
+| Guest checkout dùng **checkout token ngắn hạn**: cart-service xác minh cookie `cart_token` rồi cấp token ký (JWT ES256 qua `platform-security`) gắn `cart_id` + hash guest, sống ngắn; storefront gửi token trong header khi gọi order; order xác minh chữ ký/hạn/audience rồi điền `Cart-Actor` | Cookie `cart_token` giữ nguyên `Path=/api/v1/carts`; order không phụ thuộc định dạng cookie của cart; dùng được cho client không cookie (mobile) và mở rộng claim xác minh (OTP Phase 2). Chi phí: thêm endpoint cart, cặp khóa ký + xoay khóa, contract và test hết hạn/sai giỏ/dùng lại |
+| Loại: mở rộng Path cookie (A), cookie thứ hai cho order (B) | A để cookie guest đi tới mọi service `/api/v1`; B phải đồng bộ hai cookie |
+
+Chi tiết (TTL, tên header, endpoint, có giới hạn dùng một lần hay không, task sở hữu endpoint cart) chốt ở spec ORD-01.
+CART-03 không đổi cookie.
 
 ## INV-03 — quyết định 2026-10-18
 
@@ -544,7 +551,7 @@ hoặc cơ chế khác). CART-03 không đổi cookie. Phải chốt trước kh
 **Cập nhật 2026-10-20:** agent đề xuất giá trị retention O06 (13 §3 "Giá trị cụ thể O06"): giỏ 30 ngày, PII trong đơn
 ẩn danh sau 12 tháng từ khi đơn kết thúc, guest credential tối đa 90 ngày, log 30 ngày, traces 7 ngày, backup 30 ngày,
 idempotency 30 ngày, tài khoản không hoạt động 24 tháng, chứng từ tài chính 10 năm. Chủ dự án xác nhận giữ nguyên
-toàn bộ giá trị cùng ngày (sau review PR #31), nên điều kiện "chốt O06 trước ORD-01" **đã đạt**; xác minh pháp lý còn mở tới G2. ORD-01 vẫn chờ câu hỏi mở về cách xác minh guest checkout (mục CART-03 bên trên).
+toàn bộ giá trị cùng ngày (sau review PR #31), nên điều kiện "chốt O06 trước ORD-01" **đã đạt**; xác minh pháp lý còn mở tới G2. Cách xác minh guest checkout đã chốt ngày 2026-10-20: checkout token ngắn hạn (mục CART-03 bên trên).
 
 ## CAT-02a — quyết định chủ dự án 2026-10-11
 
