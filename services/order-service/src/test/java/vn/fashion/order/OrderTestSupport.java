@@ -34,7 +34,8 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 @Testcontainers
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = "fashion.messaging.relay.enabled=false")
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {"fashion.messaging.relay.enabled=false", "fashion.order.saga.enabled=false",
+    "spring.kafka.listener.auto-startup=false"})
 @org.springframework.context.annotation.Import(OrderTestSupport.Clocks.class)
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 public abstract class OrderTestSupport {

@@ -83,6 +83,12 @@ public class OrderService {
     String hash = Api.sha256(request.cartId() + "|" + request.cartVersion() + "|" + Api.sha256(request.quoteToken()));
     var existing = byCheckout(actor.key(), key);
     if (existing.isPresent()) return replay(existing.get(), hash);
+    // ORD-02 spec section 7: the same actor already ordered this cart state (lost response, cart since cleaned, quote
+    // expired) -> its order, before any quote or cart check. Only the actor's own request data is used (T21).
+    var open = jdbc.sql("select order_no from orders where cart_id = :c and cart_version = :v and actor_key = :a and status <> 'CANCELLED'")
+        .param("c", request.cartId()).param("v", request.cartVersion()).param("a", actor.key()).query(String.class).optional();
+    if (open.isPresent())
+      throw new AlreadyOrdered(open.get(), actor.member() ? null : grantAccess(orderIdByNo(open.get()), open.get()));
 
     Quote quote = tokens.verify(request.quoteToken());
     if (!quote.actorKey().equals(actor.key()) || !quote.cartId().equals(request.cartId()) || quote.cartVersion() != request.cartVersion())

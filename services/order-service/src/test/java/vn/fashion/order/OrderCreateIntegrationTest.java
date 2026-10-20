@@ -86,8 +86,15 @@ class OrderCreateIntegrationTest extends OrderTestSupport {
     assertThat(count("select count(*) from outbox_events")).isEqualTo(1);
     // Same key, another body: refused.
     assertThat(problem(create("k1", createBody(cart, 5, "x.y"), "Authorization", member), 409)).isEqualTo("IDEMPOTENCY_KEY_REUSED");
-    // Without the retry, the same expired quote is 409 QUOTE_EXPIRED.
-    assertThat(problem(create("k2", body, "Authorization", member), 409)).isEqualTo("QUOTE_EXPIRED");
+    // Another key on the same cart state finds the order first (ORD-02 spec section 7).
+    assertThat(problem(create("k2", body, "Authorization", member), 409)).isEqualTo("CART_ALREADY_ORDERED");
+    // An expired quote of a cart that was never ordered is 409 QUOTE_EXPIRED.
+    UUID other = UUID.randomUUID();
+    clock.reset();
+    stubCheckout(other, 150000, 99000);
+    String stale = createBody(other, 4, quoteToken(other, "Authorization", member));
+    clock.shift(Duration.ofMinutes(5));
+    assertThat(problem(create("k3", stale, "Authorization", member), 409)).isEqualTo("QUOTE_EXPIRED");
   }
 
   @Test void parallelSubmitsMakeOneOrder() throws Exception {
@@ -171,6 +178,27 @@ class OrderCreateIntegrationTest extends OrderTestSupport {
         .isEqualTo(orderNo);
     // Another guest on another cart never gets anything from this order.
     assertThat(count("select count(*) from orders")).isEqualTo(1);
+  }
+
+  @Test void aGuestWhoseCartWasCleanedFindsItsOrderAgain() {
+    // ORD-02 spec section 7: lost response, the cart was cleaned (new version) and the quote expired; a new key with the
+    // submitted cart_id/cart_version still reaches the order, before any quote check.
+    UUID cart = UUID.randomUUID();
+    stubCheckout(cart, 150000, 99000);
+    String checkout = checkoutToken(GUEST_HASH, cart), body = createBody(cart, 4, quoteToken(cart, "Checkout-Token", checkout));
+    String orderNo = data(create("g1", body, "Checkout-Token", checkout), 202).path("order_no").asString();
+    clock.shift(Duration.ofMinutes(10));
+    StubServers.CART.reply(s -> new StubServers.Reply(200, cartSnapshot(cart, 5)));
+    StubServers.CART.seen.clear();
+    var again = create("g9", body, "Checkout-Token", checkoutToken(GUEST_HASH, cart));
+    assertThat(problem(again, 409)).isEqualTo("CART_ALREADY_ORDERED");
+    assertThat(json(again).path("errors").get(0).path("message").asString()).isEqualTo(orderNo);
+    String set = cookie(again);
+    assertThat(send("GET", "/api/v1/orders/" + orderNo, null, "Cookie", "order_access=" + set.substring(13, set.indexOf(';'))).statusCode())
+        .isEqualTo(200);
+    assertThat(StubServers.CART.seen).isEmpty();
+    // Another actor with the same body learns nothing: its own quote check fails first.
+    assertThat(create("m1", body, "Authorization", memberToken()).statusCode()).isEqualTo(400);
   }
 
   @Test void reissuedCredentialsAreCappedPerOrder() {

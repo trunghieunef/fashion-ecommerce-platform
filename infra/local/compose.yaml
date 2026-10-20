@@ -287,6 +287,8 @@ services:
       ORDER_CART_URL: http://cart:8084
       ORDER_CATALOG_URL: http://catalog:8081
       ORDER_SHIPPING_URL: http://shipping:8085
+      ORDER_INVENTORY_URL: http://inventory:8083
+      ORDER_PAYMENT_URL: http://payment:8086
       ORDER_CHECKOUT_PUBLIC_KEYS: ${ORDER_CHECKOUT_PUBLIC_KEYS:?run scripts/local-up.sh}
       ORDER_QUOTE_SECRET: ${ORDER_QUOTE_SECRET:?run scripts/local-up.sh}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092

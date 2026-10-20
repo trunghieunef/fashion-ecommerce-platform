@@ -25,8 +25,22 @@ class OrderSchemaIntegrationTest extends OrderTestSupport {
     UUID cart = UUID.randomUUID();
     order(UUID.randomUUID(), cart, 4, "user:" + MEMBER, MEMBER, null, 125000);
     assertThatThrownBy(() -> order(UUID.randomUUID(), cart, 4, "user:" + MEMBER, MEMBER, null, 125000))
-        .isInstanceOf(DataAccessException.class).hasMessageContaining("orders_cart_id_cart_version_key");
+        .isInstanceOf(DataAccessException.class).hasMessageContaining("orders_open_cart_version_idx");
     order(UUID.randomUUID(), cart, 5, "user:" + MEMBER, MEMBER, null, 125000);
+  }
+
+  @Test void aCancelledOrderFreesItsCartVersion() {
+    // ORD-02 V002: the cart state of a cancelled order (out of stock) can be ordered again.
+    UUID cart = UUID.randomUUID(), first = UUID.randomUUID();
+    order(first, cart, 4, "user:" + MEMBER, MEMBER, null, 125000);
+    assertThatThrownBy(() -> order(UUID.randomUUID(), cart, 4, "user:" + MEMBER, MEMBER, null, 125000))
+        .isInstanceOf(DataAccessException.class).hasMessageContaining("orders_open_cart_version_idx");
+    asOwner("update orders set status = 'CANCELLED' where id = '" + first + "'");
+    order(UUID.randomUUID(), cart, 4, "user:" + MEMBER, MEMBER, null, 125000);
+    assertThat(count("select count(*) from background_tasks")).isZero();
+    assertThat(count("select count(*) from processed_events")).isZero();
+    assertThat(jdbc.queryForObject("select column_default from information_schema.columns where table_name = 'order_sagas' and column_name = 'payment_state'", String.class))
+        .contains("NONE");
   }
 
   @Test void aGuestOrderNeedsItsAccessHashAndAMemberOrderHasNone() {
