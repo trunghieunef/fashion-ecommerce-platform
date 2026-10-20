@@ -479,6 +479,33 @@ Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác v
 | `PAYMENT_COMPLETED` chỉ ghi `paid_at`/`payment_state = PAID`, không đổi `status`; event cho đơn lạ ACK + log, event hỏng → DLT; không phát `ORDER_PAID` | COD dùng ở ORD-03/04; refund PAY-04 |
 | Guest mất response tìm lại đơn: đơn chưa hủy của cùng actor với `(cart_id, cart_version)` → 409 `CART_ALREADY_ORDERED` trước kiểm quote (thay ràng buộc ORD-01) | FE giữ `cart_id`/`cart_version` đã submit; key khác + quote cũ hết hạn nay nhận `CART_ALREADY_ORDERED` thay vì `QUOTE_EXPIRED` |
 
+## ORD-03 — quyết định 2026-10-21
+
+`TASK:ORD-03` · `REQ:ORD-03/06` (COD; phần online `REQ:PAY-03` hoãn tới PAY-02/03). Chủ dự án duyệt
+[spec](../superpowers/specs/2026-10-21-ord-03-cod-confirm-fulfil-design.md) ngày 2026-10-21 (cả các mặc định §11); các dòng
+"(SDD)" là phán quyết của controller khi triển khai, ghi lại để review PR.
+
+| Quyết định | Hệ quả |
+|---|---|
+| OPS xác nhận **từng đơn** sau khi gọi khách; ghi chú cuộc gọi tùy chọn (≤ 500), hủy bắt buộc lý do (1..500) | Không có xác nhận hàng loạt; lý do nằm ở history `reason` + `audit_logs.reason` |
+| Hủy đơn `CONFIRMED` (saga còn `WAIT_OPS`) kéo từ ORD-04 vào ORD-03 (chủ dự án đồng ý 2026-10-21); hủy từ `PENDING`, sau xác nhận, khách tự hủy, giao thất bại/hoàn hàng vẫn là ORD-04 | Đơn đã xác nhận (saga qua `WAIT_OPS`) hủy → 409 `INVALID_TRANSITION` |
+| Confirm trả `202`, đơn vẫn `CONFIRMED` (`processing_status = PROCESSING`) tới khi inventory commit xong mới `PACKING` | FE/OPS poll; không bao giờ `PACKING` khi chưa trừ kho (T12) |
+| Sau xác nhận, hạn của order không còn hủy đơn: worker chỉ kiểm `expires_at` ở `RESERVE`/`CREATE_PAYMENT`/`WAIT_OPS`; từ `COMMIT_STOCK` inventory là trọng tài (`RESERVATION_EXPIRED` → `CANCELLED EXPIRED`, `RESERVATION_CLOSED` → `CANCELLED RESERVE_FAILED`) | Một kết quả duy nhất do đồng hồ DB của inventory; lệch đồng hồ chỉ làm confirm sát hạn bị từ chối/hủy |
+| Ở `COMMIT_STOCK` intent tính lần thử + backoff nhưng giữ `inventory_state = HELD`; key cố định `commit:{order_id}`, `shipment:{order_id}` | T09: worker chết sau commit → retry cùng key, inventory trả `COMMITTED` không trừ lần hai; bù trừ không hiểu nhầm là được release |
+| Commit OK kết thúc lượt (`next_retry_at = now`, nhả lease); `CREATE_SHIPMENT` chạy lượt sau (SDD Task 4) | Mỗi lượt một lời gọi HTTP; trễ thêm ~1 s; quan sát được `PACKING` chưa có shipment (`PROCESSING`) |
+| Vận đơn SELF tạo tự động sau `PACKING`, body từ snapshot (`quote_id`, `cod_amount = total_amount`, `to_address`); mọi từ chối → `MANUAL`, đơn giữ `PACKING` | Kho đã trừ thì không tự hủy; xử lý tiếp ở ORD-04; chưa có UI/alert MANUAL (ADM-02/PLT-05) |
+| Không thêm event `ORDER_PACKING`/`ORDER_SHIPPED`; chỉ phát thêm `ORDER_COMPLETED` khi `DELIVERED` | Chuyển trạng thái vẫn có history; thêm event khi NOT-01/ADM cần |
+| Order nghe `shipping.events`: `DELIVERING` có `handed_over_at` → `SHIPPING` (`shipped_at`), `DELIVERED` → `DELIVERED` (`delivered_at`, qua `SHIPPING` nếu còn `PACKING`); `shipment_version` ≤ bản đã áp dụng bị bỏ qua; FAILED/RETURNING/… chỉ ghi version | Event cũ không hạ trạng thái; giao thất bại/hoàn hàng giữ `SHIPPING` (ORD-04); `DELIVERED` không có nghĩa đã thu tiền (T27) |
+| FINANCE nhận bản redacted bằng cách "không có `order.fulfill`" (không permission riêng): bỏ `contact_phone`/`contact_email`/`shipping_address`/`note`, history `reason` null, `q` theo số điện thoại 403 | Response confirm/cancel cũng bỏ key (không trả null) như GET (SDD Task 6) |
+| `q` chỉ khớp chính xác `order_no` (dạng `ORD` + 12 số) hoặc `contact_phone`, không full-text | Chưa có index `contact_phone` (seq scan, đủ cho MVP) |
+| `cancel_reason = OPS_CANCELLED` (reason_code công khai mới), lý do người nhập vào history `reason` + `audit_logs` (SDD Task 2) | `OrderTransitions.move` nhận actor `ADMIN`/`actor_id`/`request_id` |
+| Audit OPS vào `audit_logs` chuẩn 05 §3 (V003, REVOKE UPDATE/DELETE/TRUNCATE); `confirmed_at` giữ nghĩa ORD-02 (shop tiếp nhận) | Thời điểm/người OPS xác nhận đọc từ audit, không thêm cột |
+| Confirm/cancel tăng `orders.version`; `order_version` trong event có thể nhảy | Request cầm version cũ nhận `VERSION_CONFLICT` |
+| Kiểm version **trước** trạng thái/step saga (plan ghi trạng thái trước; SDD Task 2) | Confirm và cancel đua nhau trên một version: bên thua nhận `VERSION_CONFLICT`; caller cũ thấy `VERSION_CONFLICT` thay vì `INVALID_TRANSITION` |
+| Thứ tự khóa toàn service: `order_sagas` rồi `orders` (worker, lệnh OPS, consumer shipping; SDD Task 2/5) | Không deadlock giữa OPS và worker lúc tới hạn |
+| Lỗi nghiệp vụ 409 (`VERSION_CONFLICT`/`INVALID_TRANSITION`/`ORDER_EXPIRED`) của confirm/cancel không lưu vào idempotency (transaction rollback); chỉ `202` được lưu | Retry cùng key được đánh giá lại theo trạng thái hiện tại, giống create đơn ORD-01 (4xx không lưu; `Api.body` lưu lỗi chưa dùng ở order-service); 03 §1.3 đã ghi |
+| Saga `MANUAL` vẫn hiển thị `PROCESSING` cho khách, không `ACTION_REQUIRED` | FE giới hạn poll theo 14 §3 |
+
 ## PAY-01 — quyết định 2026-10-20
 
 `TASK:PAY-01` · `REQ:PAY-03/07/08`. Chủ dự án giao agent tự chốt và duyệt [spec](../superpowers/specs/2026-10-20-pay-01-payment-cod-design.md) (cả các mặc định §9):

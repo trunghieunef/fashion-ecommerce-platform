@@ -329,6 +329,14 @@ NONE/UNKNOWN/CREATED/CLOSED/PAID; UNIQUE `(cart_id, cart_version)` thay bằng u
 platform-durability. `orders.cancel_reason` (đã có ở V001) là `reason_code` của GET; `paid_at` ghi khi nhận
 `PAYMENT_COMPLETED`.
 
+`ORD-03` (V003 order-service, append-only): `audit_logs` theo §3 (cùng cột catalog/user-service, index
+`(resource_type, resource_id, created_at)`, `REVOKE UPDATE, DELETE, TRUNCATE` khỏi `order_runtime`; action
+`ORDER_CONFIRM_COD`/`ORDER_CANCEL`, `resource_id = order_no`, `reason` = ghi chú/lý do OPS, `before_data`/`after_data` =
+status + version); `idempotency_requests` chép DDL platform-durability (lệnh admin confirm-cod/cancel, actor
+`admin:{user_id}`; cần UPDATE cho `finish`); `orders.shipped_at` (= `handed_over_at` khi sang `SHIPPING`);
+`order_sagas.shipment_version bigint` (bản shipping đã áp dụng, chặn event cũ). `cancel_reason` thêm giá trị
+`OPS_CANCELLED` (cột text, không CHECK). Quyền dựa default privileges như V001/V002, không GRANT riêng.
+
 ## 8. `inventory-db`
 
 ```mermaid
