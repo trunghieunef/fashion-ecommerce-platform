@@ -4,7 +4,7 @@ B1 · 2026-09-19 · Work package mặc định: **Planned; Assignee TBD; Reviewe
 
 ## 1. Cách nhận việc
 
-Update 2026-10-20 — `TASK:PAY-01` **In review (local)**, PR #31: payment-service COD — một payment/đơn từ snapshot order
+Update 2026-10-20 — `TASK:PAY-01` **Done (local, trước G0)** ([nghiệm thu](../evidence/acceptance-2026-10-20.md#taskpay-01--payment-service-cod)), PR #31: payment-service COD — một payment/đơn từ snapshot order
 (`provider_request_id = order_no`), close + tombstone close-before-create, bằng chứng COD từ `shipping.events` (lệch →
 reconciliation item, REMITTED chỉ là bằng chứng — T27), FINANCE settlement gross = fee + net nhiều đợt → SUCCESS +
 `PAYMENT_COMPLETED`; `REQ:PAY-03/07/08`; dependency PLT-03, USR-02, SHP-02;

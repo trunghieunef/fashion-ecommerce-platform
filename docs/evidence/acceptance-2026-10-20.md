@@ -45,3 +45,44 @@ local. Sửa này đi cùng PR kế tiếp từ `dev`.
   chỉ có integration test và outbox row.
 - Upload ảnh bằng chứng, nộp COD nhiều đợt, `NOTIFY_SHIPMENT_STATUS` (NOT-01), carrier (SHP-03) chưa làm.
 - O04 (phí mẫu) vẫn mở từ SHP-01.
+
+## TASK:PAY-01 — payment-service COD
+
+Chủ dự án yêu cầu Claude Code nghiệm thu `TASK:PAY-01` trước khi merge PR #31. **Không độc lập:** PAY-01 do Claude Code viết.
+Review gồm một subagent reviewer toàn nhánh (1 Important + Minor, sửa ở `2d8ede8`) và một agent review riêng trên PR #31
+(2 Important + 6 Minor, sửa ở `50fef8c` và `b5be015`); re-review trên PR kết luận **đồng ý merge**, không thấy lỗi mới.
+Merge do chủ dự án. Phạm vi: acceptance ở [10](../delivery/10_backlog.md) dòng PAY-01 theo
+[spec đã duyệt](../superpowers/specs/2026-10-20-pay-01-payment-cod-design.md), mức local trước G0.
+
+### Bằng chứng chung
+
+- Code trên `dev` `b5be015`. Application CI (pull_request) SUCCESS
+  ([run 39375350512](https://github.com/trunghieunef/fashion-ecommerce-platform/actions/runs/39375350512)): backend toàn
+  reactor **824 test** (payment-service 28), frontend typecheck/unit 21/build, contract **79 test**, local stack + smoke
+  (`PAY-01 payment admin route PASS`, `SHP-02 self-event route PASS`, `S1-local smoke PASS`), browser smoke Playwright 8 test.
+  Documentation CI SUCCESS ([run 39375350570](https://github.com/trunghieunef/fashion-ecommerce-platform/actions/runs/39375350570)).
+- Local: payment-service 28 test; mutation (lock theo order, hash snapshot, kiểm số tiền COD, Σgross ≤ amount) bị test bắt.
+  Chi tiết: [evidence PAY-01](pay-01-local-2026-10-20.md).
+
+### Kết quả theo tiêu chí
+
+| Tiêu chí (10 PAY-01 / spec) | Bằng chứng | Kết quả |
+|---|---|---|
+| Payment/COD schema, một payment mỗi đơn, `provider_request_id = order_no` (PAY-07) | `PaymentSchemaIntegrationTest` (CHECK, REVOKE), `PaymentCreateIntegrationTest` (song song một payment, replay, 409 conflict/duplicate) | Pass |
+| Close + `closed_at`, close-before-create ngăn tạo mới (PAY-08) | `PaymentCloseIntegrationTest` (tombstone, song song close/create, retry trả hiện trạng) | Pass |
+| Late success vẫn ghi tiền | `lateCollectionOnAClosedPaymentIsRecordedAndKeepsClosedAt`, `settlementAfterALateCollectionOnAClosedPaymentStillCompletes` | Pass |
+| T27: carrier đã nộp chưa phải SUCCESS | `COD_REMITTED` chỉ là bằng chứng; SUCCESS chỉ khi FINANCE settle đủ | Pass |
+| Settlement gross = fee + net nhiều đợt (PAY-03) | `SettlementIntegrationTest` (CHECK DB, ref một lần, Σgross ≤ amount, VERSION_CONFLICT, `PAYMENT_COMPLETED` một lần) | Pass |
+| Bằng chứng COD lệch/trùng không tự ép khớp | Reconciliation item `COD_AMOUNT_MISMATCH`/`COD_METHOD_MISMATCH`/`COD_DUPLICATE_COLLECTION`; payload sai → DLT | Pass |
+| Query + quyền FINANCE, internal không public | `PaymentAdminIntegrationTest`, `GatewayBoundaryTest.paymentAdminIsRoutedAndInternalIsNot`, smoke route | Pass |
+| Gọi thật từ order-service | Chưa có order-service: internal chỉ có integration test, `PAYMENT_INTERNAL_CALLERS` trống | **Ngoại lệ (ORD-01/02)** |
+
+**`TASK:PAY-01`: Done (local, trước G0) — internal route chờ order-service (ORD-01/02)**; CI trên `b5be015` PASS, chờ chủ
+dự án merge PR #31 vào `main`.
+
+### Ngoại lệ và việc còn lại (không chặn Done local)
+
+- VNPay/MoMo (PAY-02/03), refund (PAY-04), resolve đối soát/batch và alert COD outstanding (PAY-05), consumer `payment.events`
+  (ORD-02/03), `NOTIFY_PAYMENT_SUCCESS` (NOT-01), alert trên `messaging_dlt_total` (PLT-05).
+- Minor M4 (review nội bộ): create replay trước khi close trả trạng thái đã lưu; order nên đọc `GET by-order` khi cần hiện trạng.
+- PR #31 còn mang: sửa SHP-02 sau merge, O06 (chủ dự án xác nhận) và quyết định guest checkout cho ORD-01 (`fd5e5fc`, 08/03).
