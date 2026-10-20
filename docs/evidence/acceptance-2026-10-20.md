@@ -77,8 +77,8 @@ Merge do chủ dự án. Phạm vi: acceptance ở [10](../delivery/10_backlog.m
 | Query + quyền FINANCE, internal không public | `PaymentAdminIntegrationTest`, `GatewayBoundaryTest.paymentAdminIsRoutedAndInternalIsNot`, smoke route | Pass |
 | Gọi thật từ order-service | Chưa có order-service: internal chỉ có integration test, `PAYMENT_INTERNAL_CALLERS` trống | **Ngoại lệ (ORD-01/02)** |
 
-**`TASK:PAY-01`: Done (local, trước G0) — internal route chờ order-service (ORD-01/02)**; CI trên `b5be015` PASS, chờ chủ
-dự án merge PR #31 vào `main`.
+**`TASK:PAY-01`: Done (local, trước G0) — internal route chờ order-service (ORD-01/02)**; CI trên `b5be015` PASS; chủ dự án
+đã merge PR #31 vào `main` (`7412f01`, 2026-10-20).
 
 ### Ngoại lệ và việc còn lại (không chặn Done local)
 
