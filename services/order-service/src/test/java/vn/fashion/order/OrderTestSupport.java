@@ -35,8 +35,22 @@ import tools.jackson.databind.ObjectMapper;
 
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = "fashion.messaging.relay.enabled=false")
+@org.springframework.context.annotation.Import(OrderTestSupport.Clocks.class)
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 public abstract class OrderTestSupport {
+  /** Test clock: shift() moves "now" for quote expiry without sleeping; reset before each test. */
+  public static final class ShiftClock extends java.time.Clock {
+    private volatile java.time.Duration offset = java.time.Duration.ZERO;
+    public void shift(java.time.Duration by) { offset = offset.plus(by); }
+    public void reset() { offset = java.time.Duration.ZERO; }
+    @Override public java.time.ZoneId getZone() { return java.time.ZoneOffset.UTC; }
+    @Override public java.time.Clock withZone(java.time.ZoneId zone) { return this; }
+    @Override public Instant instant() { return Instant.now().plus(offset); }
+  }
+  @org.springframework.boot.test.context.TestConfiguration static class Clocks {
+    @org.springframework.context.annotation.Bean @org.springframework.context.annotation.Primary ShiftClock testClock() { return new ShiftClock(); }
+  }
+  @Autowired protected ShiftClock clock;
   protected static final UUID MEMBER = UUID.randomUUID();
   protected static final ECKey KEY = key();
   protected static final String QUOTE_SECRET = Base64.getEncoder().encodeToString("order-quote-test-secret-32-bytes!".getBytes());
@@ -81,6 +95,7 @@ public abstract class OrderTestSupport {
           delete from outbox_events""");
     }
     StubServers.CART.reset(); StubServers.CATALOG.reset(); StubServers.SHIPPING.reset();
+    clock.reset();
   }
   /** Runs SQL as the superuser (fixtures the runtime role may not write). */
   protected void asOwner(String sql) {
@@ -155,6 +170,20 @@ public abstract class OrderTestSupport {
   }
   protected HttpResponse<String> quote(String body, String... auth) {
     return send("POST", "/api/v1/orders/quote", body, auth);
+  }
+
+  protected static String createBody(UUID cart, long version, String quoteToken) {
+    return "{\"cart_id\":\"" + cart + "\",\"cart_version\":" + version + ",\"quote_token\":\"" + quoteToken + "\"}";
+  }
+  protected HttpResponse<String> create(String key, String body, String... auth) {
+    var headers = new java.util.ArrayList<>(List.of(auth));
+    if (key != null) { headers.add("Idempotency-Key"); headers.add(key); }
+    return send("POST", "/api/v1/orders", body, headers.toArray(String[]::new));
+  }
+  /** A fresh quote_token for the happy fixture (stubCheckout must be set). */
+  protected String quoteToken(UUID cart, String... auth) {
+    return data(quote(quoteBody(cart, 4, "COD", auth[0].equals("Checkout-Token") ? "guest@example.test" : null), auth), 200)
+        .path("quote_token").asString();
   }
 
   /** headers: alternating name, value. */

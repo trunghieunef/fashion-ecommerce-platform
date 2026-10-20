@@ -2,13 +2,17 @@ package vn.fashion.order.orders;
 
 import io.micrometer.tracing.Tracer;
 import jakarta.servlet.http.HttpServletRequest;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import tools.jackson.databind.ObjectMapper;
@@ -25,14 +29,38 @@ public class OrderController {
                           Quote.Address shippingAddress, List<Item> items, Quote.Totals totals) { }
   public record Item(UUID variantId, String sku, String name, String size, String color, String imageUrl, int quantity,
                      long unitPrice, long lineTotal) { }
+  /** Spec section 7: guest order credential, 90 days (O06), scoped to its own order path. */
+  static final Duration ACCESS_TTL = Duration.ofDays(90);
+  static final String ACCESS_COOKIE = "order_access";
   private final OrderIdentity identity;
   private final QuoteService quotes;
   private final QuoteTokens tokens;
+  private final OrderService orders;
   private final ObjectMapper json;
   private final Tracer tracer;
 
-  public OrderController(OrderIdentity identity, QuoteService quotes, QuoteTokens tokens, ObjectMapper json, Tracer tracer) {
-    this.identity = identity; this.quotes = quotes; this.tokens = tokens; this.json = json; this.tracer = tracer;
+  public OrderController(OrderIdentity identity, QuoteService quotes, QuoteTokens tokens, OrderService orders, ObjectMapper json,
+                         Tracer tracer) {
+    this.identity = identity; this.quotes = quotes; this.tokens = tokens; this.orders = orders; this.json = json; this.tracer = tracer;
+  }
+
+  /** 202 + Location/Retry-After while PROCESSING (always in ORD-01); a retry with the same key gets the same order. */
+  @PostMapping
+  public ResponseEntity<Api.Response<OrderView>> create(@RequestHeader(name = "Idempotency-Key", required = false) String key,
+                                                       @RequestBody(required = false) String body, HttpServletRequest request) {
+    var actor = identity.require(request);
+    Api.requireKey(key);
+    var meta = Api.metadata(tracer);
+    var created = orders.create(actor, key, OrderService.parse(Api.object(json, body)), meta.traceId());
+    var view = created.view();
+    var response = Api.ok(view.processing() ? HttpStatus.ACCEPTED : HttpStatus.OK, view, meta);
+    var builder = ResponseEntity.status(response.getStatusCode()).headers(response.getHeaders());
+    if (view.processing())
+      builder.header(HttpHeaders.LOCATION, view.statusUrl()).header(HttpHeaders.RETRY_AFTER, String.valueOf(view.retryAfterSeconds()));
+    if (created.guestAccessToken() != null)
+      builder.header(HttpHeaders.SET_COOKIE, ResponseCookie.from(ACCESS_COOKIE, created.guestAccessToken()).httpOnly(true).secure(true)
+          .sameSite("Lax").path("/api/v1/orders/" + view.orderNo()).maxAge(ACCESS_TTL).build().toString());
+    return builder.body(response.getBody());
   }
 
   @PostMapping("/quote")
