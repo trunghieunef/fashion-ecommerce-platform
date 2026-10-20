@@ -89,12 +89,19 @@ class ShippingEventsIntegrationTest extends OrderTestSupport {
     assertThat(history(id, "SHIPPING", "DELIVERED")).isEqualTo(1);
     assertThat(jdbc.queryForObject("select delivered_at is not null from orders where id = ?", Boolean.class, id)).isTrue();
     deliver(updated(id, "DELIVERING", "2026-10-21T03:00:00Z", null, 3));   // older version: ignored
-    deliver(delivered);                                                      // same event_id: once
+    assertThat(shipmentVersion(id)).isEqualTo(4L);
+    deliver(delivered);                                                    // same event_id: once
     deliver(updated(id, "DELIVERED", "2026-10-21T03:00:00Z", null, 4));     // same version, new event_id: ignored
     assertThat(status(id)).isEqualTo("DELIVERED");
     assertThat(shipmentVersion(id)).isEqualTo(4L);
     assertThat(count("select count(*) from order_status_history where order_id = ?", id)).isEqualTo(3);  // PENDING, SHIPPING, DELIVERED
     assertThat(completed()).isEqualTo(1);
+    // A stale hand-over behind a newer fact (shipment cancelled before hand-over) never ships a PACKING order.
+    UUID stale = packing();
+    deliver(updated(stale, "CANCELLED", null, null, 5));
+    deliver(updated(stale, "DELIVERING", "2026-10-21T03:00:00Z", null, 3));
+    assertThat(status(stale)).isEqualTo("PACKING");
+    assertThat(shipmentVersion(stale)).isEqualTo(5L);
   }
 
   @Test void otherShipmentFactsOnlyRecordTheVersion() {

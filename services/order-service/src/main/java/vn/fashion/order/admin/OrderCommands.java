@@ -12,8 +12,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 import vn.fashion.order.orders.OrderService;
-import vn.fashion.order.orders.OrderView;
 import vn.fashion.order.saga.OrderTransitions;
 import vn.fashion.order.web.Api;
 import vn.fashion.platform.idempotency.IdempotencyStore;
@@ -89,10 +89,9 @@ public class OrderCommands {
           .param("before", json.writeValueAsString(Map.of("status", o.status(), "version", o.version())))
           .param("after", json.writeValueAsString(Map.of("status", after.status(), "version", after.version())))
           .param("request", request).update();
-      // Without order.fulfill (cancel by order.cancel only) the response carries no contact, address or note (13).
-      var view = a.permissions().contains("order.fulfill") ? after : new OrderView(after.orderId(), after.orderNo(), after.status(),
-          after.processingStatus(), after.reasonCode(), after.statusUrl(), after.retryAfterSeconds(), after.version(), after.method(),
-          after.items(), after.totals(), null, null, null, after.createdAt(), after.expiresAt(), after.allowedActions());
+      // Without order.fulfill (cancel by order.cancel only) the keys contact, address and note are omitted, like the GETs (13).
+      ObjectNode view = json.valueToTree(after);
+      if (!a.permissions().contains("order.fulfill")) view.remove(List.of("contact", "shipping_address", "note"));
       String body = json.writeValueAsString(view);
       keys.finish(actorKey, operation, key, o.id(), HttpStatus.ACCEPTED.value(), body);
       return json.readTree(body);

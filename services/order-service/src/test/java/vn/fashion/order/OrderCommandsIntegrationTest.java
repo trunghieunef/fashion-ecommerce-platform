@@ -145,7 +145,9 @@ class OrderCommandsIntegrationTest extends OrderTestSupport {
   @Test void aCancelWithoutOrderFulfillSeesNoContact() {
     UUID id = confirmed();
     var d = data(post(id, "cancel", "k", "{\"expected_version\":" + version(id) + ",\"reason\":\"x\"}", tokenWith(OPS, "order.cancel")), 202);
-    for (String field : new String[] {"contact", "shipping_address", "note"}) assertThat(d.path(field).isNull()).as(field).isTrue();
+    // Keys omitted, the same shape as the admin GETs.
+    for (String field : new String[] {"contact", "shipping_address", "note"}) assertThat(d.has(field)).as(field).isFalse();
+    assertThat(d.path("status").asString()).isEqualTo("CANCELLING");
   }
 
   @Test void aWorkerClaimTakenBeforeTheConfirmLosesItsWrite() {
