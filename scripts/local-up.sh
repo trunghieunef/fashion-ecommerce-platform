@@ -12,9 +12,11 @@ while IFS= read -r line; do
   grep -q "^${BASH_REMATCH[1]}=" "$ENV_FILE" || printf '%s\n' "$line" >> "$ENV_FILE"
 done < infra/local/.env.example
 
-# TASK:INV-01/CART-01/SHP-01/PAY-01: preserve generated inventory, cart, shipping and payment role credentials across restarts.
+# TASK:INV-01/CART-01/SHP-01/PAY-01/ORD-01: preserve generated inventory, cart, shipping, payment and order role credentials
+# across restarts.
 for inventory_key in INVENTORY_MIGRATION_DB_PASSWORD INVENTORY_DB_PASSWORD CART_MIGRATION_DB_PASSWORD CART_DB_PASSWORD \
-    SHIPPING_MIGRATION_DB_PASSWORD SHIPPING_DB_PASSWORD PAYMENT_MIGRATION_DB_PASSWORD PAYMENT_DB_PASSWORD; do
+    SHIPPING_MIGRATION_DB_PASSWORD SHIPPING_DB_PASSWORD PAYMENT_MIGRATION_DB_PASSWORD PAYMENT_DB_PASSWORD \
+    ORDER_MIGRATION_DB_PASSWORD ORDER_DB_PASSWORD; do
   if ! grep -q "^${inventory_key}=." "$ENV_FILE"; then
     sed -i "s|^${inventory_key}=.*|${inventory_key}=$(openssl rand -hex 32)|" "$ENV_FILE"
   fi
@@ -76,6 +78,24 @@ service_key() {
 }
 service_key CART cart-service CATALOG_INTERNAL_CALLERS INVENTORY_INTERNAL_CALLERS  # TASK:CART-01: catalog quote, inventory stock
 service_key SHIPPING shipping-service CATALOG_INTERNAL_CALLERS                     # TASK:SHP-01: catalog quote for weights
+service_key ORDER order-service CART_INTERNAL_CALLERS CATALOG_INTERNAL_CALLERS SHIPPING_INTERNAL_CALLERS  # TASK:ORD-01
+
+# TASK:ORD-01: guest checkout token key pair (cart signs, order verifies) and the quote HMAC secret; generated once.
+if ! grep -q '^CART_CHECKOUT_PRIVATE_KEY=.' "$ENV_FILE"; then
+  key="$(openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 |
+    openssl pkcs8 -topk8 -nocrypt -outform DER | base64 | tr -d '\r\n')"
+  sed -i "s|^CART_CHECKOUT_PRIVATE_KEY=.*|CART_CHECKOUT_PRIVATE_KEY=$key|" "$ENV_FILE"
+  sed -i "s|^ORDER_CHECKOUT_PUBLIC_KEYS=.*|ORDER_CHECKOUT_PUBLIC_KEYS=|" "$ENV_FILE"
+fi
+if ! grep -q '^ORDER_CHECKOUT_PUBLIC_KEYS=.' "$ENV_FILE"; then
+  private="$(grep '^CART_CHECKOUT_PRIVATE_KEY=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r')"
+  kid="$(grep '^CART_CHECKOUT_KID=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r')"
+  public="$(printf '%s' "$private" | base64 -d | openssl pkey -inform DER -pubout -outform DER | base64 | tr -d '\r\n')"
+  sed -i "s|^ORDER_CHECKOUT_PUBLIC_KEYS=.*|ORDER_CHECKOUT_PUBLIC_KEYS=${kid:-cart-checkout-1}:$public|" "$ENV_FILE"
+fi
+if ! grep -q '^ORDER_QUOTE_SECRET=.' "$ENV_FILE"; then
+  sed -i "s|^ORDER_QUOTE_SECRET=.*|ORDER_QUOTE_SECRET=$(openssl rand -base64 32 | tr -d '\r\n')|" "$ENV_FILE"
+fi
 
 ./mvnw -q -DskipTests package
 npm ci
