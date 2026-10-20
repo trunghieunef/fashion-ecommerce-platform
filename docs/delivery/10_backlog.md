@@ -4,7 +4,7 @@ B1 · 2026-09-19 · Work package mặc định: **Planned; Assignee TBD; Reviewe
 
 ## 1. Cách nhận việc
 
-Update 2026-10-20 — `TASK:ORD-02` **In review (local)**: saga checkout COD bằng worker nền (lease + CAS) — reserve
+Update 2026-10-21 — `TASK:ORD-02` **Done (local, trước G0)** ([nghiệm thu](../evidence/acceptance-2026-10-21.md#taskord-02--saga-checkout-cod-bù-trừ-hết-hạn-dọn-giỏ)), PR #33 CI PASS trên `3b8ee5b`, re-review đồng ý merge: saga checkout COD bằng worker nền (lease + CAS) — reserve
 (`reserve:{order_id}`) → payment COD (`payment:{order_id}`) → `CONFIRMED` chờ OPS tới `expires_at`; hết hàng/payment từ
 chối/quá hạn → `CANCELLING` → release + close → `CANCELLED` có `reason_code`; UNKNOWN retry cùng key, 30 lần → `MANUAL`;
 dọn giỏ bằng background task khi đơn `CONFIRMED` (REQ ORD-09); inbox `payment.events`; V002 unique một phần cho phép đặt lại
