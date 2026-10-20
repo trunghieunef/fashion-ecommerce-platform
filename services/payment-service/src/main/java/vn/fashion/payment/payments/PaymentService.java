@@ -29,6 +29,8 @@ public class PaymentService {
                      Instant closedAt, Instant paidAt, long version) { }
   static final String ACTOR = "service:order-service";
   static final long MAX_AMOUNT = 1_000_000_000_000L;
+  /** Close before any money: these become FAILED (06 section 17.1); UNKNOWN keeps its state until verified. */
+  private static final Set<String> UNCOLLECTED = Set.of("CREATED", "PROCESSING", "COD_PENDING");
   private static final Set<String> SNAPSHOT_FIELDS = Set.of("order_id", "order_no", "user_id", "method", "amount", "currency", "expires_at");
   private static final String VIEW = """
       select id as payment_id, order_id, order_no, method, amount, currency, status, closed_at, paid_at, version from payments""";
@@ -51,7 +53,11 @@ public class PaymentService {
     String hash = hash(s);
     return tx.execute(status -> {
       var replay = Api.replay(keys.begin(ACTOR, "payment.create", key, hash), json);
-      if (replay != null) return replay;
+      if (replay != null) {
+        // A retry after a close gets the current fact, not the stored open answer (same rule as shipping SHP-02 I1).
+        if (byOrder(s.orderId()).filter(v -> v.closedAt() != null).isPresent()) throw conflict("PAYMENT_CLOSED");
+        return replay;
+      }
       lockOrder(s.orderId());
       var existing = byOrder(s.orderId());
       if (existing.isPresent()) {
@@ -66,6 +72,45 @@ public class PaymentService {
       var view = byId(id);
       events.created(view, correlationId);
       keys.finish(ACTOR, "payment.create", key, id, 200, json.writeValueAsString(view));
+      return view;
+    });
+  }
+
+  /**
+   * PAY-08 (spec section 4): close stops every new create or resume. Not collected yet -> FAILED; no payment yet -> a FAILED
+   * tombstone with the snapshot; money already collected keeps its state (closed_at is independent of the money).
+   */
+  public Object close(String key, UUID pathOrderId, Snapshot s, String reason, String correlationId) {
+    if (!s.orderId().equals(pathOrderId))
+      throw new Api.Problem(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "INVALID_FIELDS",
+          List.of(new Api.FieldError("order_id", "must equal the order_id of the path")));
+    String hash = hash(s);
+    return tx.execute(status -> {
+      var replay = Api.replay(keys.begin(ACTOR, "payment.close", key, Api.sha256(hash + "\n" + reason)), json);
+      if (replay != null) return replay;
+      lockOrder(s.orderId());
+      var current = byOrder(s.orderId());
+      View view;
+      if (current.isEmpty()) {
+        UUID id = UUID.randomUUID();
+        insert(id, s, hash, "FAILED", reason);
+        transaction(id, "CLOSE", "close", "FAILED", null, null, "{}");
+        view = byId(id);
+        events.failed(view, "CLOSED", correlationId);
+      } else if (!requestHash(s.orderId()).equals(hash)) {
+        throw conflict("PAYMENT_CONFLICT");
+      } else if (current.get().closedAt() != null) {
+        view = current.get();
+      } else {
+        String to = UNCOLLECTED.contains(current.get().status()) ? "FAILED" : current.get().status();
+        jdbc.sql("""
+            update payments set status = :s, closed_at = now(), close_reason = :r, version = version + 1, updated_at = now()
+            where id = :id""").param("s", to).param("r", reason).param("id", current.get().paymentId()).update();
+        transaction(current.get().paymentId(), "CLOSE", "close", to, null, null, "{}");
+        view = byId(current.get().paymentId());
+        if (to.equals("FAILED")) events.failed(view, "CLOSED", correlationId);
+      }
+      keys.finish(ACTOR, "payment.close", key, view.paymentId(), 200, json.writeValueAsString(view));
       return view;
     });
   }
