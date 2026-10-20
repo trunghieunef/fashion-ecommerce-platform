@@ -1,0 +1,22 @@
+{
+  "event_id": "77777777-7777-4777-8777-7777777777a3",
+  "event_type": "PAYMENT_FAILED",
+  "version": 1,
+  "occurred_at": "2026-10-20T06:00:03Z",
+  "aggregate_id": "55555555-5555-4555-8555-555555555591",
+  "aggregate_version": 1,
+  "aggregate_sequence": 2,
+  "correlation_id": "synthetic-contract-example",
+  "payload": {
+    "order_id": "99999999-9999-4999-8999-999999999991",
+    "order_no": "ORD202610000001",
+    "payment_id": "55555555-5555-4555-8555-555555555591",
+    "method": "COD",
+    "amount": 275000,
+    "currency": "VND",
+    "status": "FAILED",
+    "paid_at": null,
+    "provider_txn_id": null,
+    "reason": "CLOSED"
+  }
+}
