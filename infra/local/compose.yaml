@@ -44,6 +44,8 @@ services:
       CART_DB_PASSWORD: ${CART_DB_PASSWORD:?run scripts/local-up.sh}
       SHIPPING_MIGRATION_DB_PASSWORD: ${SHIPPING_MIGRATION_DB_PASSWORD:?run scripts/local-up.sh}
       SHIPPING_DB_PASSWORD: ${SHIPPING_DB_PASSWORD:?run scripts/local-up.sh}
+      PAYMENT_MIGRATION_DB_PASSWORD: ${PAYMENT_MIGRATION_DB_PASSWORD:?run scripts/local-up.sh}
+      PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:?run scripts/local-up.sh}
     ports:
       - "127.0.0.1:${CATALOG_POSTGRES_PORT:-5432}:5432"
     volumes:
@@ -53,6 +55,7 @@ services:
       - ./postgres-init/03-inventory-db.sh:/docker-entrypoint-initdb.d/03-inventory-db.sh:ro
       - ./postgres-init/04-cart-db.sh:/docker-entrypoint-initdb.d/04-cart-db.sh:ro
       - ./postgres-init/05-shipping-db.sh:/docker-entrypoint-initdb.d/05-shipping-db.sh:ro
+      - ./postgres-init/06-payment-db.sh:/docker-entrypoint-initdb.d/06-payment-db.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
@@ -239,6 +242,30 @@ services:
       timeout: 3s
       retries: 30
 
+  # TASK:PAY-01: COD payments, close/tombstone, COD evidence from shipping.events, FINANCE settlements.
+  payment:
+    build: ../../services/payment-service
+    environment:
+      MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT: http://tempo:4318/v1/traces
+      TRACING_SAMPLING_PROBABILITY: ${TRACING_SAMPLING_PROBABILITY:-1.0}
+      PAYMENT_DB_URL: jdbc:postgresql://postgres:5432/payment
+      PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:?run scripts/local-up.sh}
+      PAYMENT_MIGRATION_DB_URL: jdbc:postgresql://postgres:5432/payment
+      PAYMENT_MIGRATION_DB_PASSWORD: ${PAYMENT_MIGRATION_DB_PASSWORD:?run scripts/local-up.sh}
+      PAYMENT_JWT_PUBLIC_KEYS: ${USER_JWT_PUBLIC_KEYS:?run scripts/local-up.sh}
+      PAYMENT_INTERNAL_CALLERS: ${PAYMENT_INTERNAL_CALLERS:-}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8086/actuator/health/readiness"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
   user-service:
     build: ../../services/user-service
     environment:
@@ -281,6 +308,7 @@ services:
       INVENTORY_BASE_URL: http://inventory:8083
       CART_BASE_URL: http://cart:8084
       SHIPPING_BASE_URL: http://shipping:8085
+      PAYMENT_BASE_URL: http://payment:8086
       # nacos-compat proof sets GATEWAY_CATALOG_BASE_URL=lb://catalog-service.
       CATALOG_BASE_URL: ${GATEWAY_CATALOG_BASE_URL:-http://catalog:8081}
       USER_BASE_URL: http://user-service:8082
