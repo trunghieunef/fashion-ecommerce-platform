@@ -56,7 +56,9 @@ class PaymentCreateIntegrationTest extends PaymentTestSupport {
 
   @Test void invalidInputsAreRefusedBeforeAnyWrite() {
     String order = UUID.randomUUID().toString();
-    assertThat(problem(create("a", snapshot(order, "ORD-4", "COD", 0)), 422)).isEqualTo("PAYMENT_AMOUNT_UNSUPPORTED");
+    var zero = create("a", snapshot(order, "ORD-4", "COD", 0));
+    assertThat(problem(zero, 422)).isEqualTo("PAYMENT_AMOUNT_UNSUPPORTED");
+    assertThat(json(zero).path("code").asString()).isEqualTo("PAYMENT_AMOUNT_UNSUPPORTED"); // 03 section 1 error code
     assertThat(problem(create("b", snapshot(order, "ORD-4", "VNPAY", 1000)), 422)).isEqualTo("PAYMENT_METHOD_UNAVAILABLE");
     assertThat(problem(create("c", snapshot(order, "ORD-4", "COD", 1000).replace("\"VND\"", "\"USD\"")), 400)).isEqualTo("INVALID_FIELDS");
     assertThat(problem(create("d", snapshot(order, "ORD-4", "CARD", 1000)), 400)).isEqualTo("INVALID_FIELDS");

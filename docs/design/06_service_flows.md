@@ -509,8 +509,8 @@ sequenceDiagram
 | Refund toàn phần/một phần | FINANCE hoặc order yêu cầu → lock payment → kiểm tra tiền đã thu và amount còn khả dụng → insert refund + reserve amount → gọi provider ngoài TX | Retry cùng operation_key không reserve hai lần; tổng refund thành công + đang chờ không vượt tiền gốc |
 | Refund callback/query | Xác minh → lock refund/payment → SUCCESS: chuyển refund_reserved sang refunded, outbox PAYMENT_REFUNDED có refund_id và cumulative total | FAILED chắc chắn mới nhả reserved; timeout UNKNOWN giữ reserved, reconcile |
 | Hủy chưa thu | Order close payment → khóa intent; chặn tạo/tiếp tục giao dịch mới, gọi cancel provider nếu có | Không giả định close chặn tiền đang tới; late success vẫn phát event để refund |
-| COD thu tiền | Consume COD_COLLECTED từ shipping, verify order/method/amount → COD_COLLECTED | Trạng thái DELIVERED không tự tạo COD_COLLECTED |
-| COD tiền về | FINANCE cung cấp settlement_ref/bằng chứng hoặc batch đối soát → SUCCESS → PAYMENT_COMPLETED | Chống trùng settlement_ref; thiếu/thừa tiền tạo reconciliation_items, không tự ép khớp |
+| COD thu tiền | Consume COD_COLLECTED từ shipping, verify order/method/amount → COD_COLLECTED | Trạng thái DELIVERED không tự tạo COD_COLLECTED. `PAY-01`: lệch method/amount mở reconciliation item, giữ trạng thái; chưa có payment → retry; COD_REMITTED chỉ ghi bằng chứng |
+| COD tiền về | FINANCE cung cấp settlement_ref/bằng chứng hoặc batch đối soát → SUCCESS → PAYMENT_COMPLETED | Chống trùng settlement_ref; thiếu/thừa tiền tạo reconciliation_items, không tự ép khớp. `PAY-01`: settlement nhiều đợt, thiếu giữ COD_COLLECTED, vượt amount bị từ chối 409 (batch/discrepancy tự động ở PAY-05) |
 | Đối soát online | Job query UNKNOWN và batch theo ngày → so merchant ref, trạng thái, số tiền → áp dụng qua cùng hàm ghi giao dịch | Sai lệch mở item để FINANCE xử lý có audit; không sửa lịch sử theo file không xác minh |
 
 Hoàn COD có thể cần chuyển khoản thủ công: FINANCE ghi bằng chứng và mã chuyển tiền duy nhất, cùng kiểm tra hạn mức refund; không gọi API refund online cho COD. Mất đáp ứng từ ngân hàng giữ UNKNOWN để đối chiếu.

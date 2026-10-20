@@ -370,6 +370,8 @@ erDiagram
 | `refunds` (T) | `id`, `payment_id uuid FK payments`, `operation_key text`, `amount bigint`, `reason text`, `status varchar(32) = 'REQUESTED'`, `provider_refund_id text?`, `retry_count int = 0`, `next_retry_at timestamptz = now()`, `last_error text?`, `actor_id uuid?` | UNIQUE `(payment_id, operation_key)`; amount > 0; REQUESTED/PROCESSING/UNKNOWN/SUCCESS/FAILED; partial index next_retry_at WHERE status IN ('REQUESTED','PROCESSING','UNKNOWN') |
 | `reconciliation_items` (T; MVP manual/query, Phase 2 batch) | `id`, `payment_id uuid FK payments`, `source_ref text`, `kind varchar(32)`, `expected_amount bigint`, `observed_amount bigint`, `status varchar(16) = 'OPEN'`, `evidence jsonb`, `resolved_by uuid?`, `resolved_at timestamptz?` | UNIQUE `(payment_id, source_ref, kind)`; OPEN/RESOLVED; index `(status, created_at)` |
 
+`PAY-01` (V001 payment-service) thêm so với bảng trên: `payments.snapshot jsonb` (snapshot order đã hash, cho tombstone close-before-create), `created_at`/`updated_at`; `payment_transactions.source` thêm `CLOSE`/`SETTLEMENT` để mỗi đổi trạng thái có một dòng bằng chứng. Bảng `refunds` chưa tạo (PAY-04).
+
 Payment status: CREATED/PROCESSING/UNKNOWN/SUCCESS/FAILED/PARTIALLY_REFUNDED/REFUNDED/COD_PENDING/COD_COLLECTED. COD_COLLECTED nghĩa carrier xác nhận đã thu, SUCCESS nghĩa FINANCE/đối soát xác nhận tiền về shop. Giao thành công không tự đồng nghĩa thu tiền hoặc tiền đã về.
 
 Khóa payment khi tạo refund; reserve amount trước gọi cổng. Thành công chuyển reserved sang refunded; thất bại chắc chắn mới nhả phần reserved. UNKNOWN giữ phần reserved, query kết quả bằng cùng mã trước khi retry. Refund một phần không đổi order sang REFUNDED; order chỉ REFUNDED khi nghĩa vụ hoàn toàn bộ của luồng hủy đã hoàn tất.

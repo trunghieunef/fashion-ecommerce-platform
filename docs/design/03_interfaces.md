@@ -451,10 +451,10 @@ reference/lease được GC sau 7 ngày từ terminal, suy ra upload_id, không 
 | POST /orders/{order_no}/returns | OPS | Evidence, items qty/condition, key → kiểm đếm/return work / 1 |
 | GET /inventory/skus; GET /inventory/skus/{sku}/transactions | OPS (`inventory.read`) | INV-01 hiện thực local: keyset SKU tăng hoặc ledger (created_at,id) giảm; limit 1..100 mặc định 20, sai → 400; stock có available và version / 1 |
 | POST /inventory/adjust; POST /inventory/import | OPS (`inventory.adjust`) | INV-01 hiện thực local: key, reason strip 1..500; adjust delta nguyên khác 0; import INBOUND cộng tồn, CSV UTF-8/BOM/LF/CRLF <=128 KiB, 1..1000 dòng, quantity 1..1000000, multipart <=160 KiB (quá hạn mức 413); lỗi toàn file không ghi một phần / 1 |
-| GET /payments; GET /payments/{id} | FINANCE | Transaction/refund/discrepancy / 1 |
+| GET /payments; GET /payments/{id} | FINANCE | Transaction/refund/discrepancy / 1 — `PAY-01` implemented ([payment.yaml](../../contracts/openapi/payment.yaml), `payment.read`; list status/cursor, detail có transactions, settlements, reconciliation items) |
 | POST /payments/{id}/refunds | FINANCE | amount,reason,operation_key,evidence → refund resource / 1 |
 | GET /payments/{id}/refunds/{refund_id} | FINANCE | Trạng thái UNKNOWN/SUCCESS/FAILED / 1 |
-| POST /payments/{id}/cod-settlements | FINANCE | settlement_ref,gross,fees,net,evidence / 1 |
+| POST /payments/{id}/cod-settlements | FINANCE | settlement_ref,gross,fees,net,evidence / 1 — `PAY-01` implemented (`payment.settle`, key, `expected_version`): chỉ COD_COLLECTED; gross = fee + net; ref một lần/payment; Σgross ≤ amount; đủ → SUCCESS + PAYMENT_COMPLETED |
 | GET /payments/reconciliation; POST /payments/reconciliation/{id}/resolve | FINANCE | Giải trình/evidence, không force success không xác minh / 1 |
 | GET /shipping/shipments; GET /shipping/shipments/{id} | OPS | Tracking/UNKNOWN/handed_over_at / 1 — `SHP-01` implemented (`shipping.read`; list status/cursor, detail có địa chỉ + history) |
 | POST /shipping/shipments/{id}/self-events | OPS | Event/status/evidence/thu COD, không trực tiếp sửa order / 1 — `SHP-02` implemented (`shipping.self_event`, `Idempotency-Key`, `expected_version`): ASSIGN/HANDED_OVER/DELIVERED/DELIVERY_FAILED/REDELIVER/RETURN_STARTED/RETURNED/COD_COLLECTED/COD_REMITTED theo bảng cạnh ([spec](../superpowers/specs/2026-10-20-shp-02-self-events-cancel-design.md) §2); `evidence_ref`/`reason` theo loại; cạnh sai 409 INVALID_TRANSITION, COD sai số 400, thu/nộp lặp 409; `handed_over_at` chỉ đặt ở HANDED_OVER |
@@ -488,9 +488,9 @@ Report orders do order sở hữu, cash do payment, stock do inventory; dashboar
 | POST /promotions/reservations/commit | order → promotion | order_id,key → COMMITTED |
 | POST /promotions/reservations/release | order → promotion | order_id,original_snapshot,original_hash,reason,key → RELEASED |
 | GET /promotions/reservations/{order_id} | order → promotion | Aggregate/child states |
-| POST /payments | order → payment | Authenticated order snapshot/hash,expires_at,key → payment state/URL |
-| GET /payments/by-order/{order_id} | order → payment | Verified amount/method/status/closed_at |
-| POST /payments/{order_id}/close | order → payment | Original snapshot/hash,key → closed intent/tombstone |
+| POST /payments | order → payment | Authenticated order snapshot/hash,expires_at,key → payment state/URL — `PAY-01` implemented ([payment-internal.yaml](../../contracts/openapi/payment-internal.yaml)): chỉ COD → COD_PENDING; VNPAY/MOMO 422 tới PAY-02/03; `provider_request_id = order_no`; đã close → 409 PAYMENT_CLOSED |
+| GET /payments/by-order/{order_id} | order → payment | Verified amount/method/status/closed_at — `PAY-01` implemented |
+| POST /payments/by-order/{order_id}/close | order → payment | Original snapshot/hash,key → closed intent/tombstone — `PAY-01` implemented; path đổi từ `/payments/{order_id}/close` để không trùng dạng `/payments/{payment_id}/…` (08) |
 | POST /payments/{payment_id}/refunds | order → payment | operation_key,amount,reason,order context → refund |
 | GET /payments/{payment_id}/refunds/{refund_id} | order → payment | Result/cumulative refunded amount |
 | POST /shipping/fee | order,cart → shipping | `SHP-01` implemented: `/internal/api/v1/shipping/quotes` ([shipping-internal.yaml](../../contracts/openapi/shipping-internal.yaml)), caller order-service; province_code,cod,items + key → quote_id,fee,cod_fee,carrier,weight_grams,rule_id/version,expires_at (+15 phút), lưu `shipping_quotes` |

@@ -445,6 +445,22 @@ Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác v
 | SELF tạo PENDING → CREATED trong một TX, tracking `SELF-<order_no>`; advisory lock theo quote (quote insert-only) | Bàn giao/giao/COD/cancel là SHP-02 |
 | Phát `SHIPMENT_CREATED` qua outbox từ SHP-01 | Schema + registry mới; chưa có consumer |
 
+## PAY-01 — quyết định 2026-10-20
+
+`TASK:PAY-01` · `REQ:PAY-03/07/08`. Chủ dự án giao agent tự chốt và duyệt [spec](../superpowers/specs/2026-10-20-pay-01-payment-cod-design.md) (cả các mặc định §9):
+
+| Quyết định | Hệ quả |
+|---|---|
+| Service mới `payment-service` (port 8086, DB `payment`); PAY-01 chỉ COD, VNPAY/MOMO 422 `PAYMENT_METHOD_UNAVAILABLE` | Online thêm ở PAY-02/03, schema đã có cột |
+| `provider_request_id = order_no` | Một business reference suốt vòng đời (PAY-07) |
+| Path close `/internal/api/v1/payments/by-order/{order_id}/close` (03 cũ: `/payments/{order_id}/close`) | Không trùng dạng `/payments/{payment_id}/…`; 03 đã sửa |
+| Thêm `payments.snapshot` và source `CLOSE`/`SETTLEMENT` so với 05 | 05 đã ghi |
+| Close-before-create phát `PAYMENT_FAILED` reason `CLOSED`; UNKNOWN không bị close đổi FAILED | Order nhận một tín hiệu nhất quán; UNKNOWN cần bằng chứng |
+| Không phát event khi COD_COLLECTED; `PAYMENT_COMPLETED` phát cả khi payment đã close | Order đọc COD từ `shipping.events`; late money báo order refund |
+| Settlement nhiều đợt, thiếu giữ COD_COLLECTED, vượt amount 409; gross 0 bị từ chối | SLA/discrepancy phần thiếu thuộc O04/PAY-05 |
+| Lệch method/amount từ shipping → `reconciliation_items` OPEN, không đổi trạng thái | Resolve ở PAY-05 |
+| COD evidence cho đơn chưa có payment → retry (không ACK) | Partition chờ tới khi payment có; chỉ xảy ra nếu order tạo shipment COD không có payment |
+
 ## SHP-02 — quyết định 2026-10-20
 
 `TASK:SHP-02` · `REQ:SHP-02/04/06`. Chủ dự án giao agent tự chốt và duyệt [spec](../superpowers/specs/2026-10-20-shp-02-self-events-cancel-design.md) (cả các mặc định §8):

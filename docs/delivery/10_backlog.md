@@ -4,6 +4,12 @@ B1 · 2026-09-19 · Work package mặc định: **Planned; Assignee TBD; Reviewe
 
 ## 1. Cách nhận việc
 
+Update 2026-10-20 — `TASK:PAY-01` **In review (local)**: payment-service COD — một payment/đơn từ snapshot order
+(`provider_request_id = order_no`), close + tombstone close-before-create, bằng chứng COD từ `shipping.events` (lệch →
+reconciliation item, REMITTED chỉ là bằng chứng — T27), FINANCE settlement gross = fee + net nhiều đợt → SUCCESS +
+`PAYMENT_COMPLETED`; `REQ:PAY-03/07/08`; dependency PLT-03, USR-02, SHP-02;
+[spec](../superpowers/specs/2026-10-20-pay-01-payment-cod-design.md), [evidence](../evidence/pay-01-local-2026-10-20.md).
+
 Update 2026-10-20 — `TASK:SHP-02` **Done (local, trước G0) — MANUAL + incident cho bằng chứng sau hủy chờ quyết định (08)**
 theo [nghiệm thu](../evidence/acceptance-2026-10-20.md) (PR #30 CI PASS trên `eb0b7c1`, đã merge `main` `03b3aa6`): OPS SELF events có bằng chứng (gán shipper, bàn giao đặt
 `handed_over_at`, giao/thất bại/giao lại/hoàn), COD thu/nộp là event tài chính riêng, cancel trước bàn giao + tombstone

@@ -47,9 +47,9 @@ public class PaymentService {
   /** COD -> COD_PENDING; a closed order (tombstone or closed payment) is 409 PAYMENT_CLOSED, another snapshot 409 PAYMENT_CONFLICT. */
   public Object create(String key, Snapshot s, String correlationId) {
     if (s.amount() <= 0)
-      throw new Api.Problem(HttpStatus.UNPROCESSABLE_CONTENT, "UNPROCESSABLE", "PAYMENT_AMOUNT_UNSUPPORTED", List.of());
+      throw new Api.Problem(HttpStatus.UNPROCESSABLE_CONTENT, "PAYMENT_AMOUNT_UNSUPPORTED", "PAYMENT_AMOUNT_UNSUPPORTED", List.of());
     if (!s.method().equals("COD"))
-      throw new Api.Problem(HttpStatus.UNPROCESSABLE_CONTENT, "UNPROCESSABLE", "PAYMENT_METHOD_UNAVAILABLE", List.of());
+      throw new Api.Problem(HttpStatus.UNPROCESSABLE_CONTENT, "VALIDATION_ERROR", "PAYMENT_METHOD_UNAVAILABLE", List.of());
     String hash = hash(s);
     return tx.execute(status -> {
       var replay = Api.replay(keys.begin(ACTOR, "payment.create", key, hash), json);

@@ -267,6 +267,15 @@ test "$(status -X POST -H "Authorization: Bearer $access" -H 'Content-Type: appl
   -H 'Idempotency-Key: smoke-shp02' -d "$self_event" "$self_event_url")" = 403
 test "$(status -X POST "$GATEWAY_URL/internal/api/v1/shipping/shipments/by-order/00000000-0000-4000-8000-000000000000/cancel")" = 404
 echo 'SHP-02 self-event route PASS'
+# TASK:PAY-01: FINANCE payment admin through the Gateway (payment.read); internal create/close are never routed.
+# No payment exists without order-service, so the list answers and an unknown id is 404.
+finance="$(local_ops_token payment.read)"
+curl -sS -H "Authorization: Bearer $finance" "$GATEWAY_URL/admin/api/v1/payments?limit=1" | \
+  python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert "items" in d and "next_cursor" in d, d'
+test "$(status -H "Authorization: Bearer $finance" "$GATEWAY_URL/admin/api/v1/payments/00000000-0000-4000-8000-000000000000")" = 404
+test "$(status -H "Authorization: Bearer $access" "$GATEWAY_URL/admin/api/v1/payments")" = 403
+test "$(status -X POST "$GATEWAY_URL/internal/api/v1/payments")" = 404
+echo 'PAY-01 payment admin route PASS'
 # TASK:CAT-02b: public detail is cacheable for 5 s (Redis keeps it 300 s until invalidated).
 curl -sS -o /dev/null -D "$headers" "$GATEWAY_URL/api/v1/catalog/products/$product_id"
 grep -qi '^cache-control: public, max-age=5' "$headers"
