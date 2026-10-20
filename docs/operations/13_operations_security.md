@@ -202,6 +202,32 @@ Notification/consent, traces, media và retention kỹ thuật outbox/inbox vẫ
 cần chính sách được duyệt theo từng nhóm dữ liệu, gồm các nhóm còn mở này, và kế hoạch
 cleanup/retention/restore có kiểm thử; chưa bật purge dữ liệu tài chính.
 
+### Giá trị cụ thể O06 — chủ dự án xác nhận ngày 2026-10-20
+
+Chủ dự án (PO) yêu cầu "chốt O06" trong phiên làm việc ngày 2026-10-20; **agent đề xuất** giá trị trong khung đã duyệt
+2026-10-04 và bổ sung các nhóm còn thiếu. Sau review PR #31, chủ dự án **xác nhận giữ nguyên toàn bộ
+giá trị** trong phiên làm việc ngày 2026-10-20; ORD-01 thiết kế theo bảng này. Đây là chính sách dự án, không phải kết luận pháp lý. Chưa triển khai cleanup/purge; mỗi job dọn phải có test và chạy theo task riêng.
+
+| Nhóm dữ liệu | Giá trị đã xác nhận | Mốc tính / ghi chú |
+|---|---|---|
+| Tài khoản, email, địa chỉ đã lưu | Ẩn danh sau **24 tháng** không hoạt động | "Hoạt động" = đăng nhập/refresh thành công hoặc tạo đơn; email báo trước 30 ngày; yêu cầu xóa hợp lệ xử lý ngay, không chờ 24 tháng |
+| Giỏ hàng bỏ quên | **30 ngày** | Khớp cookie `cart_token` 30 ngày trượt; không dọn giỏ đang checkout |
+| Liên hệ, địa chỉ, ghi chú trong đơn (order/shipping) | Ẩn danh sau **12 tháng** | Từ khi đơn kết thúc (COMPLETED/CANCELLED/REFUNDED và hết nghĩa vụ giao/hoàn); giữ field chứng từ (order_no, tổng tiền, tỉnh) |
+| Guest order credential (`guest_access_hash`) | Theo hạn truy cập đơn, tối đa **90 ngày** sau khi đơn kết thúc | Hết hạn thì guest dùng hỗ trợ xác minh |
+| Log kỹ thuật đã che | **30 ngày** | Từ lúc tạo |
+| Traces | **7 ngày** | Chỉ metadata, không payload (PLT-05) |
+| Audit thao tác admin | **12 tháng**; audit tài chính theo chứng từ | Như bảng 2026-10-04 |
+| Backup luân phiên | **30 ngày** | Restore phải áp lại yêu cầu xóa/ẩn danh |
+| Outbox SENT / inbox dedupe | **30 ngày / 90 ngày** | Đủ replay window của consumer |
+| `idempotency_requests` (có response body) | **30 ngày** sau khi hoàn tất | Dài hơn mọi hạn retry/quote; không lưu secret |
+| Notification rendered content/recipient | **90 ngày** | OTP/reset chỉ lưu marker |
+| Bằng chứng consent marketing | Khi consent còn hiệu lực + **24 tháng** sau khi rút | Giữ timestamp, kênh, nguồn; không giữ nội dung thừa |
+| Payment/refund/settlement/đối soát và chứng từ kế toán | **10 năm**, không purge | Chờ phụ trách pháp lý xác minh mốc tính |
+| Hồ sơ đang tranh chấp/đối soát/refund | Giữ tới khi đóng, rồi tính thời hạn nhóm từ ngày đóng | — |
+
+Còn mở trong O06 (không chặn ORD-01, chặn G2): phụ trách pháp lý xác minh áp dụng Luật 91/2025/QH15 và mốc 10 năm cho
+chứng từ; nội dung điều khoản/consent hiển thị cho khách; ngày hạn hoàn tất là **trước G2**.
+
 Secret inventory gồm JWT signing keys (service token ADR-19 và access token member ADR-21 `USER_JWT_PRIVATE_KEY`), khóa mã hóa secret tạm `USER_SECRET_KEY` (AES-256, USR-01b), service credentials, DB/Kafka/Redis credentials, merchant secrets, mail/SMS keys. Mỗi secret có owner, env, rotation plan; không lưu trong Nacos plaintext, image, Git hoặc ticket.
 
 Data inventory theo field (SEC-01, từ 05). Dùng để masking log và để O06 chốt thời hạn lưu; bảng này **không** quyết định thời hạn lưu:

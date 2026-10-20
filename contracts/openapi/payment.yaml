@@ -1,0 +1,216 @@
+openapi: 3.1.0
+info:
+  title: Payment admin API
+  version: 0.1.0
+  description: TASK:PAY-01 FINANCE payment reads and COD settlements (gross = fee + net). COD_COLLECTED means the shipper
+    collected; only FINANCE settlements that add up to the amount make SUCCESS (T27). No public payment route in PAY-01.
+    Every response is no-store.
+servers:
+- url: http://localhost:8080
+  description: Local Gateway
+tags:
+- name: Payment admin
+  description: FINANCE (permission payment.read / payment.settle)
+paths:
+  /admin/api/v1/payments:
+    get:
+      tags: [Payment admin]
+      operationId: listPayments
+      summary: Payments newest first
+      description: PAY-01 implemented. Permission payment.read. Optional status filter; keyset cursor (created_at, id).
+      security: [{bearerAuth: []}]
+      x-implementation-status: implemented
+      parameters:
+      - {name: status, in: query, schema: {$ref: '#/components/schemas/PaymentStatus'}}
+      - {name: cursor, in: query, schema: {type: string}}
+      - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+      responses:
+        '200':
+          description: Page
+          headers: &headers
+            X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+            Cache-Control: {$ref: '#/components/headers/NoStore'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PaymentPageResponse'}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /admin/api/v1/payments/{id}:
+    get:
+      tags: [Payment admin]
+      operationId: getPayment
+      summary: Payment with evidence rows, settlements and reconciliation items
+      description: PAY-01 implemented. Permission payment.read. Payment stores user_id only (no contact or address).
+      security: [{bearerAuth: []}]
+      x-implementation-status: implemented
+      parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Detail
+          headers: *headers
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PaymentDetailResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /admin/api/v1/payments/{id}/cod-settlements:
+    post:
+      tags: [Payment admin]
+      operationId: recordCodSettlement
+      summary: Record COD money that reached the shop
+      description: >-
+        PAY-01 implemented. Permission payment.settle. Only on COD_COLLECTED (else 409 PAYMENT_NOT_SETTLEABLE, errors status
+        current=S); expected_version must match (409 VERSION_CONFLICT). gross_amount = fee_amount + net_amount and > 0 (400).
+        A settlement_ref is used once per payment (409 SETTLEMENT_REF_REUSED). Batches add up; a sum above the amount is
+        409 SETTLEMENT_EXCEEDS_AMOUNT. When the sum reaches the amount the payment is SUCCESS with paid_at and outbox
+        PAYMENT_COMPLETED, also on a closed payment (the order then owes a refund). A shortfall stays COD_COLLECTED.
+      security: [{bearerAuth: []}]
+      x-implementation-status: implemented
+      parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CodSettlement'}
+      responses:
+        '200':
+          description: Payment after the settlement
+          headers: *headers
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SettledResponse'}
+              examples:
+                completed:
+                  value:
+                    code: OK
+                    data: {payment_id: 55555555-5555-4555-8555-555555555591, status: SUCCESS, amount: 275000, settled_amount: 275000,
+                      paid_at: '2026-10-20T06:00:02Z', closed_at: null, version: 3}
+                    metadata: {request_id: pay01-synthetic-request, trace_id: pay01-synthetic-trace}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409':
+          description: PAYMENT_NOT_SETTLEABLE, VERSION_CONFLICT, SETTLEMENT_REF_REUSED, SETTLEMENT_EXCEEDS_AMOUNT or IDEMPOTENCY_KEY_REUSED
+          headers: *headers
+          content:
+            application/json:
+              schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT, description: ADR-21 access token with payment.read / payment.settle}
+  headers:
+    NoStore:
+      description: Never cached, errors included.
+      schema: {type: string, const: no-store}
+  schemas:
+    Money: {type: integer, minimum: 0, maximum: 1000000000000}
+    Method: {type: string, enum: [COD, VNPAY, MOMO]}
+    PaymentStatus: {type: string, enum: [CREATED, PROCESSING, UNKNOWN, SUCCESS, FAILED, PARTIALLY_REFUNDED, REFUNDED, COD_PENDING, COD_COLLECTED]}
+    PaymentSummary:
+      type: object
+      additionalProperties: false
+      required: [payment_id, order_id, order_no, method, amount, status, closed_at, paid_at, created_at]
+      properties:
+        payment_id: {type: string, format: uuid}
+        order_id: {type: string, format: uuid}
+        order_no: {type: string}
+        method: {$ref: '#/components/schemas/Method'}
+        amount: {$ref: '#/components/schemas/Money'}
+        status: {$ref: '#/components/schemas/PaymentStatus'}
+        closed_at: {type: [string, 'null'], format: date-time}
+        paid_at: {type: [string, 'null'], format: date-time}
+        created_at: {type: string, format: date-time}
+    PaymentPageResponse:
+      type: object
+      required: [code, data, metadata]
+      properties:
+        code: {type: string, const: OK}
+        data:
+          type: object
+          required: [items, next_cursor]
+          properties:
+            items: {type: array, items: {$ref: '#/components/schemas/PaymentSummary'}}
+            next_cursor: {type: [string, 'null']}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
+    PaymentDetailResponse:
+      type: object
+      required: [code, data, metadata]
+      properties:
+        code: {type: string, const: OK}
+        data:
+          type: object
+          description: Summary fields plus user_id, currency, provider_request_id, close_reason, refunded_amount,
+            refund_reserved_amount, version, updated_at, transactions[{source, provider_event_key, status, amount, occurred_at,
+            evidence, created_at}], settlements[{settlement_ref, gross_amount, fee_amount, net_amount, evidence_ref, confirmed_by,
+            created_at}] and reconciliation_items[{id, source_ref, kind, expected_amount, observed_amount, status, evidence,
+            resolved_by, resolved_at, created_at}]
+          required: [payment_id, order_id, status, transactions, settlements, reconciliation_items]
+          properties:
+            payment_id: {type: string, format: uuid}
+            order_id: {type: string, format: uuid}
+            status: {$ref: '#/components/schemas/PaymentStatus'}
+            transactions: {type: array, items: {type: object}}
+            settlements: {type: array, items: {type: object}}
+            reconciliation_items: {type: array, items: {type: object}}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
+    CodSettlement:
+      type: object
+      additionalProperties: false
+      required: [settlement_ref, gross_amount, fee_amount, net_amount, evidence_ref, expected_version]
+      properties:
+        settlement_ref: {type: string, minLength: 1, maxLength: 128, description: 'Bank/carrier statement reference, once per payment'}
+        gross_amount: {$ref: '#/components/schemas/Money'}
+        fee_amount: {$ref: '#/components/schemas/Money'}
+        net_amount: {$ref: '#/components/schemas/Money'}
+        evidence_ref: {type: string, minLength: 1, maxLength: 500}
+        expected_version: {type: integer, minimum: 0}
+    Settled:
+      type: object
+      additionalProperties: false
+      required: [payment_id, status, amount, settled_amount, paid_at, closed_at, version]
+      properties:
+        payment_id: {type: string, format: uuid}
+        status: {$ref: '#/components/schemas/PaymentStatus'}
+        amount: {$ref: '#/components/schemas/Money'}
+        settled_amount: {$ref: '#/components/schemas/Money'}
+        paid_at: {type: [string, 'null'], format: date-time}
+        closed_at: {type: [string, 'null'], format: date-time}
+        version: {type: integer, minimum: 0}
+    SettledResponse:
+      type: object
+      required: [code, data, metadata]
+      properties:
+        code: {type: string, const: OK}
+        data: {$ref: '#/components/schemas/Settled'}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
+  responses:
+    Invalid:
+      description: INVALID_FIELDS, INVALID_KEY, MALFORMED_JSON or INVALID_PARAMETER
+      headers: *headers
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+    Unauthorized:
+      description: INVALID_ACCESS_TOKEN
+      headers: *headers
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+    Forbidden:
+      description: PERMISSION_REQUIRED
+      headers: *headers
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+    NotFound:
+      description: PAYMENT_NOT_FOUND
+      headers: *headers
+      content:
+        application/json:
+          schema: {$ref: ./common.yaml#/components/schemas/ApiError}

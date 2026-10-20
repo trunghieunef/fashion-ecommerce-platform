@@ -1,0 +1,179 @@
+openapi: 3.1.0
+info:
+  title: Payment internal API
+  version: 0.1.0
+  description: >
+    TASK:PAY-01 — COD payment create, read and close (with close-before-create tombstone) for order-service (03 §4).
+    ADR-19 ES256 service token, audience payment-service, caller order-service only; token and caller are checked before
+    headers and body. Not routed by the public Gateway. Every response is no-store. VNPAY/MOMO arrive with PAY-02/03.
+servers:
+- url: http://localhost:8086
+  description: Private payment service; bypasses public Gateway
+tags:
+- name: Internal payment
+  description: order-service only
+security:
+- serviceToken: []
+paths:
+  /internal/api/v1/payments:
+    post:
+      tags: [Internal payment]
+      operationId: createPayment
+      summary: Create the payment of an order from its snapshot
+      description: >-
+        One payment per order for its whole life; provider_request_id = order_no (PAY-07). COD becomes COD_PENDING at once
+        with a CREATE evidence row and outbox PAYMENT_CREATED. The same order and snapshot returns the existing payment (any
+        key); another snapshot is 409 PAYMENT_CONFLICT. A closed order (tombstone or closed payment) is 409 PAYMENT_CLOSED,
+        checked before the snapshot and the 422 rules, also for a same-key replay after the close. amount 0 is 422
+        PAYMENT_AMOUNT_UNSUPPORTED; VNPAY/MOMO are 422 PAYMENT_METHOD_UNAVAILABLE until PAY-02/03.
+      x-implementation-status: implemented
+      parameters:
+      - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/OrderSnapshot'}
+      responses:
+        '200':
+          description: Payment (new or existing)
+          headers: &headers
+            X-Correlation-Id: {$ref: ./common.yaml#/components/headers/CorrelationId}
+            Cache-Control: {$ref: '#/components/headers/NoStore'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PaymentResponse'}
+              examples:
+                created:
+                  value:
+                    code: OK
+                    data: &payment {payment_id: 55555555-5555-4555-8555-555555555591, order_id: 99999999-9999-4999-8999-999999999991,
+                      order_no: ORD202610000001, method: COD, amount: 275000, currency: VND, status: COD_PENDING, closed_at: null,
+                      paid_at: null, version: 0}
+                    metadata: {request_id: pay01-synthetic-request, trace_id: pay01-synthetic-trace}
+        '400': &error
+          description: INVALID_FIELDS, INVALID_KEY or MALFORMED_JSON
+          headers: *headers
+          content:
+            application/json:
+              schema: {$ref: ./common.yaml#/components/schemas/ApiError}
+        '401': {<<: *error, description: INVALID_SERVICE_TOKEN}
+        '403': {<<: *error, description: CALLER_NOT_ALLOWED}
+        '409': {<<: *error, description: 'PAYMENT_CLOSED (checked first, before the 422 rules), PAYMENT_CONFLICT, DUPLICATE (order_no already used by another order_id) or IDEMPOTENCY_KEY_REUSED'}
+        '422': {<<: *error, description: 'PAYMENT_AMOUNT_UNSUPPORTED (code PAYMENT_AMOUNT_UNSUPPORTED) or PAYMENT_METHOD_UNAVAILABLE'}
+  /internal/api/v1/payments/by-order/{order_id}/close:
+    post:
+      tags: [Internal payment]
+      operationId: closePayment
+      summary: Close the payment of an order, or block a late create (tombstone)
+      description: >-
+        PAY-08. Body is the original create snapshot plus reason; order_id must equal the path. Same order lock as create.
+        No payment yet: a FAILED tombstone with the snapshot and closed_at is stored and PAYMENT_FAILED (reason CLOSED) is
+        sent, so a later create is 409 PAYMENT_CLOSED. Not collected (COD_PENDING): FAILED + closed_at + PAYMENT_FAILED.
+        Money already collected (COD_COLLECTED/SUCCESS): closed_at is set and the money state is kept, so the order owes a
+        refund. Already closed, or a same-key retry: the current state (money collected after the close shows). Another snapshot: 409 PAYMENT_CONFLICT. closed_at never changes later;
+        COD collected after the close is still recorded (06 §17.1).
+      x-implementation-status: implemented
+      parameters:
+      - {name: order_id, in: path, required: true, schema: {type: string, format: uuid}}
+      - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PaymentClose'}
+      responses:
+        '200':
+          description: Payment after close (closed_at set)
+          headers: *headers
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PaymentResponse'}
+              examples:
+                closed:
+                  value:
+                    code: OK
+                    data: {payment_id: 55555555-5555-4555-8555-555555555591, order_id: 99999999-9999-4999-8999-999999999991,
+                      order_no: ORD202610000001, method: COD, amount: 275000, currency: VND, status: FAILED,
+                      closed_at: '2026-10-20T06:00:00Z', paid_at: null, version: 1}
+                    metadata: {request_id: pay01-synthetic-request, trace_id: pay01-synthetic-trace}
+        '400': *error
+        '401': {<<: *error, description: INVALID_SERVICE_TOKEN}
+        '403': {<<: *error, description: CALLER_NOT_ALLOWED}
+        '409': {<<: *error, description: 'PAYMENT_CONFLICT (snapshot differs), DUPLICATE (order_no already used by another order_id) or IDEMPOTENCY_KEY_REUSED'}
+  /internal/api/v1/payments/by-order/{order_id}:
+    get:
+      tags: [Internal payment]
+      operationId: getPaymentByOrder
+      summary: Verified amount, method, status and closed_at of an order's payment
+      x-implementation-status: implemented
+      parameters:
+      - {name: order_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Payment
+          headers: *headers
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PaymentResponse'}
+              examples:
+                pending:
+                  value: {code: OK, data: *payment, metadata: {request_id: pay01-synthetic-request, trace_id: pay01-synthetic-trace}}
+        '401': {<<: *error, description: INVALID_SERVICE_TOKEN}
+        '403': {<<: *error, description: CALLER_NOT_ALLOWED}
+        '404': {<<: *error, description: PAYMENT_NOT_FOUND}
+components:
+  securitySchemes:
+    serviceToken: {type: http, scheme: bearer, bearerFormat: 'JWT (ES256 service token, ADR-19; aud payment-service; caller order-service)'}
+  headers:
+    NoStore:
+      description: Never cached, errors included.
+      schema: {type: string, const: no-store}
+  schemas:
+    OrderSnapshot:
+      type: object
+      additionalProperties: false
+      required: [order_id, order_no, user_id, method, amount, currency, expires_at]
+      properties:
+        order_id: {type: string, format: uuid}
+        order_no: {type: string, minLength: 1, maxLength: 32}
+        user_id: {type: [string, 'null'], format: uuid, description: null for a guest order}
+        method: {$ref: './payment.yaml#/components/schemas/Method'}
+        amount: {type: integer, minimum: 0, maximum: 1000000000000, description: 'Order total in VND from the order snapshot; 0 is 422 on create'}
+        currency: {type: string, const: VND}
+        expires_at: {type: string, format: date-time}
+    PaymentClose:
+      type: object
+      additionalProperties: false
+      required: [order_id, order_no, user_id, method, amount, currency, expires_at, reason]
+      properties:
+        order_id: {type: string, format: uuid}
+        order_no: {type: string, minLength: 1, maxLength: 32}
+        user_id: {type: [string, 'null'], format: uuid}
+        method: {$ref: './payment.yaml#/components/schemas/Method'}
+        amount: {type: integer, minimum: 0, maximum: 1000000000000}
+        currency: {type: string, const: VND}
+        expires_at: {type: string, format: date-time}
+        reason: {type: string, minLength: 1, maxLength: 500}
+    Payment:
+      type: object
+      additionalProperties: false
+      required: [payment_id, order_id, order_no, method, amount, currency, status, closed_at, paid_at, version]
+      properties:
+        payment_id: {type: string, format: uuid}
+        order_id: {type: string, format: uuid}
+        order_no: {type: string, minLength: 1, maxLength: 32}
+        method: {$ref: './payment.yaml#/components/schemas/Method'}
+        amount: {type: integer, minimum: 0}
+        currency: {type: string, const: VND}
+        status: {$ref: './payment.yaml#/components/schemas/PaymentStatus'}
+        closed_at: {type: [string, 'null'], format: date-time}
+        paid_at: {type: [string, 'null'], format: date-time}
+        version: {type: integer, minimum: 0}
+    PaymentResponse:
+      type: object
+      required: [code, data, metadata]
+      properties:
+        code: {type: string, const: OK}
+        data: {$ref: '#/components/schemas/Payment'}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}

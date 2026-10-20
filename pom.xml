@@ -18,6 +18,7 @@
     <module>services/inventory-service</module>
     <module>services/cart-service</module>
     <module>services/shipping-service</module>
+    <module>services/payment-service</module>
     <module>services/gateway</module>
   </modules>
 

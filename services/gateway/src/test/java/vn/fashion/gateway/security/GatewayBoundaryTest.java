@@ -59,6 +59,7 @@ class GatewayBoundaryTest {
     registry.add("INVENTORY_BASE_URL", CATALOG::baseUrl);
     registry.add("CART_BASE_URL", CATALOG::baseUrl);
     registry.add("SHIPPING_BASE_URL", CATALOG::baseUrl);
+    registry.add("PAYMENT_BASE_URL", CATALOG::baseUrl);
     registry.add("fashion.security.allowed-origins", () -> "http://localhost:4173");
     registry.add("GATEWAY_MANAGEMENT_PORT", () -> "0");
   }
@@ -118,6 +119,18 @@ class GatewayBoundaryTest {
     int before = CATALOG.requestCount();
     client.post().uri("/internal/api/v1/shipping/quotes").exchange().expectStatus().isNotFound();
     client.get().uri("/internal/api/v1/shipping/shipments/by-order/4c8a1f2e-0000-4000-8000-000000000011").exchange().expectStatus().isNotFound();
+    assertThat(CATALOG.requestCount()).isEqualTo(before);
+  }
+
+  @Test
+  void paymentAdminIsRoutedAndInternalIsNot() {
+    // TASK:PAY-01: FINANCE admin only; no public payment route and /internal never leaves the cluster.
+    client.get().uri("/admin/api/v1/payments").exchange().expectStatus().isOk();
+    assertThat(CATALOG.path()).isEqualTo("/admin/api/v1/payments");
+    int before = CATALOG.requestCount();
+    client.post().uri("/internal/api/v1/payments").exchange().expectStatus().isNotFound();
+    client.get().uri("/internal/api/v1/payments/by-order/4c8a1f2e-0000-4000-8000-000000000011").exchange().expectStatus().isNotFound();
+    client.get().uri("/api/v1/payments").exchange().expectStatus().isNotFound();
     assertThat(CATALOG.requestCount()).isEqualTo(before);
   }
 

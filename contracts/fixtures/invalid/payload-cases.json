@@ -228,5 +228,8 @@
   {"name": "order completed item quantity 0", "fixture": "order-completed.json", "changes": {"items": [{"variant_id": "66666666-6666-4666-8666-666666666666", "sku": "SYNTH-TEE-M-BLK", "quantity": 0}]}, "validator": "minimum", "path": ["items", 0, "quantity"]},
   {"name": "COD amount as a decimal string", "fixture": "cod-collected.json", "changes": {"gross_amount": "275000.00"}, "validator": "type", "path": ["gross_amount"]},
   {"name": "COD in another currency", "fixture": "cod-remitted.json", "changes": {"currency": "USD"}, "validator": "const", "path": ["currency"]},
-  {"name": "COD without evidence", "fixture": "cod-collected.json", "changes": {}, "remove": ["evidence_ref"], "validator": "required", "path": []}
+  {"name": "COD without evidence", "fixture": "cod-collected.json", "changes": {}, "remove": ["evidence_ref"], "validator": "required", "path": []},
+  {"name": "Payment amount as a float", "fixture": "payment-created.json", "changes": {"amount": 275000.5}, "validator": "type", "path": ["amount"]},
+  {"name": "Payment with an unknown method", "fixture": "payment-completed.json", "changes": {"method": "CARD"}, "validator": "enum", "path": ["method"]},
+  {"name": "Payment without paid_at", "fixture": "payment-failed.json", "changes": {}, "remove": ["paid_at"], "validator": "required", "path": []}
 ]

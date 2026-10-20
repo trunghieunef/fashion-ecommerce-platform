@@ -4,7 +4,14 @@ B1 · 2026-09-19 · Work package mặc định: **Planned; Assignee TBD; Reviewe
 
 ## 1. Cách nhận việc
 
-Update 2026-10-20 — `TASK:SHP-02` **In review (local)**, PR #30: OPS SELF events có bằng chứng (gán shipper, bàn giao đặt
+Update 2026-10-20 — `TASK:PAY-01` **Done (local, trước G0)** ([nghiệm thu](../evidence/acceptance-2026-10-20.md#taskpay-01--payment-service-cod)), PR #31: payment-service COD — một payment/đơn từ snapshot order
+(`provider_request_id = order_no`), close + tombstone close-before-create, bằng chứng COD từ `shipping.events` (lệch →
+reconciliation item, REMITTED chỉ là bằng chứng — T27), FINANCE settlement gross = fee + net nhiều đợt → SUCCESS +
+`PAYMENT_COMPLETED`; `REQ:PAY-03/07/08`; dependency PLT-03, USR-02, SHP-02;
+[spec](../superpowers/specs/2026-10-20-pay-01-payment-cod-design.md), [evidence](../evidence/pay-01-local-2026-10-20.md).
+
+Update 2026-10-20 — `TASK:SHP-02` **Done (local, trước G0) — MANUAL + incident cho bằng chứng sau hủy chờ quyết định (08)**
+theo [nghiệm thu](../evidence/acceptance-2026-10-20.md) (PR #30 CI PASS trên `eb0b7c1`, đã merge `main` `03b3aa6`): OPS SELF events có bằng chứng (gán shipper, bàn giao đặt
 `handed_over_at`, giao/thất bại/giao lại/hoàn), COD thu/nộp là event tài chính riêng, cancel trước bàn giao + tombstone
 hủy-trước-tạo, 409 sau bàn giao; `REQ:SHP-02/04/06`; dependency SHP-01;
 [spec](../superpowers/specs/2026-10-20-shp-02-self-events-cancel-design.md), [evidence](../evidence/shp-02-local-2026-10-20.md).
@@ -136,8 +143,8 @@ PLT-04/05, AWS/K3s/ECR/ArgoCD, provider sandbox và các task business Phase 1 k
   data inventory theo field và permission codes ở 13, cách nạp secret. Còn mở: JWT người dùng,
   `auth_version` và U03/U24 (USR-01/02), service đầu tiên nối service token. Actuator Gateway
   đã tách sang management port 9080 không publish (2026-10-04). Chủ dự án (PO) đã duyệt toàn bộ [bảng retention và ngoại lệ](../operations/13_operations_security.md)
-  ngày 2026-10-04; O06 còn ngày hạn, giá trị cụ thể trong các khung thời gian, chi tiết policy,
-  nhóm dữ liệu ngoài bảng và xác minh pháp lý; chưa triển khai cleanup/purge.
+  ngày 2026-10-04; ngày 2026-10-20 agent đề xuất giá trị cụ thể từng nhóm (13 §3) và chủ dự án xác nhận giữ nguyên; O06 chỉ còn xác minh pháp lý và nội dung
+  điều khoản/consent, hạn trước G2; chưa triển khai cleanup/purge.
   O01 chỉ chặn phần cloud, không chặn PLT-02/03 local; chưa provision/deploy.
 - `TASK:PLT-05` — **In progress, phần local** (2026-10-05, assignee Claude Code, reviewer chủ dự án):
   Gateway và catalog đã có trace W3C (smoke kiểm trace đi Gateway → catalog và quay về trong

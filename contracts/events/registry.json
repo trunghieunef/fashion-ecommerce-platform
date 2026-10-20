@@ -16,5 +16,8 @@
   "SHIPMENT_CREATED": {"schema": "shipping-events.schema.json#/$defs/ShipmentStatus", "topic": "shipping.events", "partition_key": "order_no", "aggregate_id": "shipment_id"},
   "SHIPMENT_STATUS_UPDATED": {"schema": "shipping-events.schema.json#/$defs/ShipmentStatus", "topic": "shipping.events", "partition_key": "order_no", "aggregate_id": "shipment_id"},
   "COD_COLLECTED": {"schema": "shipping-events.schema.json#/$defs/CodMovement", "topic": "shipping.events", "partition_key": "order_no", "aggregate_id": "shipment_id"},
-  "COD_REMITTED": {"schema": "shipping-events.schema.json#/$defs/CodMovement", "topic": "shipping.events", "partition_key": "order_no", "aggregate_id": "shipment_id"}
+  "COD_REMITTED": {"schema": "shipping-events.schema.json#/$defs/CodMovement", "topic": "shipping.events", "partition_key": "order_no", "aggregate_id": "shipment_id"},
+  "PAYMENT_CREATED": {"schema": "payment-events.schema.json#/$defs/PaymentState", "topic": "payment.events", "partition_key": "order_no", "aggregate_id": "payment_id"},
+  "PAYMENT_COMPLETED": {"schema": "payment-events.schema.json#/$defs/PaymentState", "topic": "payment.events", "partition_key": "order_no", "aggregate_id": "payment_id"},
+  "PAYMENT_FAILED": {"schema": "payment-events.schema.json#/$defs/PaymentState", "topic": "payment.events", "partition_key": "order_no", "aggregate_id": "payment_id"}
 }

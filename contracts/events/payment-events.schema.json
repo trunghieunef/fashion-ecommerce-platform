@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fashion.local/contracts/events/payment-events.schema.json",
+  "title": "payment.events payment payloads (03 §5.2/5.3)",
+  "description": "PAYMENT_CREATED, PAYMENT_COMPLETED and PAYMENT_FAILED (PAY-01). COD: COMPLETED only after FINANCE confirms the money arrived (gross = fee + net); a late COMPLETED on a closed payment means the order owes a refund.",
+  "$defs": {
+    "PaymentState": {
+      "description": "Order identifiers, payment id, method, amount, currency, status, paid_at, provider_txn_id and reason (CLOSED on close)",
+      "type": "object",
+      "required": ["order_id", "order_no", "payment_id", "method", "amount", "currency", "status", "paid_at", "provider_txn_id", "reason"],
+      "properties": {
+        "order_id": {"$ref": "common.schema.json#/$defs/uuid"},
+        "order_no": {"type": "string", "minLength": 1, "maxLength": 32},
+        "payment_id": {"$ref": "common.schema.json#/$defs/uuid"},
+        "method": {"enum": ["COD", "VNPAY", "MOMO"]},
+        "amount": {"$ref": "common.schema.json#/$defs/vnd_amount"},
+        "currency": {"const": "VND"},
+        "status": {"enum": ["CREATED", "PROCESSING", "UNKNOWN", "SUCCESS", "FAILED", "PARTIALLY_REFUNDED", "REFUNDED", "COD_PENDING", "COD_COLLECTED"]},
+        "paid_at": {"anyOf": [{"$ref": "common.schema.json#/$defs/utc_timestamp"}, {"type": "null"}]},
+        "provider_txn_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 128},
+        "reason": {"type": ["string", "null"], "minLength": 1, "maxLength": 64}
+      },
+      "additionalProperties": false
+    }
+  }
+}

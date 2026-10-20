@@ -67,7 +67,7 @@ Không mở rộng DLT cho mọi loại event chưa được service sử dụng
 | O03 | Merchant sandbox/production, callback domains, quyền query/refund VNPay/MoMo | PO + FINANCE | PAY-02/03 / G2 | Mock và negative tests |
 | O04 | Phí ship/COD, vùng SELF, nguồn địa chỉ, carrier account/SLA | PO + OPS | SHP-01/03 | Fixture giả và adapter |
 | O05 | Đổi trả, phí, hàng hỏng, bằng chứng, đơn tổng 0; giá đã gồm thuế hay chưa và yêu cầu hóa đơn | PO + FINANCE | ORD-01/04 / G2 | Baseline không cộng thuế ngoài giá niêm yết; chặn checkout total <= 0; nếu cần thuế tách dòng phải sửa pricing/schema trước code |
-| O06 | Retention PII, điều khoản/consent, nghĩa vụ pháp lý hiện hành | PO + phụ trách pháp lý | SEC-01 / G2; ngày hạn hoàn tất: chưa được chỉ định | Chủ dự án (PO) duyệt toàn bộ bảng retention và ngoại lệ tại [13 §3](../operations/13_operations_security.md) ngày 2026-10-04, theo xác nhận trong phiên làm việc. Còn giá trị cụ thể trong các khung thời gian, chi tiết policy, nhóm dữ liệu ngoài bảng và xác minh pháp lý; O06 vẫn mở cho các phần này; chưa bật purge tài chính |
+| O06 | Retention PII, điều khoản/consent, nghĩa vụ pháp lý hiện hành | PO + phụ trách pháp lý | SEC-01 / G2; ngày hạn hoàn tất: trước G2 | Chủ dự án (PO) duyệt toàn bộ bảng retention và ngoại lệ tại [13 §3](../operations/13_operations_security.md) ngày 2026-10-04, theo xác nhận trong phiên làm việc. Ngày 2026-10-20 agent **đề xuất** giá trị cụ thể cho từng nhóm (gồm traces, outbox/inbox, idempotency, notification, consent, guest credential) tại 13 §3 theo yêu cầu "chốt O06" của chủ dự án; chủ dự án **xác nhận giữ nguyên** cùng ngày (sau review PR #31) — đủ cho ORD-01. Còn mở tới G2: phụ trách pháp lý xác minh áp dụng luật và mốc 10 năm chứng từ, nội dung điều khoản/consent; chưa bật purge tài chính |
 | O07 | Email/SMS provider, domain gửi, consent, query/retry hỗ trợ | PO + DEVOPS | NOT-01 / G2; OTP trước G3 | Mail sink và contract |
 | O08 | Headcount, capacity, người QA, tên owner/reviewer | PO + TL | Planning đầu | Estimate theo role; chưa cam kết ngày |
 | O09 | Bộ tải/dữ liệu/hạ tầng/ngân sách chứng minh SLO | TL + QA + DEVOPS | QA-03 / G2 | Script và synthetic dataset |
@@ -445,6 +445,22 @@ Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác v
 | SELF tạo PENDING → CREATED trong một TX, tracking `SELF-<order_no>`; advisory lock theo quote (quote insert-only) | Bàn giao/giao/COD/cancel là SHP-02 |
 | Phát `SHIPMENT_CREATED` qua outbox từ SHP-01 | Schema + registry mới; chưa có consumer |
 
+## PAY-01 — quyết định 2026-10-20
+
+`TASK:PAY-01` · `REQ:PAY-03/07/08`. Chủ dự án giao agent tự chốt và duyệt [spec](../superpowers/specs/2026-10-20-pay-01-payment-cod-design.md) (cả các mặc định §9):
+
+| Quyết định | Hệ quả |
+|---|---|
+| Service mới `payment-service` (port 8086, DB `payment`); PAY-01 chỉ COD, VNPAY/MOMO 422 `PAYMENT_METHOD_UNAVAILABLE` | Online thêm ở PAY-02/03, schema đã có cột |
+| `provider_request_id = order_no` | Một business reference suốt vòng đời (PAY-07) |
+| Path close `/internal/api/v1/payments/by-order/{order_id}/close` (03 cũ: `/payments/{order_id}/close`) | Không trùng dạng `/payments/{payment_id}/…`; 03 đã sửa |
+| Thêm `payments.snapshot` và source `CLOSE`/`SETTLEMENT` so với 05 | 05 đã ghi |
+| Close-before-create phát `PAYMENT_FAILED` reason `CLOSED`; UNKNOWN không bị close đổi FAILED | Order nhận một tín hiệu nhất quán; UNKNOWN cần bằng chứng |
+| Không phát event khi COD_COLLECTED; `PAYMENT_COMPLETED` phát cả khi payment đã close | Order đọc COD từ `shipping.events`; late money báo order refund |
+| Settlement nhiều đợt, thiếu giữ COD_COLLECTED, vượt amount 409; gross 0 bị từ chối | SLA/discrepancy phần thiếu thuộc O04/PAY-05 |
+| Lệch method/amount từ shipping → `reconciliation_items` OPEN, không đổi trạng thái | Resolve ở PAY-05 |
+| COD evidence cho đơn chưa có payment → retry (không ACK) tối đa 10 phút từ lúc event phát (`PAYMENT_COD_ORPHAN_GRACE`), rồi DLT | Review PR I1: event mồ côi không chặn partition vô hạn; FINANCE/BE xem DLT + `messaging_dlt_total` |
+
 ## SHP-02 — quyết định 2026-10-20
 
 `TASK:SHP-02` · `REQ:SHP-02/04/06`. Chủ dự án giao agent tự chốt và duyệt [spec](../superpowers/specs/2026-10-20-shp-02-self-events-cancel-design.md) (cả các mặc định §8):
@@ -500,9 +516,16 @@ tinh chỉnh thẩm mỹ sau (task riêng):
 | Giỏ vẫn ACTIVE sau cleanup (không `CHECKED_OUT`); version chỉ tăng khi có xóa | Giữ unique ACTIVE member và item còn lại |
 | Cart không gọi shipping: `subtotal_preview` (chỉ khi preview OK) + `shipping_fee_status: NOT_CALCULATED` | Fee preview là SHP-01 `POST /shipping/fee/estimate`; tổng chốt chỉ ở order quote |
 
-**Câu hỏi mở cho ORD-01/WEB-03 (chưa quyết định):** cookie `cart_token` có `Path=/api/v1/carts` nên trình duyệt không
-gửi nó tới `/api/v1/orders`; order-service cần một cách xác minh guest để điền `Cart-Actor` (mở rộng Path cookie
-hoặc cơ chế khác). CART-03 không đổi cookie. Phải chốt trước khi ORD-01 triển khai guest checkout.
+**Câu hỏi mở cho ORD-01/WEB-03 — đã quyết định 2026-10-20:** cookie `cart_token` có `Path=/api/v1/carts` nên trình
+duyệt không gửi nó tới `/api/v1/orders`; order-service cần một cách xác minh guest để điền `Cart-Actor`.
+
+| Quyết định (chủ dự án chọn C, 2026-10-20) | Hệ quả |
+|---|---|
+| Guest checkout dùng **checkout token ngắn hạn**: cart-service xác minh cookie `cart_token` rồi cấp token ký (JWT ES256 qua `platform-security`) gắn `cart_id` + hash guest, sống ngắn; storefront gửi token trong header khi gọi order; order xác minh chữ ký/hạn/audience rồi điền `Cart-Actor` | Cookie `cart_token` giữ nguyên `Path=/api/v1/carts`; order không phụ thuộc định dạng cookie của cart; dùng được cho client không cookie (mobile) và mở rộng claim xác minh (OTP Phase 2). Chi phí: thêm endpoint cart, cặp khóa ký + xoay khóa, contract và test hết hạn/sai giỏ/dùng lại |
+| Loại: mở rộng Path cookie (A), cookie thứ hai cho order (B) | A để cookie guest đi tới mọi service `/api/v1`; B phải đồng bộ hai cookie |
+
+Chi tiết (TTL, tên header, endpoint, có giới hạn dùng một lần hay không, task sở hữu endpoint cart) chốt ở spec ORD-01.
+CART-03 không đổi cookie.
 
 ## INV-03 — quyết định 2026-10-18
 
@@ -524,6 +547,11 @@ hoặc cơ chế khác). CART-03 không đổi cookie. Phải chốt trước kh
 | Hoãn G0 (PLT-04 staging, PLT-05 staging/dashboard, O02 scan CVE/license) tới sau G1; staging muộn nhất ngay sau G1, trước G2 | Phase 1B/G1 làm tiếp trên local; G2 vẫn cần mọi P0 Done. Rủi ro deploy (sizing node, secret, ingress, quyền DB) dồn về sau G1 |
 | O06 (retention, consent, purge) phải chốt trước ORD-01 | Checkout/order thiết kế theo quyết định retention/consent; không chờ tới G2 |
 | Review producer/consumer PLT-02 làm khi order-service có `order.events` | Lúc đó mới đủ producer và consumer để review |
+
+**Cập nhật 2026-10-20:** agent đề xuất giá trị retention O06 (13 §3 "Giá trị cụ thể O06"): giỏ 30 ngày, PII trong đơn
+ẩn danh sau 12 tháng từ khi đơn kết thúc, guest credential tối đa 90 ngày, log 30 ngày, traces 7 ngày, backup 30 ngày,
+idempotency 30 ngày, tài khoản không hoạt động 24 tháng, chứng từ tài chính 10 năm. Chủ dự án xác nhận giữ nguyên
+toàn bộ giá trị cùng ngày (sau review PR #31), nên điều kiện "chốt O06 trước ORD-01" **đã đạt**; xác minh pháp lý còn mở tới G2. Cách xác minh guest checkout đã chốt ngày 2026-10-20: checkout token ngắn hạn (mục CART-03 bên trên).
 
 ## CAT-02a — quyết định chủ dự án 2026-10-11
 

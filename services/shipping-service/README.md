@@ -43,7 +43,7 @@ Port 8085 (không publish ra host). Qua Gateway: `/api/v1/shipping/**`, `/admin/
   DELIVERY_FAILED→FAILED; REDELIVER FAILED→DELIVERING; RETURN_STARTED FAILED→RETURNING; RETURNED. COD_COLLECTED (DELIVERED,
   đúng `cod_amount`, một lần) / COD_REMITTED (đủ phần chưa nộp). Một TX: khóa hàng, version, history `self:<id>` (actor,
   evidence, không địa chỉ; `event_ref` của COD = id dòng history), outbox `SHIPMENT_STATUS_UPDATED` / `COD_COLLECTED` /
-  `COD_REMITTED`. Cạnh sai → 409 `INVALID_TRANSITION`. `occurred_at` không lùi so với sự kiện trước, tối đa now + 60 giây.
+  `COD_REMITTED`. Cạnh sai → 409 `INVALID_TRANSITION`. `occurred_at` không lùi so với sự kiện trước (trừ trên CANCELLED), tối đa now + 60 giây.
   ASSIGN lại (PICKING→PICKING) tăng version nhưng không phát event. Sự kiện trên shipment CANCELLED → history
   `applied=false` (bằng chứng để đối soát), 409 `CANCELLED_EVIDENCE_RECORDED`; OPS thấy trong GET chi tiết.
 - **Cancel (SHP-02)**: cùng advisory lock quote với create. Chưa có shipment → tombstone CANCELLED; CREATED/PICKING → CANCELLED;

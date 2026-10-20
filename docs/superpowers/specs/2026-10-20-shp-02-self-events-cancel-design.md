@@ -41,7 +41,8 @@ trạng thái UNKNOWN/MANUAL/retry (SELF không gọi bên ngoài nên không c�
 - **Sự kiện trên shipment CANCELLED** (PR #30 I1, 06 §17.2 "không âm thầm bỏ bằng chứng vật lý"): ghi history
   `applied = false` kèm evidence/actor, status giữ CANCELLED, trả 409 `CANCELLED_EVIDENCE_RECORDED`; kiểm trước
   `expected_version` (bản OPS đang cầm đã cũ vì cancel tăng version); 409 được lưu cho replay nên retry không ghi thêm.
-  Chuyển MANUAL + incident chờ chủ dự án quyết (08).
+  Chuyển MANUAL + incident chờ chủ dự án quyết (08). Trên CANCELLED không kiểm thứ tự `occurred_at` so với sự kiện
+  trước (re-review PR #30), chỉ giữ giới hạn 60 giây và mốc tạo shipment.
 - `evidence_ref` là mã tham chiếu bằng chứng (số biên nhận, mã ảnh…) 1–200 ký tự, không phải file; upload ảnh để sau.
 
 ## 3. API

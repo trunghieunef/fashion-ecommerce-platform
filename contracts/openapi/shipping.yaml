@@ -173,8 +173,8 @@ paths:
         DELIVERY_FAILED DELIVERING to FAILED (reason); REDELIVER FAILED to DELIVERING; RETURN_STARTED FAILED to RETURNING (reason);
         RETURNED RETURNING to RETURNED (evidence_ref; stock is restored only through order and inventory after counting);
         COD_COLLECTED on DELIVERED, amount = cod_amount, once; COD_REMITTED on DELIVERED, amount = collected minus remitted.
-        Fields a type does not use are rejected. occurred_at is never before the shipment creation or the previous event and
-        at most 60 seconds ahead; without it the event takes max(now, previous event). Any event on a CANCELLED shipment is
+        Fields a type does not use are rejected. occurred_at is never before the shipment creation or the previous event (not
+        checked on a CANCELLED shipment, whose late evidence usually predates rows already kept) and at most 60 seconds ahead; without it the event takes max(now, previous event). Any event on a CANCELLED shipment is
         kept as history applied=false (evidence for reconciliation, 06 section 17.2), the status stays CANCELLED and the
         answer is 409 CANCELLED_EVIDENCE_RECORDED (checked before expected_version). Re-ASSIGN while PICKING changes the
         shipper and bumps version without an outbox event. The response is state only (no address); same Idempotency-Key
@@ -328,7 +328,7 @@ components:
       properties:
         event_type: {type: string, enum: [ASSIGN, HANDED_OVER, DELIVERED, DELIVERY_FAILED, REDELIVER, RETURN_STARTED, RETURNED, COD_COLLECTED, COD_REMITTED]}
         expected_version: {type: integer, minimum: 0}
-        occurred_at: {type: string, format: date-time, description: 'Default max(now, previous event); never before the shipment creation or the previous event, at most 60 seconds ahead'}
+        occurred_at: {type: string, format: date-time, description: 'Default max(now, previous event); never before the shipment creation or the previous event (except on CANCELLED), at most 60 seconds ahead'}
         assigned_to: {type: string, format: uuid, description: ASSIGN only (shipper user id)}
         evidence_ref: {type: string, minLength: 1, maxLength: 200, description: 'Receipt/photo reference; required for HANDED_OVER, DELIVERED, RETURNED, COD_*'}
         reason: {type: string, minLength: 1, maxLength: 500, description: Required for DELIVERY_FAILED and RETURN_STARTED}
