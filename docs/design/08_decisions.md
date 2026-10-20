@@ -462,6 +462,23 @@ Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác v
 | Quote không kiểm tồn kho; chưa rate limit checkout | Hết hàng phát hiện ở reserve (ORD-02); limiter chung là việc sau |
 | Mã lỗi chi tiết nằm ở `message` (enum `code` chung giữ nguyên); tràn số tiền → 422 `AMOUNT_OUT_OF_RANGE` | Không đổi `common.yaml` |
 
+## ORD-02 — quyết định 2026-10-20
+
+`TASK:ORD-02` · `REQ:ORD-02/09`. Chủ dự án giao agent tự chốt và duyệt [spec](../superpowers/specs/2026-10-20-ord-02-checkout-saga-design.md) (các mặc định §11):
+
+| Quyết định | Hệ quả |
+|---|---|
+| Saga chạy bằng worker nền (poll 1 s, batch 10, lease 30 s, `SKIP LOCKED`); create không chạy inline, luôn 202 | FE poll (14 §3); không có 201 nhanh. Nhiều instance dựa vào lease, chưa đo tải |
+| Thứ tự `RESERVE → CREATE_PAYMENT`; COD xong payment là `CONFIRMED` + `WAIT_OPS` tới `expires_at` (24 h) | OPS xác nhận, commit kho và race commit↔expire ở ORD-03 |
+| Hết hạn xử lý trong ORD-02: worker hủy saga quá deadline (kể cả khi bước đang UNKNOWN), release + close | Không xác nhận đơn muộn |
+| CANCEL luôn close payment kể cả chưa tạo (tombstone, PAY-08) | Create đến muộn không mở lại payment |
+| Key cố định `reserve:`/`payment:`/`release:`/`close:{order_id}`, cleanup = order_id | Retry sau timeout không tạo giữ hàng/payment thứ hai (T03) |
+| Lỗi chưa rõ backoff `min(2^n s, 5 phút)` ±20 %, 30 lần → `MANUAL` + metric; từ chối nghiệp vụ khi release (COMMITTED) hoặc close (tiền đã thu → `PAID_NEEDS_REFUND`) → `MANUAL` ngay. Client: 2xx OK; 400/404/409/422 từ chối; 401/403/5xx/timeout UNKNOWN | Chưa có UI/alert MANUAL (ADM-02/PLT-05); một lỗi 400 cố định sẽ hủy đơn thay vì MANUAL |
+| V002 thay UNIQUE `(cart_id, cart_version)` bằng unique index một phần `WHERE status <> 'CANCELLED'` (thay khuyến nghị bump version giỏ ở ORD-01) | Khách đặt lại cùng giỏ sau khi đơn hủy; không thêm API cart |
+| Dọn giỏ chỉ sau khi giữ hàng, bằng background task `CART_CLEANUP` độc lập saga; đơn đang/đã hủy bỏ qua task | Đơn hủy (hết hàng, payment từ chối) giữ nguyên giỏ; cart lỗi không đổi trạng thái đơn |
+| `PAYMENT_COMPLETED` chỉ ghi `paid_at`/`payment_state = PAID`, không đổi `status`; event cho đơn lạ ACK + log, event hỏng → DLT; không phát `ORDER_PAID` | COD dùng ở ORD-03/04; refund PAY-04 |
+| Guest mất response tìm lại đơn: đơn chưa hủy của cùng actor với `(cart_id, cart_version)` → 409 `CART_ALREADY_ORDERED` trước kiểm quote (thay ràng buộc ORD-01) | FE giữ `cart_id`/`cart_version` đã submit; key khác + quote cũ hết hạn nay nhận `CART_ALREADY_ORDERED` thay vì `QUOTE_EXPIRED` |
+
 ## PAY-01 — quyết định 2026-10-20
 
 `TASK:PAY-01` · `REQ:PAY-03/07/08`. Chủ dự án giao agent tự chốt và duyệt [spec](../superpowers/specs/2026-10-20-pay-01-payment-cod-design.md) (cả các mặc định §9):

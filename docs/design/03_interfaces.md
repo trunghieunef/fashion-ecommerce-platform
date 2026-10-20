@@ -174,9 +174,9 @@ attach kiểm APPROVED/ownership/target trong DB; chưa đủ validation không 
 | Method | Path | Auth / phase | Input → output |
 |---|---|---|---|
 | POST | /orders/quote | Cart owner / 1 | `ORD-01` implemented ([order.yaml](../../contracts/openapi/order.yaml)): cart_id,cart_version,method,shipping_address,contact,note (voucher Phase 2) → quote_token ký HMAC + totals, hạn 2 phút; member Bearer hoặc guest `Checkout-Token` (cart cấp); 409 VERSION_CONFLICT/ITEM_UNAVAILABLE, 422 CART_EMPTY/PAYMENT_METHOD_UNAVAILABLE/NO_SHIPPING_RULE; chỉ COD tới PAY-02/03 |
-| POST | /orders | Actor bound quote / 1 | `ORD-01` implemented: quote_token,cart_id,cart_version + key → 202 PENDING/PROCESSING + Location/Retry-After; lookup key trước kiểm quote; 400 INVALID_QUOTE, 409 QUOTE_EXPIRED/PRICE_CHANGED/VERSION_CONFLICT/IDEMPOTENCY_KEY_REUSED/CART_ALREADY_ORDERED; guest nhận cookie `order_access` (Path theo order_no, 90 ngày) |
+| POST | /orders | Actor bound quote / 1 | `ORD-01` implemented: quote_token,cart_id,cart_version + key → 202 PENDING/PROCESSING + Location/Retry-After; lookup key trước kiểm quote; 400 INVALID_QUOTE, 409 QUOTE_EXPIRED/PRICE_CHANGED/VERSION_CONFLICT/IDEMPOTENCY_KEY_REUSED/CART_ALREADY_ORDERED; guest nhận cookie `order_access` (Path theo order_no, 90 ngày). `ORD-02`: luôn 202, saga chạy ở worker nền (không 201 inline) |
 | GET | /orders/mine | Member / 1 | `ORD-01` implemented: status/cursor/limit → đơn của mình, cursor gắn filter |
-| GET | /orders/{order_no} | Owner/member hoặc guest order cookie / 1 | State/totals/items/tracking/payment/refund và allowed_actions. `ORD-01` implemented phần state/totals/items/địa chỉ/liên hệ, allowed_actions rỗng; không thuộc actor → 404 ORDER_NOT_FOUND (T21) |
+| GET | /orders/{order_no} | Owner/member hoặc guest order cookie / 1 | State/totals/items/tracking/payment/refund và allowed_actions. `ORD-01` implemented phần state/totals/items/địa chỉ/liên hệ, allowed_actions rỗng; không thuộc actor → 404 ORDER_NOT_FOUND (T21). `ORD-02`: processing_status PROCESSING (PENDING/CANCELLING, kèm retry_after_seconds), READY (CONFIRMED, chờ OPS), FINISHED (CANCELLED); reason_code khi hủy = OUT_OF_STOCK/RESERVE_FAILED/PAYMENT_FAILED/EXPIRED, còn lại null |
 | POST | /orders/{order_no}/cancel | Owner / 1 | reason,expected_version,key → 202 CANCELLING hoặc trạng thái hiện hành |
 | GET | /orders/{order_no}/payment | Order owner / 1 | Payment status, URL đã có nếu còn mở/hợp lệ; không create/đổi amount |
 | POST | /promotions/vouchers/validate | Actor / 2 | cart_id,version,code → server preview |
@@ -224,7 +224,7 @@ Ví dụ response đang chuẩn bị:
 }
 ```
 
-HTTP 202 kèm Location=status_url và Retry-After. HTTP 201 khi đã WAITING_PAYMENT + URL hoặc CONFIRMED COD. GET order trả processing_status=PROCESSING/READY/ACTION_REQUIRED/FINISHED, reason_code nếu cần; không lộ stacktrace/saga internals. Client poll theo Retry-After, pause khi tab hidden, dừng khi terminal; không báo payment success từ query string redirect.
+HTTP 202 kèm Location=status_url và Retry-After. HTTP 201 khi đã WAITING_PAYMENT + URL hoặc CONFIRMED COD. GET order trả processing_status=PROCESSING/READY/ACTION_REQUIRED/FINISHED, reason_code nếu cần; không lộ stacktrace/saga internals. `ORD-02` chốt luôn 202 (saga ở worker nền, 08 ORD-02), không có 201. Client poll theo Retry-After, pause khi tab hidden, dừng khi terminal; không báo payment success từ query string redirect.
 
 ## 3. API admin
 
@@ -473,13 +473,13 @@ Report orders do order sở hữu, cash do payment, stock do inventory; dashboar
 | Methods / path | Caller → owner | Input bắt buộc / kết quả |
 |---|---|---|
 | GET /carts/{id}/snapshot | order → cart | `CART-03` implemented ([cart-internal.yaml](../../contracts/openapi/cart-internal.yaml)): `/internal/api/v1/carts/{id}/snapshot?expected_version`; service token aud cart-service, caller order-service; header `Cart-Actor` `user:<uuid>`/`guest:<sha256 cookie>` (order đã xác minh) → items item_id/variant_id/sku/quantity/item_version/price_snapshot/catalog_version; 400 INVALID_ACTOR/VERSION_REQUIRED, 404 CART_NOT_FOUND, 409 VERSION_CONFLICT; chỉ đọc, no-store |
-| POST /carts/{id}/checkout-cleanup | order → cart | `CART-03` implemented: `/internal/api/v1/carts/{id}/checkout-cleanup`; `Cart-Actor`, `Idempotency-Key` = order_id, body order_id + 1–100 items {item_id,item_version,quantity} → removed/retained(ITEM_CHANGED,current_quantity)/missing, cart_version; một TX, idempotent theo order_id (khác body → 409 IDEMPOTENCY_KEY_REUSED); chỉ xóa item khớp version+quantity, giỏ vẫn ACTIVE |
+| POST /carts/{id}/checkout-cleanup | order → cart | `CART-03` implemented: `/internal/api/v1/carts/{id}/checkout-cleanup`; `Cart-Actor`, `Idempotency-Key` = order_id, body order_id + 1–100 items {item_id,item_version,quantity} → removed/retained(ITEM_CHANGED,current_quantity)/missing, cart_version; một TX, idempotent theo order_id (khác body → 409 IDEMPOTENCY_KEY_REUSED); chỉ xóa item khớp version+quantity, giỏ vẫn ACTIVE. `ORD-02`: order gọi từ background task `CART_CLEANUP` sau khi giữ hàng, không gọi khi đơn hủy |
 | POST /catalog/variants/quote | order,cart → catalog | `CAT-02a` implemented: /internal/api/v1/catalog/variants/quote; 1–100 distinct UUID → ordered snapshot; service token aud catalog-service, caller cart-service/order-service; 401 UNAUTHORIZED/INVALID_SERVICE_TOKEN, 403 FORBIDDEN/CALLER_NOT_ALLOWED, no-store mọi response |
 | GET /orders/{order_id}/snapshot | payment,shipping → order | Scoped fields; immutable snapshot/version/hash |
 | GET /orders/{order_id}/saga-status | promotion,shipping,payment → order | Intent, readiness,deadline/version; không PII dư |
-| POST /inventory/reserve | order-service → inventory | INV-02 implemented local: `/internal/api/v1/inventory/reserve`; order_id,order_no,items,expires_at,request_hash,key → reservation; no-store |
+| POST /inventory/reserve | order-service → inventory | INV-02 implemented local: `/internal/api/v1/inventory/reserve`; order_id,order_no,items,expires_at,request_hash,key → reservation; no-store. Caller `order-service` từ ORD-02, key `reserve:{order_id}` |
 | POST /inventory/commit | order-service → inventory | INV-02 implemented local: `/internal/api/v1/inventory/commit`; order_id,key → COMMITTED hoặc conflict đã hết hạn; no-store |
-| POST /inventory/release | order-service → inventory | INV-02 implemented local: `/internal/api/v1/inventory/release`; order_id,original_reservation {order_no,items,expires_at},original_request_hash,reason,key → RELEASED/EXPIRED/COMMITTED; no-store |
+| POST /inventory/release | order-service → inventory | INV-02 implemented local: `/internal/api/v1/inventory/release`; order_id,original_reservation {order_no,items,expires_at},original_request_hash,reason,key → RELEASED/EXPIRED/COMMITTED; no-store. ORD-02 release khi bù trừ, key `release:{order_id}`; COMMITTED → saga MANUAL |
 | GET /inventory/reservations/{order_id} | order-service → inventory | INV-02 implemented local: `/internal/api/v1/inventory/reservations/{order_id}`; status/items/deadline,404 RESERVATION_NOT_FOUND; no-store |
 | GET /inventory/skus/{sku} | catalog,cart → inventory | INV-01 hiện thực local: sku,variant_id,available,version,observed_at; no-store cả lỗi; auth/caller trước SKU validation; 404 SKU_NOT_FOUND, không route qua Gateway |
 | POST /inventory/returns | order → inventory | `INV-03` implemented local: `/internal/api/v1/inventory/returns`; order_id,operation_key (= Idempotency-Key),reason,evidence_ref,items {sku,quantity} → items {sku,quantity,committed,returned_total}; reservation COMMITTED, cùng operation_key replay không cộng lại (khác dữ liệu → 409 RETURN_CONFLICT), tổng trả ≤ commit theo SKU (409 RETURN_EXCEEDS_COMMITTED), 409 RESERVATION_NOT_COMMITTED; GET reservation thêm `items[].returned`; no-store |
@@ -488,9 +488,9 @@ Report orders do order sở hữu, cash do payment, stock do inventory; dashboar
 | POST /promotions/reservations/commit | order → promotion | order_id,key → COMMITTED |
 | POST /promotions/reservations/release | order → promotion | order_id,original_snapshot,original_hash,reason,key → RELEASED |
 | GET /promotions/reservations/{order_id} | order → promotion | Aggregate/child states |
-| POST /payments | order → payment | Authenticated order snapshot/hash,expires_at,key → payment state/URL — `PAY-01` implemented ([payment-internal.yaml](../../contracts/openapi/payment-internal.yaml)): chỉ COD → COD_PENDING; VNPAY/MOMO 422 tới PAY-02/03; `provider_request_id = order_no`; đã close → 409 PAYMENT_CLOSED |
+| POST /payments | order → payment | Authenticated order snapshot/hash,expires_at,key → payment state/URL — `PAY-01` implemented ([payment-internal.yaml](../../contracts/openapi/payment-internal.yaml)): chỉ COD → COD_PENDING; VNPAY/MOMO 422 tới PAY-02/03; `provider_request_id = order_no`; đã close → 409 PAYMENT_CLOSED. Caller `order-service` từ ORD-02, key `payment:{order_id}` |
 | GET /payments/by-order/{order_id} | order → payment | Verified amount/method/status/closed_at — `PAY-01` implemented |
-| POST /payments/by-order/{order_id}/close | order → payment | Original snapshot/hash,key → closed intent/tombstone — `PAY-01` implemented; path đổi từ `/payments/{order_id}/close` để không trùng dạng `/payments/{payment_id}/…` (08) |
+| POST /payments/by-order/{order_id}/close | order → payment | Original snapshot/hash,key → closed intent/tombstone — `PAY-01` implemented; path đổi từ `/payments/{order_id}/close` để không trùng dạng `/payments/{payment_id}/…` (08). ORD-02 luôn close khi bù trừ (tombstone), key `close:{order_id}`; status COD_COLLECTED/SUCCESS → saga MANUAL `PAID_NEEDS_REFUND` |
 | POST /payments/{payment_id}/refunds | order → payment | operation_key,amount,reason,order context → refund |
 | GET /payments/{payment_id}/refunds/{refund_id} | order → payment | Result/cumulative refunded amount |
 | POST /shipping/fee | order,cart → shipping | `SHP-01` implemented: `/internal/api/v1/shipping/quotes` ([shipping-internal.yaml](../../contracts/openapi/shipping-internal.yaml)), caller order-service; province_code,cod,items + key → quote_id,fee,cod_fee,carrier,weight_grams,rule_id/version,expires_at (+15 phút), lưu `shipping_quotes` |
@@ -571,10 +571,10 @@ Relay giữ thứ tự chưa gửi theo aggregate_sequence. Consumer dedupe tron
 |---|---|---|---|
 | user.events / user_id | user | USER_CREATED | Chưa có consumer nghiệp vụ bắt buộc; analytics sau |
 | catalog.events / product_id | catalog | VARIANT_CREATED, CATALOG_CHANGED | inventory register SKU; catalog invalidation worker |
-| order.events / order_no | order | ORDER_CREATED, ORDER_CONFIRMED, ORDER_PAID, ORDER_CANCELLED, ORDER_COMPLETED | catalog sold projection/eligibility, inventory stop restock tại COMPLETED; không create payment/stock/shipment |
+| order.events / order_no | order | ORDER_CREATED, ORDER_CONFIRMED, ORDER_PAID, ORDER_CANCELLED, ORDER_COMPLETED | catalog sold projection/eligibility, inventory stop restock tại COMPLETED; không create payment/stock/shipment. Hiện phát ORDER_CREATED (ORD-01), ORDER_CONFIRMED/ORDER_CANCELLED (ORD-02) |
 | inventory.events / sku | inventory | INVENTORY_UPDATED, INVENTORY_RESTOCKED | catalog stock projection; inventory sở hữu restock fan-out |
 | inventory.events / order_no | inventory | INVENTORY_RESERVED, INVENTORY_RELEASED, INVENTORY_DEDUCTED | order reconcile reservation (INV-02) |
-| payment.events / order_no | payment | PAYMENT_CREATED, PAYMENT_COMPLETED, PAYMENT_FAILED, PAYMENT_REFUNDED | order saga/tài chính COD; không inventory tự deduct |
+| payment.events / order_no | payment | PAYMENT_CREATED, PAYMENT_COMPLETED, PAYMENT_FAILED, PAYMENT_REFUNDED | order saga/tài chính COD; không inventory tự deduct. `ORD-02`: order-service tiêu thụ (group `order-service`, inbox), COMPLETED chỉ ghi `paid_at` |
 | promotion.events / variant_id | promotion | PRICE_CHANGED | catalog invalidation |
 | shipping.events / order_no | shipping | SHIPMENT_CREATED, SHIPMENT_STATUS_UPDATED, COD_COLLECTED, COD_REMITTED | order giao hàng; payment COD evidence |
 | notification.events / dedupe_key | Domain owners | NOTIFY_* (schema thực thi: NOTIFY_RESET_PASSWORD do user, `TASK:USR-01` phần 1b) | Chỉ notification gửi |

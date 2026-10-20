@@ -322,6 +322,13 @@ Order status: PENDING, WAITING_PAYMENT, CONFIRMED, PAID, PACKING, SHIPPING, DELI
 `orders`/`order_items`/`order_status_history`, không UPDATE history. `shipping_quote` là quote shipping trong quote_token;
 `order_items.image_url` là đường dẫn ảnh public của catalog (`/api/v1/catalog/images/{asset_id}?kind=thumb`).
 
+`ORD-02` (V002 order-service, append-only): `order_sagas.payment_state varchar(16) = 'NONE'` CHECK
+NONE/UNKNOWN/CREATED/CLOSED/PAID; UNIQUE `(cart_id, cart_version)` thay bằng unique index một phần
+`orders_open_cart_version_idx ... WHERE status <> 'CANCELLED'` (đơn hủy không chặn đặt lại cùng giỏ/version);
+`processed_events` (inbox `payment.events`) và `background_tasks` (task `CART_CLEANUP`, business key = order_id) chép DDL
+platform-durability. `orders.cancel_reason` (đã có ở V001) là `reason_code` của GET; `paid_at` ghi khi nhận
+`PAYMENT_COMPLETED`.
+
 ## 8. `inventory-db`
 
 ```mermaid

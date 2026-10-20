@@ -44,6 +44,12 @@ token mới rồi gửi lại **cùng** Idempotency-Key và body. Credential xem
 server đặt (FE không đọc được); `409 CART_ALREADY_ORDERED` có `order_no` ở `errors[0].message` và với cùng guest kèm cookie
 mới → chuyển tới order detail, không tạo đơn khác. Member dùng Bearer, không cần checkout token.
 
+ORD-02: create luôn trả 202 (không có 201), FE poll GET đơn: `processing_status` `PROCESSING` (đang giữ hàng/tạo payment
+hoặc đang hủy) → poll tiếp theo `retry_after_seconds`; `READY` (`CONFIRMED`, COD chờ shop xác nhận) và `FINISHED`
+(`CANCELLED`, `reason_code` OUT_OF_STOCK/RESERVE_FAILED/PAYMENT_FAILED/EXPIRED) dừng poll. Hết hàng: giỏ được giữ nguyên, hướng
+khách về giỏ để sửa rồi đặt lại. FE giữ `cart_id` + `cart_version` đã submit (sessionStorage được, không phải secret): mất
+response và key, gửi lại nhận `409 CART_ALREADY_ORDERED` + `order_no` của đơn chưa hủy (08 ORD-02).
+
 409 PRICE_CHANGED/QUOTE_EXPIRED: highlight số cũ/mới nếu có, yêu cầu xác nhận lại. 409 VERSION_CONFLICT: reload cart, không ghi đè thay đổi thiết bị khác. 429: chờ; 503: thông báo thử lại nhưng giữ key của mutation chưa biết kết quả.
 
 ## 4. Trạng thái đơn, tiền và nội dung UI
