@@ -39,9 +39,10 @@ Port 8087 (không publish ra host). Qua Gateway: `/api/v1/orders/**` và `/admin
 - **Admin (ORD-03)**: `AdminAuth` kiểm Bearer + permission tại service (cùng `ORDER_JWT_PUBLIC_KEYS`). Không có
   `order.fulfill` (FINANCE) → bỏ key `contact_phone`/`contact_email`/`shipping_address`/`note` (cả response confirm/cancel:
   bỏ `contact`/`shipping_address`/`note`), history `reason` null. Confirm/cancel: auth → key → body, rồi một transaction khóa
-  `order_sagas` rồi `orders` (thứ tự chung toàn service): version (409 `VERSION_CONFLICT`) → CONFIRMED + saga `WAIT_OPS` +
-  không lease sống (+ COD cho confirm) (409 `INVALID_TRANSITION`, errors `status current=S`) → confirm chưa quá `expires_at`
-  (409 `ORDER_EXPIRED`; cancel vẫn được). Cả hai tăng `orders.version`, ghi `audit_logs` (`ORDER_CONFIRM_COD`/`ORDER_CANCEL`)
+  `order_sagas` rồi `orders` (thứ tự chung toàn service): version (409 `VERSION_CONFLICT`) → CONFIRMED + saga `WAIT_OPS`
+  (+ COD cho confirm) (409 `INVALID_TRANSITION`, errors `status current=S`) → confirm chưa quá `expires_at`
+  (409 `ORDER_EXPIRED`; cancel vẫn được) → không có worker giữ lease (409 `SAGA_BUSY`: đang xử lý, tải lại sau). Ghi chú
+  cuộc gọi/lý do hủy lưu nguyên văn ở history và `audit_logs`: OPS không nhập số điện thoại/địa chỉ khách vào đó. Cả hai tăng `orders.version`, ghi `audit_logs` (`ORDER_CONFIRM_COD`/`ORDER_CANCEL`)
   và lưu response `202` trong `idempotency_requests` (actor `admin:{user_id}`); 409 nghiệp vụ rollback, không lưu (retry cùng
   key được đánh giá lại); khác body → 409 `IDEMPOTENCY_KEY_REUSED`.
 
@@ -131,4 +132,7 @@ Readiness `readinessState,db`; log JSON ECS có redaction (token, cookie không 
 instance dựa vào `SKIP LOCKED` + lease, chưa đo tải; online `WAIT_PAYMENT` chưa đạt được tới PAY-02/03. Admin: list đọc
 saga từng dòng CONFIRMED (N+1), chưa index `contact_phone` (seq scan); consumer shipping chưa đối chiếu `shipment_id` với saga
 (một shipment/đơn ở shipping hiện tại, cần khi ORD-04 tạo lại vận đơn).
-Admin `q` chỉ coi `ORD` + 12 chữ số là order_no (`OrderAdminQueries.ORDER_NO`); mọi chuỗi khác là tìm theo số điện thoại.
+Admin `q` chỉ coi `ORD` + 12 chữ số (không phân biệt hoa thường) là order_no (`OrderAdminQueries.ORDER_NO`); `q` rỗng là
+không lọc; chuỗi khác là số điện thoại, so theo chữ số với `84` đầu quy về `0` (`+84 912…` khớp `0912…`). Consumer shipping
+chỉ cảnh báo log (`order_id`, status, không PII) khi shipment `FAILED`/`RETURNING`/`RETURNED`/`CANCELLED`/`MANUAL`, đơn giữ
+nguyên tới ORD-04; `shipment_version` lưu theo đơn, ORD-04 tạo vận đơn mới phải đối chiếu `shipment_id` và đặt lại version.

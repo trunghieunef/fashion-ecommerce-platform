@@ -83,7 +83,7 @@ class OrderCommandsIntegrationTest extends OrderTestSupport {
     assertThat(problem(stale, 409)).isEqualTo("VERSION_CONFLICT");
     // A worker holding the lease: the OPS command waits for it to finish.
     jdbc.update("update order_sagas set lease_token = gen_random_uuid(), lease_until = now() + interval '30 seconds' where order_id = ?", id);
-    assertThat(problem(confirm(id, "k", v, null), 409)).isEqualTo("INVALID_TRANSITION");
+    assertThat(problem(confirm(id, "k", v, null), 409)).isEqualTo("SAGA_BUSY");
     jdbc.update("update order_sagas set lease_token = null, lease_until = null where order_id = ?", id);
     expire(id);
     assertThat(problem(confirm(id, "k", v, null), 409)).isEqualTo("ORDER_EXPIRED");
@@ -155,7 +155,7 @@ class OrderCommandsIntegrationTest extends OrderTestSupport {
     long v = version(id);
     asOwner("update order_sagas set next_retry_at = now() - interval '1 minute' where order_id = '" + id + "'");
     var claim = sagas.claimDue(10, Duration.ofSeconds(30)).stream().filter(c -> c.orderId().equals(id)).findFirst().orElseThrow();
-    assertThat(problem(confirm(id, "k", v, null), 409)).isEqualTo("INVALID_TRANSITION");   // lease still live
+    assertThat(problem(confirm(id, "k", v, null), 409)).isEqualTo("SAGA_BUSY");   // lease still live (PR #34 review M4)
     asOwner("update order_sagas set lease_until = now() - interval '1 second' where order_id = '" + id + "'");
     data(confirm(id, "k", v, null), 202);
     assertThat(sagas.write(claim, jdbc -> jdbc.sql("update order_sagas set step = 'WAIT_OPS' where order_id = :id").param("id", id).update(), true))

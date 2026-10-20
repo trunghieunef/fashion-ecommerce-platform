@@ -258,7 +258,7 @@ public class OrderService {
 
   public record Summary(String orderNo, String status, long totalAmount, String currency, Instant createdAt, int itemCount) { }
   public record Page(List<Summary> items, String nextCursor) { }
-  static final Set<String> STATUSES = Set.of("PENDING", "WAITING_PAYMENT", "CONFIRMED", "PAID", "PACKING", "SHIPPING", "DELIVERED",
+  public static final Set<String> STATUSES = Set.of("PENDING", "WAITING_PAYMENT", "CONFIRMED", "PAID", "PACKING", "SHIPPING", "DELIVERED",
       "CANCELLING", "CANCELLED", "REFUNDING", "REFUNDED", "RETURNING", "RETURNED");
 
   /** Spec section 8: member by user_id, guest by its access cookie; anything else is the same 404 (T21). */

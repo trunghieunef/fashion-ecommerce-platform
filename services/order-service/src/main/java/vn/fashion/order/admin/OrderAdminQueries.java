@@ -19,20 +19,25 @@ import vn.fashion.order.web.Api;
 /** OPS order reads (spec section 5). pii = the caller holds order.fulfill: contact, address, note and history reasons. */
 @Component
 public class OrderAdminQueries {
-  static final Set<String> STATUSES = Set.of("PENDING", "WAITING_PAYMENT", "CONFIRMED", "PAID", "PACKING", "SHIPPING",
-      "DELIVERED", "CANCELLING", "CANCELLED", "REFUNDING", "REFUNDED", "RETURNING", "RETURNED");
   private static final Set<String> PII = Set.of("contact_phone", "contact_email", "shipping_address", "note", "reason");
-  /** The order_no shape of OrderService (ORD + yyyyMM + 6 digits); any other q is a phone. */
-  private static final Pattern ORDER_NO = Pattern.compile("ORD\\d{12}");
+  /** The order_no shape of OrderService (ORD + yyyyMM + 6 digits, any case); any other q is a phone. */
+  private static final Pattern ORDER_NO = Pattern.compile("ORD\\d{12}", Pattern.CASE_INSENSITIVE);
   private final JdbcClient jdbc;
   private final ObjectMapper json;
 
   public OrderAdminQueries(JdbcClient jdbc, ObjectMapper json) { this.jdbc = jdbc; this.json = json; }
 
-  public static boolean isPhoneQuery(String q) { return q != null && !ORDER_NO.matcher(q).matches(); }
+  /** A blank q is no filter (PR #34 review M3). */
+  public static String query(String q) { return q == null || q.isBlank() ? null : q.strip(); }
+  public static boolean isPhoneQuery(String q) { return query(q) != null && !ORDER_NO.matcher(query(q)).matches(); }
+  /** Phone as digits with 84 written as 0, so +84 912 345 678 finds 0912345678 (PR #34 review M2). */
+  static String phone(String q) {
+    String digits = q.replaceAll("[^0-9]", "");
+    return digits.startsWith("84") && digits.length() == 11 ? "0" + digits.substring(2) : digits;
+  }
 
   public Map<String, Object> page(String status, String q, String cursor, int limit, boolean pii) {
-    if (status != null && !STATUSES.contains(status)) throw invalid("status");
+    if (status != null && !vn.fashion.order.orders.OrderService.STATUSES.contains(status)) throw invalid("status");
     Instant afterAt = null;
     UUID afterId = null;
     if (cursor != null) {
@@ -42,12 +47,17 @@ public class OrderAdminQueries {
         afterId = UUID.fromString(parts[1]);
       } catch (RuntimeException e) { throw invalid("cursor"); }
     }
+    q = query(q);
     boolean byNo = q != null && !isPhoneQuery(q);
+    if (q != null) q = byNo ? q.toUpperCase(java.util.Locale.ROOT) : phone(q);
     var rows = jdbc.sql("""
         select id, order_no, status, version, payment_method as method, total_amount, created_at, expires_at, confirmed_at, delivered_at,
           contact_phone, contact_email
         from orders where (cast(:status as text) is null or status = :status)
-          and (cast(:q as text) is null or (:byNo and order_no = :q) or (not :byNo and contact_phone = :q))
+          and (cast(:q as text) is null or (:byNo and order_no = :q) or (not :byNo and :q <> '' and :q = (
+            case when regexp_replace(contact_phone, '[^0-9]', '', 'g') ~ '^84[0-9]{9}$'
+              then '0' || substr(regexp_replace(contact_phone, '[^0-9]', '', 'g'), 3)
+              else regexp_replace(contact_phone, '[^0-9]', '', 'g') end)))
           and (cast(:at as timestamptz) is null or (created_at, id) < (cast(:at as timestamptz), cast(:id as uuid)))
         order by created_at desc, id desc limit :n""")
         .param("status", status).param("q", q).param("byNo", byNo)

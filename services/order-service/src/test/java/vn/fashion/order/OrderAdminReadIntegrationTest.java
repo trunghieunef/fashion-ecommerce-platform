@@ -60,6 +60,12 @@ class OrderAdminReadIntegrationTest extends OrderTestSupport {
     assertThat(byNo.get(0).path("order_no").asString()).isEqualTo(b);
     assertThat(data(get("?q=0933333333", ops()), 200).path("items").get(0).path("order_no").asString()).isEqualTo(c);
     assertThat(data(get("?q=093333333", ops()), 200).path("items")).isEmpty();
+    // PR #34 review M2: the same phone written another way still finds the order.
+    for (String other : new String[] {"%2B84933333333", "84933333333", "0933%20333%20333"})
+      assertThat(data(get("?q=" + other, ops()), 200).path("items").get(0).path("order_no").asString()).as(other).isEqualTo(c);
+    // M3: a lower-case order_no is an order_no, a blank q is no filter.
+    assertThat(data(get("?q=" + b.toLowerCase(), ops()), 200).path("items").get(0).path("order_no").asString()).isEqualTo(b);
+    assertThat(data(get("?q=", ops()), 200).path("items")).hasSize(4);
     for (String bad : new String[] {"?limit=0", "?limit=101", "?limit=x", "?status=NOPE", "?cursor=zzz"})
       assertThat(problem(get(bad, ops()), 400)).isEqualTo("INVALID_PARAMETER");
   }
@@ -91,6 +97,8 @@ class OrderAdminReadIntegrationTest extends OrderTestSupport {
     assertThat(d.path("history").get(0).path("actor_type").asString()).isEqualTo("ADMIN");
     assertThat(problem(get("?q=0911111111", finance()), 403)).isEqualTo("PERMISSION_REQUIRED");
     assertThat(data(get("?q=" + no, finance()), 200).path("items")).hasSize(1);
+    assertThat(data(get("?q=" + no.toLowerCase(), finance()), 200).path("items")).hasSize(1);   // M3: not a phone
+    assertThat(data(get("?q=", finance()), 200).path("items")).hasSize(1);
   }
 
   @Test void transitionsRecordTheActor() {

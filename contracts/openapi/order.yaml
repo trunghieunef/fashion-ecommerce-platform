@@ -295,8 +295,9 @@ paths:
       description: >-
         ORD-03 implemented. Permission order.fulfill. Checked in order: auth, Idempotency-Key (400 INVALID_KEY), body (400
         INVALID_FIELDS/MALFORMED_JSON), then in one transaction locking order_sagas then orders: expected_version (409
-        VERSION_CONFLICT, errors expected_version current=N), order CONFIRMED + COD + saga FULFILL/WAIT_OPS without a live
-        worker lease (else 409 INVALID_TRANSITION, errors status current=S), now < expires_at (409 ORDER_EXPIRED). The order
+        VERSION_CONFLICT, errors expected_version current=N), order CONFIRMED + COD + saga FULFILL/WAIT_OPS (else 409
+        INVALID_TRANSITION, errors status current=S), now < expires_at (409 ORDER_EXPIRED), no live worker lease (409
+        SAGA_BUSY: reload and retry). The order
         stays CONFIRMED (processing_status PROCESSING, version + 1) until inventory commits; then CONFIRMED -> PACKING and the
         saga creates the SELF shipment (READY once it has one). After the confirm the order deadline no longer cancels:
         inventory decides (RESERVATION_EXPIRED -> CANCELLED EXPIRED). Same key + body replays the stored 202; another body
@@ -708,7 +709,7 @@ components:
     CommandConflict:
       description: >-
         VERSION_CONFLICT (errors expected_version current=N), INVALID_TRANSITION (errors status current=S), ORDER_EXPIRED
-        (confirm-cod only) or IDEMPOTENCY_KEY_REUSED. Business 409s are not stored by idempotency; a retry is evaluated again.
+        (confirm-cod only), SAGA_BUSY (a worker holds the saga; reload) or IDEMPOTENCY_KEY_REUSED. Business 409s are not stored by idempotency; a retry is evaluated again.
       headers: *headers
       content:
         application/json:

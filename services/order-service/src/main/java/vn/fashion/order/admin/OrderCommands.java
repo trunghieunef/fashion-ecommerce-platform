@@ -77,8 +77,8 @@ public class OrderCommands {
       // A cancel is still allowed past the deadline the worker has not acted on yet (same outcome as EXPIRED).
       if (confirm && !clock.instant().isBefore(o.expiresAt()))
         throw new Api.Problem(HttpStatus.CONFLICT, "CONFLICT", "ORDER_EXPIRED", List.of());
-      // A worker holds the saga (e.g. cancelling it at the deadline): let it finish, OPS reloads.
-      if (o.leased()) throw invalid(o.status());
+      // A worker holds the saga (e.g. cancelling it at the deadline): let it finish, OPS reloads (PR #34 review M4).
+      if (o.leased()) throw new Api.Problem(HttpStatus.CONFLICT, "CONFLICT", "SAGA_BUSY", List.of());
       UUID request = UUID.randomUUID();
       work.apply(o, request);
       var after = orders.view(o.id());

@@ -19,6 +19,7 @@ import vn.fashion.platform.messaging.PermanentEventException;
 @Component
 public class ShippingEvents {
   private static final Logger LOG = LoggerFactory.getLogger(ShippingEvents.class);
+  private static final java.util.Set<String> ATTENTION = java.util.Set.of("FAILED", "RETURNING", "RETURNED", "CANCELLED", "MANUAL");
   private final JdbcClient jdbc;
   private final OrderTransitions transitions;
   private final OrderService orders;
@@ -49,7 +50,11 @@ public class ShippingEvents {
     if (created) return null;
     boolean handedOver = s.status().equals("DELIVERING") && s.handedOverAt() != null;
     boolean delivered = s.status().equals("DELIVERED");
-    if (!handedOver && !delivered) return null;   // PICKING, FAILED, RETURNING...: ORD-04
+    if (!handedOver && !delivered) {
+      // The order stays SHIPPING with the COD payment open until ORD-04 handles it: say so (no PII; PR #34 review M1).
+      if (ATTENTION.contains(s.status())) LOG.warn("Shipment {} needs OPS (ORD-04): order_id={} status={}", s.status(), s.orderId(), status);
+      return null;   // PICKING, DELIVERING without hand-over: nothing to do
+    }
     if (!status.equals("PACKING") && !status.equals("SHIPPING")) {
       if (!status.equals("DELIVERED")) LOG.warn("Shipment {} on a {} order: order_id={}", s.status(), status, s.orderId());
       return null;
