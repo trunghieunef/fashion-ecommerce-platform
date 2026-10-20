@@ -123,6 +123,10 @@ key nhận cùng đơn.
   trước vẫn hợp lệ — hai request đua cùng key có thể về trình duyệt theo thứ tự bất kỳ, và response bị mất chưa tới tay
   ai nên thu hồi không có lợi (review nhánh I1, sửa 2026-10-20). Ghi log audit có cấu trúc (`order_no`, `ACCESS_REISSUED`,
   không token). Không tăng `version` đơn.
+- Review PR #32: server chỉ nhận credential guest trong 90 ngày từ khi cấp (`order_guest_access.created_at`), không dựa vào
+  `Max-Age`; tối đa 10 credential mỗi đơn (quá thì không cấp thêm, log `ACCESS_CAPPED`); guest cùng actor nhận `409
+  CART_ALREADY_ORDERED` (mất key sau reload) cũng được cấp credential cho đơn đó. Job dọn credential hết hạn theo O06 chạy
+  bằng role migration/owner (runtime không DELETE), thuộc task retention riêng.
 - Không có API tra đơn bằng `order_no`/phone đơn thuần (03 §2.3). Mất cookie → hỗ trợ xác minh theo policy (ngoài phạm vi).
 
 ## 8. Đọc đơn

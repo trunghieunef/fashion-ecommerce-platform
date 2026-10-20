@@ -100,8 +100,10 @@ public class OrderService {
     var ordered = jdbc.sql("select order_no, actor_key from orders where cart_id = :c and cart_version = :v")
         .param("c", request.cartId()).param("v", request.cartVersion()).query((rs, n) -> new String[] {rs.getString(1), rs.getString(2)})
         .optional().orElseThrow(() -> new IllegalStateException("insert skipped without a conflicting order"));
-    throw new Api.Problem(HttpStatus.CONFLICT, "CONFLICT", "CART_ALREADY_ORDERED",
-        List.of(new Api.FieldError("order_no", ordered[1].equals(actor.key()) ? ordered[0] : "")));
+    boolean same = ordered[1].equals(actor.key());
+    // PR review I2: the same guest (lost key after a reload) proves the same actor as a replay, so it gets a credential.
+    String granted = same && !actor.member() ? grantAccess(orderIdByNo(ordered[0]), ordered[0]) : null;
+    throw new AlreadyOrdered(same ? ordered[0] : "", granted);
   }
 
   /** The cart must still hold exactly the quoted lines and catalog the quoted prices (T24), else nothing is written. */
@@ -127,7 +129,7 @@ public class OrderService {
   private boolean insert(UUID id, OrderActor actor, String key, String hash, Quote quote, String access, String correlationId) {
     Instant now = clock.instant();
     long seq = jdbc.sql("select nextval('order_no_seq')").query(Long.class).single();
-    String orderNo = "ORD" + MONTH.format(now.atZone(SHOP)) + String.format("%06d", seq);
+    String orderNo = "ORD" + MONTH.format(now.atZone(SHOP)) + String.format(java.util.Locale.ROOT, "%06d", seq);
     // COD waits 24 h for OPS (06 section 5.2); online methods get 15 minutes (ORD-03 owns the expiry).
     Instant expires = now.plus(quote.method().equals("COD") ? Duration.ofHours(24) : Duration.ofMinutes(15));
     var t = quote.totals();
@@ -168,7 +170,8 @@ public class OrderService {
         .param("id", UUID.randomUUID()).param("order", id).param("actor", actor.userId()).update();
     jdbc.sql("insert into order_sagas(order_id, intent, step, status) values (:order, 'FULFILL', 'RESERVE', 'RUNNING')")
         .param("order", id).update();
-    if (access != null) grantAccess(id, access);
+    if (access != null) jdbc.sql("insert into order_guest_access(access_hash, order_id) values (:h, :o)")
+        .param("h", Api.sha256(access)).param("o", id).update();
     events.created(view(id), actor.userId(), correlationId);
     return true;
   }
@@ -179,18 +182,39 @@ public class OrderService {
    */
   private Created replay(Row row, String hash) {
     if (!row.checkoutHash().equals(hash)) throw new Api.Problem(HttpStatus.CONFLICT, "CONFLICT", "IDEMPOTENCY_KEY_REUSED", List.of());
-    String access = null;
-    if (row.userId() == null) {
-      access = newAccessToken();
-      grantAccess(row.id(), access);
-      LOG.info("Guest order access reissued: order_no={} event=ACCESS_REISSUED", row.orderNo());
-    }
+    String access = row.userId() == null ? grantAccess(row.id(), row.orderNo()) : null;
     return new Created(view(row.id()), true, access);
   }
 
-  private void grantAccess(UUID orderId, String access) {
+  /** 409 CART_ALREADY_ORDERED; for the same guest it carries a new access credential (set as a cookie by the controller). */
+  public static class AlreadyOrdered extends Api.Problem {
+    private final String orderNo, access;
+    AlreadyOrdered(String orderNo, String access) {
+      super(HttpStatus.CONFLICT, "CONFLICT", "CART_ALREADY_ORDERED", List.of(new Api.FieldError("order_no", orderNo)));
+      this.orderNo = orderNo; this.access = access;
+    }
+    public String orderNo() { return orderNo; }
+    public String access() { return access; }
+  }
+
+  /** PR review M1: at most MAX_ACCESS credentials per order (the runtime cannot delete); beyond that none is issued. */
+  static final int MAX_ACCESS = 10;
+  private String grantAccess(UUID orderId, String orderNo) { return tx.execute(status -> grantLocked(orderId, orderNo)); }
+  private String grantLocked(UUID orderId, String orderNo) {
+    jdbc.sql("select id from orders where id = :o for update").param("o", orderId).query(UUID.class).single();
+    long issued = jdbc.sql("select count(*) from order_guest_access where order_id = :o").param("o", orderId).query(Long.class).single();
+    if (issued >= MAX_ACCESS) {
+      LOG.warn("Guest order access cap reached: order_no={} event=ACCESS_CAPPED", orderNo);
+      return null;
+    }
+    String access = newAccessToken();
     jdbc.sql("insert into order_guest_access(access_hash, order_id) values (:h, :o)").param("h", Api.sha256(access)).param("o", orderId)
         .update();
+    if (issued > 0) LOG.info("Guest order access reissued: order_no={} event=ACCESS_REISSUED", orderNo);
+    return access;
+  }
+  private UUID orderIdByNo(String orderNo) {
+    return jdbc.sql("select id from orders where order_no = :no").param("no", orderNo).query(UUID.class).single();
   }
 
   Optional<Row> byCheckout(String actorKey, String key) {
@@ -223,7 +247,10 @@ public class OrderService {
   public OrderView readable(String orderNo, UUID userId, String accessToken) {
     var row = byNo(orderNo).filter(r -> userId != null ? userId.equals(r.userId())
         : accessToken != null && r.userId() == null && jdbc.sql("select count(*) from order_guest_access where access_hash = :h and order_id = :o")
-            .param("h", Api.sha256(accessToken)).param("o", r.id()).query(Long.class).single() > 0);
+            .param("h", Api.sha256(accessToken)).param("o", r.id()).query(Long.class).single() > 0
+            // PR review I1 (O06): a guest credential reads for 90 days, enforced here and not only by the cookie Max-Age.
+            && jdbc.sql("select count(*) from order_guest_access where access_hash = :h and created_at > now() - interval '90 days'")
+                .param("h", Api.sha256(accessToken)).query(Long.class).single() > 0);
     return view(row.orElseThrow(() -> new Api.Problem(HttpStatus.NOT_FOUND, "NOT_FOUND", "ORDER_NOT_FOUND", List.of())));
   }
 

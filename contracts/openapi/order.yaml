@@ -85,7 +85,8 @@ paths:
         and confirm, T24). One transaction writes the PENDING order, items, history, the saga row and ORDER_CREATED. Another
         key on the same cart state is 409 CART_ALREADY_ORDERED (order_no in errors for the same actor). 4xx store nothing;
         COD expires_at is created_at + 24 h. A guest gets the order_access cookie (HttpOnly, Secure, SameSite=Lax,
-        Path=/api/v1/orders/{order_no}, 90 days); a retry with the same key issues one more and earlier cookies stay valid.
+        Path=/api/v1/orders/{order_no}, 90 days); a retry with the same key issues one more and earlier cookies stay valid (at most 10 per order, each readable for 90 days from
+        issue, checked by the server). CART_ALREADY_ORDERED for the same guest also sets an order_access cookie for that order.
       security: [{memberBearer: []}, {checkoutToken: []}]
       x-implementation-status: implemented
       parameters:
@@ -156,7 +157,8 @@ paths:
       operationId: getOrder
       summary: One order for its owner
       description: ORD-01 implemented. A member reads its own orders (Bearer); a guest reads only the order of its
-        order_access cookie. Missing, foreign or guessed order numbers are the same 404 ORDER_NOT_FOUND (T21). No lookup by
+        order_access cookie (90 days from issue, checked by the server). Missing, foreign or guessed order numbers are the same 404
+        ORDER_NOT_FOUND (T21). No lookup by
         order_no or phone alone. PENDING is processing_status PROCESSING; allowed_actions is empty until ORD-04.
       security: [{memberBearer: []}, {orderAccess: []}]
       x-implementation-status: implemented

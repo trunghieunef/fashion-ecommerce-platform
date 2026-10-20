@@ -8,8 +8,10 @@ import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -60,10 +62,22 @@ public class OrderController {
     var builder = ResponseEntity.status(response.getStatusCode()).headers(response.getHeaders());
     if (view.processing())
       builder.header(HttpHeaders.LOCATION, view.statusUrl()).header(HttpHeaders.RETRY_AFTER, String.valueOf(view.retryAfterSeconds()));
-    if (created.guestAccessToken() != null)
-      builder.header(HttpHeaders.SET_COOKIE, ResponseCookie.from(ACCESS_COOKIE, created.guestAccessToken()).httpOnly(true).secure(true)
-          .sameSite("Lax").path("/api/v1/orders/" + view.orderNo()).maxAge(ACCESS_TTL).build().toString());
+    if (created.guestAccessToken() != null) builder.header(HttpHeaders.SET_COOKIE, accessCookie(created.guestAccessToken(), view.orderNo()));
     return builder.body(response.getBody());
+  }
+
+  /** 409 CART_ALREADY_ORDERED keeps its error body; the same guest also gets a credential for that order (PR review I2). */
+  @ExceptionHandler(OrderService.AlreadyOrdered.class)
+  ResponseEntity<Api.Error> alreadyOrdered(OrderService.AlreadyOrdered e) {
+    var error = Api.error(e.status(), e.code(), e.getMessage(), e.errors(), tracer);
+    var builder = ResponseEntity.status(error.getStatusCode()).headers(error.getHeaders()).contentType(MediaType.APPLICATION_JSON);
+    if (e.access() != null) builder.header(HttpHeaders.SET_COOKIE, accessCookie(e.access(), e.orderNo()));
+    return builder.body(error.getBody());
+  }
+
+  static String accessCookie(String token, String orderNo) {
+    return ResponseCookie.from(ACCESS_COOKIE, token).httpOnly(true).secure(true).sameSite("Lax").path("/api/v1/orders/" + orderNo)
+        .maxAge(ACCESS_TTL).build().toString();
   }
 
   @GetMapping("/mine")

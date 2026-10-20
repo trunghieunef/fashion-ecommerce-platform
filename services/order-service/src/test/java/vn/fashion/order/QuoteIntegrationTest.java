@@ -70,6 +70,9 @@ class QuoteIntegrationTest extends OrderTestSupport {
     assertThat(problem(quote(body, "Checkout-Token", checkoutToken(GUEST_HASH, cart, 900, "payment-service")), 401))
         .isEqualTo("INVALID_CHECKOUT_TOKEN");
     assertThat(problem(quote(body, "Checkout-Token", "garbage"), 401)).isEqualTo("INVALID_CHECKOUT_TOKEN");
+    // PR review M2: a token living longer than 15 minutes (misconfigured cart TTL) is refused.
+    assertThat(problem(quote(body, "Checkout-Token", checkoutToken(GUEST_HASH, cart, 86400, "order-service")), 401))
+        .isEqualTo("INVALID_CHECKOUT_TOKEN");
   }
 
   @Test void cartAndCatalogAnswersMapToClientErrors() {

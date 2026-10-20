@@ -117,7 +117,7 @@ topic `order.events` + DLT; `.env.example`; Gateway route `order-public`; test `
 
 - [ ] Test `OrderReadIntegrationTest`: member đọc đơn mình 200 (`processing_status PROCESSING`, `allowed_actions []`,
   no-store); member khác 404; guest cookie đúng 200; cookie đơn khác hoặc không cookie 404; `order_no` không tồn tại 404 (cùng
-  body); sau guest retry cookie cũ 404; `mine`: 25 đơn → limit 20 + cursor → trang 2 còn 5, filter status, cursor sai 400,
+  body); sau guest retry cookie cũ vẫn đọc được (sửa theo review nhánh I1); `mine`: 25 đơn → limit 20 + cursor → trang 2 còn 5, filter status, cursor sai 400,
   guest 401.
 - [ ] Implement; verify PASS; commit `feat(ORD-01): order read with member and guest ownership`.
 

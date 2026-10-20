@@ -154,6 +154,38 @@ class OrderCreateIntegrationTest extends OrderTestSupport {
     assertThat(count("select count(*) from orders")).isZero();
   }
 
+  @Test void aGuestWhoLostItsKeyGetsCartAlreadyOrderedWithAWorkingCookie() {
+    // PR review I2: reload lost the key and the quote; a new key on the same cart state must still reach the order.
+    UUID cart = UUID.randomUUID();
+    stubCheckout(cart, 150000, 99000);
+    String checkout = checkoutToken(GUEST_HASH, cart);
+    String orderNo = data(create("g1", createBody(cart, 4, quoteToken(cart, "Checkout-Token", checkout)), "Checkout-Token", checkout), 202)
+        .path("order_no").asString();
+    var again = create("g2", createBody(cart, 4, quoteToken(cart, "Checkout-Token", checkout)), "Checkout-Token", checkout);
+    assertThat(problem(again, 409)).isEqualTo("CART_ALREADY_ORDERED");
+    assertThat(json(again).path("errors").get(0).path("message").asString()).isEqualTo(orderNo);
+    String set = cookie(again);
+    assertThat(set).contains("Path=/api/v1/orders/" + orderNo).contains("HttpOnly");
+    String value = set.substring("order_access=".length(), set.indexOf(';'));
+    assertThat(data(send("GET", "/api/v1/orders/" + orderNo, null, "Cookie", "order_access=" + value), 200).path("order_no").asString())
+        .isEqualTo(orderNo);
+    // Another guest on another cart never gets anything from this order.
+    assertThat(count("select count(*) from orders")).isEqualTo(1);
+  }
+
+  @Test void reissuedCredentialsAreCappedPerOrder() {
+    // PR review M1: retries cannot grow the credential table without bound (10 per order).
+    UUID cart = UUID.randomUUID();
+    stubCheckout(cart, 150000, 99000);
+    String checkout = checkoutToken(GUEST_HASH, cart), body = createBody(cart, 4, quoteToken(cart, "Checkout-Token", checkout));
+    data(create("g1", body, "Checkout-Token", checkout), 202);
+    for (int i = 0; i < 12; i++) data(create("g1", body, "Checkout-Token", checkout), 202);
+    assertThat(count("select count(*) from order_guest_access")).isEqualTo(10);
+    var last = create("g1", body, "Checkout-Token", checkout);
+    assertThat(data(last, 202).path("order_no").asString()).isNotBlank();
+    assertThat(last.headers().allValues("Set-Cookie")).isEmpty();
+  }
+
   @Test void aGuestGetsAnAccessCookieAndARetryReissuesIt() {
     UUID cart = UUID.randomUUID();
     stubCheckout(cart, 150000, 99000);

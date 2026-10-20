@@ -8,10 +8,11 @@ import org.junit.jupiter.api.Test;
 
 /** TASK:ORD-01 spec section 8: owner-only reads (T21, REQ ORD-05). */
 class OrderReadIntegrationTest extends OrderTestSupport {
+  static final java.util.concurrent.atomic.AtomicInteger SEQ = new java.util.concurrent.atomic.AtomicInteger(100000);
   /** Inserts an order directly; minutesAgo orders the list. Returns the order_no. */
   private String seed(UUID userId, String accessHash, String status, int minutesAgo) {
     UUID id = UUID.randomUUID();
-    String orderNo = "ORD202610" + String.format("%06d", (int) (Math.random() * 999999));
+    String orderNo = "TST" + SEQ.incrementAndGet();  // PR review M3: unique, never the ORD shape of the unknown number
     jdbc.update("""
         insert into orders(id, order_no, user_id, actor_key, guest_access_hash, checkout_key, checkout_hash, cart_id, cart_version,
           status, payment_method, subtotal, shipping_fee, cod_fee, total_amount, contact_phone, contact_email, shipping_address,
@@ -57,6 +58,16 @@ class OrderReadIntegrationTest extends OrderTestSupport {
     assertThat(problem(get("/api/v1/orders/" + order, "Cookie", "order_access=" + otherToken), 404)).isEqualTo("ORDER_NOT_FOUND");
     // A guest order is never readable by a member token, even the member's own (no user_id on it).
     assertThat(problem(get("/api/v1/orders/" + order, "Authorization", memberToken()), 404)).isEqualTo("ORDER_NOT_FOUND");
+  }
+
+  @Test void aGuestCredentialExpiresAfter90DaysOnTheServer() {
+    // PR review I1 (O06): the 90 days are enforced by the server, not only by the cookie Max-Age.
+    String token = "v".repeat(43);
+    String order = seed(null, sha256(token), "PENDING", 1);
+    asOwner("update order_guest_access set created_at = now() - interval '91 days'");
+    assertThat(problem(get("/api/v1/orders/" + order, "Cookie", "order_access=" + token), 404)).isEqualTo("ORDER_NOT_FOUND");
+    asOwner("update order_guest_access set created_at = now() - interval '89 days'");
+    assertThat(data(get("/api/v1/orders/" + order, "Cookie", "order_access=" + token), 200).path("order_no").asString()).isEqualTo(order);
   }
 
   @Test void aReissuedCookieIsAddedAndEarlierCookiesStayValid() {

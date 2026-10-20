@@ -41,8 +41,10 @@ Port 8087 (không publish ra host). Qua Gateway: `/api/v1/orders/**`; không có
   (FULFILL/RESERVE/RUNNING cho ORD-02) + outbox `ORDER_CREATED`. Key khác cùng giỏ/version → 409 `CART_ALREADY_ORDERED`
   (order_no chỉ lộ cho cùng actor). COD `expires_at = +24h`. `order_no = ORD + yyyyMM (giờ VN) + 6 số sequence`.
 - **Guest credential**: cookie `order_access` (HttpOnly, Secure, SameSite=Lax, `Path=/api/v1/orders/{order_no}`, 90 ngày —
-  O06); DB chỉ lưu sha256 (bảng `order_guest_access`). Retry create cùng key cấp thêm cookie mới, cookie cũ vẫn hợp lệ (hai
-  response đua nhau không làm guest mất đơn); log audit `ACCESS_REISSUED`.
+  O06, server kiểm `created_at` của credential, không chỉ `Max-Age`); DB chỉ lưu sha256 (bảng `order_guest_access`). Retry
+  create cùng key cấp thêm cookie mới, cookie cũ vẫn hợp lệ (hai response đua nhau không làm guest mất đơn), tối đa 10
+  credential mỗi đơn (`ACCESS_CAPPED`); guest cùng actor nhận `409 CART_ALREADY_ORDERED` cũng kèm cookie của đơn đó. Log
+  audit `ACCESS_REISSUED`. Dọn credential hết hạn (O06) cần role migration/owner — task retention riêng.
 
 ## Cấu hình
 

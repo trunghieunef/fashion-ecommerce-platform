@@ -24,6 +24,8 @@ import vn.fashion.platform.security.AccessTokenVerifier;
  */
 @Component
 public class OrderIdentity {
+  private static final java.time.Duration SKEW = java.time.Duration.ofSeconds(60);
+  private static final java.time.Duration MAX_LIFETIME = java.time.Duration.ofMinutes(15).plus(SKEW);
   private static final Pattern GUEST = Pattern.compile("guest:([0-9a-f]{64})");
   private final AccessTokenVerifier members;
   private final Map<String, ECPublicKey> checkoutKeys;
@@ -62,9 +64,12 @@ public class OrderIdentity {
         throw invalidCheckout();
       var claims = jwt.getJWTClaimsSet();
       var matcher = GUEST.matcher(String.valueOf(claims.getSubject()));
-      Date exp = claims.getExpirationTime();
+      Date exp = claims.getExpirationTime(), iat = claims.getIssueTime();
+      var now = clock.instant();
       if (!"cart-service".equals(claims.getIssuer()) || !List.of("order-service").equals(claims.getAudience())
-          || exp == null || !exp.toInstant().isAfter(clock.instant()) || !matcher.matches())
+          || exp == null || !exp.toInstant().isAfter(now) || !matcher.matches()
+          // PR review M2: never longer-lived than spec section 3 allows, nor issued in the future (60 s skew).
+          || iat == null || iat.toInstant().isAfter(now.plus(SKEW)) || exp.getTime() - iat.getTime() > MAX_LIFETIME.toMillis())
         throw invalidCheckout();
       return OrderActor.guest(matcher.group(1), UUID.fromString(claims.getStringClaim("cart_id")));
     } catch (Api.Problem e) { throw e; }
