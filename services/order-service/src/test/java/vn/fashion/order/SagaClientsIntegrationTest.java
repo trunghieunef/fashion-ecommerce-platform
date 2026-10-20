@@ -63,6 +63,26 @@ class SagaClientsIntegrationTest extends OrderTestSupport {
     assertThat(inventory.reserve(ORDER).result()).isEqualTo(Outcome.Result.UNKNOWN);
   }
 
+  @Test void commitSendsOnlyTheOrderIdUnderAFixedKey() throws Exception {
+    // ORD-03: CommitRequest is {order_id} (additionalProperties false); inventory is the arbiter of the deadline.
+    StubServers.INVENTORY.reply(s -> new StubServers.Reply(200, StubServers.ok("{\"status\":\"COMMITTED\"}")));
+    assertThat(inventory.commit(ORDER).result()).isEqualTo(Outcome.Result.OK);
+    var seen = StubServers.INVENTORY.seen.get(0);
+    assertThat(seen.path()).isEqualTo("/internal/api/v1/inventory/commit");
+    assertThat(seen.idempotencyKey()).isEqualTo("commit:" + ID);
+    assertThat(seen.authorization()).startsWith("Bearer ");
+    assertThat(mapper.readTree(seen.body())).isEqualTo(mapper.readTree("{\"order_id\":\"" + ID + "\"}"));
+    StubServers.INVENTORY.reply(s -> new StubServers.Reply(409, StubServers.error("CONFLICT", "RESERVATION_EXPIRED")));
+    var expired = inventory.commit(ORDER);
+    assertThat(expired.result()).isEqualTo(Outcome.Result.REJECTED);
+    assertThat(expired.code()).isEqualTo("RESERVATION_EXPIRED");
+    StubServers.INVENTORY.reply(s -> new StubServers.Reply(503, StubServers.error("TEMPORARILY_UNAVAILABLE", "DEPENDENCY_UNAVAILABLE")));
+    assertThat(inventory.commit(ORDER).result()).isEqualTo(Outcome.Result.UNKNOWN);
+    StubServers.INVENTORY.reply(s -> new StubServers.Reply(200, StubServers.ok("{\"status\":\"COMMITTED\"}")));
+    StubServers.INVENTORY.delay(1500);
+    assertThat(inventory.commit(ORDER).result()).isEqualTo(Outcome.Result.UNKNOWN);
+  }
+
   @Test void paymentCreateAndCloseShareOneSnapshot() throws Exception {
     StubServers.PAYMENT.reply(s -> new StubServers.Reply(200, StubServers.ok("{\"payment_id\":\"55555555-5555-4555-8555-555555555591\",\"status\":\"COD_PENDING\"}")));
     var created = payments.create(ORDER);

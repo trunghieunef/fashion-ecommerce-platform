@@ -23,6 +23,12 @@ public class InventoryClient {
         "Idempotency-Key", "reserve:" + o.id());
   }
 
+  /** ORD-03: deducts the held stock once (key commit:{id}); a repeat answers 200 COMMITTED, the 409 message is the code. */
+  public Outcome commit(SagaOrder o) {
+    return Outcome.of("inventory", http, "inventory-service", url + "/internal/api/v1/inventory/commit",
+        Map.of("order_id", o.id().toString()), "Idempotency-Key", "commit:" + o.id());
+  }
+
   /** RELEASED/EXPIRED (also a tombstone before any reserve) is OK; COMMITTED is REJECTED "COMMITTED" (stock already taken). */
   public Outcome release(SagaOrder o, String reason) {
     var body = Map.of("order_id", o.id().toString(), "original_reservation", snapshot(o), "original_request_hash", hash(o),

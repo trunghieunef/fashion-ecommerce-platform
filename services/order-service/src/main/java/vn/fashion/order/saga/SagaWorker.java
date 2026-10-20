@@ -31,6 +31,8 @@ public class SagaWorker {
   static final java.util.Set<String> RESERVE_REFUSALS = java.util.Set.of("OUT_OF_STOCK", "RESERVATION_CLOSED");
   static final java.util.Set<String> PAYMENT_REFUSALS =
       java.util.Set.of("PAYMENT_CLOSED", "PAYMENT_METHOD_UNAVAILABLE", "PAYMENT_AMOUNT_UNSUPPORTED");
+  // ORD-03 spec section 4: the order deadline applies only up to the OPS confirm; from COMMIT_STOCK inventory decides.
+  static final java.util.Set<String> DEADLINE_STEPS = java.util.Set.of("RESERVE", "CREATE_PAYMENT", "WAIT_OPS");
   private final SagaRepository sagas;
   private final OrderTransitions transitions;
   private final InventoryClient inventory;
@@ -72,11 +74,13 @@ public class SagaWorker {
       // The intent spends the budget too, so a worker dying mid-call on every attempt still ends MANUAL (review M1).
       if (saga.retryCount() >= maxRetries) { manual(c, saga, "RETRY_BUDGET"); return; }
       // Deadline passed (online 15 min / COD 24 h, also while a call is UNKNOWN): cancel, never confirm late.
-      boolean more = saga.intent().equals("FULFILL") && !clock.instant().isBefore(order.expiresAt())
+      boolean more = saga.intent().equals("FULFILL") && DEADLINE_STEPS.contains(saga.step())
+          && !clock.instant().isBefore(order.expiresAt())
           ? startCancel(c, "EXPIRED")
           : switch (saga.step()) {
               case "RESERVE" -> reserve(c, saga, order);
               case "CREATE_PAYMENT" -> createPayment(c, saga, order);
+              case "COMMIT_STOCK" -> commitStock(c, saga, order);
               case "COMPENSATE" -> compensate(c, saga, order);
               default -> { sagas.write(c, jdbc -> { }, true); yield false; }
             };
@@ -121,6 +125,28 @@ public class SagaWorker {
       tasks.enqueue(CART_CLEANUP, c.orderId().toString(), "{\"order_id\":\"" + c.orderId() + "\"}");
     }, true);
     return false;
+  }
+
+  /**
+   * ORD-03 spec section 4: inventory is the arbiter of the deadline. The intent keeps HELD (UNKNOWN would let compensation
+   * release committed stock, T09); a lost answer retries the same key. EXPIRED/CLOSED: inventory already released it.
+   */
+  private boolean commitStock(SagaRepository.Claim c, SagaRepository.Saga saga, SagaOrder order) {
+    if (!intent(c, saga, null)) return false;
+    var out = inventory.commit(order);
+    boolean expired = "RESERVATION_EXPIRED".equals(out.code());
+    if (out.result() == Outcome.Result.REJECTED && (expired || "RESERVATION_CLOSED".equals(out.code()))) {
+      if (!sagas.write(c, jdbc -> jdbc.sql("update order_sagas set inventory_state = 'RELEASED' where order_id = :id")
+          .param("id", c.orderId()).update(), false)) return false;
+      return startCancel(c, expired ? "EXPIRED" : "RESERVE_FAILED");
+    }
+    if (out.result() != Outcome.Result.OK) return retry(c, saga, out);
+    return sagas.write(c, jdbc -> {
+      jdbc.sql("""
+          update order_sagas set inventory_state = 'COMMITTED', step = 'CREATE_SHIPMENT', retry_count = 0, last_error = null
+          where order_id = :id""").param("id", c.orderId()).update();
+      transitions.move(c.orderId(), "CONFIRMED", "PACKING", null);
+    }, false);
   }
 
   /** Intent CANCEL first (06 section 5.4), then compensation: CANCELLING now, CANCELLED only after release and close. */
@@ -190,12 +216,13 @@ public class SagaWorker {
   /**
    * Before a forward call: column = UNKNOWN and the attempt counted with its backoff (spec section 3), so a crash before the
    * result is retried later and still ends MANUAL. A result resets retry_count; retry() records the same attempt number.
+   * column null (COMMIT_STOCK): only the attempt is counted, the step itself marks the call in flight.
    */
   private boolean intent(SagaRepository.Claim c, SagaRepository.Saga saga, String column) {
     int attempts = saga.retryCount() + 1;
     var next = backoff(attempts);
     return sagas.write(c, jdbc -> {
-      state(jdbc, c.orderId(), column, "UNKNOWN");
+      if (column != null) state(jdbc, c.orderId(), column, "UNKNOWN");
       jdbc.sql("update order_sagas set retry_count = :n, next_retry_at = :next where order_id = :id")
           .param("n", attempts).param("next", Timestamp.from(next)).param("id", c.orderId()).update();
     }, false);
