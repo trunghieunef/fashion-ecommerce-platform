@@ -19,8 +19,8 @@ import vn.fashion.order.web.Api;
 import vn.fashion.platform.idempotency.IdempotencyStore;
 
 /**
- * OPS confirm-cod and cancel (spec section 3): one transaction locks orders then order_sagas, checks version, then state, then
- * deadline (confirm) and a live worker lease; writes saga + order + audit_logs + the idempotent response together.
+ * OPS confirm-cod and cancel (spec section 3): one transaction locks order_sagas then orders (the worker's order), checks
+ * version, then state, then deadline (confirm) and a live worker lease; writes saga + order + audit_logs + the idempotent response together.
  */
 @Component
 public class OrderCommands {
@@ -99,16 +99,17 @@ public class OrderCommands {
     });
   }
 
+  /** Locks order_sagas then orders, the worker's order (SagaRepository.write, then move), so the two never deadlock. */
   private Locked lock(String orderNo) {
-    var order = jdbc.sql("select id, status, payment_method, version, expires_at from orders where order_no = :no for update")
-        .param("no", orderNo).query((rs, n) -> new Object[] {rs.getObject(1, UUID.class), rs.getString(2), rs.getString(3), rs.getLong(4),
-            rs.getTimestamp(5).toInstant()}).optional()
+    UUID id = jdbc.sql("select id from orders where order_no = :no").param("no", orderNo).query(UUID.class).optional()
         .orElseThrow(() -> new Api.Problem(HttpStatus.NOT_FOUND, "NOT_FOUND", "ORDER_NOT_FOUND", List.of()));
-    UUID id = (UUID) order[0];
     var saga = jdbc.sql("select intent, step, coalesce(lease_until > now(), false) from order_sagas where order_id = :id for update")
         .param("id", id).query((rs, n) -> new Object[] {rs.getString(1), rs.getString(2), rs.getBoolean(3)}).optional()
         .orElse(new Object[] {null, null, false});
-    return new Locked(id, (String) order[1], (String) order[2], (long) order[3], (Instant) order[4], (String) saga[0], (String) saga[1],
+    var order = jdbc.sql("select status, payment_method, version, expires_at from orders where id = :id for update")
+        .param("id", id).query((rs, n) -> new Object[] {rs.getString(1), rs.getString(2), rs.getLong(3), rs.getTimestamp(4).toInstant()})
+        .single();
+    return new Locked(id, (String) order[0], (String) order[1], (long) order[2], (Instant) order[3], (String) saga[0], (String) saga[1],
         (boolean) saga[2]);
   }
 

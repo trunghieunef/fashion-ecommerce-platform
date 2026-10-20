@@ -2,18 +2,21 @@ package vn.fashion.order;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import vn.fashion.order.saga.SagaRepository;
 import vn.fashion.order.saga.SagaWorker;
 
 /** TASK:ORD-03 spec section 3: OPS confirm-cod hands the order to the saga; OPS cancel compensates through ORD-02. */
 class OrderCommandsIntegrationTest extends OrderTestSupport {
   static final UUID OPS = UUID.randomUUID();
   @Autowired SagaWorker worker;
+  @Autowired SagaRepository sagas;
 
   private String ops() { return tokenWith(OPS, "order.read", "order.fulfill", "order.cancel"); }
 
@@ -143,6 +146,19 @@ class OrderCommandsIntegrationTest extends OrderTestSupport {
     UUID id = confirmed();
     var d = data(post(id, "cancel", "k", "{\"expected_version\":" + version(id) + ",\"reason\":\"x\"}", tokenWith(OPS, "order.cancel")), 202);
     for (String field : new String[] {"contact", "shipping_address", "note"}) assertThat(d.path(field).isNull()).as(field).isTrue();
+  }
+
+  @Test void aWorkerClaimTakenBeforeTheConfirmLosesItsWrite() {
+    UUID id = confirmed();
+    long v = version(id);
+    asOwner("update order_sagas set next_retry_at = now() - interval '1 minute' where order_id = '" + id + "'");
+    var claim = sagas.claimDue(10, Duration.ofSeconds(30)).stream().filter(c -> c.orderId().equals(id)).findFirst().orElseThrow();
+    assertThat(problem(confirm(id, "k", v, null), 409)).isEqualTo("INVALID_TRANSITION");   // lease still live
+    asOwner("update order_sagas set lease_until = now() - interval '1 second' where order_id = '" + id + "'");
+    data(confirm(id, "k", v, null), 202);
+    assertThat(sagas.write(claim, jdbc -> jdbc.sql("update order_sagas set step = 'WAIT_OPS' where order_id = :id").param("id", id).update(), true))
+        .isFalse();
+    assertThat(saga(id)).containsEntry("step", "COMMIT_STOCK");
   }
 
   @Test void confirmAndCancelRaceHasOneWinner() throws Exception {
