@@ -78,7 +78,8 @@ service_key() {
 }
 service_key CART cart-service CATALOG_INTERNAL_CALLERS INVENTORY_INTERNAL_CALLERS  # TASK:CART-01: catalog quote, inventory stock
 service_key SHIPPING shipping-service CATALOG_INTERNAL_CALLERS                     # TASK:SHP-01: catalog quote for weights
-service_key ORDER order-service CART_INTERNAL_CALLERS CATALOG_INTERNAL_CALLERS SHIPPING_INTERNAL_CALLERS \n  INVENTORY_INTERNAL_CALLERS PAYMENT_INTERNAL_CALLERS  # TASK:ORD-01 quote/create, ORD-02 saga
+service_key ORDER order-service CART_INTERNAL_CALLERS CATALOG_INTERNAL_CALLERS SHIPPING_INTERNAL_CALLERS \
+  INVENTORY_INTERNAL_CALLERS PAYMENT_INTERNAL_CALLERS  # TASK:ORD-01 quote/create, ORD-02 saga
 
 # TASK:ORD-01: guest checkout token key pair (cart signs, order verifies) and the quote HMAC secret; generated once.
 if ! grep -q '^CART_CHECKOUT_PRIVATE_KEY=.' "$ENV_FILE"; then
