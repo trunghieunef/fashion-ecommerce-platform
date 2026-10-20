@@ -13,7 +13,7 @@ import java.util.function.Function;
 /** JDK HTTP stub for cart snapshot / catalog quote / shipping quote: scripted responses, latency and request capture. */
 public final class StubServers {
   public record Reply(int status, String body) { }
-  public record Seen(String path, String authorization, String body) { }
+  public record Seen(String path, String query, String authorization, String cartActor, String idempotencyKey, String body) { }
 
   public static final class Stub {
     final HttpServer server;
@@ -28,7 +28,9 @@ public final class StubServers {
       server.start();
     }
     void handle(HttpExchange exchange) throws IOException {
-      var request = new Seen(exchange.getRequestURI().getPath(), exchange.getRequestHeaders().getFirst("Authorization"),
+      var headers = exchange.getRequestHeaders();
+      var request = new Seen(exchange.getRequestURI().getPath(), exchange.getRequestURI().getQuery(), headers.getFirst("Authorization"),
+          headers.getFirst("Cart-Actor"), headers.getFirst("Idempotency-Key"),
           new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
       seen.add(request);
       try { if (delayMillis > 0) Thread.sleep(delayMillis); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }

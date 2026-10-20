@@ -36,7 +36,8 @@ public class ApiExceptionHandler {
   @ExceptionHandler(MissingRequestHeaderException.class) ResponseEntity<Api.Error> missingHeader(MissingRequestHeaderException e) {
     return Api.error(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "MISSING_HEADER", List.of(new Api.FieldError(e.getHeaderName(), "is required")), tracer);
   }
-  @ExceptionHandler({DataAccessResourceFailureException.class, QueryTimeoutException.class}) ResponseEntity<Api.Error> unavailable() {
+  @ExceptionHandler({DataAccessResourceFailureException.class, QueryTimeoutException.class,
+      vn.fashion.order.deps.DependencyUnavailable.class}) ResponseEntity<Api.Error> unavailable() {
     return json(Api.error(HttpStatus.SERVICE_UNAVAILABLE, "TEMPORARILY_UNAVAILABLE", "DEPENDENCY_UNAVAILABLE", List.of(), tracer));
   }
   @ExceptionHandler(HttpMessageNotReadableException.class) ResponseEntity<Api.Error> unreadable() {

@@ -112,6 +112,51 @@ public abstract class OrderTestSupport {
   }
   protected String checkoutToken(String guestHash, UUID cartId) { return checkoutToken(guestHash, cartId, 900, "order-service"); }
 
+  // Checkout fixtures (ORD-01): two variants, a cart holding both, catalog prices and a SELF shipping quote.
+  protected static final UUID V1 = UUID.fromString("33333333-3333-4333-8333-000000000001");
+  protected static final UUID V2 = UUID.fromString("33333333-3333-4333-8333-000000000002");
+  protected static final UUID ITEM1 = UUID.fromString("22222222-2222-4222-8222-000000000001");
+  protected static final UUID ITEM2 = UUID.fromString("22222222-2222-4222-8222-000000000002");
+  protected static final UUID SHIP_QUOTE = UUID.fromString("44444444-4444-4444-8444-000000000001");
+  protected static final String GUEST_HASH = "d".repeat(64);
+
+  protected static String cartItem(UUID item, UUID variant, String sku, int quantity, long itemVersion) {
+    return "{\"item_id\":\"" + item + "\",\"variant_id\":\"" + variant + "\",\"sku\":\"" + sku + "\",\"quantity\":" + quantity
+        + ",\"item_version\":" + itemVersion + ",\"price_snapshot\":1,\"catalog_version\":1}";
+  }
+  protected static String cartSnapshot(UUID cart, long version, String... items) {
+    return StubServers.ok("{\"cart_id\":\"" + cart + "\",\"version\":" + version + ",\"owner\":\"MEMBER\",\"items\":["
+        + String.join(",", items) + "]}");
+  }
+  protected static String variant(UUID id, boolean active, String sku, long price) {
+    return "{\"variant_id\":\"" + id + "\",\"found\":true,\"active\":" + active + ",\"sku\":\"" + sku
+        + "\",\"product_id\":\"55555555-5555-4555-8555-555555555555\",\"name_vi\":\"Ao thun\",\"name_en\":\"Tee\",\"size\":\"M\","
+        + "\"color\":\"Den\",\"base_price\":" + price + ",\"effective_price\":" + price + ",\"weight_grams\":300,\"product_version\":7,"
+        + "\"image\":{\"asset_id\":\"66666666-6666-4666-8666-666666666666\",\"alt_vi\":\"a\",\"alt_en\":\"a\"}}";
+  }
+  protected static String shippingQuote(long fee, long codFee) {
+    return StubServers.ok("{\"quote_id\":\"" + SHIP_QUOTE + "\",\"fee\":" + fee + ",\"cod_fee\":" + codFee + ",\"carrier\":\"SELF\","
+        + "\"weight_grams\":900,\"rule_id\":\"77777777-7777-4777-8777-777777777777\",\"rule_version\":1,"
+        + "\"expires_at\":\"" + Instant.now().plusSeconds(900) + "\"}");
+  }
+  /** Happy dependencies: cart v4 with V1 x2 + V2 x1, prices p1/p2, shipping fee 30000 + COD fee 10000. */
+  protected void stubCheckout(UUID cart, long p1, long p2) {
+    StubServers.CART.reply(s -> new StubServers.Reply(200, cartSnapshot(cart, 4, cartItem(ITEM1, V1, "TEE-M", 2, 1),
+        cartItem(ITEM2, V2, "TEE-L", 1, 3))));
+    StubServers.CATALOG.reply(s -> new StubServers.Reply(200, StubServers.ok("[" + variant(V1, true, "TEE-M", p1) + ","
+        + variant(V2, true, "TEE-L", p2) + "]")));
+    StubServers.SHIPPING.reply(s -> new StubServers.Reply(200, shippingQuote(30000, 10000)));
+  }
+  protected static String quoteBody(UUID cart, long version, String method, String email) {
+    return "{\"cart_id\":\"" + cart + "\",\"cart_version\":" + version + ",\"method\":\"" + method + "\","
+        + "\"shipping_address\":{\"recipient_name\":\"Synthetic Person\",\"phone\":\"0912345678\",\"province_code\":\"79\","
+        + "\"ward_code\":\"26734\",\"address_line\":\"1 Synthetic St\"},\"contact\":{\"phone\":\"0912345678\""
+        + (email == null ? "" : ",\"email\":\"" + email + "\"") + "},\"note\":\"Giao gio hanh chinh\"}";
+  }
+  protected HttpResponse<String> quote(String body, String... auth) {
+    return send("POST", "/api/v1/orders/quote", body, auth);
+  }
+
   /** headers: alternating name, value. */
   protected HttpResponse<String> send(String method, String path, String body, String... headers) {
     try {
