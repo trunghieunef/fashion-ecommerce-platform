@@ -16,11 +16,15 @@ import vn.fashion.order.saga.SagaOrder;
 class SagaClientsIntegrationTest extends OrderTestSupport {
   @Autowired InventoryClient inventory;
   @Autowired PaymentClient payments;
+  @Autowired vn.fashion.order.deps.ShippingClient shipping;
   @Autowired CartClient carts;
   static final UUID ID = UUID.fromString("22222222-2222-4222-8222-222222222222");
   static final SagaOrder ORDER = new SagaOrder(ID, "ORD202610000001", null, "guest:" + "d".repeat(64),
       UUID.fromString("11111111-1111-4111-8111-111111111111"), "COD", 340000, Instant.parse("2026-10-21T03:00:30.123456Z"),
-      List.of(new SagaOrder.Item(ITEM1, 1, "TEE-M", 2), new SagaOrder.Item(ITEM2, 3, "tee-l", 1)));
+      List.of(new SagaOrder.Item(ITEM1, 1, "TEE-M", 2), new SagaOrder.Item(ITEM2, 3, "tee-l", 1)),
+      UUID.fromString("33333333-3333-4333-8333-333333333333"),
+      java.util.Map.of("recipient_name", "Synthetic Person", "phone", "0912345678", "province_code", "79", "ward_code", "26734",
+          "address_line", "1 Synthetic St"));
 
   @Test void reserveAndReleaseUseFixedKeysAndTheOriginalSnapshot() throws Exception {
     StubServers.INVENTORY.reply(s -> new StubServers.Reply(200, StubServers.ok("{\"status\":\"ACTIVE\"}")));
@@ -106,6 +110,35 @@ class SagaClientsIntegrationTest extends OrderTestSupport {
     assertThat(xb).isEqualTo(cb);
     StubServers.PAYMENT.reply(s -> new StubServers.Reply(409, StubServers.error("CONFLICT", "PAYMENT_CLOSED")));
     assertThat(payments.create(ORDER).code()).isEqualTo("PAYMENT_CLOSED");
+  }
+
+  @Test void shipmentCreateSendsTheOrderSnapshotUnderAFixedKey() throws Exception {
+    StubServers.SHIPPING.reply(s -> new StubServers.Reply(200, StubServers.ok("{\"shipment_id\":\"44444444-4444-4444-8444-444444444444\"}")));
+    var out = shipping.create(ORDER);
+    assertThat(out.result()).isEqualTo(Outcome.Result.OK);
+    assertThat(out.data().path("shipment_id").asString()).isEqualTo("44444444-4444-4444-8444-444444444444");
+    var seen = StubServers.SHIPPING.seen.get(0);
+    assertThat(seen.path()).isEqualTo("/internal/api/v1/shipping/shipments");
+    assertThat(seen.idempotencyKey()).isEqualTo("shipment:" + ID);
+    assertThat(seen.authorization()).startsWith("Bearer ");
+    assertThat(mapper.readTree(seen.body())).isEqualTo(mapper.readTree("{\"order_id\":\"" + ID + "\",\"order_no\":\"ORD202610000001\","
+        + "\"quote_id\":\"33333333-3333-4333-8333-333333333333\",\"cod_amount\":340000,\"to_address\":{\"recipient_name\":\"Synthetic Person\","
+        + "\"phone\":\"0912345678\",\"province_code\":\"79\",\"ward_code\":\"26734\",\"address_line\":\"1 Synthetic St\"}}"));
+    StubServers.SHIPPING.reply(s -> new StubServers.Reply(409, StubServers.error("CONFLICT", "QUOTE_MISMATCH")));
+    var refused = shipping.create(ORDER);
+    assertThat(refused.result()).isEqualTo(Outcome.Result.REJECTED);
+    assertThat(refused.code()).isEqualTo("QUOTE_MISMATCH");
+    StubServers.SHIPPING.reply(s -> new StubServers.Reply(200, StubServers.ok("{}")));
+    StubServers.SHIPPING.delay(1500);
+    assertThat(shipping.create(ORDER).result()).isEqualTo(Outcome.Result.UNKNOWN);
+  }
+
+  @Test void shipmentCodAmountIsZeroForOnlineMethods() throws Exception {
+    StubServers.SHIPPING.reply(s -> new StubServers.Reply(200, StubServers.ok("{\"shipment_id\":\"44444444-4444-4444-8444-444444444444\"}")));
+    var online = new SagaOrder(ORDER.id(), ORDER.orderNo(), null, ORDER.actorKey(), ORDER.cartId(), "VNPAY", 340000, ORDER.expiresAt(),
+        ORDER.items(), ORDER.quoteId(), ORDER.toAddress());
+    shipping.create(online);
+    assertThat(mapper.readTree(StubServers.SHIPPING.seen.get(0).body()).path("cod_amount").asLong()).isZero();
   }
 
   @Test void cartCleanupUsesTheOrderIdAsKey() throws Exception {

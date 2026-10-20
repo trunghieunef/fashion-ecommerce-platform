@@ -239,6 +239,9 @@ public class OrderService {
     String processingStatus = switch (row.status()) {
       case "PENDING", "CANCELLING" -> "PROCESSING";
       case "CANCELLED" -> "FINISHED";
+      // PACKING: PROCESSING until the saga stored the SELF shipment, then READY.
+      case "PACKING" -> jdbc.sql("select shipment_id is not null from order_sagas where order_id = :id").param("id", row.id())
+          .query(Boolean.class).optional().filter(has -> !has).map(has -> "PROCESSING").orElse("READY");
       // ORD-03 spec section 3: READY while waiting for OPS, PROCESSING once OPS confirmed (saga past WAIT_OPS).
       case "CONFIRMED" -> jdbc.sql("select step from order_sagas where order_id = :id").param("id", row.id()).query(String.class)
           .optional().filter(step -> !step.equals("WAIT_OPS")).map(step -> "PROCESSING").orElse("READY");

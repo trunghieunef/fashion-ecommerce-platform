@@ -146,6 +146,66 @@ class SagaCommitIntegrationTest extends OrderTestSupport {
     assertThat(saga(id)).containsEntry("inventory_state", "COMMITTED").containsEntry("retry_count", 0);
   }
 
+  /** Packed: OPS confirmed, inventory committed (saga at CREATE_SHIPMENT, order PACKING). */
+  private UUID packed() {
+    UUID id = opsConfirmed();
+    commitAnswers(200, null);
+    worker.runOnce();
+    assertThat(status(id)).isEqualTo("PACKING");
+    StubServers.SHIPPING.reset();
+    return id;
+  }
+  private static final String SHIPMENT = "44444444-4444-4444-8444-444444444444";
+  private String processing(UUID id) {
+    return data(send("GET", "/api/v1/orders/" + no(id), null, "Authorization", memberToken()), 200).path("processing_status").asString();
+  }
+
+  @Test void aPackedOrderGetsItsSelfShipment() {
+    UUID id = packed();
+    assertThat(processing(id)).isEqualTo("PROCESSING");
+    StubServers.SHIPPING.reply(s -> new StubServers.Reply(200, StubServers.ok("{\"shipment_id\":\"" + SHIPMENT + "\"}")));
+    worker.runOnce();
+    assertThat(StubServers.SHIPPING.seen).hasSize(1);
+    assertThat(StubServers.SHIPPING.seen.get(0).idempotencyKey()).isEqualTo("shipment:" + id);
+    assertThat(StubServers.SHIPPING.seen.get(0).body())
+        .contains("\"cod_amount\":" + jdbc.queryForObject("select total_amount from orders where id = ?", Long.class, id))
+        .contains("\"province_code\":\"79\"").doesNotContain("district_code");
+    assertThat(saga(id)).containsEntry("shipment_id", UUID.fromString(SHIPMENT)).containsEntry("status", "DONE")
+        .containsEntry("step", "DONE").containsEntry("retry_count", 0).containsEntry("last_error", null);
+    assertThat(status(id)).isEqualTo("PACKING");
+    assertThat(processing(id)).isEqualTo("READY");
+  }
+
+  @Test void aRefusedShipmentGoesManualAndKeepsTheStock() {
+    UUID id = packed();
+    StubServers.SHIPPING.reply(s -> new StubServers.Reply(409, StubServers.error("CONFLICT", "SHIPMENT_CANCELLED")));
+    worker.runOnce();
+    assertThat(saga(id)).containsEntry("status", "MANUAL").containsEntry("inventory_state", "COMMITTED").containsEntry("step", "CREATE_SHIPMENT");
+    assertThat((String) saga(id).get("last_error")).contains("SHIPMENT_CANCELLED");
+    assertThat(status(id)).isEqualTo("PACKING");
+    assertThat(calls(StubServers.INVENTORY, "/release")).isZero();
+  }
+
+  @Test void aLostShipmentResponseIsRetriedWithTheSameBody() {
+    UUID id = packed();
+    var n = new AtomicInteger();
+    StubServers.SHIPPING.reply(s -> {
+      if (n.incrementAndGet() == 1) {
+        try { Thread.sleep(1500); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+      }
+      return new StubServers.Reply(200, StubServers.ok("{\"shipment_id\":\"" + SHIPMENT + "\"}"));
+    });
+    worker.runOnce();
+    assertThat(saga(id)).containsEntry("retry_count", 1).containsEntry("step", "CREATE_SHIPMENT").containsEntry("status", "RUNNING");
+    assertThat(saga(id).get("shipment_id")).isNull();
+    clock.shift(Duration.ofMinutes(10));
+    worker.runOnce();
+    assertThat(StubServers.SHIPPING.seen).hasSize(2);
+    assertThat(StubServers.SHIPPING.seen).extracting(StubServers.Seen::idempotencyKey).containsOnly("shipment:" + id);
+    assertThat(StubServers.SHIPPING.seen.get(1).body()).isEqualTo(StubServers.SHIPPING.seen.get(0).body());
+    assertThat(saga(id)).containsEntry("shipment_id", UUID.fromString(SHIPMENT)).containsEntry("status", "DONE");
+  }
+
   @Test void otherCommitRefusalsRetryIntoManual() {
     // A conflict or a missing reservation is about our request, not the order: retried, then MANUAL; the order stays CONFIRMED.
     UUID id = opsConfirmed();

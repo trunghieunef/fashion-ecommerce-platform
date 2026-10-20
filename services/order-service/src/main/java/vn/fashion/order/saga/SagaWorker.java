@@ -14,6 +14,7 @@ import org.springframework.stereotype.Component;
 import vn.fashion.order.deps.InventoryClient;
 import vn.fashion.order.deps.Outcome;
 import vn.fashion.order.deps.PaymentClient;
+import vn.fashion.order.deps.ShippingClient;
 import vn.fashion.platform.work.BackgroundTaskRepository;
 
 /**
@@ -37,15 +38,16 @@ public class SagaWorker {
   private final OrderTransitions transitions;
   private final InventoryClient inventory;
   private final PaymentClient payments;
+  private final ShippingClient shipping;
   private final BackgroundTaskRepository tasks;
   private final Clock clock;
   private final int maxRetries;
   private final Counter manual;
 
-  public SagaWorker(SagaRepository sagas, OrderTransitions transitions, InventoryClient inventory, PaymentClient payments,
+  public SagaWorker(SagaRepository sagas, OrderTransitions transitions, InventoryClient inventory, PaymentClient payments, ShippingClient shipping,
                     BackgroundTaskRepository tasks, Clock clock, MeterRegistry meters,
                     @Value("${fashion.order.saga.max-retries:30}") int maxRetries) {
-    this.sagas = sagas; this.transitions = transitions; this.inventory = inventory; this.payments = payments; this.tasks = tasks;
+    this.sagas = sagas; this.transitions = transitions; this.inventory = inventory; this.payments = payments; this.shipping = shipping; this.tasks = tasks;
     this.clock = clock; this.maxRetries = maxRetries;
     this.manual = Counter.builder("order.saga.manual").description("Sagas moved to MANUAL after the retry budget").register(meters);
   }
@@ -81,6 +83,7 @@ public class SagaWorker {
               case "RESERVE" -> reserve(c, saga, order);
               case "CREATE_PAYMENT" -> createPayment(c, saga, order);
               case "COMMIT_STOCK" -> commitStock(c, saga, order);
+              case "CREATE_SHIPMENT" -> createShipment(c, saga, order);
               case "COMPENSATE" -> compensate(c, saga, order);
               default -> { sagas.write(c, jdbc -> { }, true); yield false; }
             };
@@ -141,12 +144,27 @@ public class SagaWorker {
       return startCancel(c, expired ? "EXPIRED" : "RESERVE_FAILED");
     }
     if (out.result() != Outcome.Result.OK) return retry(c, saga, out);
-    return sagas.write(c, jdbc -> {
+    sagas.write(c, jdbc -> {
       jdbc.sql("""
-          update order_sagas set inventory_state = 'COMMITTED', step = 'CREATE_SHIPMENT', retry_count = 0, last_error = null
-          where order_id = :id""").param("id", c.orderId()).update();
+          update order_sagas set inventory_state = 'COMMITTED', step = 'CREATE_SHIPMENT', retry_count = 0, last_error = null,
+            next_retry_at = :now
+          where order_id = :id""").param("now", Timestamp.from(clock.instant())).param("id", c.orderId()).update();
       transitions.move(c.orderId(), "CONFIRMED", "PACKING", null);
-    }, false);
+    }, true);
+    return false;   // the shipment is its own pass: a lost lease or crash here cannot repeat the commit
+  }
+
+  /** ORD-03 spec section 4: any refusal is about our request or a deploy (stock stays committed), so MANUAL; UNKNOWN retries. */
+  private boolean createShipment(SagaRepository.Claim c, SagaRepository.Saga saga, SagaOrder order) {
+    if (!intent(c, saga, null)) return false;
+    var out = shipping.create(order);
+    if (out.result() == Outcome.Result.REJECTED) return manual(c, saga, "REJECTED " + out.code());
+    if (out.result() != Outcome.Result.OK) return retry(c, saga, out);
+    UUID shipmentId = UUID.fromString(out.data().path("shipment_id").asString());
+    sagas.write(c, jdbc -> jdbc.sql("""
+        update order_sagas set shipment_id = :s, status = 'DONE', step = 'DONE', retry_count = 0, last_error = null
+        where order_id = :id""").param("s", shipmentId).param("id", c.orderId()).update(), true);
+    return false;
   }
 
   /** Intent CANCEL first (06 section 5.4), then compensation: CANCELLING now, CANCELLED only after release and close. */
