@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import vn.fashion.shipping.internal.InternalCallers;
 import vn.fashion.shipping.web.Api;
@@ -38,6 +39,24 @@ public class ShipmentController {
     var meta = Api.metadata(tracer);
     var request = ShipmentService.parse(Api.object(json, body));
     return Api.ok(HttpStatus.OK, shipments.create(key, request, meta.traceId()), meta);
+  }
+
+  /** SHP-02: body is the original create snapshot plus reason; callers, then key, then body. */
+  @PostMapping("/by-order/{orderId}/cancel")
+  public ResponseEntity<?> cancel(@RequestHeader(name = "Authorization", required = false) String authorization,
+                                  @RequestHeader(name = "Idempotency-Key", required = false) String key,
+                                  @PathVariable String orderId, @RequestBody(required = false) String body) {
+    callers.require(authorization);
+    Api.requireKey(key);
+    UUID pathOrder = id(orderId);
+    var node = Api.object(json, body);
+    var request = ShipmentService.parse(node); // top-level fields other than the snapshot (reason) are ignored by parse
+    JsonNode r = node.path("reason");
+    String reason = r.isString() ? r.asString().strip() : "";
+    if (reason.isEmpty() || reason.length() > 500)
+      throw new Api.Problem(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "INVALID_FIELDS", List.of(new Api.FieldError("reason", "must be 1..500 characters")));
+    var meta = Api.metadata(tracer);
+    return Api.ok(HttpStatus.OK, shipments.cancel(key, pathOrder, request, reason, meta.traceId()), meta);
   }
 
   @GetMapping("/by-order/{orderId}")

@@ -72,10 +72,24 @@ public final class Api {
     try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8))); }
     catch (NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
   }
-  /** Idempotency outcome: CONFLICT -> 409, COMPLETED -> the stored body, otherwise null (the caller does the work). */
+  /**
+   * Idempotency outcome: CONFLICT -> 409, COMPLETED -> the stored body (a stored 4xx is thrown again), otherwise null
+   * (the caller does the work).
+   */
   public static Object replay(IdempotencyStore.Outcome outcome, ObjectMapper json) {
     if (outcome.status() == IdempotencyStore.Status.CONFLICT)
       throw new Problem(HttpStatus.CONFLICT, "CONFLICT", "IDEMPOTENCY_KEY_REUSED", List.of());
-    return outcome.status() == IdempotencyStore.Status.COMPLETED ? json.readTree(outcome.responseBody()) : null;
+    if (outcome.status() != IdempotencyStore.Status.COMPLETED) return null;
+    JsonNode body = json.readTree(outcome.responseBody());
+    if (outcome.responseCode() >= 400) {
+      var errors = new java.util.ArrayList<FieldError>();
+      body.path("errors").forEach(e -> errors.add(new FieldError(e.path("field").asString(), e.path("message").asString())));
+      throw new Problem(HttpStatus.valueOf(outcome.responseCode()), body.path("code").asString(), body.path("message").asString(), errors);
+    }
+    return body;
+  }
+  /** Stored form of a rejected request, replayed by {@link #replay}. */
+  public static java.util.Map<String, Object> body(Problem p) {
+    return java.util.Map.of("code", p.code(), "message", p.getMessage(), "errors", p.errors());
   }
 }

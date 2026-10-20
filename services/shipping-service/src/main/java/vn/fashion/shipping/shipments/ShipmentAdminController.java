@@ -14,6 +14,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -22,7 +24,7 @@ import tools.jackson.databind.ObjectMapper;
 import vn.fashion.shipping.web.AdminAuth;
 import vn.fashion.shipping.web.Api;
 
-/** OPS read of shipments (permission shipping.read): list newest first with keyset cursor, detail with history. */
+/** OPS shipments: list newest first with keyset cursor, detail with history (shipping.read); SELF events (SHP-02). */
 @RestController
 @RequestMapping("/admin/api/v1/shipping/shipments")
 public class ShipmentAdminController {
@@ -30,14 +32,16 @@ public class ShipmentAdminController {
       "RETURNING", "RETURNED", "CANCEL_PENDING", "CANCELLED", "MANUAL");
   public record Summary(UUID shipmentId, UUID orderId, String orderNo, String status, String carrier, String trackingCode, long fee,
                         long codAmount, Instant handedOverAt, Instant createdAt) { }
-  public record History(String fromStatus, String toStatus, String providerEventKey, boolean applied, String reason, Instant createdAt) { }
   private final AdminAuth auth;
   private final JdbcClient jdbc;
   private final ObjectMapper json;
   private final Tracer tracer;
+  private final ShipmentService shipments;
+  private final SelfEventService selfEvents;
 
-  public ShipmentAdminController(AdminAuth auth, JdbcClient jdbc, ObjectMapper json, Tracer tracer) {
-    this.auth = auth; this.jdbc = jdbc; this.json = json; this.tracer = tracer;
+  public ShipmentAdminController(AdminAuth auth, JdbcClient jdbc, ObjectMapper json, Tracer tracer, ShipmentService shipments,
+                                 SelfEventService selfEvents) {
+    this.auth = auth; this.jdbc = jdbc; this.json = json; this.tracer = tracer; this.shipments = shipments; this.selfEvents = selfEvents;
   }
 
   @GetMapping
@@ -82,19 +86,20 @@ public class ShipmentAdminController {
   @GetMapping("/{id}")
   public ResponseEntity<?> detail(@RequestHeader(name = "Authorization", required = false) String authorization, @PathVariable String id) {
     auth.require(authorization, "shipping.read");
+    return Api.ok(HttpStatus.OK, shipments.adminDetail(ShipmentController.id(id)), tracer);
+  }
+
+  /** SHP-02: SELF delivery/COD event with evidence (permission shipping.self_event); auth, then key, then body. */
+  @PostMapping("/{id}/self-events")
+  public ResponseEntity<?> selfEvent(@RequestHeader(name = "Authorization", required = false) String authorization,
+                                     @RequestHeader(name = "Idempotency-Key", required = false) String key,
+                                     @PathVariable String id, @RequestBody(required = false) String body) {
+    UUID actor = auth.require(authorization, "shipping.self_event");
+    Api.requireKey(key);
     UUID shipmentId = ShipmentController.id(id);
-    var row = jdbc.sql("""
-        select id, order_id, order_no, quote_id, status, carrier, tracking_code, fee, weight_grams, cod_amount, cod_collected_amount,
-          cod_remitted_amount, handed_over_at, assigned_to, version, created_at, from_address::text as from_address, to_address::text as to_address
-        from shipments where id = :id""").param("id", shipmentId).query().listOfRows().stream().findFirst()
-        .orElseThrow(ShipmentController::notFound);
-    var detail = new LinkedHashMap<String, Object>();
-    row.forEach((k, v) -> detail.put(k.equals("id") ? "shipment_id" : k,
-        k.endsWith("_address") ? json.readTree((String) v) : v instanceof Timestamp t ? t.toInstant() : v));
-    detail.put("history", jdbc.sql("""
-        select from_status, to_status, provider_event_key, applied, reason, created_at from shipment_status_history
-        where shipment_id = :id order by created_at, id""").param("id", shipmentId).query(History.class).list());
-    return Api.ok(HttpStatus.OK, detail, tracer);
+    var event = SelfEventService.parse(Api.object(json, body));
+    var meta = Api.metadata(tracer);
+    return Api.ok(HttpStatus.OK, selfEvents.apply(shipmentId, actor, key, event, meta.traceId()), meta);
   }
 
   private static Api.Problem invalid(String field) {

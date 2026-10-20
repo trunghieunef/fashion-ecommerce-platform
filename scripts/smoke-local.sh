@@ -256,6 +256,17 @@ curl -sS -X POST -H 'Content-Type: application/json' -H 'Origin: http://localhos
 test "$(status -X POST -H 'Content-Type: application/json' -H 'Origin: http://localhost:4173'   -d '{"province_code":"79","cod":false,"items":[{"variant_id":"00000000-0000-4000-8000-000000000000","quantity":1}]}'   "$GATEWAY_URL/api/v1/shipping/fee/estimate")" = 422
 test "$(status -X POST "$GATEWAY_URL/internal/api/v1/shipping/quotes")" = 404
 echo 'SHP-01 shipping estimate PASS'
+# TASK:SHP-02: OPS self-events go through the Gateway and need shipping.self_event; internal cancel is never routed.
+# No shipment exists without order-service, so an unknown id answering 404 proves route + permission, not a transition.
+shipping_ops="$(local_ops_token shipping.self_event)"
+self_event_url="$GATEWAY_URL/admin/api/v1/shipping/shipments/00000000-0000-4000-8000-000000000000/self-events"
+self_event='{"event_type":"ASSIGN","expected_version":1,"assigned_to":"11111111-1111-4111-8111-111111111111"}'
+test "$(status -X POST -H "Authorization: Bearer $shipping_ops" -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: smoke-shp02' -d "$self_event" "$self_event_url")" = 404
+test "$(status -X POST -H "Authorization: Bearer $access" -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: smoke-shp02' -d "$self_event" "$self_event_url")" = 403
+test "$(status -X POST "$GATEWAY_URL/internal/api/v1/shipping/shipments/by-order/00000000-0000-4000-8000-000000000000/cancel")" = 404
+echo 'SHP-02 self-event route PASS'
 # TASK:CAT-02b: public detail is cacheable for 5 s (Redis keeps it 300 s until invalidated).
 curl -sS -o /dev/null -D "$headers" "$GATEWAY_URL/api/v1/catalog/products/$product_id"
 grep -qi '^cache-control: public, max-age=5' "$headers"

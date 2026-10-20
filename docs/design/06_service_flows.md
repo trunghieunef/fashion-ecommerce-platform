@@ -558,9 +558,9 @@ flowchart TD
 | Fee estimate/quote | Validate địa chỉ, lấy weight từ catalog snapshot → áp dụng rule/carrier → trả fee/cod_fee/carrier/expiry. `SHP-01` implemented (SELF): rule ACTIVE priority nhỏ nhất khớp; estimate public không lưu, quote internal lưu `shipping_quotes` | Preview cache 1h được; giá chốt cần còn hiệu lực; carrier lỗi chỉ dùng bảng phí fallback đã cấu hình, có nhãn và khách xác nhận |
 | Create | Chỉ order hoặc OPS thông qua order kiểm tra PACKING + saga ready → insert shipment PENDING → gọi carrier cùng provider_request_id → lưu tracking/outbox. `SHP-01` implemented cho SELF: PENDING → CREATED cùng một TX (advisory lock theo quote), history + outbox SHIPMENT_CREATED | UNIQUE order_id chặn hai vận đơn; không tạo từ ORDER_PAID song song REST |
 | Retry create | Query theo merchant reference trước retry nếu request trước UNKNOWN | Tối đa 3 lần thử có kết quả xác định; không tìm được kết quả an toàn thì MANUAL, không chuyển hãng tự động |
-| Cancel trước bàn giao | Lưu CANCEL_PENDING → query/cancel carrier → CANCELLED chỉ khi xác nhận | Carrier đã lấy hàng hoặc UNKNOWN: báo order chờ/return, không cho restore kho |
+| Cancel trước bàn giao | Lưu CANCEL_PENDING → query/cancel carrier → CANCELLED chỉ khi xác nhận. `SHP-02` implemented cho SELF: CREATED/PICKING → CANCELLED ngay trong một TX (không bên thứ ba); chưa có shipment → tombstone CANCELLED, create đến muộn 409; cùng advisory lock quote với create | Carrier đã lấy hàng hoặc UNKNOWN: báo order chờ/return, không cho restore kho; SELF sau bàn giao → 409 SHIPMENT_HANDED_OVER |
 | Webhook status | Verify adapter → dedupe event → kiểm tra cạnh/sequence/timestamp → TX history + status/version + outbox | Event cũ ghi applied=false; thiếu tiền đề query carrier; không dùng bảng rank đơn giản cho mọi nhánh |
-| SELF | OPS gán shipper, cập nhật cùng state machine, có audit và bằng chứng bàn giao/thu tiền | Không bypass validation chỉ vì cập nhật thủ công |
+| SELF | OPS gán shipper, cập nhật cùng state machine, có audit và bằng chứng bàn giao/thu tiền. `SHP-02` implemented: PICKING = đã gán shipper chưa lấy hàng; HANDED_OVER → DELIVERING đặt `handed_over_at`; COD_COLLECTED (đủ `cod_amount`, sau DELIVERED) và COD_REMITTED là event tài chính riêng | Không bypass validation chỉ vì cập nhật thủ công; event sai thứ tự/version cũ → 409, không ghi |
 | Giao thất bại | FAILED có thể sang DELIVERING nếu hãng giao lại hoặc RETURNING khi quyết định hoàn | Không hủy đơn ngay ở lần giao thất bại đầu |
 | Hàng hoàn về | Carrier RETURNED → báo OPS kiểm đếm; OPS xác nhận số lượng thực nhận qua order → inventory return | Không cộng kho từ webhook RETURNED nếu chưa xác nhận tình trạng hàng |
 
@@ -742,5 +742,10 @@ Refund REQUESTED → PROCESSING trước network; PROCESSING → UNKNOWN khi tim
 | CANCEL_PENDING → CANCELLED | Đã chứng minh chưa bàn giao và ngăn tạo/giao tiếp |
 | CANCEL_PENDING → DELIVERING / RETURNING | Phát hiện đã bàn giao: giữ evidence, order không restore; return khi carrier xác nhận |
 | CANCELLED nhận evidence đã bàn giao/giao | Mâu thuẫn cần MANUAL + incident/reconcile; không âm thầm bỏ bằng chứng vật lý |
+
+`SHP-02` (SELF, OPS ghi tay) dùng tập cạnh hẹp hơn: CREATED → PICKING chỉ khi gán shipper, bàn giao chỉ từ PICKING
+(`HANDED_OVER`), hoàn chỉ qua FAILED → RETURNING, hủy CREATED/PICKING → CANCELLED ngay (không CANCEL_PENDING). Sự kiện SELF
+trên CANCELLED được ghi history `applied=false` kèm bằng chứng và trả 409 `CANCELLED_EVIDENCE_RECORDED`; chuyển MANUAL +
+incident chưa làm (chờ quyết định ở 08).
 
 Nếu webhook nhảy từ CREATED sang DELIVERED, query carrier để xác minh mốc bàn giao và lịch sử thiếu trước apply; không bắt provider phải gửi mọi intermediate status. Shipment đã DELIVERED chỉ xử lý return sau giao bằng chứng từ OPS/order_returns theo D10, không xóa lịch sử giao.

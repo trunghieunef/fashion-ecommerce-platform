@@ -93,6 +93,21 @@ public abstract class ShippingTestSupport {
       return "Bearer " + jwt.serialize();
     } catch (Exception e) { throw new AssertionError(e); }
   }
+  // Shipment helpers shared by the SHP-01/02 tests (quote, create body, create call).
+  protected String quote(String province, boolean cod) {
+    String v = variant(700);
+    return data(send("POST", "/internal/api/v1/shipping/quotes", feeBody(province, cod, v, 1), "Authorization", serviceToken("order-service"),
+        "Idempotency-Key", UUID.randomUUID().toString()), 200).path("quote_id").asString();
+  }
+  protected static String body(String order, String orderNo, String quote, String province, long cod) {
+    return "{\"order_id\":\"" + order + "\",\"order_no\":\"" + orderNo + "\",\"quote_id\":\"" + quote + "\",\"cod_amount\":" + cod
+        + ",\"to_address\":{\"recipient_name\":\"Khách mẫu\",\"phone\":\"0900000000\",\"province_code\":\"" + province
+        + "\",\"ward_code\":\"26734\",\"address_line\":\"1 Đường Mẫu\"}}";
+  }
+  protected HttpResponse<String> create(String key, String body) {
+    return send("POST", "/internal/api/v1/shipping/shipments", body, "Authorization", serviceToken("order-service"), "Idempotency-Key", key);
+  }
+
   /** headers: alternating name, value. */
   protected HttpResponse<String> send(String method, String path, String body, String... headers) {
     try {

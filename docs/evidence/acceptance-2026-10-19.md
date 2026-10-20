@@ -31,7 +31,7 @@ thay review bởi người khác tác giả. Phạm vi: acceptance ở [10](../d
 | Mock có contract | `tests/contracts/test_storefront_fixtures.py` (8 fixture khớp `catalog.yaml`, đã bắt một fixture sai) | Pass |
 | Keyboard, mobile 360px | e2e `detail with contract fixtures` (Space/Arrow trên radio, 360px) | Pass |
 
-**`TASK:WEB-01`: Done (local, trước G0) — bản thô, chưa hoàn thiện chi tiết UI**; còn bước merge PR #28 vào `main` do chủ dự án.
+**`TASK:WEB-01`: Done (local, trước G0) — bản thô, chưa hoàn thiện chi tiết UI**; chủ dự án đã merge PR #28 vào `main` (`ff176ef`).
 
 ### Ngoại lệ và việc còn lại (không chặn Done bản thô)
 
@@ -73,8 +73,8 @@ trong `local-up.sh`, đã sửa ở `c1b12ce`. Reviewer **chưa đăng ý kiến
 | Mapping địa chỉ O04 | O04 còn mở: bảng phí **mẫu** V002, mã tỉnh theo `user_addresses`, không kiểm danh mục hành chính | **Ngoại lệ** |
 | State/handed-over APIs (chuyển trạng thái) | Spec đã duyệt chuyển sang SHP-02; SHP-01 chỉ đọc trạng thái/`handed_over_at` | **Ngoại lệ (SHP-02)** |
 
-**`TASK:SHP-01`: Done (local, trước G0) — với ngoại lệ O04 (phí mẫu) và chuyển trạng thái thuộc SHP-02**; còn bước merge
-PR #29 vào `main` do chủ dự án.
+**`TASK:SHP-01`: Done (local, trước G0) — với ngoại lệ O04 (phí mẫu) và chuyển trạng thái thuộc SHP-02**; chủ dự án đã merge
+PR #29 vào `main` (`cb4fe9b`, 2026-10-20), CI trên `afea3c6` PASS trước merge.
 
 ### Ngoại lệ và việc còn lại (không chặn Done local)
 

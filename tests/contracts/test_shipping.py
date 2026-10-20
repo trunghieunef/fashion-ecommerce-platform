@@ -12,9 +12,11 @@ BASE = "https://fashion.local/contracts/openapi/"
 FILES = ("shipping.yaml", "shipping-internal.yaml", "common.yaml")
 PUBLIC = {("post", "/api/v1/shipping/fee/estimate"), ("get", "/admin/api/v1/shipping/rules"),
           ("post", "/admin/api/v1/shipping/rules"), ("put", "/admin/api/v1/shipping/rules/{id}"),
-          ("get", "/admin/api/v1/shipping/shipments"), ("get", "/admin/api/v1/shipping/shipments/{id}")}
+          ("get", "/admin/api/v1/shipping/shipments"), ("get", "/admin/api/v1/shipping/shipments/{id}"),
+          ("post", "/admin/api/v1/shipping/shipments/{id}/self-events")}
 INTERNAL = {("post", "/internal/api/v1/shipping/quotes"), ("post", "/internal/api/v1/shipping/shipments"),
-            ("get", "/internal/api/v1/shipping/shipments/by-order/{order_id}")}
+            ("get", "/internal/api/v1/shipping/shipments/by-order/{order_id}"),
+            ("post", "/internal/api/v1/shipping/shipments/by-order/{order_id}/cancel")}
 
 
 class ShippingContractTest(unittest.TestCase):
@@ -87,6 +89,23 @@ class ShippingContractTest(unittest.TestCase):
         update = self.docs["shipping.yaml"]["components"]["schemas"]["RuleUpdate"]
         self.assertIn("active", update["required"])
         self.assertIn("expected_version", update["required"])
+
+    def test_self_event_and_cancel_bodies(self):
+        # TASK:SHP-02: self-events need a key, a known type and integer VND; cancel carries the create snapshot + reason.
+        op = self.docs["shipping.yaml"]["paths"]["/admin/api/v1/shipping/shipments/{id}/self-events"]["post"]
+        self.assertIn({"$ref": "./common.yaml#/components/parameters/IdempotencyKey"}, op["parameters"])
+        event = self.validator(BASE + "shipping.yaml#/components/schemas/SelfEvent")
+        ok = {"event_type": "COD_COLLECTED", "expected_version": 3, "amount": 275000, "evidence_ref": "BN-1"}
+        self.assertEqual(list(event.iter_errors(ok)), [])
+        for bad in ({**ok, "event_type": "SHIPPED"}, {**ok, "amount": "275000"}, {**ok, "amount": 0},
+                    {**ok, "extra": 1}, {"event_type": "DELIVERED"}):
+            self.assertTrue(list(event.iter_errors(bad)), bad)
+        cancel = self.validator(BASE + "shipping-internal.yaml#/components/schemas/ShipmentCancel")
+        body = {"order_id": "99999999-9999-4999-8999-999999999991", "order_no": "ORD1", "quote_id": "6a1b2c3d-0000-4000-8000-000000000001",
+                "cod_amount": 0, "to_address": {"recipient_name": "A", "phone": "0900000000", "province_code": "79",
+                                                "ward_code": "26734", "address_line": "1 Mẫu"}}
+        self.assertTrue(list(cancel.iter_errors(body)), "reason is required")
+        self.assertEqual(list(cancel.iter_errors({**body, "reason": "khách hủy"})), [])
 
     def test_rule_types(self):
         types = self.docs["shipping.yaml"]["components"]["schemas"]["RuleType"]["enum"]

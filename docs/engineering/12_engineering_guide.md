@@ -23,7 +23,7 @@ Catalog admin CAT-01a dùng cùng ES256 verifier, JdbcClient và durability, có
 version/key/audit; [evidence local](../evidence/cat-01a-local-2026-10-07.md) ghi số test và mutation.
 
 CART-01: `./mvnw -B -pl services/cart-service -am test` (PostgreSQL Testcontainers, stub catalog/inventory). Smoke tạo giỏ guest qua Gateway, thêm SKU smoke, retry cùng key, đọc preview và mở giỏ member (`CART-01 guest/member cart PASS`); local-up sinh service key cho cart-service. CART-03: route internal snapshot/cleanup chỉ kiểm bằng integration test (`CartSnapshotIntegrationTest`, `CheckoutCleanupIntegrationTest`), chưa smoke vì chưa có order-service; `CART_INTERNAL_CALLERS` trống mặc định.
-SHP-01: `./mvnw -B -pl services/shipping-service -am test` (PostgreSQL Testcontainers, stub catalog, relay tắt). Smoke estimate qua Gateway bằng variant smoke + variant lạ → 422 (`SHP-01 shipping estimate PASS`); local-up sinh service key `shipping-service` và thêm vào `CATALOG_INTERNAL_CALLERS`; `SHIPPING_INTERNAL_CALLERS` trống mặc định.
+SHP-01/02: `./mvnw -B -pl services/shipping-service -am test` (PostgreSQL Testcontainers, stub catalog, relay tắt). SHP-02 smoke: self-events qua Gateway với token OPS local (`shipping.self_event` → 404 cho id lạ, thiếu quyền → 403), cancel internal không route (`SHP-02 self-event route PASS`). Smoke estimate qua Gateway bằng variant smoke + variant lạ → 422 (`SHP-01 shipping estimate PASS`); local-up sinh service key `shipping-service` và thêm vào `CATALOG_INTERNAL_CALLERS`; `SHIPPING_INTERNAL_CALLERS` trống mặc định.
 
 PLT-05: `local-up` bật thêm Tempo (`127.0.0.1:3200`) và Grafana (`http://127.0.0.1:3000`, anonymous
 viewer). Xem trace: lấy `metadata.trace_id` của response → Grafana Explore → Tempo → dán trace id.
