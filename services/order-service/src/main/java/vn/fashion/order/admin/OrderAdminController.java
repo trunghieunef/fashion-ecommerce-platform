@@ -6,21 +6,29 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import vn.fashion.order.web.Api;
 
-/** OPS/FINANCE orders (13, spec section 5): order.read lists and reads; contact data and phone search need order.fulfill. */
+/** OPS/FINANCE orders (13, spec section 5): order.read lists and reads; contact data and phone search need order.fulfill; order.fulfill confirms COD, order.cancel cancels. */
 @RestController
 @RequestMapping("/admin/api/v1/orders")
 public class OrderAdminController {
   private final AdminAuth auth;
   private final OrderAdminQueries queries;
+  private final OrderCommands commands;
+  private final ObjectMapper json;
   private final Tracer tracer;
 
-  public OrderAdminController(AdminAuth auth, OrderAdminQueries queries, Tracer tracer) { this.auth = auth; this.queries = queries; this.tracer = tracer; }
+  public OrderAdminController(AdminAuth auth, OrderAdminQueries queries, OrderCommands commands, ObjectMapper json, Tracer tracer) {
+    this.auth = auth; this.queries = queries; this.commands = commands; this.json = json; this.tracer = tracer;
+  }
 
   @GetMapping
   public ResponseEntity<?> list(@RequestHeader(name = "Authorization", required = false) String authorization,
@@ -42,5 +50,45 @@ public class OrderAdminController {
   public ResponseEntity<?> detail(@RequestHeader(name = "Authorization", required = false) String authorization, @PathVariable String orderNo) {
     var actor = auth.require(authorization, "order.read");
     return Api.ok(HttpStatus.OK, queries.detail(orderNo, actor.permissions().contains("order.fulfill")), tracer);
+  }
+
+  /** Spec section 3: auth, then Idempotency-Key, then body {expected_version, note? (<= 500)}; 202 + the order. */
+  @PostMapping("/{orderNo}/confirm-cod")
+  public ResponseEntity<?> confirmCod(@RequestHeader(name = "Authorization", required = false) String authorization,
+                                      @RequestHeader(name = "Idempotency-Key", required = false) String key,
+                                      @PathVariable String orderNo, @RequestBody(required = false) String body) {
+    var actor = auth.require(authorization, "order.fulfill");
+    Api.requireKey(key);
+    var node = Api.object(json, body);
+    return Api.ok(HttpStatus.ACCEPTED, commands.confirmCod(actor, orderNo, key, version(node), text(node, "note", false)), tracer);
+  }
+
+  /** Spec section 3: body {expected_version, reason (1..500)}; 202 + the order (CANCELLING). */
+  @PostMapping("/{orderNo}/cancel")
+  public ResponseEntity<?> cancel(@RequestHeader(name = "Authorization", required = false) String authorization,
+                                  @RequestHeader(name = "Idempotency-Key", required = false) String key,
+                                  @PathVariable String orderNo, @RequestBody(required = false) String body) {
+    var actor = auth.require(authorization, "order.cancel");
+    Api.requireKey(key);
+    var node = Api.object(json, body);
+    return Api.ok(HttpStatus.ACCEPTED, commands.cancel(actor, orderNo, key, version(node), text(node, "reason", true)), tracer);
+  }
+
+  private static long version(JsonNode body) {
+    var v = body.path("expected_version");
+    if (!v.isIntegralNumber() || !v.canConvertToLong() || v.asLong() < 0) throw fields("expected_version", "must be a non-negative integer");
+    return v.asLong();
+  }
+  /** Trimmed text up to 500 characters; blank is absent (required -> 400). */
+  private static String text(JsonNode body, String field, boolean required) {
+    var v = body.path(field);
+    if (!v.isMissingNode() && !v.isNull() && !v.isString()) throw fields(field, "must be a string");
+    String s = v.isString() ? v.asString().strip() : "";
+    if (s.length() > 500) throw fields(field, "must be at most 500 characters");
+    if (s.isEmpty() && required) throw fields(field, "is required");
+    return s.isEmpty() ? null : s;
+  }
+  private static Api.Problem fields(String field, String message) {
+    return new Api.Problem(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "INVALID_FIELDS", List.of(new Api.FieldError(field, message)));
   }
 }

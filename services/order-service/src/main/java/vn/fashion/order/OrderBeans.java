@@ -20,6 +20,9 @@ public class OrderBeans {
   @Bean vn.fashion.platform.work.BackgroundTaskRepository backgroundTasks(JdbcClient jdbc) {
     return new vn.fashion.platform.work.BackgroundTaskRepository(jdbc);
   }
+  @Bean vn.fashion.platform.idempotency.IdempotencyStore idempotencyStore(JdbcClient jdbc) {
+    return new vn.fashion.platform.idempotency.IdempotencyStore(jdbc);
+  }
   /** Quote expiry and order deadlines; tests replace it to move time. */
   @Bean Clock clock() { return Clock.systemUTC(); }
 }

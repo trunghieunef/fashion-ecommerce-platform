@@ -95,7 +95,7 @@ public abstract class OrderTestSupport {
     try (var c = DriverManager.getConnection(postgres.getJdbcUrl(), "postgres", "postgres"); var s = c.createStatement()) {
       s.execute("""
           delete from background_tasks; delete from processed_events; delete from order_sagas; delete from order_guest_access; delete from order_status_history; delete from order_items; delete from orders;
-          delete from outbox_events""");
+          delete from outbox_events; delete from audit_logs; delete from idempotency_requests""");
     }
     StubServers.CART.reset(); StubServers.CATALOG.reset(); StubServers.SHIPPING.reset();
     StubServers.INVENTORY.reset(); StubServers.PAYMENT.reset();
