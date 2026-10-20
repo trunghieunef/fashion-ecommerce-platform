@@ -51,6 +51,15 @@ class OrderSchemaIntegrationTest extends OrderTestSupport {
     order(UUID.randomUUID(), UUID.randomUUID(), 1, "guest:" + "b".repeat(64), null, "c".repeat(64), 125000);
   }
 
+  @Test void auditLogsAreAppendOnly() {
+    UUID id = UUID.randomUUID();
+    jdbc.update("insert into audit_logs(id, action, resource_type, resource_id, request_id) values (?, 'ORDER_CONFIRM_COD', 'ORDER', 'x', gen_random_uuid())", id);
+    assertThatThrownBy(() -> jdbc.update("update audit_logs set reason = 'x' where id = ?", id)).rootCause().hasMessageContaining("permission denied");
+    assertThatThrownBy(() -> jdbc.update("delete from audit_logs where id = ?", id)).rootCause().hasMessageContaining("permission denied");
+    assertThat(count("select count(*) from idempotency_requests")).isZero();
+    assertThat(count("select count(*) from information_schema.columns where (table_name, column_name) in (('orders','shipped_at'), ('order_sagas','shipment_version'))")).isEqualTo(2);
+  }
+
   @Test void theRuntimeNeverDeletesOrdersNorRewritesHistory() {
     UUID id = UUID.randomUUID();
     order(id, UUID.randomUUID(), 1, "user:" + MEMBER, MEMBER, null, 125000);

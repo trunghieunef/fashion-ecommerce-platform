@@ -107,12 +107,14 @@ public abstract class OrderTestSupport {
     catch (java.sql.SQLException e) { throw new AssertionError(e); }
   }
   protected String memberToken() { return memberToken(MEMBER); }
-  protected String memberToken(UUID subject) {
+  protected String memberToken(UUID subject) { return tokenWith(subject); }
+  /** ORD-03: a user-service access token carrying the given permissions. */
+  protected String tokenWith(UUID subject, String... permissions) {
     try {
       var jwt = new SignedJWT(new JWSHeader.Builder(JWSAlgorithm.ES256).keyID("test").build(),
           new JWTClaimsSet.Builder().issuer("user-service").audience("fashion-api").subject(subject.toString())
               .issueTime(Date.from(Instant.now())).expirationTime(Date.from(Instant.now().plusSeconds(900)))
-              .claim("auth_version", 0).claim("permissions", List.of()).build());
+              .claim("auth_version", 0).claim("permissions", List.of(permissions)).build());
       jwt.sign(new ECDSASigner(KEY));
       return "Bearer " + jwt.serialize();
     } catch (Exception e) { throw new AssertionError(e); }

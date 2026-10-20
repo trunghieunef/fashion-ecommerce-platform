@@ -17,8 +17,15 @@ public class OrderTransitions {
 
   public OrderTransitions(JdbcClient jdbc, OrderService orders, OrderEvents events) { this.jdbc = jdbc; this.orders = orders; this.events = events; }
 
+  /** Who moved the order (history actor_type SYSTEM | CUSTOMER | ADMIN, actor_id, request_id). */
+  public record Actor(String type, UUID id, UUID requestId) {
+    public static final Actor SYSTEM = new Actor("SYSTEM", null, null);
+  }
+
+  public void move(UUID orderId, String from, String to, String reason) { move(orderId, from, to, reason, Actor.SYSTEM); }
+
   /** Moves from -> to (only from the expected status) or throws, rolling the caller's transaction back. */
-  public void move(UUID orderId, String from, String to, String reason) {
+  public void move(UUID orderId, String from, String to, String reason, Actor actor) {
     int moved = jdbc.sql("""
         update orders set status = :to, version = version + 1, updated_at = now(),
           cancel_reason = coalesce(:reason, cancel_reason),
@@ -27,9 +34,10 @@ public class OrderTransitions {
         .param("to", to).param("reason", reason).param("id", orderId).param("from", from).update();
     if (moved != 1) throw new IllegalStateException("order " + orderId + " is not " + from);
     jdbc.sql("""
-        insert into order_status_history(id, order_id, from_status, to_status, actor_type, reason)
-        values (:id, :order, :from, :to, 'SYSTEM', :reason)""")
-        .param("id", UUID.randomUUID()).param("order", orderId).param("from", from).param("to", to).param("reason", reason).update();
+        insert into order_status_history(id, order_id, from_status, to_status, actor_type, actor_id, reason, request_id)
+        values (:id, :order, :from, :to, :type, :actor, :reason, :request)""")
+        .param("id", UUID.randomUUID()).param("order", orderId).param("from", from).param("to", to).param("reason", reason)
+        .param("type", actor.type()).param("actor", actor.id()).param("request", actor.requestId()).update();
     String type = EVENTS.get(to);
     if (type != null) {
       UUID userId = jdbc.sql("select user_id from orders where id = :id").param("id", orderId)
