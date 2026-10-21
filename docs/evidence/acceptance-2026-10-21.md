@@ -61,7 +61,7 @@ G0.
 - Code trên `dev` `ad54847`. CI PR #34 trên `7c66b34` SUCCESS: `s1-local`
   ([run 39505115599](https://github.com/trunghieunef/fashion-ecommerce-platform/actions/runs/39505115599/job/118911981664),
   gồm backend reactor, contract, local stack + smoke) và `docs-check`. CI trên `ad54847` (sửa review PR): `docs-check`
-  SUCCESS, `s1-local` đang chạy lúc nghiệm thu — kết quả ghi bổ sung bên dưới.
+  SUCCESS; `s1-local` của `ad54847` bị hủy vì có push mới, chạy lại trên `e542f1a` (cùng code + acceptance) **SUCCESS** ([run 39509342216](https://github.com/trunghieunef/fashion-ecommerce-platform/actions/runs/39509342216/job/118926690478)).
 - Local: `./mvnw -B -pl services/order-service verify` **95 test** PASS sau sửa review PR; trước đó order-service +
   gateway 138 test; contract 86 test (docker Python 3.13); `local-up` + `smoke-local` → `ORD-03 COD end-to-end PASS`.
   Mutation 4 guard đều bị test bắt (một mutant sống lần đầu, đã thêm assert). Chi tiết: [evidence ORD-03](ord-03-local-2026-10-21.md).
@@ -81,7 +81,7 @@ G0.
 | Không HTTP trong DB TX; thứ tự khóa `order_sagas` → `orders` toàn service | `aWorkerClaimTakenBeforeTheConfirmLosesItsWrite`, `paymentEventsLockTheSagaBeforeTheOrder`; review toàn nhánh | Pass |
 
 **`TASK:ORD-03`: Done (local, trước G0)**; CI trên `7c66b34` PASS, review PR #34 "có thể merge", 8 minor đã sửa ở
-`ad54847`; chủ dự án quyết định merge.
+`ad54847`; CI trên `e542f1a` PASS; chủ dự án đã merge vào `main` (`13f7eec`, 2026-10-21).
 
 ### Ngoại lệ và việc còn lại (không chặn Done local)
 

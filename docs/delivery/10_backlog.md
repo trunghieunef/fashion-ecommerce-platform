@@ -4,7 +4,7 @@ B1 · 2026-09-19 · Work package mặc định: **Planned; Assignee TBD; Reviewe
 
 ## 1. Cách nhận việc
 
-Update 2026-10-21 — `TASK:ORD-03` **Done (local, trước G0)** ([nghiệm thu](../evidence/acceptance-2026-10-21.md#taskord-03--ops-xác-nhậnhủy-cod-commit-kho-vận-đơn-self-giao-hàng)), PR #34 review "có thể merge", chủ dự án quyết định merge: OPS xác nhận/hủy đơn COD
+Update 2026-10-21 — `TASK:ORD-03` **Done (local, trước G0)** ([nghiệm thu](../evidence/acceptance-2026-10-21.md#taskord-03--ops-xác-nhậnhủy-cod-commit-kho-vận-đơn-self-giao-hàng)), PR #34 merge `13f7eec`: OPS xác nhận/hủy đơn COD
 (`/admin/api/v1/orders`: list/detail `order.read`, PII chỉ với `order.fulfill`; `confirm-cod` `order.fulfill`, `cancel`
 `order.cancel`, key + `expected_version`, `audit_logs`), saga `COMMIT_STOCK` (inventory là trọng tài hạn, T12; key
 `commit:{order_id}`, T09) → `PACKING` → vận đơn SELF tự động (`shipment:{order_id}`), consumer `shipping.events` →
