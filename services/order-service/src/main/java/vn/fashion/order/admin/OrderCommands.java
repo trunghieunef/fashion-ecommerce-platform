@@ -117,8 +117,7 @@ public class OrderCommands {
   /** Lock, version, admission, lease, work, optional audit and the idempotent 202 response, in one transaction. */
   public JsonNode execute(Command c) {
     // order_no is part of the hash: the same key on another order is a reuse, never another order's stored response.
-    String hash = Api.sha256(json.writeValueAsString(c.payload() == null ? new Object[] {c.orderNo(), c.expectedVersion(), c.text()}
-        : new Object[] {c.orderNo(), c.expectedVersion(), c.text(), c.payload()}));
+    String hash = Api.sha256(hashInput(json, c));
     return tx.execute(status -> {
       Object stored = Api.replay(keys.begin(c.idempotencyActor(), c.operation(), c.key(), hash), json);
       if (stored != null) return (JsonNode) stored;
@@ -146,6 +145,12 @@ public class OrderCommands {
       keys.finish(c.idempotencyActor(), c.operation(), c.key(), o.id(), HttpStatus.ACCEPTED.value(), body);
       return json.readTree(body);
     });
+  }
+
+  /** The hashed text: an array, so its order is fixed across JVMs (a Map.of iterates in a per-JVM random order). */
+  public static String hashInput(ObjectMapper json, Command c) {
+    return json.writeValueAsString(c.payload() == null ? new Object[] {c.orderNo(), c.expectedVersion(), c.text()}
+        : new Object[] {c.orderNo(), c.expectedVersion(), c.text(), c.payload()});
   }
 
   /** Locks order_sagas then orders, the worker's order (SagaRepository.write, then move), so the two never deadlock. */

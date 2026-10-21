@@ -9,6 +9,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import vn.fashion.order.admin.OrderCommands;
+import vn.fashion.order.admin.OrderReturns;
 import vn.fashion.order.saga.OrderReturnWorker;
 import vn.fashion.order.saga.SagaWorker;
 
@@ -192,6 +194,15 @@ class OrderReturnsIntegrationTest extends OrderTestSupport {
     assertThat(count("select count(*) from audit_logs where action = 'ORDER_RETURN'")).isEqualTo(1);
   }
 
+  /** The idempotency hash must be the same on every JVM/replica: its input is a fixed string (no Map.of ordering). */
+  @Test void theSlipHashInputIsStable() {
+    var line = new OrderReturns.Line(UUID.fromString("22222222-2222-4222-8222-000000000009"), 2, 1, "torn");
+    var c = new OrderCommands.Command("admin:x", "return", "ORD1", "k", 3, "Hang hoan ve", null, null, null, null,
+        OrderReturns.payload("count-1", List.of(line)));
+    assertThat(OrderCommands.hashInput(mapper, c)).isEqualTo("[\"ORD1\",3,\"Hang hoan ve\",[\"count-1\",[{\"order_item_id\":\"22222222-2222-4222-8222-000000000009\","
+        + "\"received_quantity\":2,\"restock_quantity\":1,\"condition\":\"torn\"}]]]");
+  }
+
   @Test void concurrentSlipsNeverExceedTheQuantity() throws Exception {
     UUID id = inStatus("RETURNING");
     UUID teeM = item(id, "TEE-M");
@@ -203,6 +214,8 @@ class OrderReturnsIntegrationTest extends OrderTestSupport {
       var b = pool.submit(() -> { start.await(); return slip(id, "race-b", body(v, line(teeM, 2, 1, null)), ops()); });
       start.countDown();
       assertThat(List.of(a.get().statusCode(), b.get().statusCode())).containsExactlyInAnyOrder(202, 409);
+      // Same expected_version: the loser fails the version check first (the sum guard is pinned in slipReplaysAndRefusals).
+      assertThat(problem(a.get().statusCode() == 409 ? a.get() : b.get(), 409)).isEqualTo("VERSION_CONFLICT");
     } finally { pool.shutdown(); }
     assertThat(count("select count(*) from order_returns")).isEqualTo(1);
     assertThat(count("select coalesce(sum(received_quantity), 0)::int from order_return_items where order_item_id = ?", teeM)).isEqualTo(2);

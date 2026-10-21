@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -81,8 +80,11 @@ public class OrderReturns {
               .filter(r -> returnId.equals(r.get("return_id"))).findFirst().orElseThrow()));
           return view;
         },
-        Map.of("evidence_ref", evidenceRef, "items", lines)));
+        payload(evidenceRef, lines)));
   }
+
+  /** Idempotency hash input besides order_no/version/reason: fixed order (array, record components), never a Map.of. */
+  public static Object[] payload(String evidenceRef, List<Line> lines) { return new Object[] {evidenceRef, lines}; }
 
   private void record(UUID orderId, UUID returnId, String key, String reason, String evidenceRef, UUID actor, UUID request, List<Line> lines) {
     var ordered = new HashMap<UUID, Integer>();

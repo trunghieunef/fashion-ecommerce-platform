@@ -55,6 +55,8 @@ public class OrderReturnWorker {
     UUID returnId = UUID.fromString(task.businessKey());
     var slip = jdbc.sql("select order_id, reason, evidence_ref, status from order_returns where id = :id").param("id", returnId)
         .query((rs, n) -> new Slip(rs.getObject(1, UUID.class), rs.getString(2), rs.getString(3), rs.getString(4))).single();
+    // Read without a lock: only this task (one per slip, held by our lease) moves a slip off REQUESTED, and the final
+    // updates re-check status = 'REQUESTED'; a stale read at worst replays the same idempotent restore.
     if (!slip.status().equals("REQUESTED")) { tasks.complete(task.id(), task.leaseToken()); return; }
     var skus = new LinkedHashMap<String, Integer>();
     jdbc.sql("""
