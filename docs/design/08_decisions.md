@@ -488,7 +488,7 @@ Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác v
 | Quyết định | Hệ quả |
 |---|---|
 | OPS xác nhận **từng đơn** sau khi gọi khách; ghi chú cuộc gọi tùy chọn (≤ 500), hủy bắt buộc lý do (1..500) | Không có xác nhận hàng loạt; lý do nằm ở history `reason` + `audit_logs.reason` |
-| Hủy đơn `CONFIRMED` (saga còn `WAIT_OPS`) kéo từ ORD-04 vào ORD-03 (chủ dự án đồng ý 2026-10-21); hủy từ `PENDING`, sau xác nhận, khách tự hủy, giao thất bại/hoàn hàng vẫn là ORD-04 | Đơn đã xác nhận (saga qua `WAIT_OPS`) hủy → 409 `INVALID_TRANSITION` |
+| Hủy đơn `CONFIRMED` (saga còn `WAIT_OPS`) kéo từ ORD-04 vào ORD-03 (chủ dự án đồng ý 2026-10-21); hủy từ `PENDING`, sau xác nhận, khách tự hủy, giao thất bại/hoàn hàng vẫn là ORD-04 | Đơn đã xác nhận (saga qua `WAIT_OPS`) hủy → 409 `INVALID_TRANSITION` ở ORD-03; ORD-04 mở rộng (bảng ORD-04 bên dưới) |
 | Confirm trả `202`, đơn vẫn `CONFIRMED` (`processing_status = PROCESSING`) tới khi inventory commit xong mới `PACKING` | FE/OPS poll; không bao giờ `PACKING` khi chưa trừ kho (T12) |
 | Sau xác nhận, hạn của order không còn hủy đơn: worker chỉ kiểm `expires_at` ở `RESERVE`/`CREATE_PAYMENT`/`WAIT_OPS`; từ `COMMIT_STOCK` inventory là trọng tài (`RESERVATION_EXPIRED` → `CANCELLED EXPIRED`, `RESERVATION_CLOSED` → `CANCELLED RESERVE_FAILED`) | Một kết quả duy nhất do đồng hồ DB của inventory; lệch đồng hồ chỉ làm confirm sát hạn bị từ chối/hủy |
 | Ở `COMMIT_STOCK` intent tính lần thử + backoff nhưng giữ `inventory_state = HELD`; key cố định `commit:{order_id}`, `shipment:{order_id}` | T09: worker chết sau commit → retry cùng key, inventory trả `COMMITTED` không trừ lần hai; bù trừ không hiểu nhầm là được release |
@@ -506,6 +506,41 @@ Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác v
 | Thứ tự khóa toàn service: `order_sagas` rồi `orders` (worker, lệnh OPS, consumer shipping; SDD Task 2/5) | Không deadlock giữa OPS và worker lúc tới hạn |
 | Lỗi nghiệp vụ 409 (`VERSION_CONFLICT`/`INVALID_TRANSITION`/`ORDER_EXPIRED`) của confirm/cancel không lưu vào idempotency (transaction rollback); chỉ `202` được lưu | Retry cùng key được đánh giá lại theo trạng thái hiện tại, giống create đơn ORD-01 (4xx không lưu; `Api.body` lưu lỗi chưa dùng ở order-service); 03 §1.3 đã ghi |
 | Saga `MANUAL` vẫn hiển thị `PROCESSING` cho khách, không `ACTION_REQUIRED` | FE giới hạn poll theo 14 §3 |
+
+## ORD-04 — quyết định 2026-10-21
+
+`TASK:ORD-04` · `REQ:ORD-04`, `REQ:ORD-10`, `REQ:SHP-06`. Chủ dự án duyệt
+[spec](../superpowers/specs/2026-10-21-ord-04-cancel-return-design.md) ngày 2026-10-21 (cả các mặc định §11 và ba quyết định §12);
+các dòng "(SDD)" là phán quyết của controller khi triển khai, ghi lại để review PR.
+
+| Quyết định | Hệ quả |
+|---|---|
+| Chủ dự án (§12.1): trả hàng sau giao (REQ ORD-10) làm luôn phần cơ chế — phiếu + kiểm đếm + cộng kho; **không** enforce chính sách hạn/phí (O05/D10 chưa chốt) | Phiếu trên `DELIVERED`: đơn giữ `DELIVERED`, payment không đổi, không phát lại `ORDER_COMPLETED`; hoàn tiền là PAY-04 |
+| Chủ dự án (§12.2): khách chỉ tự hủy khi `CONFIRMED` + saga `FULFILL`/`WAIT_OPS` — hẹp hơn 02 ORD-04 ("`WAITING_PAYMENT` hoặc `CONFIRMED`") | `PENDING` (saga đang giữ hàng) hoặc shop đã xác nhận → 409 `INVALID_TRANSITION`; `WAITING_PAYMENT` online chờ PAY-02/03 |
+| Chủ dự án (§12.3): đơn đã thu COD mà phải hủy/hoàn → `MANUAL` `PAID_NEEDS_REFUND` chờ PAY-04, không ghi hoàn tay | Không bao giờ `CANCELLED`/`RETURNED` khi tiền đã thu; chỉ metric/log + API detail (chưa UI) |
+| OPS hủy được tới trước bàn giao (`CONFIRMED` `WAIT_OPS`/`COMMIT_STOCK`, `PACKING` `CREATE_SHIPMENT`/`DONE`, mọi trạng thái saga kể cả `MANUAL`); từ `SHIPPING` chỉ còn đường hoàn hàng | Đơn kẹt `MANUAL` có đường thoát; lease còn sống → 409 `SAGA_BUSY` |
+| Thứ tự bù trừ cố định vận đơn → kho → payment; chưa chắc vận đơn đã hủy thì không gọi release/returns (T16) | Kho không bao giờ được cộng khi hàng có thể đã rời shop |
+| Shipping `409 SHIPMENT_HANDED_OVER` khi hủy → không trả kho, saga `WAITING` step `WAIT_RETURN` (không `MANUAL`), `shipment_state = HANDED_OVER`, metric + log cảnh báo | Event `RETURNING` đưa `RETURNING`; event `DELIVERED` đưa `DELIVERED` qua cạnh mới `CANCELLING → SHIPPING` (06 §5.3) |
+| Trả kho khi hủy: luôn release (snapshot + hash gốc) rồi `/returns` khi `restore_required`; không cần biết step trước | Phủ cả commit đang bay (inventory phân xử release↔commit); `RELEASED` không còn được ghi khi `restore_required` |
+| Phiếu kiểm đếm hoàn tất trên đơn `RETURNING` đưa `RETURNING → RETURNED` qua bước saga `CLOSE_PAYMENT`; phiếu sau (hàng về muộn) chỉ cộng kho | Tiền và trạng thái đơn do saga giữ (một chủ, một ngân sách retry); task nền `ORDER_RETURN` chỉ cộng kho |
+| Hàng hỏng: `restock_quantity < received_quantity`, phần hỏng không vào kho (không có kho "hàng hỏng") | Chỉ chặn vượt số lượng đặt, không chặn nhập thiếu: sai số kiểm đếm là sai kho thật (spec §10b) |
+| Key cố định: `shipment-cancel:{order_id}`, `cancel:{order_id}` (trả kho khi hủy; `evidence_ref = order-cancel:{order_id}`), `return:{return_id}` (kiểm đếm), `close:{order_id}`, `release:{order_id}` | Replay cùng key không cộng kho lần hai (T17); 06 §5.4 cũ ghi `cancel:{order_id}:{sku}` đã sửa |
+| `reason` gửi shipping/inventory khi hủy là mã `cancel_reason` cố định (hash idempotency của shipping gồm reason); lời người nhập chỉ ở history/audit/phiếu | Replay khớp hash dù OPS sửa lời lẽ |
+| `processing_status`: `RETURNING` → `READY` (chờ hàng về, không poll), `RETURNED` → `FINISHED`; `reason_code` mới `CUSTOMER_CANCELLED`, `RETURNED` (admin `cancel_reason`) | FE hiển thị theo 14 §3 |
+| Không thêm event mới cho hoàn hàng | Thêm khi NOT-01 cần |
+| (SDD) `WAIT_RETURN` đỗ saga: `next_retry_at = now + 30 ngày`, ca `WAIT_RETURN` trong `advance` chỉ đỗ lại (không HTTP); chỉ event shipping/phiếu mới chuyển tiếp (preflight: không có luật cho saga tới hạn ở `WAIT_RETURN` sẽ rơi vào `default` và bị claim lại mỗi lượt) | Chi phí nếu sai: một claim rảnh mỗi 30 ngày; log cảnh báo `WAIT_RETURN` để OPS thấy đơn chờ hàng |
+| (SDD) Test ORD-02 `committedStockIsNeverTreatedAsReleased` và `aReleaseThatFindsCommittedStockGoesManual` viết lại: kho đã commit nay được cộng lại qua `/returns` (spec §4 thay nhánh `COMMITTED → MANUAL`) | Không đổi hành vi ngoài spec |
+| (SDD) Commit đang bay: release → (`restore_required`) ghi `COMMITTED` → hủy vận đơn → release lại → returns, để không đổi kho trước khi vận đơn chắc chắn hủy | Tốn thêm một lời gọi release |
+| (SDD) Release `200` đã ghi `COMMITTED` nhưng không có `restore_required` → `MANUAL` (chặt hơn spec §4 "200 khác → `RELEASED`": mâu thuẫn nghĩa là chưa rõ kho) | Một ca OPS cần xem, không được xảy ra thường |
+| (SDD) Event `RETURNED` đến trước `RETURNING` cũng đưa đơn sang `RETURNING` (chỉ tiến lên; đã chứng minh bàn giao) | Không kẹt ở `SHIPPING` khi event đến lộn thứ tự |
+| (SDD) Event `RETURNING` trên đơn `CANCELLING` được nhận ở mọi step saga (kho chỉ có thể `RESTORED` sau khi vận đơn `CANCELLED` nên không tác dụng kép) | Không cần ràng step |
+| (SDD) Event `RETURNING`/`RETURNED` vượt mặt bàn giao trên đơn `PACKING` → `PACKING → SHIPPING → RETURNING` (`shipped_at` dự phòng như ORD-03 DELIVERED vượt mặt) | Đơn không kẹt `PACKING` (06 §5.3) |
+| (SDD) Phiếu trong lúc worker giữ lease saga → 409 `SAGA_BUSY` (lõi lệnh dùng chung); OPS thử lại | Hiếm gặp |
+| (SDD) Phiếu gửi inventory đúng `reason`/`evidence_ref` OPS đã lưu (ổn định nên replay khớp); quy tắc "reason = mã `cancel_reason`" chỉ áp cho lời gọi hủy/shipping | Không đổi lời OPS thành mã trên phiếu |
+| (SDD) Hash idempotency của phiếu dùng thứ tự cố định (mảng + record), không `Map.of` (thứ tự mỗi JVM khác nhau làm replay sau restart bị `IDEMPOTENCY_KEY_REUSED`) | Test ghim hash (review Task 5) |
+| (SDD) Migration V004 không cấp quyền riêng: default privileges như V001–V003 (test chứng minh); Gateway `CsrfOriginFilter` là `GlobalFilter` phủ `/api/v1/orders/**` | Không cần đổi Gateway ngoài test route |
+| (SDD) `allowed_actions` luôn là danh sách hành động của **khách** (`["CANCEL"]` hoặc `[]`); view admin của lệnh cũng mang cùng danh sách | Contract ghi audience; FE admin bỏ qua |
+| (SDD) Đơn qua `OrderCommands.customerCancel` (idempotency actor = `orders.actor_key`, operation `customer-cancel`, không `audit_logs`, history actor `CUSTOMER`) | Khách và OPS dùng chung lõi khóa + kiểm + chuyển (`execute`) |
 
 ## PAY-01 — quyết định 2026-10-20
 

@@ -6,7 +6,9 @@ info:
     TASK:ORD-01 quote, create and read for members (Bearer) and guests (cart checkout token, then an order access cookie).
     Prices and fees come from the server; the order is durable PENDING with an immutable snapshot and stays PROCESSING until
     ORD-02 reserves stock and creates the payment. Only COD until PAY-02/03. TASK:ORD-03 adds the OPS/FINANCE admin
-    orders (list, detail, confirm-cod, cancel; Bearer + permission checked by order-service). Every response is no-store.
+    orders (list, detail, confirm-cod, cancel; Bearer + permission checked by order-service). TASK:ORD-04 adds the customer cancel
+    (while the shop has not confirmed), the OPS cancel after confirmation, return handling (RETURNING / RETURNED) and OPS return
+    slips (counted goods restocked once). Every response is no-store.
 servers:
 - url: http://localhost:8080
   description: Local Gateway
@@ -165,7 +167,10 @@ paths:
         PENDING (PROCESSING) -> CONFIRMED (READY, waiting for OPS) or -> CANCELLING -> CANCELLED (FINISHED, reason_code). In ORD-03
         OPS confirms (CONFIRMED PROCESSING) -> PACKING (PROCESSING until the SELF shipment exists, then READY) -> SHIPPING
         (READY) -> DELIVERED (FINISHED); a saga in MANUAL stays PROCESSING. No lookup by
-        order_no or phone alone. PENDING is processing_status PROCESSING; allowed_actions is empty until ORD-04.
+        order_no or phone alone. PENDING is processing_status PROCESSING. In ORD-04 a shipment that comes back moves SHIPPING ->
+        RETURNING (READY, waiting for the goods, no polling) -> RETURNED (FINISHED, after OPS counted the goods and the payment
+        is closed); allowed_actions is ["CANCEL"] only while the order is CONFIRMED and waiting for OPS (saga WAIT_OPS), else
+        empty.
       security: [{memberBearer: []}, {orderAccess: []}]
       x-implementation-status: implemented
       parameters:
@@ -182,6 +187,49 @@ paths:
                   value: {code: OK, data: *order, metadata: *meta}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/orders/{order_no}/cancel:
+    post:
+      tags: [Orders]
+      operationId: cancelOwnOrder
+      summary: Customer cancels its own order while the shop has not confirmed it yet
+      description: >-
+        ORD-04 implemented. Same credential as GET (member Bearer, or the order_access cookie of this order); an order
+        that is not the actor's is 404 ORDER_NOT_FOUND before anything else (T21). Then Idempotency-Key (400 INVALID_KEY) and
+        body (400 INVALID_FIELDS/MALFORMED_JSON), then in one transaction locking order_sagas then orders: expected_version (409
+        VERSION_CONFLICT), order CONFIRMED with saga FULFILL/WAIT_OPS (else 409 INVALID_TRANSITION, errors status current=S: a
+        PENDING order, or one the shop already confirmed, is cancelled by contacting the shop), no live worker lease (409
+        SAGA_BUSY: reload and retry). CONFIRMED -> CANCELLING (history actor CUSTOMER with the optional reason,
+        cancel_reason CUSTOMER_CANCELLED); the compensation releases stock, closes the payment and ends CANCELLED
+        (reason_code CUSTOMER_CANCELLED). Same key + body replays the stored 202; another body is 409 IDEMPOTENCY_KEY_REUSED.
+        No audit_logs row (audit is for admin commands). The response is the customer order view.
+      security: [{memberBearer: []}, {orderAccess: []}]
+      x-implementation-status: implemented
+      parameters:
+      - {name: order_no, in: path, required: true, schema: {type: string, minLength: 1, maxLength: 32}}
+      - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CustomerCancelRequest'}
+      responses:
+        '202':
+          description: Accepted; CANCELLING, poll GET until CANCELLED
+          headers: *headers
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OrderResponse'}
+              examples:
+                cancelling:
+                  value: {code: OK, data: {order_id: 22222222-2222-4222-8222-222222222222, order_no: ORD202610000001,
+                      status: CANCELLING, processing_status: PROCESSING, reason_code: null, status_url: /api/v1/orders/ORD202610000001,
+                      retry_after_seconds: 3, version: 4, method: COD, items: *items, totals: *totals, shipping_address: *address,
+                      contact: {phone: '0912345678', email: null}, note: null, created_at: '2026-10-20T03:00:30Z',
+                      expires_at: '2026-10-21T03:00:30Z', allowed_actions: []}, metadata: *meta}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/CommandConflict'}
   /admin/api/v1/orders:
     get:
       tags: [Order admin]
@@ -234,9 +282,11 @@ paths:
       operationId: getAdminOrder
       summary: Order with items, status history (actor, reason), expires_at and the saga (step, status, last_error)
       description: >-
-        ORD-03 implemented. Permission order.read. Without order.fulfill the keys contact_phone, contact_email,
-        shipping_address and note are omitted and every history reason is null (13). saga is null only for an order without a
-        saga row.
+        ORD-03 implemented, ORD-04 adds items[].order_item_id (the id a return slip refers to) and returns (slips, oldest
+        first, each with its counted items). Permission order.read. Without order.fulfill the keys contact_phone,
+        contact_email, shipping_address and note are omitted and every history reason (and slip reason) is null (13). saga is
+        null only for an order without a saga row; saga step WAIT_RETURN (status WAITING) means the shipment was handed over and the
+        saga waits for the shipping events or a return slip.
       security: [{bearerAuth: []}]
       x-implementation-status: implemented
       parameters:
@@ -275,14 +325,51 @@ paths:
                       contact_email: null
                       shipping_address: *address
                       note: null
-                      items: [{variant_id: 33333333-3333-4333-8333-333333333333, sku: TEE-M, name: Ao thun, size: M, color: Den,
-                        quantity: 2, unit_price: 150000, line_total: 300000}]
+                      items: [{order_item_id: 77777777-7777-4777-8777-777777777777, variant_id: 33333333-3333-4333-8333-333333333333,
+                        sku: TEE-M, name: Ao thun, size: M, color: Den, quantity: 2, unit_price: 150000, line_total: 300000}]
+                      returns: []
                       history:
                       - {from_status: CONFIRMED, to_status: PACKING, actor_type: SYSTEM, actor_id: null, request_id: null,
                         created_at: '2026-10-20T03:05:01Z', reason: null}
                       saga: {intent: FULFILL, step: CREATE_SHIPMENT, status: RUNNING, inventory_state: COMMITTED, payment_state: CREATED,
-                        payment_id: 55555555-5555-4555-8555-555555555591, shipment_id: null, retry_count: 0,
-                        next_retry_at: '2026-10-20T03:05:01Z', last_error: null}
+                        payment_id: 55555555-5555-4555-8555-555555555591, shipment_id: null,
+                        retry_count: 0, next_retry_at: '2026-10-20T03:05:01Z', last_error: null}
+                    metadata: *meta
+                returning:
+                  value:
+                    code: OK
+                    data:
+                      order_no: ORD202610000002
+                      user_id: null
+                      status: RETURNING
+                      version: 7
+                      method: COD
+                      currency: VND
+                      subtotal: 300000
+                      discount_amount: 0
+                      shipping_fee: 30000
+                      shipping_discount: 0
+                      cod_fee: 10000
+                      total_amount: 340000
+                      created_at: '2026-10-20T03:00:30Z'
+                      expires_at: '2026-10-21T03:00:30Z'
+                      confirmed_at: '2026-10-20T03:00:32Z'
+                      shipped_at: '2026-10-20T08:00:00Z'
+                      delivered_at: null
+                      cancel_reason: RETURNED
+                      items: [{order_item_id: 77777777-7777-4777-8777-777777777777, variant_id: 33333333-3333-4333-8333-333333333333,
+                        sku: TEE-M, name: Ao thun, size: M, color: Den, quantity: 2, unit_price: 150000, line_total: 300000}]
+                      returns: [{return_id: 88888888-8888-4888-8888-888888888888, status: COMPLETED, reason: 'Khach tu choi nhan',
+                        evidence_ref: 'phieu-nhap-001', actor_id: 99999999-9999-4999-8999-999999999999,
+                        created_at: '2026-10-22T03:00:00Z', updated_at: '2026-10-22T03:00:05Z',
+                        items: [{order_item_id: 77777777-7777-4777-8777-777777777777, received_quantity: 2, restock_quantity: 1,
+                          condition: 'Mot cai ban'}]}]
+                      history:
+                      - {from_status: SHIPPING, to_status: RETURNING, actor_type: SYSTEM, actor_id: null, request_id: null,
+                        created_at: '2026-10-21T09:00:00Z', reason: null}
+                      saga: {intent: CANCEL, step: WAIT_RETURN, status: WAITING, inventory_state: COMMITTED, payment_state: CREATED,
+                        payment_id: 55555555-5555-4555-8555-555555555592, shipment_id: 55555555-5555-4555-8555-555555555593,
+                        retry_count: 0, next_retry_at: '2026-11-20T09:00:00Z', last_error: null}
                     metadata: *meta
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -336,13 +423,18 @@ paths:
     post:
       tags: [Order admin]
       operationId: cancelConfirmedOrder
-      summary: OPS cancels an order still waiting for OPS (CONFIRMED, saga WAIT_OPS) with a reason
+      summary: OPS cancels an order before hand-over (CONFIRMED, PACKING) with a reason
       description: >-
-        ORD-03 implemented. Permission order.cancel. Same checks and order as confirm-cod, without the COD and deadline
-        checks: a cancel is allowed past expires_at while the worker has not acted (same outcome). An order already confirmed
-        (saga past WAIT_OPS) is 409 INVALID_TRANSITION (ORD-04). CONFIRMED -> CANCELLING (history actor ADMIN with the OPS
-        reason, cancel_reason OPS_CANCELLED, ORDER_CANCELLED reason OPS_CANCELLED); the ORD-02 compensation releases stock,
-        closes the payment and ends CANCELLED (reason_code OPS_CANCELLED). Without order.fulfill the response omits contact,
+        ORD-03 implemented, ORD-04 widened. Permission order.cancel. Same checks and order as confirm-cod, without the COD and
+        deadline checks: a cancel is allowed past expires_at while the worker has not acted (same outcome). Allowed on
+        CONFIRMED (saga WAIT_OPS or COMMIT_STOCK) and PACKING (saga CREATE_SHIPMENT or DONE), in any saga status including
+        MANUAL (the way out for a stuck order); a live worker lease is 409 SAGA_BUSY. SHIPPING and later is 409
+        INVALID_TRANSITION (goods are on the road: wait for RETURNING, then a return slip). CONFIRMED/PACKING -> CANCELLING
+        (history actor ADMIN with the OPS reason, cancel_reason OPS_CANCELLED, ORDER_CANCELLED reason OPS_CANCELLED); the
+        compensation then cancels the shipment first, restores stock already committed (release, then inventory /returns
+        under the fixed key cancel:{order_id}; never before the shipment is known cancelled), closes the payment and ends
+        CANCELLED (reason_code OPS_CANCELLED). If the shipment was already handed over the stock is not restored: the saga
+        waits (WAIT_RETURN) for the shipping events (RETURNING, or DELIVERED when the goods arrive anyway). Without order.fulfill the response omits contact,
         shipping_address and note. Idempotency as confirm-cod; one audit_logs row (ORDER_CANCEL, reason).
       security: [{bearerAuth: []}]
       x-implementation-status: implemented
@@ -372,12 +464,66 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/CommandConflict'}
+  /admin/api/v1/orders/{order_no}/returns:
+    post:
+      tags: [Order admin]
+      operationId: recordOrderReturn
+      summary: OPS records a return slip (counted goods); only the counted restock quantity goes back to stock, once
+      description: >-
+        ORD-04 implemented. Permission order.return. Checked in order: auth, Idempotency-Key (400 INVALID_KEY), body (400
+        INVALID_FIELDS: items 1..100, unique order_item_id, received_quantity >= 1, 0 <= restock_quantity <=
+        received_quantity, condition <= 200 characters, reason and evidence_ref required 1..500), then in one transaction
+        locking order_sagas then orders: expected_version (409 VERSION_CONFLICT), order RETURNING, RETURNED (goods back
+        late) or DELIVERED (return after delivery, REQ ORD-10; the order stays DELIVERED, the payment is not touched), else
+        409 INVALID_TRANSITION; no live worker lease (409 SAGA_BUSY); every order_item_id belongs to the order (else 400) and
+        the received total over all slips of the order stays within the ordered quantity (409 RETURN_EXCEEDS_ORDERED,
+        errors field items[<order_item_id>] message ordered=N received=M requested=K; nothing is written). The slip and its
+        items (status REQUESTED), the restock task and audit_logs (ORDER_RETURN) are written in one transaction; the
+        background task then calls inventory /returns once per slip (key return:{return_id}, only items with
+        restock_quantity > 0) and the slip becomes COMPLETED, or MANUAL when inventory refuses it. On a RETURNING order a
+        COMPLETED slip also lets the saga close the payment and the order becomes RETURNED (poll GET). Same key + body
+        replays the stored 202; another body is 409 IDEMPOTENCY_KEY_REUSED. The response is the admin order view plus
+        the new slip as return. The slip reason is hidden (null) without order.fulfill, like history reasons.
+      security: [{bearerAuth: []}]
+      x-implementation-status: implemented
+      parameters:
+      - {name: order_no, in: path, required: true, schema: {type: string, minLength: 1, maxLength: 32}}
+      - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReturnRequest'}
+      responses:
+        '202':
+          description: Accepted; the slip is REQUESTED, poll GET (admin detail returns[] and the order status)
+          headers: *headers
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ReturnOrderResponse'}
+              examples:
+                requested:
+                  value: {code: OK, data: {order_id: 22222222-2222-4222-8222-222222222222, order_no: ORD202610000002,
+                      status: RETURNING, processing_status: READY, reason_code: null, status_url: /api/v1/orders/ORD202610000002,
+                      retry_after_seconds: null, version: 8, method: COD, items: *items, totals: *totals, shipping_address: *address,
+                      contact: {phone: '0912345678', email: null}, note: null, created_at: '2026-10-20T03:00:30Z',
+                      expires_at: '2026-10-21T03:00:30Z', allowed_actions: [],
+                      return: {return_id: 88888888-8888-4888-8888-888888888888, status: REQUESTED, reason: 'Khach tu choi nhan',
+                        evidence_ref: 'phieu-nhap-001', actor_id: 99999999-9999-4999-8999-999999999999,
+                        created_at: '2026-10-22T03:00:00Z', updated_at: '2026-10-22T03:00:00Z',
+                        items: [{order_item_id: 77777777-7777-4777-8777-777777777777, received_quantity: 2, restock_quantity: 1,
+                          condition: 'Mot cai ban'}]}}, metadata: *meta}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/CommandConflict'}
 components:
   securitySchemes:
     memberBearer: {type: http, scheme: bearer, bearerFormat: JWT, description: ADR-21 access token; decides alone when present}
     checkoutToken: {type: apiKey, in: header, name: Checkout-Token, description: 'Guest proof from cart (ES256, aud order-service, 15 minutes)'}
     orderAccess: {type: apiKey, in: cookie, name: order_access, description: Guest credential of one order (sha256 stored)}
-    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT, description: ADR-21 access token with order.read / order.fulfill / order.cancel}
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT, description: ADR-21 access token with order.read / order.fulfill / order.cancel / order.return}
   headers:
     NoStore:
       description: Orders are per actor and hold PII; never cached, errors included.
@@ -471,8 +617,8 @@ components:
         order_id: {type: string, format: uuid}
         order_no: {type: string, minLength: 1, maxLength: 32}
         status: {$ref: '#/components/schemas/OrderStatus'}
-        processing_status: {type: string, enum: [PROCESSING, READY, ACTION_REQUIRED, FINISHED], description: 'PENDING/CANCELLING PROCESSING (poll after retry_after_seconds); CONFIRMED READY while waiting for OPS, PROCESSING once OPS confirmed (ORD-03); PACKING PROCESSING until the SELF shipment exists, then READY; SHIPPING READY; DELIVERED/CANCELLED FINISHED. A MANUAL saga keeps PROCESSING'}
-        reason_code: {type: [string, 'null'], description: 'CANCELLED only: OUT_OF_STOCK, RESERVE_FAILED, PAYMENT_FAILED, EXPIRED or OPS_CANCELLED (ORD-03)'}
+        processing_status: {type: string, enum: [PROCESSING, READY, ACTION_REQUIRED, FINISHED], description: 'PENDING/CANCELLING PROCESSING (poll after retry_after_seconds); CONFIRMED READY while waiting for OPS, PROCESSING once OPS confirmed (ORD-03); PACKING PROCESSING until the SELF shipment exists, then READY; SHIPPING READY; RETURNING READY (goods on the way back, OPS counts them; ORD-04); DELIVERED/CANCELLED/RETURNED FINISHED. A MANUAL saga keeps PROCESSING'}
+        reason_code: {type: [string, 'null'], description: 'CANCELLED only: OUT_OF_STOCK, RESERVE_FAILED, PAYMENT_FAILED, EXPIRED, OPS_CANCELLED (ORD-03) or CUSTOMER_CANCELLED (customer cancel, ORD-04); a shipment that came back without an earlier cancel leaves the admin cancel_reason RETURNED (ORD-04)'}
         status_url: {type: string}
         retry_after_seconds: {type: [integer, 'null'], minimum: 1}
         version: {type: integer, minimum: 0}
@@ -484,7 +630,7 @@ components:
         note: {type: [string, 'null']}
         created_at: {type: string, format: date-time}
         expires_at: {type: string, format: date-time}
-        allowed_actions: {type: array, items: {type: string}}
+        allowed_actions: {type: array, items: {type: string, enum: [CANCEL]}, description: 'Customer-audience actions: CANCEL while CONFIRMED and waiting for OPS (ORD-04). Admin command views carry the same list.'}
     CommandOrder:
       description: The order after an admin command; without order.fulfill shipping_address, contact and note are omitted (keys absent, 13).
       type: object
@@ -513,6 +659,73 @@ components:
       properties:
         expected_version: {type: integer, minimum: 0}
         reason: {type: string, minLength: 1, maxLength: 500, pattern: '\S', description: 'Required (trimmed, blank is 400); history reason and audit_logs reason; cancel_reason is OPS_CANCELLED'}
+    CustomerCancelRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      properties:
+        expected_version: {type: integer, minimum: 0}
+        reason: {type: [string, 'null'], maxLength: 500, description: 'Optional (trimmed, blank is absent); history reason, cancel_reason is CUSTOMER_CANCELLED'}
+    ReturnRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version, reason, evidence_ref, items]
+      properties:
+        expected_version: {type: integer, minimum: 0}
+        reason: {type: string, minLength: 1, maxLength: 500, pattern: '\S', description: 'Required (trimmed); stored on the slip and audit_logs, and sent to inventory as the /returns reason'}
+        evidence_ref: {type: string, minLength: 1, maxLength: 500, pattern: '\S', description: 'Required (trimmed); the paper slip or photo reference sent to inventory'}
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            type: object
+            additionalProperties: false
+            required: [order_item_id, received_quantity, restock_quantity]
+            properties:
+              order_item_id: {type: string, format: uuid, description: 'items[].order_item_id of the admin detail; unique in the slip'}
+              received_quantity: {type: integer, minimum: 1, description: 'Counted goods back; all slips of an order together stay within the ordered quantity'}
+              restock_quantity: {type: integer, minimum: 0, description: 'Part of received_quantity that goes back to stock (the rest is damaged and stays out); at most received_quantity'}
+              condition: {type: [string, 'null'], maxLength: 200}
+    ReturnSlip:
+      type: object
+      additionalProperties: false
+      required: [return_id, status, reason, evidence_ref, actor_id, created_at, updated_at, items]
+      properties:
+        return_id: {type: string, format: uuid}
+        status: {type: string, enum: [REQUESTED, PROCESSING, COMPLETED, MANUAL]}
+        reason: {type: [string, 'null'], description: 'order.fulfill only (null without it)'}
+        evidence_ref: {type: string}
+        actor_id: {type: [string, 'null'], format: uuid}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        items:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [order_item_id, received_quantity, restock_quantity, condition]
+            properties:
+              order_item_id: {type: string, format: uuid}
+              received_quantity: {type: integer, minimum: 1}
+              restock_quantity: {type: integer, minimum: 0}
+              condition: {type: [string, 'null']}
+    ReturnOrder:
+      description: The admin command view of the order plus the slip just recorded.
+      type: object
+      additionalProperties: false
+      required: [order_id, order_no, status, processing_status, reason_code, status_url, retry_after_seconds, version, method, items, totals,
+        created_at, expires_at, allowed_actions, return]
+      properties:
+        <<: *orderProperties
+        return: {$ref: '#/components/schemas/ReturnSlip'}
+    ReturnOrderResponse:
+      type: object
+      required: [code, data, metadata]
+      properties:
+        code: {type: string, const: OK}
+        data: {$ref: '#/components/schemas/ReturnOrder'}
+        metadata: {$ref: ./common.yaml#/components/schemas/Metadata}
     AdminOrderSummary:
       type: object
       additionalProperties: false
@@ -546,7 +759,7 @@ components:
       type: object
       additionalProperties: false
       required: [order_no, user_id, status, version, method, currency, subtotal, discount_amount, shipping_fee, shipping_discount, cod_fee,
-        total_amount, created_at, expires_at, confirmed_at, shipped_at, delivered_at, cancel_reason, items, history, saga]
+        total_amount, created_at, expires_at, confirmed_at, shipped_at, delivered_at, cancel_reason, items, returns, history, saga]
       properties:
         order_no: {type: string}
         user_id: {type: [string, 'null'], format: uuid}
@@ -565,7 +778,7 @@ components:
         confirmed_at: {type: [string, 'null'], format: date-time}
         shipped_at: {type: [string, 'null'], format: date-time, description: handed_over_at of the shipping event; falls back to provider_occurred_at then receive time when DELIVERED overtakes DELIVERING (ORD-03)}
         delivered_at: {type: [string, 'null'], format: date-time}
-        cancel_reason: {type: [string, 'null'], description: 'OUT_OF_STOCK, RESERVE_FAILED, PAYMENT_FAILED, EXPIRED or OPS_CANCELLED'}
+        cancel_reason: {type: [string, 'null'], description: 'OUT_OF_STOCK, RESERVE_FAILED, PAYMENT_FAILED, EXPIRED, OPS_CANCELLED, CUSTOMER_CANCELLED or RETURNED'}
         contact_phone: {type: string, description: order.fulfill only}
         contact_email: {type: [string, 'null'], description: order.fulfill only}
         shipping_address: {$ref: '#/components/schemas/Address', description: order.fulfill only}
@@ -575,8 +788,9 @@ components:
           items:
             type: object
             additionalProperties: false
-            required: [variant_id, sku, name, size, color, quantity, unit_price, line_total]
+            required: [order_item_id, variant_id, sku, name, size, color, quantity, unit_price, line_total]
             properties:
+              order_item_id: {type: string, format: uuid, description: 'The id a return slip refers to (ORD-04)'}
               variant_id: {type: string, format: uuid}
               sku: {type: string}
               name: {type: string}
@@ -585,6 +799,9 @@ components:
               quantity: {type: integer, minimum: 1}
               unit_price: {type: integer, minimum: 0}
               line_total: {type: integer, minimum: 0}
+        returns:
+          type: array
+          items: {$ref: '#/components/schemas/ReturnSlip'}
         history:
           type: array
           items:
@@ -605,7 +822,7 @@ components:
           required: [intent, step, status, inventory_state, payment_state, payment_id, shipment_id, retry_count, next_retry_at, last_error]
           properties:
             intent: {type: string, enum: [FULFILL, CANCEL]}
-            step: {type: string, description: 'e.g. RESERVE, CREATE_PAYMENT, WAIT_OPS, COMMIT_STOCK, CREATE_SHIPMENT, COMPENSATE'}
+            step: {type: string, description: 'e.g. RESERVE, CREATE_PAYMENT, WAIT_OPS, COMMIT_STOCK, CREATE_SHIPMENT, COMPENSATE, WAIT_RETURN (parked until a shipping event or a return slip), CLOSE_PAYMENT'}
             status: {type: string, description: 'e.g. RUNNING, COMPENSATING, DONE, MANUAL'}
             inventory_state: {type: string}
             payment_state: {type: string}
@@ -709,7 +926,8 @@ components:
     CommandConflict:
       description: >-
         VERSION_CONFLICT (errors expected_version current=N), INVALID_TRANSITION (errors status current=S), ORDER_EXPIRED
-        (confirm-cod only), SAGA_BUSY (a worker holds the saga; reload) or IDEMPOTENCY_KEY_REUSED. Business 409s are not stored by idempotency; a retry is evaluated again.
+        (confirm-cod only), SAGA_BUSY (a worker holds the saga; reload), RETURN_EXCEEDS_ORDERED (returns only; errors field
+        items[<order_item_id>] message ordered=N received=M requested=K) or IDEMPOTENCY_KEY_REUSED. Business 409s are not stored by idempotency; a retry is evaluated again.
       headers: *headers
       content:
         application/json:
@@ -717,6 +935,9 @@ components:
           examples:
             transition:
               value: {code: CONFLICT, message: INVALID_TRANSITION, errors: [{field: status, message: current=PACKING}], metadata: *meta}
+            exceeded:
+              value: {code: CONFLICT, message: RETURN_EXCEEDS_ORDERED,
+                errors: [{field: 'items[77777777-7777-4777-8777-777777777777]', message: 'ordered=2 received=1 requested=2'}], metadata: *meta}
     Unprocessable:
       description: CART_EMPTY, PAYMENT_METHOD_UNAVAILABLE, NO_SHIPPING_RULE, VARIANT_NOT_AVAILABLE, AMOUNT_OUT_OF_RANGE or PAYMENT_AMOUNT_UNSUPPORTED
       headers: *headers

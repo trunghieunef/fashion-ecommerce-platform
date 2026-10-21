@@ -157,6 +157,17 @@ class GatewayBoundaryTest {
   }
 
   @Test
+  void orderCancelAndReturnPathsAreRouted() {
+    // TASK:ORD-04: customer cancel (public route) and OPS cancel/returns (admin route) reach order-service.
+    client.post().uri("/api/v1/orders/ORD202610000001/cancel").exchange().expectStatus().isOk();
+    assertThat(CATALOG.path()).isEqualTo("/api/v1/orders/ORD202610000001/cancel");
+    client.post().uri("/admin/api/v1/orders/ORD202610000001/cancel").exchange().expectStatus().isOk();
+    assertThat(CATALOG.path()).isEqualTo("/admin/api/v1/orders/ORD202610000001/cancel");
+    client.post().uri("/admin/api/v1/orders/ORD202610000001/returns").exchange().expectStatus().isOk();
+    assertThat(CATALOG.path()).isEqualTo("/admin/api/v1/orders/ORD202610000001/returns");
+  }
+
+  @Test
   void inventoryAdminIsRouted() {
     client.get().uri("/admin/api/v1/inventory/skus").exchange().expectStatus().isOk();
     assertThat(CATALOG.requestCount()).isEqualTo(1);
