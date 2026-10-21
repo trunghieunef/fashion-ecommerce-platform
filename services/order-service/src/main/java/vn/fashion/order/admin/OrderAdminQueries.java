@@ -103,9 +103,13 @@ public class OrderAdminQueries {
         select id as return_id, status, reason, evidence_ref, actor_id, created_at, updated_at from order_returns
         where order_id = :id order by created_at, id""").param("id", orderId).query().listOfRows().stream().map(r -> {
           var slip = row(r, pii);
-          slip.put("items", jdbc.sql("""
+          // Free text typed by OPS (evidence, condition) may name the customer: hidden like reason (PR #35 review M6).
+          if (!pii) slip.put("evidence_ref", null);
+          var items = jdbc.sql("""
               select order_item_id, received_quantity, restock_quantity, condition from order_return_items
-              where return_id = :id order by order_item_id""").param("id", r.get("return_id")).query().listOfRows());
+              where return_id = :id order by order_item_id""").param("id", r.get("return_id")).query().listOfRows();
+          if (!pii) items = items.stream().map(i -> { var m = new LinkedHashMap<>(i); m.put("condition", null); return (Map<String, Object>) m; }).toList();
+          slip.put("items", items);
           return slip;
         }).toList();
   }

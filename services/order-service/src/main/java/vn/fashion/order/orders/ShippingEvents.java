@@ -93,8 +93,10 @@ public class ShippingEvents {
       // Physical evidence wins over the cancel: the goods reached the customer (CANCELLING -> SHIPPING -> DELIVERED).
       LOG.warn("Cancelled order delivered anyway: order_id={} status={} shipment={}", s.orderId(), status, s.status());
       jdbc.sql("""
-          update order_sagas set status = 'DONE', step = 'DONE', lease_token = null, lease_until = null, last_error = null,
-            version = version + 1, updated_at = now() where order_id = :id""").param("id", s.orderId()).update();
+          update order_sagas set intent = 'FULFILL', status = 'DONE', step = 'DONE', lease_token = null, lease_until = null,
+            last_error = null, version = version + 1, updated_at = now() where order_id = :id""").param("id", s.orderId()).update();
+      // A delivered order carries no cancel reason (PR #35 review M2); the cancel stays in history and audit_logs.
+      jdbc.sql("update orders set cancel_reason = null where id = :id").param("id", s.orderId()).update();
     }
     if (!status.equals("SHIPPING")) ship(s, status);
     if (delivered) {

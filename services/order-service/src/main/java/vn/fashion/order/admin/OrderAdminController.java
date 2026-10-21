@@ -89,4 +89,19 @@ public class OrderAdminController {
     return Api.ok(HttpStatus.ACCEPTED, returns.create(actor, orderNo, key, version, reason, evidence, OrderReturns.lines(node)), tracer);
   }
 
+  /** PR #35 review I2: body {expected_version, reason (1..500)}; voids a MANUAL slip so the goods can be counted again. */
+  @PostMapping("/{orderNo}/returns/{returnId}/void")
+  public ResponseEntity<?> voidReturn(@RequestHeader(name = "Authorization", required = false) String authorization,
+                                      @RequestHeader(name = "Idempotency-Key", required = false) String key,
+                                      @PathVariable String orderNo, @PathVariable String returnId, @RequestBody(required = false) String body) {
+    var actor = auth.require(authorization, "order.return");
+    Api.requireKey(key);
+    var node = Api.object(json, body);
+    long version = Api.expectedVersion(node);
+    String reason = Api.text(node, "reason", true);
+    java.util.UUID id = Api.uuid(returnId);
+    if (id == null) throw new Api.Problem(HttpStatus.NOT_FOUND, "NOT_FOUND", "RETURN_NOT_FOUND", java.util.List.of());
+    return Api.ok(HttpStatus.ACCEPTED, returns.voidSlip(actor, orderNo, id, key, version, reason), tracer);
+  }
+
 }

@@ -248,7 +248,9 @@ class ShippingEventsIntegrationTest extends OrderTestSupport {
     assertThat(jdbc.queryForObject("select shipped_at::text from orders where id = ?", String.class, id)).startsWith("2026-10-21 03:00:00");
     assertThat(jdbc.queryForObject("select delivered_at::text from orders where id = ?", String.class, id)).startsWith("2026-10-21 08:00:00");
     assertThat(completed()).isEqualTo(1);
-    assertThat(saga(id)).containsEntry("status", "DONE").containsEntry("step", "DONE");
+    assertThat(saga(id)).containsEntry("status", "DONE").containsEntry("step", "DONE").containsEntry("intent", "FULFILL");
+    // PR #35 review M2: a delivered order carries no cancel reason.
+    assertThat(jdbc.queryForObject("select cancel_reason from orders where id = ?", String.class, id)).isNull();
     assertThat(saga(id).get("lease_token")).isNull();
     assertThat(warns()).hasSize(1).allMatch(w -> w.contains(id.toString()) && w.contains("CANCELLING"));
   }

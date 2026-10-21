@@ -245,7 +245,7 @@ class OrderReturnsIntegrationTest extends OrderTestSupport {
     assertThat(saga(id)).containsEntry("step", "WAIT_RETURN").containsEntry("status", "WAITING");
   }
 
-  @Test void aManualSlipOnAReturningOrderHasNoApiExit() {
+  @Test void aManualSlipStillCountsUntilVoided() {
     UUID id = inStatus("RETURNING");
     UUID teeM = item(id, "TEE-M");
     var d = data(slip(id, "ret-m", body(version(id), line(teeM, 2, 2, null)), ops()), 202);
@@ -257,7 +257,7 @@ class OrderReturnsIntegrationTest extends OrderTestSupport {
     assertThat(meters.counter("order.return.manual").count()).isEqualTo(before + 1);
     assertThat(jdbc.queryForObject("select status from orders where id = ?", String.class, id)).isEqualTo("RETURNING");
     assertThat(saga(id)).containsEntry("step", "WAIT_RETURN").containsEntry("status", "WAITING");
-    // The MANUAL slip still counts in the received sum, so the remainder cannot be re-submitted.
+    // The MANUAL slip still counts in the received sum until OPS voids it (opsVoidsAManualSlipAndCountsAgain).
     assertThat(problem(slip(id, "ret-m2", body(version(id), line(teeM, 1, 1, null)), ops()), 409)).isEqualTo("RETURN_EXCEEDS_ORDERED");
   }
 
@@ -271,6 +271,77 @@ class OrderReturnsIntegrationTest extends OrderTestSupport {
     assertThat(jdbc.queryForMap("select status, attempts, last_error from background_tasks where business_key = ?", returnId.toString()))
         .containsEntry("status", "PENDING").containsEntry("attempts", 1).containsEntry("last_error", "inventory_503");
     assertThat(saga(id)).containsEntry("step", "WAIT_RETURN");
+  }
+
+  @Test void anInventoryOutageNeverParksTheSlipManual() {
+    // PR #35 review I2: a long outage is retried with the same key for as long as it takes; past 30 attempts it is flagged.
+    UUID id = inStatus("RETURNING");
+    var d = data(slip(id, "ret-o", body(version(id), line(item(id, "TEE-M"), 1, 1, null)), ops()), 202);
+    UUID returnId = UUID.fromString(d.path("return").path("return_id").asString());
+    jdbc.update("update background_tasks set attempts = 40 where business_key = ?", returnId.toString());
+    inventoryReturns(503, "{}");
+    double before = meters.counter("order.return.stalled").count();
+    returns.runOnce();
+    assertThat(slipStatus(returnId)).isEqualTo("REQUESTED");
+    assertThat(taskStatus(returnId)).isEqualTo("PENDING");
+    assertThat(meters.counter("order.return.stalled").count()).isEqualTo(before + 1);
+    // Inventory back: the same key restocks and the order finishes.
+    jdbc.update("update background_tasks set next_attempt_at = now() where business_key = ?", returnId.toString());
+    inventoryReturns(200, StubServers.ok("{\"items\":[]}"));
+    returns.runOnce();
+    assertThat(slipStatus(returnId)).isEqualTo("COMPLETED");
+    assertThat(calls(StubServers.INVENTORY, "/returns")).allMatch(s -> s.idempotencyKey().equals("return:" + returnId));
+  }
+
+  @Test void opsVoidsAManualSlipAndCountsAgain() {
+    // PR #35 review I2: a refused slip wrote no stock; voiding it frees the received sum so the order can still finish.
+    UUID id = inStatus("RETURNING");
+    UUID teeM = item(id, "TEE-M");
+    var d = data(slip(id, "ret-v", body(version(id), line(teeM, 2, 2, null)), ops()), 202);
+    UUID returnId = UUID.fromString(d.path("return").path("return_id").asString());
+    inventoryReturns(409, StubServers.error("CONFLICT", "RETURN_EXCEEDS_COMMITTED"));
+    returns.runOnce();
+    assertThat(slipStatus(returnId)).isEqualTo("MANUAL");
+    String path = "/admin/api/v1/orders/" + no(id) + "/returns/" + returnId + "/void";
+    String voidBody = "{\"expected_version\":" + version(id) + ",\"reason\":\"Kho kiem lai, lap phieu moi\"}";
+    assertThat(problem(send("POST", path, voidBody, "Authorization", tokenWith(OPS, "order.read")), 403)).isEqualTo("PERMISSION_REQUIRED");
+    data(send("POST", path, voidBody, "Authorization", ops(), "Idempotency-Key", "void-1"), 202);
+    assertThat(slipStatus(returnId)).isEqualTo("VOIDED");
+    assertThat(count("select count(*) from audit_logs where action = 'ORDER_RETURN_VOID'")).isEqualTo(1);
+    // Only a MANUAL slip can be voided; an unknown slip is 404.
+    String again = "{\"expected_version\":" + version(id) + ",\"reason\":\"x\"}";
+    assertThat(problem(send("POST", path, again, "Authorization", ops(), "Idempotency-Key", "void-2"), 409)).isEqualTo("RETURN_NOT_MANUAL");
+    assertThat(problem(send("POST", "/admin/api/v1/orders/" + no(id) + "/returns/" + UUID.randomUUID() + "/void", again,
+        "Authorization", ops(), "Idempotency-Key", "void-3"), 404)).isEqualTo("RETURN_NOT_FOUND");
+    // Counted again: the new slip fits and finishes the order.
+    var d2 = data(slip(id, "ret-v2", body(version(id), line(teeM, 2, 2, null)), ops()), 202);
+    UUID second = UUID.fromString(d2.path("return").path("return_id").asString());
+    inventoryReturns(200, StubServers.ok("{\"items\":[]}"));
+    returns.runOnce();
+    assertThat(slipStatus(second)).isEqualTo("COMPLETED");
+    worker.runOnce();
+    assertThat(jdbc.queryForObject("select status from orders where id = ?", String.class, id)).isEqualTo("RETURNED");
+  }
+
+  @Test void anotherOpsReusingAKeyOnTheOrderGets409() {
+    // PR #35 review M3: idempotency is per actor, the slip key is unique per order — 409, not 500.
+    UUID id = inStatus("RETURNING");
+    data(slip(id, "same-key", body(version(id), line(item(id, "TEE-M"), 1, 1, null)), ops()), 202);
+    String other = tokenWith(UUID.randomUUID(), "order.read", "order.fulfill", "order.return");
+    assertThat(problem(slip(id, "same-key", body(version(id), line(item(id, "TEE-L"), 1, 1, null)), other), 409))
+        .isEqualTo("IDEMPOTENCY_KEY_REUSED");
+  }
+
+  @Test void financeSeesNoFreeTextOfASlip() {
+    // PR #35 review M6: evidence_ref and condition are OPS free text, hidden without order.fulfill like reason.
+    UUID id = inStatus("RETURNING");
+    data(slip(id, "ret-f", body(version(id), line(item(id, "TEE-M"), 1, 0, "rach tay ao")), ops()), 202);
+    var slip = data(send("GET", "/admin/api/v1/orders/" + no(id), null, "Authorization", tokenWith(UUID.randomUUID(), "order.read")), 200)
+        .path("returns").get(0);
+    assertThat(slip.path("reason").isNull()).isTrue();
+    assertThat(slip.path("evidence_ref").isNull()).isTrue();
+    assertThat(slip.path("items").get(0).path("condition").isNull()).isTrue();
+    assertThat(slip.path("items").get(0).path("received_quantity").asInt()).isEqualTo(1);
   }
 
   @Test void aCollectedReturnStillRestocksButNeedsARefund() {

@@ -14,7 +14,7 @@ OPERATIONS = {("post", "/api/v1/orders/quote"), ("post", "/api/v1/orders"), ("ge
               ("get", "/api/v1/orders/{order_no}"), ("post", "/api/v1/orders/{order_no}/cancel")}
 ADMIN = {("get", "/admin/api/v1/orders"), ("get", "/admin/api/v1/orders/{order_no}"),
          ("post", "/admin/api/v1/orders/{order_no}/confirm-cod"), ("post", "/admin/api/v1/orders/{order_no}/cancel"),
-         ("post", "/admin/api/v1/orders/{order_no}/returns")}
+         ("post", "/admin/api/v1/orders/{order_no}/returns"), ("post", "/admin/api/v1/orders/{order_no}/returns/{return_id}/void")}
 QUOTE = {"cart_id": "11111111-1111-4111-8111-111111111111", "cart_version": 4, "method": "COD",
          "shipping_address": {"recipient_name": "Synthetic Person", "phone": "0912345678", "province_code": "79",
                               "ward_code": "26734", "address_line": "1 Synthetic St"},
@@ -88,6 +88,13 @@ class OrderContractTest(unittest.TestCase):
             op = ops[("post", f"/admin/api/v1/orders/{{order_no}}/{action}")]
             self.assertIn({"$ref": "./common.yaml#/components/parameters/IdempotencyKey"}, op["parameters"])
             self.assertEqual(set(op["responses"]), {"202", "400", "401", "403", "404", "409"})
+        void = ops[("post", "/admin/api/v1/orders/{order_no}/returns/{return_id}/void")]
+        self.assertIn({"$ref": "./common.yaml#/components/parameters/IdempotencyKey"}, void["parameters"])
+        self.assertEqual(set(void["responses"]), {"202", "400", "401", "403", "404", "409"})
+        body = self.validator(BASE + "order.yaml#/components/schemas/VoidReturnRequest")
+        self.assertEqual(list(body.iter_errors({"expected_version": 3, "reason": "Kho kiem lai"})), [])
+        for bad in ({"expected_version": 3}, {"expected_version": 3, "reason": " "}, {"expected_version": 3, "reason": "x", "extra": 1}):
+            self.assertTrue(list(body.iter_errors(bad)), bad)
 
     def test_admin_command_bodies(self):
         confirm = self.validator(BASE + "order.yaml#/components/schemas/ConfirmCodRequest")
@@ -162,6 +169,7 @@ class OrderContractTest(unittest.TestCase):
         slip = self.validator(BASE + "order.yaml#/components/schemas/ReturnSlip")
         self.assertEqual(list(slip.iter_errors({**data["returns"][0], "reason": None})), [])
         self.assertTrue(list(slip.iter_errors({**data["returns"][0], "status": "DONE"})))
+        self.assertEqual(list(slip.iter_errors({**data["returns"][0], "status": "VOIDED", "evidence_ref": None})), [])
 
     def test_cart_checkout_token_operation(self):
         op = self.docs["cart.yaml"]["paths"]["/api/v1/carts/{cart_id}/checkout-token"]["post"]

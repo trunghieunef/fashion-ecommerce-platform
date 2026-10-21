@@ -237,7 +237,10 @@ public class OrderService {
         select variant_id, sku, name, size, color, image_url, quantity, unit_price, line_total from order_items
         where order_id = :id order by sku, variant_id""").param("id", row.id()).query(OrderController.Item.class).list();
     String processingStatus = switch (row.status()) {
-      case "PENDING", "CANCELLING" -> "PROCESSING";
+      case "PENDING" -> "PROCESSING";
+      // A cancel waiting for the handed-over goods to come back (WAIT_RETURN) can take days: READY, no polling (PR #35 M1).
+      case "CANCELLING" -> jdbc.sql("select step from order_sagas where order_id = :id").param("id", row.id()).query(String.class)
+          .optional().filter(step -> step.equals("WAIT_RETURN")).map(step -> "READY").orElse("PROCESSING");
       case "CANCELLED", "DELIVERED", "RETURNED" -> "FINISHED";
       // PACKING: PROCESSING until the saga stored the SELF shipment, then READY.
       case "PACKING" -> jdbc.sql("select shipment_id is not null from order_sagas where order_id = :id").param("id", row.id())

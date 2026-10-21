@@ -21,6 +21,7 @@ class SagaCancelAfterConfirmIntegrationTest extends OrderTestSupport {
   @Autowired SagaWorker worker;
   @Autowired OrderCommands commands;
   @Autowired MeterRegistry meters;
+  @Autowired vn.fashion.order.orders.OrderService orders;
   /** Every dependency call in order, as "service path-suffix". */
   final List<String> calls = new CopyOnWriteArrayList<>();
   volatile StubServers.Reply shipmentCancel = new StubServers.Reply(200, StubServers.ok("{\"status\":\"CANCELLED\"}"));
@@ -94,6 +95,38 @@ class SagaCancelAfterConfirmIntegrationTest extends OrderTestSupport {
         "[{\"sku\":\"TEE-L\",\"quantity\":1},{\"sku\":\"TEE-M\",\"quantity\":2}]"));
   }
 
+  @Test void aSagaStuckOnARefusedQuoteCanStillBeCancelled() {
+    // PR #35 review I1: create got 409 QUOTE_MISMATCH (saga MANUAL); shipping's cancel runs the same quote checks while no
+    // shipment row exists. That refusal proves nothing can ship, so compensation goes on: restore, close, CANCELLED.
+    UUID id = placeOrder();
+    stubAll();
+    worker.runOnce();
+    commands.confirmCod(OPS, no(id), "confirm-" + id, version(id), null);
+    worker.runOnce();   // commit
+    StubServers.SHIPPING.reply(s -> {
+      calls.add(s.path().endsWith("/cancel") ? "shipping cancel" : "shipping create");
+      return new StubServers.Reply(409, StubServers.error("CONFLICT", "QUOTE_MISMATCH"));
+    });
+    worker.runOnce();   // create refused
+    assertThat(saga(id)).containsEntry("status", "MANUAL").containsEntry("shipment_state", "NONE");
+    calls.clear();
+    opsCancel(id);
+    runAll();
+    assertThat(calls).containsExactly("shipping cancel", "inventory release", "inventory returns", "payment close");
+    assertThat(status(id)).isEqualTo("CANCELLED");
+    assertThat(saga(id)).containsEntry("shipment_state", "CANCELLED").containsEntry("inventory_state", "RESTORED")
+        .containsEntry("status", "DONE");
+  }
+
+  @Test void otherShipmentCancelRefusalsStillGoManual() {
+    UUID id = packedWithShipment();
+    shipmentCancel = new StubServers.Reply(409, StubServers.error("CONFLICT", "SHIPMENT_CONFLICT"));
+    opsCancel(id);
+    worker.runOnce();
+    assertThat(saga(id)).containsEntry("status", "MANUAL").containsEntry("inventory_state", "COMMITTED");
+    assertThat(count(StubServers.INVENTORY, "/release") + count(StubServers.INVENTORY, "/returns")).isZero();
+  }
+
   @Test void aShipmentCancelInDoubtNeverRestoresStock() {
     // T16: until shipping confirms the cancel the goods may still leave, so no release/returns.
     UUID id = packedWithShipment();
@@ -121,6 +154,8 @@ class SagaCancelAfterConfirmIntegrationTest extends OrderTestSupport {
         .containsEntry("inventory_state", "COMMITTED").containsEntry("lease_token", null);
     assertThat(((Timestamp) saga(id).get("next_retry_at")).toInstant()).isAfter(clock.instant().plus(Duration.ofDays(29)));
     assertThat(status(id)).isEqualTo("CANCELLING");
+    // PR #35 review M1: waiting days for the goods to come back is READY (no polling), not PROCESSING.
+    assertThat(orders.view(id).processingStatus()).isEqualTo("READY");
     assertThat(meters.counter("order.saga.handed_over").count()).isEqualTo(before + 1);
     // Parked: a due WAIT_RETURN only re-parks, no call (shipping events move it, Task 4).
     calls.clear();

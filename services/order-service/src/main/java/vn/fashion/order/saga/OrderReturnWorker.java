@@ -5,6 +5,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
@@ -25,7 +26,7 @@ import vn.fashion.platform.work.BackgroundTaskRepository;
 @Component
 public class OrderReturnWorker {
   private static final Logger LOG = LoggerFactory.getLogger(OrderReturnWorker.class);
-  static final int MAX_ATTEMPTS = 30;
+  static final int STALLED_AFTER = 30;
   private final BackgroundTaskRepository tasks;
   private final SagaRepository sagas;
   private final InventoryClient inventory;
@@ -45,11 +46,26 @@ public class OrderReturnWorker {
       try { restock(task); }
       catch (RuntimeException e) {
         LOG.error("Return restock failed: task_id={}", task.id(), e);
-        try { tasks.fail(task.id(), task.leaseToken(), e.getClass().getSimpleName(), SagaWorker.MAX_BACKOFF, MAX_ATTEMPTS); }
+        try { retryLater(task, e.getClass().getSimpleName()); }
         catch (RuntimeException again) { LOG.error("Return restock failure not recorded: task_id={}", task.id(), again); }
       }
     }
     return claimed.size();
+  }
+
+  /**
+   * In doubt (UNKNOWN, exception) the restore is retried with the same key for as long as it takes, never MANUAL: the count
+   * is real and inventory dedupes return:{return_id} (PR #35 review I2). Past STALLED_AFTER attempts it is flagged for OPS.
+   */
+  private void retryLater(BackgroundTaskRepository.ClaimedTask task, String error) {
+    int attempts = task.attempts() + 1;
+    long seconds = Math.min(1L << Math.min(attempts, 30), SagaWorker.MAX_BACKOFF.toSeconds());
+    long millis = (long) (seconds * 1000 * ThreadLocalRandom.current().nextDouble(0.8, 1.2));
+    tasks.fail(task.id(), task.leaseToken(), error, Duration.ofMillis(millis), Integer.MAX_VALUE);
+    if (attempts >= STALLED_AFTER) {
+      Counter.builder("order.return.stalled").description("Return restocks still failing after many attempts").register(meters).increment();
+      LOG.warn("Return restock still failing: task_id={} attempts={} error={}", task.id(), attempts, error);
+    }
   }
 
   private record Slip(UUID orderId, String reason, String evidenceRef, String status) { }
@@ -69,20 +85,17 @@ public class OrderReturnWorker {
     // Nothing resellable (all damaged): the count is done without a stock call.
     if (!skus.isEmpty()) {
       var out = inventory.restore(sagas.order(slip.orderId()), "return:" + returnId, slip.reason(), slip.evidenceRef(), skus);
-      if (out.result() == Outcome.Result.UNKNOWN && task.attempts() < MAX_ATTEMPTS) {
-        long seconds = Math.min(1L << Math.min(task.attempts() + 1, 30), SagaWorker.MAX_BACKOFF.toSeconds());
-        tasks.fail(task.id(), task.leaseToken(), out.code(), Duration.ofSeconds(seconds), MAX_ATTEMPTS);
-        return;
-      }
+      if (out.result() == Outcome.Result.UNKNOWN) { retryLater(task, out.code()); return; }
       if (out.result() != Outcome.Result.OK) {
-        // RETURN_EXCEEDS_COMMITTED / RESERVATION_NOT_COMMITTED or an exhausted budget: OPS decides, nothing is retried.
+        // A refusal (RETURN_EXCEEDS_COMMITTED / RESERVATION_NOT_COMMITTED...): inventory wrote nothing, OPS decides and may
+        // void the slip (OrderReturns.voidSlip) and count again.
         LOG.warn("Return restock needs OPS: return_id={} order_id={} code={}", returnId, slip.orderId(), out.code());
         tx.executeWithoutResult(s -> {
           if (!tasks.fail(task.id(), task.leaseToken(), out.result() + " " + out.code(), Duration.ZERO, 0)) throw new IllegalStateException("lease lost");
           jdbc.sql("update order_returns set status = 'MANUAL', updated_at = now() where id = :id and status = 'REQUESTED'")
               .param("id", returnId).update();
         });
-        // No API exit for a MANUAL slip on a RETURNING order (it still counts in the received sum): visible for OPS runbook.
+        // Visible for OPS: the exit is voiding the slip (it then no longer counts in the received sum) and counting again.
         Counter.builder("order.return.manual").description("Return slips moved to MANUAL").register(meters).increment();
         return;
       }

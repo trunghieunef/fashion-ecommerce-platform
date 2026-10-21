@@ -32,6 +32,8 @@ public class SagaWorker {
   static final java.util.Set<String> RESERVE_REFUSALS = java.util.Set.of("OUT_OF_STOCK", "RESERVATION_CLOSED");
   static final java.util.Set<String> PAYMENT_REFUSALS =
       java.util.Set.of("PAYMENT_CLOSED", "PAYMENT_METHOD_UNAVAILABLE", "PAYMENT_AMOUNT_UNSUPPORTED");
+  /** Shipment-cancel refusals that prove no shipment exists or can be created for this snapshot (quote checks). */
+  static final java.util.Set<String> NO_SHIPMENT_POSSIBLE = java.util.Set.of("QUOTE_NOT_FOUND", "QUOTE_MISMATCH", "QUOTE_ALREADY_USED");
   // ORD-03 spec section 4: the order deadline applies only up to the OPS confirm; from COMMIT_STOCK inventory decides.
   static final java.util.Set<String> DEADLINE_STEPS = java.util.Set.of("RESERVE", "CREATE_PAYMENT", "WAIT_OPS");
   // ORD-04 ruling: WAIT_RETURN is moved by shipping events / return slips only; a claim just re-parks it.
@@ -208,6 +210,10 @@ public class SagaWorker {
         }
         return false;
       }
+      // Shipping answers QUOTE_* only when the order has no shipment row; quotes are immutable (no UPDATE/DELETE for its
+      // runtime), so a create from this snapshot can never succeed: nothing can leave the shop (PR #35 review I1).
+      if (out.result() == Outcome.Result.REJECTED && NO_SHIPMENT_POSSIBLE.contains(out.code()))
+        return settled(c, "shipment_state = 'CANCELLED'");
       if (out.result() == Outcome.Result.REJECTED) return manual(c, saga, "shipment-cancel " + out.code());
       // In doubt the goods may still leave: retry the same key, never touch the stock (T16).
       if (out.result() != Outcome.Result.OK) return retry(c, saga, out);

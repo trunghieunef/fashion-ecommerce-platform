@@ -480,10 +480,10 @@ paths:
         errors field items[<order_item_id>] message ordered=N received=M requested=K; nothing is written). The slip and its
         items (status REQUESTED), the restock task and audit_logs (ORDER_RETURN) are written in one transaction; the
         background task then calls inventory /returns once per slip (key return:{return_id}, only items with
-        restock_quantity > 0) and the slip becomes COMPLETED, or MANUAL when inventory refuses it. On a RETURNING order a
+        restock_quantity > 0) and the slip becomes COMPLETED, or MANUAL when inventory refuses it (an outage is retried with the same key for as long as it takes, never MANUAL; OPS may void a MANUAL slip and count again). On a RETURNING order a
         COMPLETED slip also lets the saga close the payment and the order becomes RETURNED (poll GET). Same key + body
         replays the stored 202; another body is 409 IDEMPOTENCY_KEY_REUSED. The response is the admin order view plus
-        the new slip as return. The slip reason is hidden (null) without order.fulfill, like history reasons.
+        the new slip as return. The slip reason, evidence_ref and item condition are hidden (null) without order.fulfill, like history reasons.
       security: [{bearerAuth: []}]
       x-implementation-status: implemented
       parameters:
@@ -513,6 +513,42 @@ paths:
                         created_at: '2026-10-22T03:00:00Z', updated_at: '2026-10-22T03:00:00Z',
                         items: [{order_item_id: 77777777-7777-4777-8777-777777777777, received_quantity: 2, restock_quantity: 1,
                           condition: 'Mot cai ban'}]}}, metadata: *meta}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/CommandConflict'}
+  /admin/api/v1/orders/{order_no}/returns/{return_id}/void:
+    post:
+      tags: [Order admin]
+      operationId: voidOrderReturn
+      summary: OPS voids a MANUAL return slip so the goods can be counted again
+      description: >-
+        ORD-04 (PR #35 review I2). Permission order.return. Checked in order: auth, Idempotency-Key (400 INVALID_KEY), body
+        (400 INVALID_FIELDS: reason required 1..500), then in one transaction locking order_sagas then orders:
+        expected_version (409 VERSION_CONFLICT), order RETURNING, RETURNED or DELIVERED (else 409 INVALID_TRANSITION), no
+        live worker lease (409 SAGA_BUSY), the slip belongs to the order (404 RETURN_NOT_FOUND) and is MANUAL (409
+        RETURN_NOT_MANUAL, errors status current=S). A slip goes MANUAL only when inventory refused its restock, which writes
+        no stock, so the VOIDED slip leaves the received sum and a new slip may count the goods again. audit_logs
+        ORDER_RETURN_VOID, orders.version + 1. Same key + body replays the stored 202.
+      security: [{bearerAuth: []}]
+      x-implementation-status: implemented
+      parameters:
+      - {name: order_no, in: path, required: true, schema: {type: string, minLength: 1, maxLength: 32}}
+      - {name: return_id, in: path, required: true, schema: {type: string, format: uuid}}
+      - $ref: ./common.yaml#/components/parameters/IdempotencyKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/VoidReturnRequest'}
+      responses:
+        '202':
+          description: Accepted; the slip is VOIDED
+          headers: *headers
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CommandOrderResponse'}
         '400': {$ref: '#/components/responses/Invalid'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -617,7 +653,7 @@ components:
         order_id: {type: string, format: uuid}
         order_no: {type: string, minLength: 1, maxLength: 32}
         status: {$ref: '#/components/schemas/OrderStatus'}
-        processing_status: {type: string, enum: [PROCESSING, READY, ACTION_REQUIRED, FINISHED], description: 'PENDING/CANCELLING PROCESSING (poll after retry_after_seconds); CONFIRMED READY while waiting for OPS, PROCESSING once OPS confirmed (ORD-03); PACKING PROCESSING until the SELF shipment exists, then READY; SHIPPING READY; RETURNING READY (goods on the way back, OPS counts them; ORD-04); DELIVERED/CANCELLED/RETURNED FINISHED. A MANUAL saga keeps PROCESSING'}
+        processing_status: {type: string, enum: [PROCESSING, READY, ACTION_REQUIRED, FINISHED], description: 'PENDING/CANCELLING PROCESSING (poll after retry_after_seconds), except CANCELLING waiting for handed-over goods to come back (saga WAIT_RETURN) READY; CONFIRMED READY while waiting for OPS, PROCESSING once OPS confirmed (ORD-03); PACKING PROCESSING until the SELF shipment exists, then READY; SHIPPING READY; RETURNING READY (goods on the way back, OPS counts them; ORD-04); DELIVERED/CANCELLED/RETURNED FINISHED. A MANUAL saga keeps PROCESSING'}
         reason_code: {type: [string, 'null'], description: 'CANCELLED only: OUT_OF_STOCK, RESERVE_FAILED, PAYMENT_FAILED, EXPIRED, OPS_CANCELLED (ORD-03) or CUSTOMER_CANCELLED (customer cancel, ORD-04); a shipment that came back without an earlier cancel leaves the admin cancel_reason RETURNED (ORD-04)'}
         status_url: {type: string}
         retry_after_seconds: {type: [integer, 'null'], minimum: 1}
@@ -659,6 +695,13 @@ components:
       properties:
         expected_version: {type: integer, minimum: 0}
         reason: {type: string, minLength: 1, maxLength: 500, pattern: '\S', description: 'Required (trimmed, blank is 400); history reason and audit_logs reason; cancel_reason is OPS_CANCELLED'}
+    VoidReturnRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version, reason]
+      properties:
+        expected_version: {type: integer, minimum: 0}
+        reason: {type: string, minLength: 1, maxLength: 500, pattern: '\S', description: 'Required (trimmed); audit_logs reason'}
     CustomerCancelRequest:
       type: object
       additionalProperties: false
@@ -693,9 +736,9 @@ components:
       required: [return_id, status, reason, evidence_ref, actor_id, created_at, updated_at, items]
       properties:
         return_id: {type: string, format: uuid}
-        status: {type: string, enum: [REQUESTED, PROCESSING, COMPLETED, MANUAL]}
+        status: {type: string, enum: [REQUESTED, PROCESSING, COMPLETED, MANUAL, VOIDED], description: 'PROCESSING is reserved (unused); MANUAL only on an inventory refusal (an outage is retried, never MANUAL); VOIDED by OPS (no longer counted)'}
         reason: {type: [string, 'null'], description: 'order.fulfill only (null without it)'}
-        evidence_ref: {type: string}
+        evidence_ref: {type: [string, 'null'], description: 'order.fulfill only (null without it; OPS free text)'}
         actor_id: {type: [string, 'null'], format: uuid}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
@@ -927,7 +970,7 @@ components:
       description: >-
         VERSION_CONFLICT (errors expected_version current=N), INVALID_TRANSITION (errors status current=S), ORDER_EXPIRED
         (confirm-cod only), SAGA_BUSY (a worker holds the saga; reload), RETURN_EXCEEDS_ORDERED (returns only; errors field
-        items[<order_item_id>] message ordered=N received=M requested=K) or IDEMPOTENCY_KEY_REUSED. Business 409s are not stored by idempotency; a retry is evaluated again.
+        items[<order_item_id>] message ordered=N received=M requested=K; a VOIDED slip does not count), RETURN_NOT_MANUAL (void only; errors status current=S) or IDEMPOTENCY_KEY_REUSED (also another OPS reusing a slip key on the same order). Business 409s are not stored by idempotency; a retry is evaluated again.
       headers: *headers
       content:
         application/json:

@@ -83,6 +83,28 @@ public class OrderReturns {
         payload(evidenceRef, lines)));
   }
 
+  /**
+   * PR #35 review I2: void a MANUAL slip (inventory refused it and wrote nothing) so it leaves the received sum and OPS can
+   * count again. 202 + the order view; another status → 409 RETURN_NOT_MANUAL; unknown slip of this order → 404.
+   */
+  public JsonNode voidSlip(AdminAuth.AdminActor a, String orderNo, UUID returnId, String key, long expectedVersion, String reason) {
+    return commands.execute(new OrderCommands.Command("admin:" + a.userId(), "return-void", orderNo, key, expectedVersion, reason,
+        o -> { if (!OPEN.contains(o.status())) throw OrderCommands.invalid(o.status()); },
+        (o, request) -> {
+          var status = jdbc.sql("select status from order_returns where id = :r and order_id = :o for update")
+              .param("r", returnId).param("o", o.id()).query(String.class).optional()
+              .orElseThrow(() -> new Api.Problem(HttpStatus.NOT_FOUND, "NOT_FOUND", "RETURN_NOT_FOUND", List.of()));
+          if (!status.equals("MANUAL"))
+            throw new Api.Problem(HttpStatus.CONFLICT, "CONFLICT", "RETURN_NOT_MANUAL",
+                List.of(new Api.FieldError("status", "current=" + status)));
+          jdbc.sql("update order_returns set status = 'VOIDED', updated_at = now() where id = :r").param("r", returnId).update();
+          jdbc.sql("update orders set version = version + 1, updated_at = now() where id = :id").param("id", o.id()).update();
+        },
+        new OrderCommands.Audit(a.userId(), "ORDER_RETURN_VOID"),
+        id -> commands.adminView(a, id),
+        new Object[] {returnId}));
+  }
+
   /** Idempotency hash input besides order_no/version/reason: fixed order (array, record components), never a Map.of. */
   public static Object[] payload(String evidenceRef, List<Line> lines) { return new Object[] {evidenceRef, lines}; }
 
@@ -94,7 +116,7 @@ public class OrderReturns {
     var received = new HashMap<UUID, Integer>();
     jdbc.sql("""
         select ri.order_item_id, sum(ri.received_quantity) from order_return_items ri join order_returns r on r.id = ri.return_id
-        where r.order_id = :id group by ri.order_item_id""").param("id", orderId)
+        where r.order_id = :id and r.status <> 'VOIDED' group by ri.order_item_id""").param("id", orderId)
         .query((rs, n) -> received.put(rs.getObject(1, UUID.class), rs.getInt(2))).list();
     var over = new ArrayList<Api.FieldError>();
     for (int i = 0; i < lines.size(); i++) {
@@ -107,11 +129,14 @@ public class OrderReturns {
             "ordered=" + quantity + " received=" + done + " requested=" + line.receivedQuantity()));
     }
     if (!over.isEmpty()) throw new Api.Problem(HttpStatus.CONFLICT, "CONFLICT", "RETURN_EXCEEDS_ORDERED", over);
-    jdbc.sql("""
+    // Idempotency is per actor: another OPS reusing this key on the order hits UNIQUE(order_id, operation_key) — 409, not 500
+    // (PR #35 review M3).
+    int inserted = jdbc.sql("""
         insert into order_returns(id, order_id, operation_key, reason, evidence_ref, actor_id, request_id)
-        values (:id, :order, :key, :reason, :evidence, :actor, :request)""")
+        values (:id, :order, :key, :reason, :evidence, :actor, :request) on conflict (order_id, operation_key) do nothing""")
         .param("id", returnId).param("order", orderId).param("key", key).param("reason", reason).param("evidence", evidenceRef)
         .param("actor", actor).param("request", request).update();
+    if (inserted == 0) throw new Api.Problem(HttpStatus.CONFLICT, "CONFLICT", "IDEMPOTENCY_KEY_REUSED", List.of());
     for (var line : lines)
       jdbc.sql("""
           insert into order_return_items(return_id, order_item_id, received_quantity, restock_quantity, condition)
