@@ -53,9 +53,9 @@ public class OrderCommands {
     }, new Audit(a.userId(), "ORDER_CONFIRM_COD"), id -> adminView(a, id)));
   }
 
-  /** CONFIRMED -> CANCELLING by ADMIN; the ORD-02 compensation releases, closes and ends CANCELLED (OPS_CANCELLED). */
+  /** CONFIRMED or PACKING -> CANCELLING by ADMIN (ORD-04 spec section 4); the compensation then ends CANCELLED (OPS_CANCELLED). */
   public JsonNode cancel(AdminAuth.AdminActor a, String orderNo, String key, long expectedVersion, String reason) {
-    return execute(new Command("admin:" + a.userId(), "cancel", orderNo, key, expectedVersion, reason, OrderCommands::admitWaitingForOps,
+    return execute(new Command("admin:" + a.userId(), "cancel", orderNo, key, expectedVersion, reason, OrderCommands::admitOpsCancel,
         cancelWork(reason, "OPS_CANCELLED", "ADMIN", a.userId()), new Audit(a.userId(), "ORDER_CANCEL"), id -> adminView(a, id)));
   }
 
@@ -82,10 +82,20 @@ public class OrderCommands {
     if (!o.status().equals("CONFIRMED") || !"FULFILL".equals(o.intent()) || !"WAIT_OPS".equals(o.step())) throw invalid(o.status());
   }
 
+  /** ORD-04 spec section 4: CONFIRMED at WAIT_OPS/COMMIT_STOCK or PACKING at CREATE_SHIPMENT/DONE, any saga status, forward intent. */
+  private static void admitOpsCancel(Locked o) {
+    boolean ok = "FULFILL".equals(o.intent()) && switch (o.status()) {
+      case "CONFIRMED" -> "WAIT_OPS".equals(o.step()) || "COMMIT_STOCK".equals(o.step());
+      case "PACKING" -> "CREATE_SHIPMENT".equals(o.step()) || "DONE".equals(o.step());
+      default -> false;
+    };
+    if (!ok) throw invalid(o.status());
+  }
+
   private Work cancelWork(String reason, String cancelReason, String actorType, UUID actorId) {
     return (o, request) -> {
       saga(o.id(), "intent = 'CANCEL', step = 'COMPENSATE', status = 'COMPENSATING'");
-      transitions.move(o.id(), "CONFIRMED", "CANCELLING", reason, cancelReason, new OrderTransitions.Actor(actorType, actorId, request));
+      transitions.move(o.id(), o.status(), "CANCELLING", reason, cancelReason, new OrderTransitions.Actor(actorType, actorId, request));
     };
   }
 

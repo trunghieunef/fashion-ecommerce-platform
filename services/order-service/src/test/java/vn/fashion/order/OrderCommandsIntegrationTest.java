@@ -93,8 +93,58 @@ class OrderCommandsIntegrationTest extends OrderTestSupport {
     assertThat(problem(again, 409)).isEqualTo("INVALID_TRANSITION");
     assertThat(json(again).path("errors").get(0).path("field").asString()).isEqualTo("status");
     assertThat(json(again).path("errors").get(0).path("message").asString()).isEqualTo("current=CONFIRMED");
-    assertThat(problem(post(id, "cancel", "k3", "{\"expected_version\":" + (v + 1) + ",\"reason\":\"x\"}", ops()), 409)).isEqualTo("INVALID_TRANSITION");
+    // ORD-04: a cancel after confirm-cod (COMMIT_STOCK) is now accepted.
+    data(post(id, "cancel", "k3", "{\"expected_version\":" + (v + 1) + ",\"reason\":\"x\"}", ops()), 202);
+    assertThat(status(id)).isEqualTo("CANCELLING");
     assertThat(audits("ORDER_CONFIRM_COD")).isEqualTo(1);
+  }
+
+  private void seedSaga(UUID id, String status, String step, String sagaStatus) {
+    jdbc.update("update orders set status = ? where id = ?", status, id);
+    jdbc.update("update order_sagas set intent = 'FULFILL', step = ?, status = ? where order_id = ?", step, sagaStatus, id);
+  }
+
+  @Test void opsCancelsAPackingOrder() {
+    UUID id = confirmed();
+    seedSaga(id, "PACKING", "DONE", "DONE");
+    jdbc.update("update order_sagas set shipment_id = gen_random_uuid() where order_id = ?", id);
+    var d = data(cancel(id, "p1", version(id), "Khach doi y"), 202);
+    assertThat(d.path("status").asString()).isEqualTo("CANCELLING");
+    assertThat(saga(id)).containsEntry("intent", "CANCEL").containsEntry("step", "COMPENSATE").containsEntry("status", "COMPENSATING")
+        .containsEntry("retry_count", 0).containsEntry("lease_token", null);
+    var history = jdbc.queryForMap("select * from order_status_history where order_id = ? and to_status = 'CANCELLING'", id);
+    assertThat(history).containsEntry("from_status", "PACKING").containsEntry("actor_type", "ADMIN").containsEntry("actor_id", OPS);
+    assertThat(jdbc.queryForObject("select cancel_reason from orders where id = ?", String.class, id)).isEqualTo("OPS_CANCELLED");
+    assertThat(audits("ORDER_CANCEL")).isEqualTo(1);
+    worker.runOnce();   // Task 3 owns the compensation; here it must only not crash
+  }
+
+  @Test void opsCancelsAStuckSaga() {
+    UUID packing = confirmed();
+    seedSaga(packing, "PACKING", "CREATE_SHIPMENT", "MANUAL");
+    data(cancel(packing, "s1", version(packing), "x"), 202);
+    assertThat(status(packing)).isEqualTo("CANCELLING");
+    UUID commit = confirmed();
+    seedSaga(commit, "CONFIRMED", "COMMIT_STOCK", "RUNNING");
+    data(cancel(commit, "s2", version(commit), "x"), 202);
+    assertThat(status(commit)).isEqualTo("CANCELLING");
+    assertThat(saga(commit)).containsEntry("step", "COMPENSATE");
+  }
+
+  @Test void opsCancelAdmissionRefusals() {
+    UUID shipping = confirmed();
+    seedSaga(shipping, "SHIPPING", "DONE", "DONE");
+    var r = cancel(shipping, "r1", version(shipping), "x");
+    assertThat(problem(r, 409)).isEqualTo("INVALID_TRANSITION");
+    assertThat(json(r).path("errors").get(0).path("message").asString()).isEqualTo("current=SHIPPING");
+    UUID cancelling = confirmed();
+    seedSaga(cancelling, "CANCELLING", "COMPENSATE", "COMPENSATING");
+    jdbc.update("update order_sagas set intent = 'CANCEL' where order_id = ?", cancelling);
+    assertThat(problem(cancel(cancelling, "r2", version(cancelling), "x"), 409)).isEqualTo("INVALID_TRANSITION");
+    UUID busy = confirmed();
+    seedSaga(busy, "PACKING", "CREATE_SHIPMENT", "RUNNING");
+    jdbc.update("update order_sagas set lease_token = gen_random_uuid(), lease_until = now() + interval '30 seconds' where order_id = ?", busy);
+    assertThat(problem(cancel(busy, "r3", version(busy), "x"), 409)).isEqualTo("SAGA_BUSY");
   }
 
   @Test void aReplayReturnsTheStoredResponse() {
