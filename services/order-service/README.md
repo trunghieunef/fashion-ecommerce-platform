@@ -34,16 +34,16 @@ Port 8087 (không publish ra host). Qua Gateway: `/api/v1/orders/**` và `/admin
 | `POST /api/v1/orders/{order_no}/cancel` | như GET + `Idempotency-Key` | `{expected_version, reason?}` → `202` `CANCELLING` (`cancel_reason = CUSTOMER_CANCELLED`, history `CUSTOMER`, không `audit_logs`); `PENDING`/đã xác nhận → 409 `INVALID_TRANSITION` |
 | `GET /api/v1/orders/mine` | member | `status`, `cursor`, `limit` 1..100 (mặc định 20), mới nhất trước |
 | `GET /admin/api/v1/orders` | Bearer `order.read` | `status`, `q` (chính xác `order_no` hoặc `contact_phone`; phone cần `order.fulfill`, else 403), keyset `cursor`, `limit` 1..100 |
-| `GET /admin/api/v1/orders/{order_no}` | `order.read` | đơn + items + history (actor, reason) + `expires_at`/`shipped_at` + saga (step, status, last_error) |
+| `GET /admin/api/v1/orders/{order_no}` | `order.read` | đơn + items (kèm `order_item_id`) + `returns` (phiếu kiểm đếm) + history (actor, reason) + `expires_at`/`shipped_at` + saga (step, status, last_error) |
 | `POST /admin/api/v1/orders/{order_no}/confirm-cod` | `order.fulfill` + `Idempotency-Key` | `{expected_version, note?}` → `202`, đơn vẫn `CONFIRMED` (PROCESSING), saga `COMMIT_STOCK` |
 | `POST /admin/api/v1/orders/{order_no}/cancel` | `order.cancel` + `Idempotency-Key` | `{expected_version, reason}` → `202` `CANCELLING`, `cancel_reason = OPS_CANCELLED`; ORD-04: nhận `CONFIRMED` (`WAIT_OPS`/`COMMIT_STOCK`) và `PACKING` (`CREATE_SHIPMENT`/`DONE`), mọi trạng thái saga trừ lease sống (`SAGA_BUSY`) |
 | `POST /admin/api/v1/orders/{order_no}/returns` | `order.return` + `Idempotency-Key` | `{expected_version, reason, evidence_ref, items:[{order_item_id, received_quantity, restock_quantity, condition?}]}` → `202` + đơn + `return` (`REQUESTED`); đơn `RETURNING`/`RETURNED`/`DELIVERED`; Σ received ≤ quantity (409 `RETURN_EXCEEDS_ORDERED`) |
 
-- **Admin (ORD-03)**: `AdminAuth` kiểm Bearer + permission tại service (cùng `ORDER_JWT_PUBLIC_KEYS`). Không có
+- **Admin (ORD-03/04)**: `AdminAuth` kiểm Bearer + permission tại service (cùng `ORDER_JWT_PUBLIC_KEYS`). Không có
   `order.fulfill` (FINANCE) → bỏ key `contact_phone`/`contact_email`/`shipping_address`/`note` (cả response confirm/cancel:
   bỏ `contact`/`shipping_address`/`note`), history `reason` null. Confirm/cancel: auth → key → body, rồi một transaction khóa
   `order_sagas` rồi `orders` (thứ tự chung toàn service): version (409 `VERSION_CONFLICT`) → CONFIRMED + saga `WAIT_OPS`
-  (+ COD cho confirm) (409 `INVALID_TRANSITION`, errors `status current=S`) → confirm chưa quá `expires_at`
+  (+ COD cho confirm; cancel từ ORD-04 nhận thêm `COMMIT_STOCK` và `PACKING` `CREATE_SHIPMENT`/`DONE`, `SHIPPING`+ bị từ chối) (409 `INVALID_TRANSITION`, errors `status current=S`) → confirm chưa quá `expires_at`
   (409 `ORDER_EXPIRED`; cancel vẫn được) → không có worker giữ lease (409 `SAGA_BUSY`: đang xử lý, tải lại sau). Ghi chú
   cuộc gọi/lý do hủy lưu nguyên văn ở history và `audit_logs`: OPS không nhập số điện thoại/địa chỉ khách vào đó. Cả hai tăng `orders.version`, ghi `audit_logs` (`ORDER_CONFIRM_COD`/`ORDER_CANCEL`)
   và lưu response `202` trong `idempotency_requests` (actor `admin:{user_id}`); 409 nghiệp vụ rollback, không lưu (retry cùng
@@ -137,8 +137,7 @@ Readiness `readinessState,db`; log JSON ECS có redaction (token, cookie không 
 `/actuator/prometheus`. Event `ORDER_CREATED` không chứa địa chỉ/liên hệ. Giới hạn: chưa có rate limit checkout 10 rpm
 (03 §1.2) — chưa có limiter chung; quote_token có thể dài tới ~20 KB với 100 dòng. Saga: `MANUAL` chưa có UI/alert (ADM-02/PLT-05), chỉ metric + log; nhiều
 instance dựa vào `SKIP LOCKED` + lease, chưa đo tải; online `WAIT_PAYMENT` chưa đạt được tới PAY-02/03. Admin: list đọc
-saga từng dòng CONFIRMED (N+1), chưa index `contact_phone` (seq scan); consumer shipping chưa đối chiếu `shipment_id` với saga
-(một shipment/đơn ở shipping hiện tại, cần khi ORD-04 tạo lại vận đơn).
+saga từng dòng CONFIRMED (N+1), chưa index `contact_phone` (seq scan).
 Admin `q` chỉ coi `ORD` + 12 chữ số (không phân biệt hoa thường) là order_no (`OrderAdminQueries.ORDER_NO`); `q` rỗng là
 không lọc; chuỗi khác là số điện thoại, so theo chữ số với `84` đầu quy về `0` (`+84 912…` khớp `0912…`). Consumer shipping
 cảnh báo log (`order_id`, status, không PII) khi shipment cần OPS (`FAILED`/`MANUAL`) hoặc lệch trạng thái đơn; `shipment_version` lưu theo đơn và `shipment_id` của event được đối chiếu với saga (ORD-04: chưa tạo vận đơn thứ hai cho một đơn).

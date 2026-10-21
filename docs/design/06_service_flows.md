@@ -363,11 +363,11 @@ của order ở `RESERVE`/`CREATE_PAYMENT`/`WAIT_OPS`; từ `COMMIT_STOCK` inven
 intent tính lần thử nhưng giữ `inventory_state = HELD`) OK → `COMMITTED` + `CONFIRMED → PACKING` (history SYSTEM, không
 outbox) và kết thúc lượt; `RESERVATION_EXPIRED` → `RELEASED` + hủy `EXPIRED`; `RESERVATION_CLOSED` → `RELEASED` + hủy
 `RESERVE_FAILED`; mã khác retry rồi `MANUAL`. Lượt sau `CREATE_SHIPMENT` (key `shipment:{order_id}`, body từ snapshot) →
-lưu `shipment_id`, saga `DONE`; mọi từ chối → `MANUAL`, đơn giữ `PACKING`. OPS `.../cancel` (reason bắt buộc) chỉ khi saga còn
-`WAIT_OPS` (kể cả đã quá hạn mà worker chưa chạy): `CONFIRMED → CANCELLING` (history ADMIN + reason, `cancel_reason =
+lưu `shipment_id`, saga `DONE`; mọi từ chối → `MANUAL`, đơn giữ `PACKING`. OPS `.../cancel` (reason bắt buộc) ở ORD-03 chỉ khi saga còn
+`WAIT_OPS` (ORD-04 mở rộng tới `COMMIT_STOCK` và `PACKING`, §5.4; kể cả đã quá hạn mà worker chưa chạy): `CONFIRMED → CANCELLING` (history ADMIN + reason, `cancel_reason =
 OPS_CANCELLED`) rồi bù trừ ORD-02. Consumer `shipping.events` (inbox, ACK sau commit): `shipment_version` ≤ bản đã áp
 dụng bỏ qua; `DELIVERING` có `handed_over_at` → `SHIPPING` (`shipped_at`); `DELIVERED` → (`SHIPPING` nếu còn `PACKING`)
-`DELIVERED` (`delivered_at`) + outbox `ORDER_COMPLETED`; trạng thái khác (FAILED/RETURNING/…) chỉ ghi version (ORD-04);
+`DELIVERED` (`delivered_at`) + outbox `ORDER_COMPLETED`; `FAILED` chỉ ghi version + cảnh báo; `RETURNING`/`RETURNED` đưa đơn sang `RETURNING` (ORD-04, §5.4);
 `SHIPMENT_CREATED` ghi `shipment_id` nếu saga chưa có. COD_COLLECTED/REMITTED thuộc payment; FINANCE settlement →
 `PAYMENT_COMPLETED` → order ghi `paid_at` (ORD-02). Hủy sau xác nhận, giao thất bại/hoàn hàng và trả hàng: `ORD-04` (§5.3, §5.4); shipment `UNKNOWN` của carrier ngoài chưa có (SELF tạo đồng bộ).
 

@@ -495,7 +495,7 @@ Mẫu quyết định mới: ID; vấn đề; lựa chọn; phương án khác v
 | Commit OK kết thúc lượt (`next_retry_at = now`, nhả lease); `CREATE_SHIPMENT` chạy lượt sau (SDD Task 4) | Mỗi lượt một lời gọi HTTP; trễ thêm ~1 s; quan sát được `PACKING` chưa có shipment (`PROCESSING`) |
 | Vận đơn SELF tạo tự động sau `PACKING`, body từ snapshot (`quote_id`, `cod_amount = total_amount`, `to_address`); mọi từ chối → `MANUAL`, đơn giữ `PACKING` | Kho đã trừ thì không tự hủy; xử lý tiếp ở ORD-04; chưa có UI/alert MANUAL (ADM-02/PLT-05) |
 | Không thêm event `ORDER_PACKING`/`ORDER_SHIPPED`; chỉ phát thêm `ORDER_COMPLETED` khi `DELIVERED` | Chuyển trạng thái vẫn có history; thêm event khi NOT-01/ADM cần |
-| Order nghe `shipping.events`: `DELIVERING` có `handed_over_at` → `SHIPPING` (`shipped_at`), `DELIVERED` → `DELIVERED` (`delivered_at`, qua `SHIPPING` nếu còn `PACKING`); `shipment_version` ≤ bản đã áp dụng bị bỏ qua; FAILED/RETURNING/… chỉ ghi version | Event cũ không hạ trạng thái; giao thất bại/hoàn hàng giữ `SHIPPING` (ORD-04); `DELIVERED` không có nghĩa đã thu tiền (T27) |
+| Order nghe `shipping.events`: `DELIVERING` có `handed_over_at` → `SHIPPING` (`shipped_at`), `DELIVERED` → `DELIVERED` (`delivered_at`, qua `SHIPPING` nếu còn `PACKING`); `shipment_version` ≤ bản đã áp dụng bị bỏ qua; FAILED/RETURNING/… chỉ ghi version (ORD-04 đổi: `RETURNING`/`RETURNED` → `RETURNING`, xem bảng ORD-04) | Event cũ không hạ trạng thái; giao thất bại giữ `SHIPPING`; `DELIVERED` không có nghĩa đã thu tiền (T27) |
 | FINANCE nhận bản redacted bằng cách "không có `order.fulfill`" (không permission riêng): bỏ `contact_phone`/`contact_email`/`shipping_address`/`note`, history `reason` null, `q` theo số điện thoại 403 | Response confirm/cancel cũng bỏ key (không trả null) như GET (SDD Task 6) |
 | `q` chỉ khớp chính xác `order_no` (dạng `ORD` + 12 số, không phân biệt hoa thường) hoặc `contact_phone` (so theo chữ số, `84` đầu quy về `0`); `q` rỗng là không lọc (review PR #34 M2/M3); không full-text | Chưa có index `contact_phone` (seq scan, đủ cho MVP) |
 | Worker đang giữ lease saga khi OPS bấm → 409 `SAGA_BUSY` thay vì `INVALID_TRANSITION` `current=CONFIRMED` (review PR #34 M4) | FE báo "đang xử lý, tải lại sau"; chỉ gặp khi worker đang hủy đơn đúng lúc hết hạn |
@@ -540,7 +540,7 @@ các dòng "(SDD)" là phán quyết của controller khi triển khai, ghi lạ
 | (SDD) Hash idempotency của phiếu dùng thứ tự cố định (mảng + record), không `Map.of` (thứ tự mỗi JVM khác nhau làm replay sau restart bị `IDEMPOTENCY_KEY_REUSED`) | Test ghim hash (review Task 5) |
 | (SDD) Migration V004 không cấp quyền riêng: default privileges như V001–V003 (test chứng minh); Gateway `CsrfOriginFilter` là `GlobalFilter` phủ `/api/v1/orders/**` | Không cần đổi Gateway ngoài test route |
 | (SDD) `allowed_actions` luôn là danh sách hành động của **khách** (`["CANCEL"]` hoặc `[]`); view admin của lệnh cũng mang cùng danh sách | Contract ghi audience; FE admin bỏ qua |
-| (SDD) Đơn qua `OrderCommands.customerCancel` (idempotency actor = `orders.actor_key`, operation `customer-cancel`, không `audit_logs`, history actor `CUSTOMER`) | Khách và OPS dùng chung lõi khóa + kiểm + chuyển (`execute`) |
+| (SDD) Đơn qua `OrderCommands.customerCancel` (idempotency actor = `orders.actor_key`, operation `customer-cancel`, không `audit_logs`, history actor `CUSTOMER`) | Khách và OPS dùng chung lõi khóa + kiểm + chuyển (`execute`); điều kiện nhận (admit) là `Consumer` được phép ném lỗi vì confirm-cod cần phân biệt `INVALID_TRANSITION` với `ORDER_EXPIRED` |
 
 ## PAY-01 — quyết định 2026-10-20
 
