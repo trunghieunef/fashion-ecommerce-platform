@@ -35,7 +35,7 @@ public class SagaWorker {
   // ORD-03 spec section 4: the order deadline applies only up to the OPS confirm; from COMMIT_STOCK inventory decides.
   static final java.util.Set<String> DEADLINE_STEPS = java.util.Set.of("RESERVE", "CREATE_PAYMENT", "WAIT_OPS");
   // ORD-04 ruling: WAIT_RETURN is moved by shipping events / return slips only; a claim just re-parks it.
-  static final Duration RETURN_PARK = Duration.ofDays(30);
+  public static final Duration RETURN_PARK = Duration.ofDays(30);
   private final SagaRepository sagas;
   private final OrderTransitions transitions;
   private final InventoryClient inventory;
