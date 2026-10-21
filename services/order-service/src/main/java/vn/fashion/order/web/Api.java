@@ -79,7 +79,7 @@ public final class Api {
     if (s.isEmpty() && required) throw fields(field, "is required");
     return s.isEmpty() ? null : s;
   }
-  private static Problem fields(String field, String message) {
+  public static Problem fields(String field, String message) {
     return new Problem(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "INVALID_FIELDS", List.of(new FieldError(field, message)));
   }
   public static void requireKey(String key) {

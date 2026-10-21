@@ -90,6 +90,7 @@ public class SagaWorker {
               case "COMMIT_STOCK" -> commitStock(c, saga, order);
               case "CREATE_SHIPMENT" -> createShipment(c, saga, order);
               case "COMPENSATE" -> compensate(c, saga, order);
+              case "CLOSE_PAYMENT" -> closeReturned(c, saga, order);
               case "WAIT_RETURN" -> { park(c, null); yield false; }
               default -> { sagas.write(c, jdbc -> { }, true); yield false; }
             };
@@ -231,23 +232,39 @@ public class SagaWorker {
       if (stock.equals("COMMITTED")) return manual(c, saga, "release " + held);
       return settled(c, "inventory_state = 'RELEASED'");
     }
+    Boolean closing = closePayment(c, saga, order, reason);
+    if (closing != null) return closing;
+    return finish(c, "CANCELLING", "CANCELLED", reason);
+  }
+
+  /** ORD-04 spec section 5: a counted return (OrderReturnWorker) closes the payment like a cancel, then RETURNING -> RETURNED. */
+  private boolean closeReturned(SagaRepository.Claim c, SagaRepository.Saga saga, SagaOrder order) {
+    Boolean closing = closePayment(c, saga, order, sagas.cancelReason(c.orderId()));
+    if (closing != null) return closing;
+    return finish(c, "RETURNING", "RETURNED", null);
+  }
+
+  /** Closes the payment (key close:{order_id}); null once CLOSED, else the pass result. Collected money -> MANUAL PAID_NEEDS_REFUND. */
+  private Boolean closePayment(SagaRepository.Claim c, SagaRepository.Saga saga, SagaOrder order, String reason) {
     // PAYMENT_COMPLETED already recorded: the money is in, the order owes a refund (PAY-04/ORD-04).
     if (saga.paymentState().equals("PAID")) return manual(c, saga, "PAID_NEEDS_REFUND");
-    if (!saga.paymentState().equals("CLOSED")) {
-      if (!intent(c, saga, null)) return false;
-      var out = payments.close(order, reason);
-      if (out.result() == Outcome.Result.REJECTED) return manual(c, saga, "close " + out.code());
-      if (out.result() != Outcome.Result.OK) return retry(c, saga, out);
-      String money = out.data().path("status").asString("");
-      // Money already collected: closing keeps it, the order owes a refund (PAY-04/ORD-04) - not a plain CANCELLED.
-      if (money.equals("COD_COLLECTED") || money.equals("SUCCESS")) return manual(c, saga, "PAID_NEEDS_REFUND");
-      // A PAYMENT_COMPLETED recorded meanwhile stays PAID (paid_at kept too).
-      return settled(c, "payment_state = case when payment_state = 'PAID' then 'PAID' else 'CLOSED' end");
-    }
+    if (saga.paymentState().equals("CLOSED")) return null;
+    if (!intent(c, saga, null)) return false;
+    var out = payments.close(order, reason);
+    if (out.result() == Outcome.Result.REJECTED) return manual(c, saga, "close " + out.code());
+    if (out.result() != Outcome.Result.OK) return retry(c, saga, out);
+    String money = out.data().path("status").asString("");
+    // Money already collected: closing keeps it, the order owes a refund (PAY-04/ORD-04) - not a plain CANCELLED/RETURNED.
+    if (money.equals("COD_COLLECTED") || money.equals("SUCCESS")) return manual(c, saga, "PAID_NEEDS_REFUND");
+    // A PAYMENT_COMPLETED recorded meanwhile stays PAID (paid_at kept too).
+    return settled(c, "payment_state = case when payment_state = 'PAID' then 'PAID' else 'CLOSED' end");
+  }
+
+  private boolean finish(SagaRepository.Claim c, String from, String to, String reason) {
     sagas.write(c, jdbc -> {
       jdbc.sql("update order_sagas set status = 'DONE', step = 'DONE', retry_count = 0, last_error = null where order_id = :id")
           .param("id", c.orderId()).update();
-      transitions.move(c.orderId(), "CANCELLING", "CANCELLED", reason);
+      transitions.move(c.orderId(), from, to, reason);
     }, true);
     return false;
   }

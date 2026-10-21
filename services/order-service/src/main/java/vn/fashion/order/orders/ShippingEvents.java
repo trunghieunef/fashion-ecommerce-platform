@@ -60,8 +60,10 @@ public class ShippingEvents {
     switch (s.status()) {
       case "RETURNING", "RETURNED" -> {
         // ORD-04 spec section 5: goods on the way back; a RETURNED that overtook RETURNING moves the order the same way.
-        // Stock waits for the OPS count (return slip), never this event.
-        if (status.equals("SHIPPING") || status.equals("CANCELLING")) returning(s.orderId(), status);
+        // Stock waits for the OPS count (return slip), never this event. On PACKING the hand-over was overtaken or lost:
+        // ship the order first, as an overtaking DELIVERED does.
+        if (status.equals("PACKING")) { ship(s, status); returning(s.orderId(), "SHIPPING"); }
+        else if (status.equals("SHIPPING") || status.equals("CANCELLING")) returning(s.orderId(), status);
         else if (!status.equals("RETURNING") && !status.equals("RETURNED"))
           LOG.warn("Shipment {} on a {} order: order_id={}", s.status(), status, s.orderId());
         if (s.status().equals("RETURNED")) LOG.info("Shipment back at the shop, awaiting the OPS count: order_id={}", s.orderId());
@@ -94,13 +96,7 @@ public class ShippingEvents {
           update order_sagas set status = 'DONE', step = 'DONE', lease_token = null, lease_until = null, last_error = null,
             version = version + 1, updated_at = now() where order_id = :id""").param("id", s.orderId()).update();
     }
-    if (!status.equals("SHIPPING")) {
-      transitions.move(s.orderId(), status, "SHIPPING", null);
-      // A DELIVERED that overtook DELIVERING may carry no hand-over time: the delivery time stands in.
-      Instant shipped = s.handedOverAt() != null ? s.handedOverAt() : s.occurredAt() != null ? s.occurredAt() : clock.instant();
-      jdbc.sql("update orders set shipped_at = coalesce(shipped_at, :t) where id = :id").param("t", Timestamp.from(shipped))
-          .param("id", s.orderId()).update();
-    }
+    if (!status.equals("SHIPPING")) ship(s, status);
     if (delivered) {
       Instant at = s.occurredAt() != null ? s.occurredAt() : clock.instant();
       transitions.move(s.orderId(), "SHIPPING", "DELIVERED", null);
@@ -110,6 +106,14 @@ public class ShippingEvents {
       events.completed(orders.view(s.orderId()), userId, at, event.correlationId());
     }
     return null;
+  }
+
+  private void ship(Shipment s, String from) {
+    transitions.move(s.orderId(), from, "SHIPPING", null);
+    // An event that overtook DELIVERING may carry no hand-over time: the event time stands in.
+    Instant shipped = s.handedOverAt() != null ? s.handedOverAt() : s.occurredAt() != null ? s.occurredAt() : clock.instant();
+    jdbc.sql("update orders set shipped_at = coalesce(shipped_at, :t) where id = :id").param("t", Timestamp.from(shipped))
+        .param("id", s.orderId()).update();
   }
 
   /**

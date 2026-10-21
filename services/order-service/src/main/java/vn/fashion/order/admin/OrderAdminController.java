@@ -15,18 +15,20 @@ import org.springframework.web.bind.annotation.RestController;
 import tools.jackson.databind.ObjectMapper;
 import vn.fashion.order.web.Api;
 
-/** OPS/FINANCE orders (13, spec section 5): order.read lists and reads; contact data and phone search need order.fulfill; order.fulfill confirms COD, order.cancel cancels. */
+/** OPS/FINANCE orders (13, spec section 5): order.read lists and reads; contact data and phone search need order.fulfill; order.fulfill confirms COD, order.cancel cancels, order.return records return slips. */
 @RestController
 @RequestMapping("/admin/api/v1/orders")
 public class OrderAdminController {
   private final AdminAuth auth;
   private final OrderAdminQueries queries;
   private final OrderCommands commands;
+  private final OrderReturns returns;
   private final ObjectMapper json;
   private final Tracer tracer;
 
-  public OrderAdminController(AdminAuth auth, OrderAdminQueries queries, OrderCommands commands, ObjectMapper json, Tracer tracer) {
-    this.auth = auth; this.queries = queries; this.commands = commands; this.json = json; this.tracer = tracer;
+  public OrderAdminController(AdminAuth auth, OrderAdminQueries queries, OrderCommands commands, OrderReturns returns, ObjectMapper json,
+                              Tracer tracer) {
+    this.auth = auth; this.queries = queries; this.commands = commands; this.returns = returns; this.json = json; this.tracer = tracer;
   }
 
   @GetMapping
@@ -71,6 +73,20 @@ public class OrderAdminController {
     Api.requireKey(key);
     var node = Api.object(json, body);
     return Api.ok(HttpStatus.ACCEPTED, commands.cancel(actor, orderNo, key, Api.expectedVersion(node), Api.text(node, "reason", true)), tracer);
+  }
+
+  /** ORD-04 spec section 5: body {expected_version, reason, evidence_ref (1..500), items[1..100]}; 202 + the order and the slip. */
+  @PostMapping("/{orderNo}/returns")
+  public ResponseEntity<?> returns(@RequestHeader(name = "Authorization", required = false) String authorization,
+                                   @RequestHeader(name = "Idempotency-Key", required = false) String key,
+                                   @PathVariable String orderNo, @RequestBody(required = false) String body) {
+    var actor = auth.require(authorization, "order.return");
+    Api.requireKey(key);
+    var node = Api.object(json, body);
+    long version = Api.expectedVersion(node);
+    String reason = Api.text(node, "reason", true);
+    String evidence = Api.text(node, "evidence_ref", true);
+    return Api.ok(HttpStatus.ACCEPTED, returns.create(actor, orderNo, key, version, reason, evidence, OrderReturns.lines(node)), tracer);
   }
 
 }

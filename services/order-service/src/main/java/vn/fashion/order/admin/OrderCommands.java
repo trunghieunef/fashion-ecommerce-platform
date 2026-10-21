@@ -73,9 +73,17 @@ public class OrderCommands {
   public record Locked(UUID id, String status, String method, long version, Instant expiresAt, String intent, String step, boolean leased) { }
   public interface Work { void apply(Locked order, UUID requestId); }
   public record Audit(UUID actorId, String action) { }
-  /** admit throws a 409 when the locked order does not accept the command; audit null = none; view renders the response. */
+  /**
+   * admit throws a 409 when the locked order does not accept the command; audit null = none; view renders the response;
+   * payload (null = none) is the rest of the body, part of the idempotency hash (return slip items).
+   */
   public record Command(String idempotencyActor, String operation, String orderNo, String key, long expectedVersion, String text,
-                        Consumer<Locked> admit, Work work, Audit audit, Function<UUID, JsonNode> view) { }
+                        Consumer<Locked> admit, Work work, Audit audit, Function<UUID, JsonNode> view, Object payload) {
+    public Command(String idempotencyActor, String operation, String orderNo, String key, long expectedVersion, String text,
+                   Consumer<Locked> admit, Work work, Audit audit, Function<UUID, JsonNode> view) {
+      this(idempotencyActor, operation, orderNo, key, expectedVersion, text, admit, work, audit, view, null);
+    }
+  }
 
   /** Only an order waiting for OPS (CONFIRMED, saga FULFILL/WAIT_OPS). */
   private static void admitWaitingForOps(Locked o) {
@@ -100,7 +108,7 @@ public class OrderCommands {
   }
 
   /** Without order.fulfill (cancel by order.cancel only) the keys contact, address and note are omitted, like the GETs (13). */
-  private JsonNode adminView(AdminAuth.AdminActor a, UUID id) {
+  JsonNode adminView(AdminAuth.AdminActor a, UUID id) {
     ObjectNode view = json.valueToTree(orders.view(id));
     if (!a.permissions().contains("order.fulfill")) view.remove(List.of("contact", "shipping_address", "note"));
     return view;
@@ -109,7 +117,8 @@ public class OrderCommands {
   /** Lock, version, admission, lease, work, optional audit and the idempotent 202 response, in one transaction. */
   public JsonNode execute(Command c) {
     // order_no is part of the hash: the same key on another order is a reuse, never another order's stored response.
-    String hash = Api.sha256(json.writeValueAsString(new Object[] {c.orderNo(), c.expectedVersion(), c.text()}));
+    String hash = Api.sha256(json.writeValueAsString(c.payload() == null ? new Object[] {c.orderNo(), c.expectedVersion(), c.text()}
+        : new Object[] {c.orderNo(), c.expectedVersion(), c.text(), c.payload()}));
     return tx.execute(status -> {
       Object stored = Api.replay(keys.begin(c.idempotencyActor(), c.operation(), c.key(), hash), json);
       if (stored != null) return (JsonNode) stored;
@@ -161,7 +170,7 @@ public class OrderCommands {
         .param("now", Timestamp.from(clock.instant())).param("id", orderId).update();
   }
 
-  private static Api.Problem invalid(String status) {
+  static Api.Problem invalid(String status) {
     return new Api.Problem(HttpStatus.CONFLICT, "CONFLICT", "INVALID_TRANSITION", List.of(new Api.FieldError("status", "current=" + status)));
   }
 }

@@ -128,8 +128,7 @@ class ShippingEventsIntegrationTest extends OrderTestSupport {
     UUID id = packing();
     deliver(updated(id, "PICKING", null, null, 2));
     assertThat(shipmentVersion(id)).isEqualTo(2L);
-    deliver(updated(id, "FAILED", null, null, 5));
-    deliver(updated(id, "RETURNING", null, null, 6));
+    deliver(updated(id, "FAILED", null, null, 6));
     deliver(updated(id, "DELIVERING", null, null, 7));                       // not handed over yet: no move
     assertThat(status(id)).isEqualTo("PACKING");
     assertThat(shipmentVersion(id)).isEqualTo(7L);
@@ -202,6 +201,19 @@ class ShippingEventsIntegrationTest extends OrderTestSupport {
     String orderNo = jdbc.queryForObject("select order_no from orders where id = ?", String.class, id);
     assertThat(data(send("GET", "/api/v1/orders/" + orderNo, null, "Authorization", memberToken()), 200)
         .path("processing_status").asString()).isEqualTo("READY");
+  }
+
+  /** Task 4 review: the hand-over event was overtaken or lost, so the return ships the order first (as DELIVERED does). */
+  @Test void aReturnThatOvertookTheHandOverShipsThePackingOrderFirst() {
+    UUID id = withShipment("PACKING", "DONE", "DONE", "FULFILL", "CREATED");
+    deliver(updated(id, "RETURNED", null, "2026-10-21T05:00:00Z", 6));
+    assertThat(status(id)).isEqualTo("RETURNING");
+    assertThat(history(id, "PACKING", "SHIPPING")).isEqualTo(1);
+    assertThat(history(id, "SHIPPING", "RETURNING")).isEqualTo(1);
+    assertThat(jdbc.queryForObject("select shipped_at::text from orders where id = ?", String.class, id)).startsWith("2026-10-21 05:00:00");
+    assertThat(cancelReason(id)).isEqualTo("RETURNED");
+    assertParked(id);
+    assertThat(warns()).isEmpty();
   }
 
   @Test void aReturnAfterAnOpsCancelKeepsTheCancelReasonAndReturnedOnlyRecordsTheVersion() {

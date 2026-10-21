@@ -42,12 +42,17 @@ public class InventoryClient {
 
   /** INV-03 /returns for the full ordered quantity; Idempotency-Key = operation_key, a replay must send the same body. */
   public Outcome restore(SagaOrder o, String operationKey, String reason, String evidenceRef) {
+    return restore(o, operationKey, reason, evidenceRef, skus(o));
+  }
+
+  /** /returns for the given quantity per SKU (an OPS return slip restocks only what it counted as resellable). */
+  public Outcome restore(SagaOrder o, String operationKey, String reason, String evidenceRef, Map<String, Integer> skus) {
     var body = new LinkedHashMap<String, Object>();
     body.put("order_id", o.id().toString());
     body.put("operation_key", operationKey);
     body.put("reason", reason);
     body.put("evidence_ref", evidenceRef);
-    body.put("items", snapshot(o).get("items"));
+    body.put("items", items(skus));
     return Outcome.of("inventory", http, "inventory-service", url + "/internal/api/v1/inventory/returns", body,
         "Idempotency-Key", operationKey);
   }
@@ -58,11 +63,13 @@ public class InventoryClient {
     o.items().forEach(i -> skus.merge(i.sku(), i.quantity(), Integer::sum));
     return skus;
   }
+  private static java.util.List<Map<String, Object>> items(Map<String, Integer> skus) {
+    return ReservationHash.canonical(skus).entrySet().stream().map(e -> Map.<String, Object>of("sku", e.getKey(), "quantity", e.getValue())).toList();
+  }
   private static LinkedHashMap<String, Object> snapshot(SagaOrder o) {
     var body = new LinkedHashMap<String, Object>();
     body.put("order_no", o.orderNo());
-    body.put("items", ReservationHash.canonical(skus(o)).entrySet().stream()
-        .map(e -> Map.of("sku", e.getKey(), "quantity", e.getValue())).toList());
+    body.put("items", items(skus(o)));
     body.put("expires_at", ReservationHash.time(o.expiresAt()));
     return body;
   }
