@@ -367,6 +367,133 @@ for _ in $(seq 1 20); do
 done
 test "$order_status" = PAID || { echo "ORD-03 paid FAIL: $order_status" >&2; exit 1; }
 echo 'ORD-03 COD end-to-end PASS'
+# TASK:ORD-04: cancel after confirm, shipment come-back with a counted return slip, and the customer's own cancel, through the
+# Gateway. Each scenario checks the SKU's available stock against the value before the order: stock must come back exactly.
+ord04_token() { local_ops_token order.read order.fulfill order.cancel order.return shipping.read shipping.self_event; }
+ord04_available() {
+  set -e
+  curl -sS -H "Authorization: Bearer $(local_ops_token inventory.read)" "$GATEWAY_URL/admin/api/v1/inventory/skus?sku_prefix=$inventory_sku" | \
+    python3 -c 'import json,sys; items=json.load(sys.stdin)["data"]["items"]; assert len(items)==1, items; print(items[0]["available"])'
+}
+ord04_admin() { # token order_no python-expression over d (order) and s (saga)
+  set -e
+  curl -sS -H "Authorization: Bearer $1" "$GATEWAY_URL/admin/api/v1/orders/$2" | \
+    python3 -c "import json,sys; d=json.load(sys.stdin)['data']; s=d['saga'] or {}; print($3)"
+}
+ord04_post() { # token path key body
+  curl -sS -H "Authorization: Bearer $1" -H 'Content-Type: application/json' -H "Idempotency-Key: $3" -d "$4" "$GATEWAY_URL$2"
+}
+ord04_wait() { # token order_no expression glob-pattern: polls up to 40 s, prints the last value
+  local v=""
+  for _ in $(seq 1 40); do
+    v="$(ord04_admin "$1" "$2" "$3")"
+    [[ "$v" == $4 ]] && break
+    sleep 1
+  done
+  printf '%s' "$v"
+}
+ord04_new_order() { # cookie-jar tag quantity: a guest COD order, prints order_no
+  set -e
+  local jar="$1" tag="$2" qty="$3" cart token quote
+  cart="$(curl -sS -c "$jar" -X POST "$GATEWAY_URL/api/v1/carts" | python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["cart_id"])')"
+  curl -sS -b "$jar" -H "Origin: $STOREFRONT_URL" -H 'Content-Type: application/json' -H "Idempotency-Key: smoke-$catalog_suffix-ord04-$tag-cart" \
+    -d "{\"variant_id\":\"$variant_id\",\"quantity\":$qty,\"expected_version\":0}" "$GATEWAY_URL/api/v1/carts/$cart/items" >/dev/null
+  token="$(curl -sS -b "$jar" -X POST -H "Origin: $STOREFRONT_URL" "$GATEWAY_URL/api/v1/carts/$cart/checkout-token" | \
+    python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["checkout_token"])')"
+  quote="$(curl -sS -X POST -H "Origin: $STOREFRONT_URL" -H 'Content-Type: application/json' -H "Checkout-Token: $token" \
+    -d "{\"cart_id\":\"$cart\",\"cart_version\":1,\"method\":\"COD\",\"shipping_address\":{\"recipient_name\":\"Smoke\",\"phone\":\"0912345678\",\"province_code\":\"79\",\"ward_code\":\"26734\",\"address_line\":\"1 Smoke St\"},\"contact\":{\"phone\":\"0912345678\",\"email\":\"smoke@example.test\"}}" \
+    "$GATEWAY_URL/api/v1/orders/quote" | python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["quote_token"])')"
+  curl -sS -b "$jar" -c "$jar" -X POST -H "Origin: $STOREFRONT_URL" -H 'Content-Type: application/json' \
+    -H "Checkout-Token: $token" -H "Idempotency-Key: smoke-$catalog_suffix-ord04-$tag-order" \
+    -d "{\"cart_id\":\"$cart\",\"cart_version\":1,\"quote_token\":\"$quote\"}" "$GATEWAY_URL/api/v1/orders" | \
+    python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["status"]=="PENDING", d; print(d["order_no"])'
+}
+ord04_fail() { echo "ORD-04 $1 FAIL: $2" >&2; exit 1; }
+ord04_confirm_to_packing() { # token order_no tag: OPS confirm-cod, then waits for PACKING + the SELF shipment
+  local version
+  version="$(ord04_admin "$1" "$2" "d['version']")"
+  ord04_post "$1" "/admin/api/v1/orders/$2/confirm-cod" "smoke-$catalog_suffix-ord04-$3-confirm" "{\"expected_version\":$version}" | \
+    python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["code"]=="OK" and d["data"]["status"]=="CONFIRMED", d'
+  [[ "$(ord04_wait "$1" "$2" "d['status'] + ' ' + str(s.get('status'))" 'PACKING DONE')" == 'PACKING DONE' ]]
+}
+
+# (A) New order -> OPS confirm -> PACKING (SELF shipment CREATED) -> OPS cancel: shipment cancelled first, committed stock restored.
+stock_a="$(ord04_available)"
+jar_a="$(mktemp)"
+order_a="$(ord04_new_order "$jar_a" a 1)"
+ops="$(ord04_token)"
+[[ "$(ord04_wait "$ops" "$order_a" "d['status'] + ' ' + str(s.get('step'))" 'CONFIRMED WAIT_OPS')" == 'CONFIRMED WAIT_OPS' ]] || ord04_fail 'cancel after confirm' 'order A did not reach WAIT_OPS'
+ord04_confirm_to_packing "$ops" "$order_a" a || ord04_fail 'cancel after confirm' 'order A did not reach PACKING'
+version="$(ord04_admin "$ops" "$order_a" "d['version']")"
+ord04_post "$ops" "/admin/api/v1/orders/$order_a/cancel" "smoke-$catalog_suffix-ord04-a-cancel" "{\"expected_version\":$version,\"reason\":\"Smoke: het hang khi dong goi\"}" | \
+  python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["code"]=="OK" and d["data"]["status"]=="CANCELLING", d'
+result="$(ord04_wait "$ops" "$order_a" "d['status'] + ' ' + str(s.get('status')) + ' ' + str(s.get('inventory_state')) + ' ' + str(d['cancel_reason'])" 'CANCELLED DONE *')"
+test "$result" = 'CANCELLED DONE RESTORED OPS_CANCELLED' || ord04_fail 'cancel after confirm' "order A: $result"
+test "$(ord04_available)" = "$stock_a" || ord04_fail 'cancel after confirm' "stock $(ord04_available) != $stock_a"
+rm -f "$jar_a"
+echo 'ORD-04 cancel after confirm PASS'
+
+# (B) New order (2 items) -> confirm -> PACKING -> shipper hands over, delivery fails, shipment comes back -> RETURNING ->
+# OPS counts 2 received, 1 restocked -> inventory +1 once -> payment closed -> RETURNED.
+stock_b="$(ord04_available)"
+jar_b="$(mktemp)"
+order_b="$(ord04_new_order "$jar_b" b 2)"
+ops="$(ord04_token)"
+[[ "$(ord04_wait "$ops" "$order_b" "d['status'] + ' ' + str(s.get('step'))" 'CONFIRMED WAIT_OPS')" == 'CONFIRMED WAIT_OPS' ]] || ord04_fail return 'order B did not reach WAIT_OPS'
+ord04_confirm_to_packing "$ops" "$order_b" b || ord04_fail return 'order B did not reach PACKING'
+shipment_id="$(ord04_admin "$ops" "$order_b" "s['shipment_id']")"
+shipment_version="$(curl -sS -H "Authorization: Bearer $ops" "$GATEWAY_URL/admin/api/v1/shipping/shipments/$shipment_id" | \
+  python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["version"])')"
+ord04_event() {
+  ord04_post "$ops" "/admin/api/v1/shipping/shipments/$shipment_id/self-events" "smoke-$catalog_suffix-ord04-b-$1" "$2" | \
+    python3 -c 'import json,sys; r=json.load(sys.stdin); assert r["code"]=="OK", r; print(r["data"]["version"])'
+}
+shipment_version="$(ord04_event assign "{\"event_type\":\"ASSIGN\",\"expected_version\":$shipment_version,\"assigned_to\":\"11111111-1111-4111-8111-111111111111\"}")"
+shipment_version="$(ord04_event handover "{\"event_type\":\"HANDED_OVER\",\"expected_version\":$shipment_version,\"evidence_ref\":\"smoke-handover\"}")"
+shipment_version="$(ord04_event failed "{\"event_type\":\"DELIVERY_FAILED\",\"expected_version\":$shipment_version,\"reason\":\"Smoke: khach vang nha\"}")"
+shipment_version="$(ord04_event start "{\"event_type\":\"RETURN_STARTED\",\"expected_version\":$shipment_version,\"reason\":\"Smoke: khach tu choi\"}")"
+shipment_version="$(ord04_event back "{\"event_type\":\"RETURNED\",\"expected_version\":$shipment_version,\"evidence_ref\":\"smoke-back\"}")"
+result="$(ord04_wait "$ops" "$order_b" "d['status'] + ' ' + str(s.get('step')) + ' ' + str(s.get('status'))" 'RETURNING WAIT_RETURN WAITING')"
+test "$result" = 'RETURNING WAIT_RETURN WAITING' || ord04_fail return "order B: $result"
+test "$(ord04_available)" = "$((stock_b - 2))" || ord04_fail return 'stock was restored before the goods were counted'
+item_id="$(ord04_admin "$ops" "$order_b" "d['items'][0]['order_item_id']")"
+version="$(ord04_admin "$ops" "$order_b" "d['version']")"
+return_body="{\"expected_version\":$version,\"reason\":\"Smoke: khach tu choi nhan\",\"evidence_ref\":\"smoke-slip\",\"items\":[{\"order_item_id\":\"$item_id\",\"received_quantity\":2,\"restock_quantity\":1,\"condition\":\"1 cai ban\"}]}"
+ord04_post "$ops" "/admin/api/v1/orders/$order_b/returns" "smoke-$catalog_suffix-ord04-b-return" "$return_body" | \
+  python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["code"]=="OK" and d["data"]["return"]["status"]=="REQUESTED", d'
+# A replay of the same key answers the stored 202 and adds no second slip.
+ord04_post "$ops" "/admin/api/v1/orders/$order_b/returns" "smoke-$catalog_suffix-ord04-b-return" "$return_body" | \
+  python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["code"]=="OK", d'
+result="$(ord04_wait "$ops" "$order_b" "d['status'] + ' ' + str(len(d['returns'])) + ' ' + d['returns'][0]['status'] + ' ' + str(s.get('status'))" 'RETURNED * COMPLETED DONE')"
+test "$result" = 'RETURNED 1 COMPLETED DONE' || ord04_fail return "order B: $result"
+test "$(ord04_available)" = "$((stock_b - 1))" || ord04_fail return "stock $(ord04_available) != $((stock_b - 1))"
+rm -f "$jar_b"
+echo 'ORD-04 return PASS'
+
+# (C) A guest cancels its own order while it waits for OPS; another caller cannot.
+stock_c="$(ord04_available)"
+jar_c="$(mktemp)"
+order_c="$(ord04_new_order "$jar_c" c 1)"
+ops="$(ord04_token)"
+[[ "$(ord04_wait "$ops" "$order_c" "d['status'] + ' ' + str(s.get('step'))" 'CONFIRMED WAIT_OPS')" == 'CONFIRMED WAIT_OPS' ]] || ord04_fail 'customer cancel' 'order C did not reach WAIT_OPS'
+customer_order="$(curl -sS -b "$jar_c" "$GATEWAY_URL/api/v1/orders/$order_c")"
+version="$(python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["allowed_actions"]==["CANCEL"], d; print(d["version"])' <<<"$customer_order")"
+cancel_body="{\"expected_version\":$version,\"reason\":\"Smoke: doi y\"}"
+test "$(status -X POST -H "Origin: $STOREFRONT_URL" -H 'Content-Type: application/json' -H "Idempotency-Key: smoke-$catalog_suffix-ord04-c-cancel" \
+  -d "$cancel_body" "$GATEWAY_URL/api/v1/orders/$order_c/cancel")" = 404
+curl -sS -b "$jar_c" -X POST -H "Origin: $STOREFRONT_URL" -H 'Content-Type: application/json' -H "Idempotency-Key: smoke-$catalog_suffix-ord04-c-cancel" \
+  -d "$cancel_body" "$GATEWAY_URL/api/v1/orders/$order_c/cancel" | \
+  python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["code"]=="OK" and d["data"]["status"]=="CANCELLING", d'
+for _ in $(seq 1 40); do
+  result="$(curl -sS -b "$jar_c" "$GATEWAY_URL/api/v1/orders/$order_c" | \
+    python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; print(d["status"] + " " + d["processing_status"] + " " + str(d["reason_code"]))')"
+  [[ "$result" == CANCELLED* ]] && break
+  sleep 1
+done
+test "$result" = 'CANCELLED FINISHED CUSTOMER_CANCELLED' || ord04_fail 'customer cancel' "order C: $result"
+test "$(ord04_available)" = "$stock_c" || ord04_fail 'customer cancel' "stock $(ord04_available) != $stock_c"
+rm -f "$jar_c"
+echo 'ORD-04 customer cancel PASS'
 # TASK:CAT-02b: public detail is cacheable for 5 s (Redis keeps it 300 s until invalidated).
 curl -sS -o /dev/null -D "$headers" "$GATEWAY_URL/api/v1/catalog/products/$product_id"
 grep -qi '^cache-control: public, max-age=5' "$headers"

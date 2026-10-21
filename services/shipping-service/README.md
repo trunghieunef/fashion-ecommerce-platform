@@ -49,6 +49,11 @@ Port 8085 (không publish ra host). Qua Gateway: `/api/v1/shipping/**`, `/admin/
 - **Cancel (SHP-02)**: cùng advisory lock quote với create. Chưa có shipment → tombstone CANCELLED; CREATED/PICKING → CANCELLED;
   đã bàn giao → 409 `SHIPMENT_HANDED_OVER` (kiểm trước snapshot; order đi return, không cộng kho). Create replay cùng key sau
   khi hủy → 409 `SHIPMENT_CANCELLED`.
+- **Bất biến order dựa vào (ORD-04, review PR #35 I1)**: cancel khi chưa có shipment trả `QUOTE_NOT_FOUND`/`QUOTE_MISMATCH`/
+  `QUOTE_ALREADY_USED` mà không ghi tombstone; order coi đó là "không bao giờ có vận đơn" và bù trừ tiếp. Điều này chỉ đúng
+  khi quote insert-only (runtime không UPDATE/DELETE), shipment không bị xóa và kiểm quote của cancel giống hệt create,
+  không phụ thuộc thời gian. Thêm kiểm quote kiểu hết hạn, cho xóa/sửa quote hoặc xóa shipment thì phải đổi
+  `SagaWorker.NO_SHIPMENT_POSSIBLE` bên order cùng lúc.
 
 ## Cấu hình
 

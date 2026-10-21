@@ -363,13 +363,13 @@ của order ở `RESERVE`/`CREATE_PAYMENT`/`WAIT_OPS`; từ `COMMIT_STOCK` inven
 intent tính lần thử nhưng giữ `inventory_state = HELD`) OK → `COMMITTED` + `CONFIRMED → PACKING` (history SYSTEM, không
 outbox) và kết thúc lượt; `RESERVATION_EXPIRED` → `RELEASED` + hủy `EXPIRED`; `RESERVATION_CLOSED` → `RELEASED` + hủy
 `RESERVE_FAILED`; mã khác retry rồi `MANUAL`. Lượt sau `CREATE_SHIPMENT` (key `shipment:{order_id}`, body từ snapshot) →
-lưu `shipment_id`, saga `DONE`; mọi từ chối → `MANUAL`, đơn giữ `PACKING`. OPS `.../cancel` (reason bắt buộc) chỉ khi saga còn
-`WAIT_OPS` (kể cả đã quá hạn mà worker chưa chạy): `CONFIRMED → CANCELLING` (history ADMIN + reason, `cancel_reason =
+lưu `shipment_id`, saga `DONE`; mọi từ chối → `MANUAL`, đơn giữ `PACKING`. OPS `.../cancel` (reason bắt buộc) ở ORD-03 chỉ khi saga còn
+`WAIT_OPS` (ORD-04 mở rộng tới `COMMIT_STOCK` và `PACKING`, §5.4; kể cả đã quá hạn mà worker chưa chạy): `CONFIRMED → CANCELLING` (history ADMIN + reason, `cancel_reason =
 OPS_CANCELLED`) rồi bù trừ ORD-02. Consumer `shipping.events` (inbox, ACK sau commit): `shipment_version` ≤ bản đã áp
 dụng bỏ qua; `DELIVERING` có `handed_over_at` → `SHIPPING` (`shipped_at`); `DELIVERED` → (`SHIPPING` nếu còn `PACKING`)
-`DELIVERED` (`delivered_at`) + outbox `ORDER_COMPLETED`; trạng thái khác (FAILED/RETURNING/…) chỉ ghi version (ORD-04);
+`DELIVERED` (`delivered_at`) + outbox `ORDER_COMPLETED`; `FAILED` chỉ ghi version + cảnh báo; `RETURNING`/`RETURNED` đưa đơn sang `RETURNING` (ORD-04, §5.4);
 `SHIPMENT_CREATED` ghi `shipment_id` nếu saga chưa có. COD_COLLECTED/REMITTED thuộc payment; FINANCE settlement →
-`PAYMENT_COMPLETED` → order ghi `paid_at` (ORD-02). Hủy sau xác nhận, giao thất bại/hoàn hàng, shipment `UNKNOWN` là ORD-04.
+`PAYMENT_COMPLETED` → order ghi `paid_at` (ORD-02). Hủy sau xác nhận, giao thất bại/hoàn hàng và trả hàng: `ORD-04` (§5.3, §5.4); shipment `UNKNOWN` của carrier ngoài chưa có (SELF tạo đồng bộ).
 
 ### 5.3 State machine đơn
 
@@ -395,12 +395,14 @@ stateDiagram-v2
     REFUNDING --> REFUNDED: hoàn toàn bộ thành công
     SHIPPING --> RETURNING: carrier hoàn hàng
     CANCELLING --> RETURNING: phát hiện đã bàn giao, carrier xác nhận hoàn
+    CANCELLING --> SHIPPING: đã hủy nhưng hàng vẫn tới tay khách, bằng chứng vật lý thắng (ORD-04)
     RETURNING --> RETURNED: kho xác nhận hàng về
     RETURNED --> REFUNDING: cần hoàn tiền
 ```
 
 Payment_failed đến sau paid không hạ trạng thái. REFUNDED không tự tăng kho; việc trả kho có operation riêng. DELIVERED có thể có refund một phần và OPS return riêng nhưng vẫn giữ lịch sử delivered; không sửa lịch sử mua thành đơn chưa từng giao. Quy trình tự phục vụ đổi/trả sau giao chưa thuộc bản này.
 
+`ORD-04` (2026-10-21) thêm cạnh `CANCELLING → SHIPPING` rồi `SHIPPING → DELIVERED`: OPS hủy nhưng shipping báo `DELIVERED` thì hàng đã tới khách, đơn thành `DELIVERED` (+ `ORDER_COMPLETED`), không để kẹt `CANCELLING`. Event `RETURNING`/`RETURNED` đến khi đơn còn `PACKING` (vượt mặt bàn giao) đi `PACKING → SHIPPING → RETURNING` như ORD-03 làm cho `DELIVERED`. Kho chỉ được cộng sau kiểm đếm (`RETURNING → RETURNED` qua phiếu), không theo event `RETURNED`.
 ### 5.4 Hết hạn, hủy và phục hồi saga
 
 ```mermaid
@@ -423,7 +425,7 @@ flowchart TD
 - Worker định kỳ quét saga chưa xong và đơn quá hạn, claim lease; query trạng thái resource rồi tiếp tục bước đã lưu. Không suy ra kết quả chỉ từ last_error hoặc thứ tự gọi trước crash.
 - Cancellation ghi intent CANCEL trước mọi compensation. Worker FULFILL cũ không được ghi kết quả tiến tiếp sau khi intent/version đổi. Mỗi lệnh có khóa `order_id:operation`; target có trạng thái terminal/tombstone để lệnh đến muộn không tạo resource lại.
 - Đặc biệt reserve timeout: gửi release cùng order_id + original reservation snapshot (order_no,items,expires_at) + original hash. Inventory ghi RELEASED kể cả reserve chưa đến; reserve đến muộn không giữ hàng. Promotion áp dụng cùng quy tắc.
-- Commit có thể đã thắng release: query reservation; COMMITTED phải dùng return/restore với key `cancel:{order_id}:{sku}`, không gọi release rồi cho rằng kho đã hoàn lại.
+- Commit có thể đã thắng release: query reservation; COMMITTED phải dùng return/restore với key `cancel:{order_id}` (một lời gọi, mọi SKU), không gọi release rồi cho rằng kho đã hoàn lại.
 - Khi create shipment UNKNOWN, dừng restore/refund hoàn tất hủy cho đến khi xác định hàng chưa bàn giao hoặc vận đơn đã hủy. Carrier đã nhận hàng thì đi luồng return và cảnh báo OPS.
 - Shipment cancel trước create phải lưu tombstone CANCELLED với snapshot/hash của original create request; create đến muộn bị từ chối. Payment close trước create lưu FAILED tombstone với order snapshot/hash và closed_at; webhook tiền thật sau đó vẫn được ghi nhận và hoàn.
 - `CANCELLED` chỉ đạt khi stock/promotion đã giải phóng hoặc restore, shipment không thể xuất hàng, payment chưa thu đã đóng. Chưa biết kết quả thì giữ CANCELLING/MANUAL, không báo hoàn tất giả.
@@ -437,7 +439,9 @@ cùng transaction, rồi release (snapshot + hash gốc, mọi trạng thái tr�
 `min(2^n s, 5 phút)` ±20 %, 30 lần → `MANUAL` + metric `order_saga_manual_total`. Mỗi ghi kết quả là CAS theo lease token;
 worker mất lease bỏ kết quả. `ORD-03` thêm OPS hủy đơn `CONFIRMED` còn chờ OPS (`OPS_CANCELLED`, §5.2) và commit
 `RESERVATION_EXPIRED`/`CLOSED` sau xác nhận (inventory đã nhả, ghi `RELEASED` trước khi vào bù trừ); khách hủy, OPS hủy sau
-xác nhận, return/restore khi đã commit là ORD-04.
+xác nhận, return/restore khi đã commit: `ORD-04`, ngay dưới.
+
+`ORD-04` (2026-10-21) hiện thực phần còn lại ([spec](../superpowers/specs/2026-10-21-ord-04-cancel-return-design.md), 08 ORD-04). **Khách hủy** `POST /api/v1/orders/{order_no}/cancel`: chỉ `CONFIRMED` + saga `FULFILL`/`WAIT_OPS`, cùng lõi khóa `order_sagas` → `orders` và thứ tự kiểm (version → trạng thái → lease) với OPS; `cancel_reason = CUSTOMER_CANCELLED`, history actor `CUSTOMER`, không `audit_logs`. **OPS hủy** mở rộng tới `CONFIRMED` (`WAIT_OPS`/`COMMIT_STOCK`) và `PACKING` (`CREATE_SHIPMENT`/`DONE`), mọi trạng thái saga trừ lease sống (`SAGA_BUSY`), kể cả `MANUAL`; `SHIPPING` trở đi → 409. **Bù trừ** `COMPENSATE` theo thứ tự cố định, intent (tính lần thử + backoff, không đổi cột trạng thái tài nguyên) ghi trước mỗi HTTP: (1) vận đơn, khi `inventory_state ∈ {COMMITTED, RESTORED}` hoặc đã có `shipment_id`/`shipment_state ≠ NONE`: shipping `by-order/{order_id}/cancel` (key `shipment-cancel:{order_id}`, body snapshot create + `reason` = mã `cancel_reason`); `200` → `shipment_state = CANCELLED`; `409 SHIPMENT_HANDED_OVER` → `HANDED_OVER`, saga `WAITING` step `WAIT_RETURN` (đỗ 30 ngày, không trả kho, metric `order.saga.handed_over` + log); từ chối khác → `MANUAL`; chưa rõ → retry cùng key và **không** sang kho (T16); (2) kho: release như ORD-02, `restore_required` → inventory `/returns` key `cancel:{order_id}`, mọi SKU đủ số đã commit, `evidence_ref = order-cancel:{order_id}` → `RESTORED`, không thì `RELEASED`; commit đang bay: release → ghi `COMMITTED` → hủy vận đơn → release lại → returns; (3) payment close như ORD-02 (đã thu → `MANUAL PAID_NEEDS_REFUND`); (4) `CANCELLING → CANCELLED`, saga `DONE`. **Hoàn hàng** (consumer `shipping.events`): `RETURNING` (hoặc `RETURNED` đến trước) trên `SHIPPING`/`CANCELLING`/`PACKING` → `RETURNING` (history SYSTEM), saga `intent CANCEL`/`WAIT_RETURN`/`WAITING`, `cancel_reason = RETURNED` nếu chưa có; `RETURNED` khi đã `RETURNING` chỉ ghi version + log (kho chưa cộng); `DELIVERED` trên `CANCELLING` → `SHIPPING → DELIVERED` + `ORDER_COMPLETED`; event có `shipment_id` khác saga bị bỏ; `CANCELLED` do chính order hủy không cảnh báo. **Kiểm đếm** `POST /admin/api/v1/orders/{order_no}/returns` (`order.return`) trên `RETURNING`/`RETURNED`/`DELIVERED`: dưới khóa, Σ `received_quantity` mọi phiếu ≤ quantity (409 `RETURN_EXCEEDS_ORDERED`), `restock ≤ received`; một TX ghi `order_returns` + items + task `ORDER_RETURN` (business key `return_id`) + `audit_logs`. Task gọi inventory `/returns` (key `return:{return_id}`, chỉ SKU `restock > 0`, `reason`/`evidence_ref` của phiếu) → phiếu `COMPLETED` (`RETURN_EXCEEDS_COMMITTED`/`RESERVATION_NOT_COMMITTED` → `MANUAL`, OPS hủy phiếu `VOIDED` rồi đếm lại; lỗi hạ tầng thử lại mãi, không `MANUAL` — review PR #35); trên đơn `RETURNING` cùng TX đặt saga `CLOSE_PAYMENT`/`RUNNING` → close payment (`close:{order_id}`, đã thu → `MANUAL PAID_NEEDS_REFUND`) → `RETURNING → RETURNED`, saga `DONE`; phiếu thêm trên `RETURNED` chỉ cộng kho; trên `DELIVERED` đơn giữ `DELIVERED`, payment không đổi (REQ ORD-10, không enforce hạn/phí O05/D10).
 
 ## 6. `inventory-service`
 

@@ -1,4 +1,4 @@
-"""TASK:ORD-01: customer order contract (spec sections 5-8) and the cart checkout token; TASK:ORD-03: OPS admin orders."""
+"""TASK:ORD-01: customer order contract (spec sections 5-8) and the cart checkout token; TASK:ORD-03: OPS admin orders; TASK:ORD-04: cancel and returns."""
 from pathlib import Path
 import unittest
 
@@ -11,9 +11,10 @@ ROOT = Path(__file__).resolve().parents[2]
 BASE = "https://fashion.local/contracts/openapi/"
 FILES = ("order.yaml", "cart.yaml", "common.yaml")
 OPERATIONS = {("post", "/api/v1/orders/quote"), ("post", "/api/v1/orders"), ("get", "/api/v1/orders/mine"),
-              ("get", "/api/v1/orders/{order_no}")}
+              ("get", "/api/v1/orders/{order_no}"), ("post", "/api/v1/orders/{order_no}/cancel")}
 ADMIN = {("get", "/admin/api/v1/orders"), ("get", "/admin/api/v1/orders/{order_no}"),
-         ("post", "/admin/api/v1/orders/{order_no}/confirm-cod"), ("post", "/admin/api/v1/orders/{order_no}/cancel")}
+         ("post", "/admin/api/v1/orders/{order_no}/confirm-cod"), ("post", "/admin/api/v1/orders/{order_no}/cancel"),
+         ("post", "/admin/api/v1/orders/{order_no}/returns"), ("post", "/admin/api/v1/orders/{order_no}/returns/{return_id}/void")}
 QUOTE = {"cart_id": "11111111-1111-4111-8111-111111111111", "cart_version": 4, "method": "COD",
          "shipping_address": {"recipient_name": "Synthetic Person", "phone": "0912345678", "province_code": "79",
                               "ward_code": "26734", "address_line": "1 Synthetic St"},
@@ -83,10 +84,17 @@ class OrderContractTest(unittest.TestCase):
         for key in ADMIN:
             self.assertEqual(ops[key]["security"], [{"bearerAuth": []}], key)
             self.assertIn("403", ops[key]["responses"], key)
-        for action in ("confirm-cod", "cancel"):
+        for action in ("confirm-cod", "cancel", "returns"):
             op = ops[("post", f"/admin/api/v1/orders/{{order_no}}/{action}")]
             self.assertIn({"$ref": "./common.yaml#/components/parameters/IdempotencyKey"}, op["parameters"])
             self.assertEqual(set(op["responses"]), {"202", "400", "401", "403", "404", "409"})
+        void = ops[("post", "/admin/api/v1/orders/{order_no}/returns/{return_id}/void")]
+        self.assertIn({"$ref": "./common.yaml#/components/parameters/IdempotencyKey"}, void["parameters"])
+        self.assertEqual(set(void["responses"]), {"202", "400", "401", "403", "404", "409"})
+        body = self.validator(BASE + "order.yaml#/components/schemas/VoidReturnRequest")
+        self.assertEqual(list(body.iter_errors({"expected_version": 3, "reason": "Kho kiem lai"})), [])
+        for bad in ({"expected_version": 3}, {"expected_version": 3, "reason": " "}, {"expected_version": 3, "reason": "x", "extra": 1}):
+            self.assertTrue(list(body.iter_errors(bad)), bad)
 
     def test_admin_command_bodies(self):
         confirm = self.validator(BASE + "order.yaml#/components/schemas/ConfirmCodRequest")
@@ -114,6 +122,54 @@ class OrderContractTest(unittest.TestCase):
         data = get["responses"]["200"]["content"]["application/json"]["examples"]["packing"]["value"]["data"]
         finance = {k: v for k, v in data.items() if k not in ("contact_phone", "contact_email", "shipping_address", "note")}
         self.assertEqual(list(detail.iter_errors(finance)), [])
+
+    def test_customer_cancel_operation_and_body(self):
+        op = self.docs["order.yaml"]["paths"]["/api/v1/orders/{order_no}/cancel"]["post"]
+        self.assertEqual(op["security"], [{"memberBearer": []}, {"orderAccess": []}])
+        self.assertIn({"$ref": "./common.yaml#/components/parameters/IdempotencyKey"}, op["parameters"])
+        self.assertEqual(set(op["responses"]), {"202", "400", "401", "404", "409"})
+        cancel = self.validator(BASE + "order.yaml#/components/schemas/CustomerCancelRequest")
+        for ok in ({"expected_version": 3}, {"expected_version": 3, "reason": "Doi y"}, {"expected_version": 0, "reason": None}):
+            self.assertEqual(list(cancel.iter_errors(ok)), [], ok)
+        for bad in ({}, {"expected_version": -1}, {"expected_version": 3, "reason": "x" * 501}, {"expected_version": 3, "extra": 1}):
+            self.assertTrue(list(cancel.iter_errors(bad)), bad)
+
+    def test_return_slip_request_is_strict(self):
+        item = {"order_item_id": "77777777-7777-4777-8777-777777777777", "received_quantity": 2, "restock_quantity": 1}
+        ok = {"expected_version": 7, "reason": "Khach tu choi nhan", "evidence_ref": "phieu-nhap-001", "items": [item]}
+        request = self.validator(BASE + "order.yaml#/components/schemas/ReturnRequest")
+        self.assertEqual(list(request.iter_errors(ok)), [])
+        self.assertEqual(list(request.iter_errors({**ok, "items": [{**item, "restock_quantity": 0, "condition": None}]})), [])
+        for bad in ({k: v for k, v in ok.items() if k != "evidence_ref"}, {**ok, "reason": "  "}, {**ok, "items": []},
+                    {**ok, "items": [{**item, "received_quantity": 0}]}, {**ok, "items": [{**item, "restock_quantity": -1}]},
+                    {**ok, "items": [{**item, "order_item_id": "x"}]}, {**ok, "items": [{**item, "condition": "x" * 201}]},
+                    {**ok, "items": [{**item, "sku": "TEE-M"}]}, {**ok, "total_amount": 1}):
+            self.assertTrue(list(request.iter_errors(bad)), bad)
+
+    def test_return_conflict_and_statuses_are_documented(self):
+        order = self.docs["order.yaml"]["components"]["schemas"]["Order"]["properties"]
+        self.assertIn("CUSTOMER_CANCELLED", order["reason_code"]["description"])
+        for word in ("RETURNING READY", "RETURNED"):
+            self.assertIn(word, order["processing_status"]["description"])
+        self.assertEqual(order["allowed_actions"]["items"]["enum"], ["CANCEL"])
+        conflict = self.docs["order.yaml"]["components"]["responses"]["CommandConflict"]
+        self.assertIn("RETURN_EXCEEDS_ORDERED", conflict["description"])
+        exceeded = conflict["content"]["application/json"]["examples"]["exceeded"]["value"]
+        self.assertEqual(list(self.validator("https://fashion.local/contracts/openapi/common.yaml#/components/schemas/ApiError").iter_errors(exceeded)), [])
+        self.assertEqual(exceeded["errors"][0]["message"], "ordered=2 received=1 requested=2")
+
+    def test_admin_detail_carries_returns_and_wait_return(self):
+        detail = self.validator(BASE + "order.yaml#/components/schemas/AdminOrderDetail")
+        get = self.docs["order.yaml"]["paths"]["/admin/api/v1/orders/{order_no}"]["get"]
+        data = get["responses"]["200"]["content"]["application/json"]["examples"]["returning"]["value"]["data"]
+        self.assertEqual(list(detail.iter_errors(data)), [])
+        self.assertEqual(data["saga"]["step"], "WAIT_RETURN")
+        self.assertTrue(list(detail.iter_errors({k: v for k, v in data.items() if k != "returns"})))
+        self.assertTrue(list(detail.iter_errors({**data, "saga": {**data["saga"], "shipment_state": "HANDED_OVER"}})))
+        slip = self.validator(BASE + "order.yaml#/components/schemas/ReturnSlip")
+        self.assertEqual(list(slip.iter_errors({**data["returns"][0], "reason": None})), [])
+        self.assertTrue(list(slip.iter_errors({**data["returns"][0], "status": "DONE"})))
+        self.assertEqual(list(slip.iter_errors({**data["returns"][0], "status": "VOIDED", "evidence_ref": None})), [])
 
     def test_cart_checkout_token_operation(self):
         op = self.docs["cart.yaml"]["paths"]["/api/v1/carts/{cart_id}/checkout-token"]["post"]

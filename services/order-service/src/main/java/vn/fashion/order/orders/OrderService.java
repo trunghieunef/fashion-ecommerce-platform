@@ -237,8 +237,11 @@ public class OrderService {
         select variant_id, sku, name, size, color, image_url, quantity, unit_price, line_total from order_items
         where order_id = :id order by sku, variant_id""").param("id", row.id()).query(OrderController.Item.class).list();
     String processingStatus = switch (row.status()) {
-      case "PENDING", "CANCELLING" -> "PROCESSING";
-      case "CANCELLED", "DELIVERED" -> "FINISHED";
+      case "PENDING" -> "PROCESSING";
+      // A cancel waiting for the handed-over goods to come back (WAIT_RETURN) can take days: READY, no polling (PR #35 M1).
+      case "CANCELLING" -> jdbc.sql("select step from order_sagas where order_id = :id").param("id", row.id()).query(String.class)
+          .optional().filter(step -> step.equals("WAIT_RETURN")).map(step -> "READY").orElse("PROCESSING");
+      case "CANCELLED", "DELIVERED", "RETURNED" -> "FINISHED";
       // PACKING: PROCESSING until the saga stored the SELF shipment, then READY.
       case "PACKING" -> jdbc.sql("select shipment_id is not null from order_sagas where order_id = :id").param("id", row.id())
           .query(Boolean.class).optional().filter(has -> !has).map(has -> "PROCESSING").orElse("READY");
@@ -248,12 +251,16 @@ public class OrderService {
       default -> "READY";
     };
     boolean processing = processingStatus.equals("PROCESSING");
+    // ORD-04 spec section 3: the customer may cancel only while the order waits for OPS (OrderCommands.customerCancel).
+    boolean cancellable = row.status().equals("CONFIRMED") && jdbc.sql(
+        "select count(*) from order_sagas where order_id = :id and intent = 'FULFILL' and step = 'WAIT_OPS'").param("id", row.id())
+        .query(Long.class).single() > 0;
     return new OrderView(row.id(), row.orderNo(), row.status(), processingStatus,
         row.status().equals("CANCELLED") ? row.cancelReason() : null, "/api/v1/orders/" + row.orderNo(),
         processing ? RETRY_AFTER_SECONDS : null, row.version(), row.paymentMethod(), items,
         new Quote.Totals(row.subtotal(), row.discountAmount(), row.shippingFee(), row.shippingDiscount(), row.codFee(), row.totalAmount(), "VND"),
         json.readValue(row.shippingAddress(), Quote.Address.class), new Quote.Contact(row.contactPhone(), row.contactEmail()), row.note(),
-        row.createdAt(), row.expiresAt(), List.of());
+        row.createdAt(), row.expiresAt(), cancellable ? List.of("CANCEL") : List.of());
   }
 
   public record Summary(String orderNo, String status, long totalAmount, String currency, Instant createdAt, int itemCount) { }
@@ -262,14 +269,17 @@ public class OrderService {
       "CANCELLING", "CANCELLED", "REFUNDING", "REFUNDED", "RETURNING", "RETURNED");
 
   /** Spec section 8: member by user_id, guest by its access cookie; anything else is the same 404 (T21). */
-  public OrderView readable(String orderNo, UUID userId, String accessToken) {
+  public OrderView readable(String orderNo, UUID userId, String accessToken) { return view(owned(orderNo, userId, accessToken)); }
+
+  /** The order of this member (user_id) or guest (access cookie), else 404 ORDER_NOT_FOUND; also authorizes commands (ORD-04). */
+  public Row owned(String orderNo, UUID userId, String accessToken) {
     var row = byNo(orderNo).filter(r -> userId != null ? userId.equals(r.userId())
         : accessToken != null && r.userId() == null && jdbc.sql("select count(*) from order_guest_access where access_hash = :h and order_id = :o")
             .param("h", Api.sha256(accessToken)).param("o", r.id()).query(Long.class).single() > 0
             // PR review I1 (O06): a guest credential reads for 90 days, enforced here and not only by the cookie Max-Age.
             && jdbc.sql("select count(*) from order_guest_access where access_hash = :h and created_at > now() - interval '90 days'")
                 .param("h", Api.sha256(accessToken)).query(Long.class).single() > 0);
-    return view(row.orElseThrow(() -> new Api.Problem(HttpStatus.NOT_FOUND, "NOT_FOUND", "ORDER_NOT_FOUND", List.of())));
+    return row.orElseThrow(() -> new Api.Problem(HttpStatus.NOT_FOUND, "NOT_FOUND", "ORDER_NOT_FOUND", List.of()));
   }
 
   /** Newest first, cursor = base64url(status filter | created_at micros | id) so it cannot be reused with another filter. */

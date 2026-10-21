@@ -60,6 +60,8 @@ có nghĩa shop đã nhận tiền COD (T27). Admin UI (ADM-01/02) gửi `expect
 retry; `409 VERSION_CONFLICT`/`INVALID_TRANSITION` → tải lại đơn (lỗi này không lưu theo key, retry cùng key được đánh giá
 lại); `409 ORDER_EXPIRED` → đơn sắp bị hủy, không xác nhận được.
 
+ORD-04: nút "Hủy đơn" của khách chỉ hiện khi `allowed_actions` chứa `CANCEL` (đơn `CONFIRMED` đang chờ OPS); FE gửi `expected_version` của GET, giữ `Idempotency-Key` qua retry, body `reason` tùy chọn. `202` → đơn `CANCELLING` (`PROCESSING`, poll như trên) rồi `CANCELLED` với `reason_code` `CUSTOMER_CANCELLED` ("bạn đã hủy đơn"). `409 INVALID_TRANSITION` (shop vừa xác nhận) → tải lại đơn và báo "đơn đã được shop xác nhận, vui lòng liên hệ shop để hủy"; `409 SAGA_BUSY`/`VERSION_CONFLICT` → tải lại rồi cho bấm lại; `404` → như mất credential. `RETURNING` (`READY`) hiển thị "đơn đang được hoàn về shop", không poll; `CANCELLING` với `READY` (hàng đã rời shop, đang chờ hoàn) hiển thị "đơn đang được hủy, hàng đang trên đường về shop", không poll; `RETURNED` (`FINISHED`) "shop đã nhận hàng hoàn" (tiền COD chưa thu nên không có hoàn tiền; đã thu thì đơn nằm ở xử lý của shop). Admin UI (ADM-01/02): phiếu kiểm đếm chọn `items[].order_item_id` từ GET detail, `restock_quantity` ≤ `received_quantity`, hiển thị lỗi `RETURN_EXCEEDS_ORDERED` theo `errors`; phiếu `MANUAL` có nút "Hủy phiếu" (`.../void`, bắt buộc lý do) rồi lập phiếu mới; `saga.step = WAIT_RETURN` (`WAITING`) nghĩa là hàng đã rời shop, đang chờ hàng về (không hứa hoàn kho).
+
 409 PRICE_CHANGED/QUOTE_EXPIRED: highlight số cũ/mới nếu có, yêu cầu xác nhận lại. 409 VERSION_CONFLICT: reload cart, không ghi đè thay đổi thiết bị khác. 429: chờ; 503: thông báo thử lại nhưng giữ key của mutation chưa biết kết quả.
 
 ## 4. Trạng thái đơn, tiền và nội dung UI
@@ -68,7 +70,7 @@ lại); `409 ORDER_EXPIRED` → đơn sắp bị hủy, không xác nhận đư�
 |---|---|---|
 | PENDING | Đang chuẩn bị đơn | Chờ, xem trạng thái; chưa mở thanh toán nếu URL chưa ready |
 | WAITING_PAYMENT | Chờ thanh toán, hạn còn lại | Pay URL hợp lệ hoặc yêu cầu hủy theo allowed_actions |
-| CONFIRMED (COD) | Đã tiếp nhận, chờ shop xác nhận | Hủy trước OPS confirm |
+| CONFIRMED (COD) | Đã tiếp nhận, chờ shop xác nhận | Hủy trước OPS confirm (nút hiện khi `allowed_actions` có `CANCEL`, ORD-04) |
 | PAID | Đã thanh toán, chờ đóng gói | Xem đơn; cần hỗ trợ thì liên hệ shop |
 | PACKING | Shop đang đóng gói | Xem đơn; không hiển thị đã giao hãng |
 | SHIPPING | Đã bàn giao để vận chuyển | Tracking |
@@ -77,7 +79,7 @@ lại); `409 ORDER_EXPIRED` → đơn sắp bị hủy, không xác nhận đư�
 | CANCELLED | Đơn đã hủy | Đặt đơn mới bằng hành động chủ động |
 | REFUNDING | Đang hoàn tiền | Xem tiến độ; thời hạn hiển thị theo policy đã chốt |
 | REFUNDED | Đã xác nhận hoàn tiền | Xem thông tin hoàn |
-| RETURNING / RETURNED | Đang hoàn hàng / shop đã nhận hàng hoàn | Tiền hoàn hiển thị trạng thái riêng |
+| RETURNING / RETURNED | Đang hoàn hàng / shop đã nhận hàng hoàn | Tiền hoàn hiển thị trạng thái riêng (ORD-04: `RETURNING` `READY` không poll, `RETURNED` `FINISHED`) |
 
 Partial refund sau DELIVERED không đổi nhãn đơn thành đã hủy. COD: “đã giao”, “đã thu từ khách”, “tiền về shop” là ba mốc riêng; khách không cần thấy các từ saga/lease/UNKNOWN. FE hiển thị “đang xác minh” và support reference an toàn.
 

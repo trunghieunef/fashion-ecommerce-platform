@@ -104,15 +104,21 @@ class SagaCompensationIntegrationTest extends OrderTestSupport {
     assertThat(saga(b)).containsEntry("intent", "FULFILL").containsEntry("step", "CREATE_PAYMENT").containsEntry("retry_count", 1);
   }
 
-  @Test void committedStockIsNeverTreatedAsReleased() {
-    // PR #33 review M3: COMMITTED/RESTORED stock needs return/restore (ORD-04), not CANCELLED.
+  @Test void committedStockIsNeverTreatedAsReleased() throws Exception {
+    // PR #33 review M3, ORD-04 spec section 4: COMMITTED stock is restored through /returns, never just marked RELEASED.
     UUID id = placeOrder();
     asOwner("update orders set status = 'CANCELLING', cancel_reason = 'EXPIRED' where id = '" + id + "'");
     asOwner("update order_sagas set intent = 'CANCEL', step = 'COMPENSATE', status = 'COMPENSATING', inventory_state = 'COMMITTED' where order_id = '" + id + "'");
-    worker.runOnce();
-    assertThat(saga(id)).containsEntry("status", "MANUAL");
-    assertThat(status(id)).isEqualTo("CANCELLING");
-    assertThat(StubServers.INVENTORY.seen).isEmpty();
+    stubSagaOk();
+    StubServers.INVENTORY.reply(s -> new StubServers.Reply(200, StubServers.ok(s.path().endsWith("/release")
+        ? "{\"status\":\"COMMITTED\",\"restore_required\":true}" : "{\"items\":[]}")));
+    StubServers.SHIPPING.reply(s -> new StubServers.Reply(200, StubServers.ok("{\"status\":\"CANCELLED\"}")));
+    for (int i = 0; i < 4; i++) { worker.runOnce(); clock.shift(Duration.ofMinutes(10)); }
+    assertThat(status(id)).isEqualTo("CANCELLED");
+    assertThat(saga(id)).containsEntry("inventory_state", "RESTORED").containsEntry("shipment_state", "CANCELLED");
+    assertThat(StubServers.INVENTORY.seen).extracting(StubServers.Seen::path)
+        .containsExactly("/internal/api/v1/inventory/release", "/internal/api/v1/inventory/returns");
+    assertThat(StubServers.INVENTORY.seen.get(1).idempotencyKey()).isEqualTo("cancel:" + id);
   }
 
   @Test void aContractErrorGoesManualInsteadOfCancellingTheOrder() {
@@ -179,15 +185,31 @@ class SagaCompensationIntegrationTest extends OrderTestSupport {
     assertThat(calls(StubServers.INVENTORY, "/release")).isEqualTo(1);
   }
 
-  @Test void aReleaseThatFindsCommittedStockGoesManual() {
+  @Test void aReleaseThatFindsCommittedStockRestoresIt() {
+    // ORD-04: the saga believed HELD, inventory says COMMITTED: recorded, shipment cancel, restore via /returns; never RELEASED.
     UUID id = placeOrder();
     stubSagaOk();
     worker.runOnce();
-    StubServers.INVENTORY.reply(s -> new StubServers.Reply(200, StubServers.ok("{\"status\":\"COMMITTED\"}")));
+    StubServers.INVENTORY.reply(s -> new StubServers.Reply(200, StubServers.ok(s.path().endsWith("/release")
+        ? "{\"status\":\"COMMITTED\",\"restore_required\":true}" : "{\"items\":[]}")));
+    StubServers.SHIPPING.reply(s -> new StubServers.Reply(200, StubServers.ok("{\"status\":\"CANCELLED\"}")));
     clock.shift(Duration.ofHours(25));
     worker.runOnce();
-    assertThat(saga(id)).containsEntry("status", "MANUAL");
-    assertThat(saga(id).get("last_error").toString()).contains("COMMITTED");
+    assertThat(status(id)).isEqualTo("CANCELLED");
+    assertThat(saga(id)).containsEntry("inventory_state", "RESTORED").containsEntry("payment_state", "CLOSED");
+    assertThat(calls(StubServers.INVENTORY, "/returns")).isEqualTo(1);
+    assertThat(calls(StubServers.SHIPPING, "/cancel")).isEqualTo(1);   // the found commit is recorded, then shipment first
+  }
+
+  @Test void aReleaseThatContradictsOurCommitGoesManual() {
+    // The saga recorded COMMITTED but inventory answers a plain release: never trusted silently.
+    UUID id = placeOrder();
+    asOwner("update orders set status = 'CANCELLING', cancel_reason = 'EXPIRED' where id = '" + id + "'");
+    asOwner("update order_sagas set intent = 'CANCEL', step = 'COMPENSATE', status = 'COMPENSATING', inventory_state = 'COMMITTED', shipment_state = 'CANCELLED' where order_id = '" + id + "'");
+    stubSagaOk();
+    worker.runOnce();
+    assertThat(saga(id)).containsEntry("status", "MANUAL").containsEntry("inventory_state", "COMMITTED");
+    assertThat(calls(StubServers.INVENTORY, "/returns")).isZero();
     assertThat(status(id)).isEqualTo("CANCELLING");
     assertThat(((Timestamp) saga(id).get("next_retry_at")).toInstant()).isNotNull();
   }

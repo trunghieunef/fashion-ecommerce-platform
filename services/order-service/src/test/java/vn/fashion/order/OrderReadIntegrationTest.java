@@ -67,9 +67,10 @@ class OrderReadIntegrationTest extends OrderTestSupport {
   }
 
   @Test void processingStatusFollowsFulfilment() {
-    // ORD-03 spec section 3: PACKING waits for the shipment, SHIPPING is READY, DELIVERED is FINISHED.
+    // ORD-03 spec section 3: PACKING waits for the shipment, SHIPPING is READY, DELIVERED is FINISHED; ORD-04: RETURNING is READY.
     String packing = seed(MEMBER, null, "PACKING", 1), packed = seed(MEMBER, null, "PACKING", 2), shipping = seed(MEMBER, null, "SHIPPING", 3),
-        delivered = seed(MEMBER, null, "DELIVERED", 4), confirmed = seed(MEMBER, null, "CONFIRMED", 5);
+        delivered = seed(MEMBER, null, "DELIVERED", 4), confirmed = seed(MEMBER, null, "CONFIRMED", 5),
+        returning = seed(MEMBER, null, "RETURNING", 6);
     jdbc.update("""
         insert into order_sagas(order_id, step, status, shipment_id)
         select id, case when order_no = ? then 'COMMIT_STOCK' else 'DONE' end, case when order_no = ? then 'RUNNING' else 'DONE' end,
@@ -77,9 +78,22 @@ class OrderReadIntegrationTest extends OrderTestSupport {
         confirmed, confirmed, packing, packing, packed, shipping, delivered, confirmed);
     var expected = new java.util.LinkedHashMap<String, String>();
     expected.put(packing, "PROCESSING"); expected.put(packed, "READY"); expected.put(shipping, "READY");
-    expected.put(delivered, "FINISHED"); expected.put(confirmed, "PROCESSING");
+    expected.put(delivered, "FINISHED"); expected.put(confirmed, "PROCESSING"); expected.put(returning, "READY");
     expected.forEach((no, status) -> assertThat(data(get("/api/v1/orders/" + no, "Authorization", memberToken()), 200)
         .path("processing_status").asString()).as(no).isEqualTo(status));
+  }
+
+  @Test void allowedActionsOfferCancelOnlyWhileWaitingForTheShop() {
+    // TASK:ORD-04 spec section 3: CANCEL only for CONFIRMED + saga FULFILL/WAIT_OPS.
+    String waiting = seed(MEMBER, null, "CONFIRMED", 1), cancelled = seed(MEMBER, null, "CANCELLED", 2);
+    jdbc.update("insert into order_sagas(order_id, step, status) select id, 'WAIT_OPS', 'WAITING' from orders where order_no in (?, ?)",
+        waiting, cancelled);
+    var actions = (java.util.function.Function<String, String>) no ->
+        data(get("/api/v1/orders/" + no, "Authorization", memberToken()), 200).path("allowed_actions").toString();
+    assertThat(actions.apply(waiting)).isEqualTo("[\"CANCEL\"]");
+    assertThat(actions.apply(cancelled)).isEqualTo("[]");
+    jdbc.update("update order_sagas set step = 'COMMIT_STOCK', status = 'RUNNING' where order_id = (select id from orders where order_no = ?)", waiting);
+    assertThat(actions.apply(waiting)).isEqualTo("[]");
   }
 
   @Test void guestsReadOnlyTheOrderOfTheirCookie() {

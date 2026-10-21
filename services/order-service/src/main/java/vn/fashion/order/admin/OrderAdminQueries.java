@@ -85,7 +85,7 @@ public class OrderAdminQueries {
         .orElseThrow(() -> new Api.Problem(HttpStatus.NOT_FOUND, "NOT_FOUND", "ORDER_NOT_FOUND", List.of()));
     UUID id = (UUID) order.remove("id");
     order.put("items", jdbc.sql("""
-        select variant_id, sku, name, size, color, quantity, unit_price, line_total from order_items
+        select id as order_item_id, variant_id, sku, name, size, color, quantity, unit_price, line_total from order_items
         where order_id = :id order by sku, id""").param("id", id).query().listOfRows().stream().map(r -> row(r, true)).toList());
     order.put("history", jdbc.sql("""
         select from_status, to_status, actor_type, actor_id, request_id, created_at, reason from order_status_history
@@ -93,7 +93,25 @@ public class OrderAdminQueries {
     order.put("saga", jdbc.sql("""
         select intent, step, status, inventory_state, payment_state, payment_id, shipment_id, retry_count, next_retry_at, last_error
         from order_sagas where order_id = :id""").param("id", id).query().listOfRows().stream().findFirst().map(r -> row(r, true)).orElse(null));
+    order.put("returns", returns(id, pii));
     return order;
+  }
+
+  /** ORD-04 return slips of the order, oldest first, each with its counted items (the slip reason is PII like history). */
+  public List<Map<String, Object>> returns(UUID orderId, boolean pii) {
+    return jdbc.sql("""
+        select id as return_id, status, reason, evidence_ref, actor_id, created_at, updated_at from order_returns
+        where order_id = :id order by created_at, id""").param("id", orderId).query().listOfRows().stream().map(r -> {
+          var slip = row(r, pii);
+          // Free text typed by OPS (evidence, condition) may name the customer: hidden like reason (PR #35 review M6).
+          if (!pii) slip.put("evidence_ref", null);
+          var items = jdbc.sql("""
+              select order_item_id, received_quantity, restock_quantity, condition from order_return_items
+              where return_id = :id order by order_item_id""").param("id", r.get("return_id")).query().listOfRows();
+          if (!pii) items = items.stream().map(i -> { var m = new LinkedHashMap<>(i); m.put("condition", null); return (Map<String, Object>) m; }).toList();
+          slip.put("items", items);
+          return slip;
+        }).toList();
   }
 
   /** Ordered row: timestamps as Instant, shipping_address text as JSON; PII columns dropped (a history reason becomes null). */

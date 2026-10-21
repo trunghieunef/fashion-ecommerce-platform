@@ -32,8 +32,12 @@ public class SagaWorker {
   static final java.util.Set<String> RESERVE_REFUSALS = java.util.Set.of("OUT_OF_STOCK", "RESERVATION_CLOSED");
   static final java.util.Set<String> PAYMENT_REFUSALS =
       java.util.Set.of("PAYMENT_CLOSED", "PAYMENT_METHOD_UNAVAILABLE", "PAYMENT_AMOUNT_UNSUPPORTED");
+  /** Shipment-cancel refusals that prove no shipment exists or can be created for this snapshot (quote checks). */
+  static final java.util.Set<String> NO_SHIPMENT_POSSIBLE = java.util.Set.of("QUOTE_NOT_FOUND", "QUOTE_MISMATCH", "QUOTE_ALREADY_USED");
   // ORD-03 spec section 4: the order deadline applies only up to the OPS confirm; from COMMIT_STOCK inventory decides.
   static final java.util.Set<String> DEADLINE_STEPS = java.util.Set.of("RESERVE", "CREATE_PAYMENT", "WAIT_OPS");
+  // ORD-04 ruling: WAIT_RETURN is moved by shipping events / return slips only; a claim just re-parks it.
+  public static final Duration RETURN_PARK = Duration.ofDays(30);
   private final SagaRepository sagas;
   private final OrderTransitions transitions;
   private final InventoryClient inventory;
@@ -42,14 +46,17 @@ public class SagaWorker {
   private final BackgroundTaskRepository tasks;
   private final Clock clock;
   private final int maxRetries;
-  private final Counter manual;
+  private final MeterRegistry meters;
+  private final Counter handedOver;
 
   public SagaWorker(SagaRepository sagas, OrderTransitions transitions, InventoryClient inventory, PaymentClient payments, ShippingClient shipping,
                     BackgroundTaskRepository tasks, Clock clock, MeterRegistry meters,
                     @Value("${fashion.order.saga.max-retries:30}") int maxRetries) {
     this.sagas = sagas; this.transitions = transitions; this.inventory = inventory; this.payments = payments; this.shipping = shipping; this.tasks = tasks;
     this.clock = clock; this.maxRetries = maxRetries;
-    this.manual = Counter.builder("order.saga.manual").description("Sagas moved to MANUAL after the retry budget").register(meters);
+    this.meters = meters;
+    this.handedOver = Counter.builder("order.saga.handed_over").description("Cancels that found the shipment already handed over")
+        .register(meters);
   }
 
   /** Processes every due saga once; returns how many were claimed. */
@@ -85,6 +92,8 @@ public class SagaWorker {
               case "COMMIT_STOCK" -> commitStock(c, saga, order);
               case "CREATE_SHIPMENT" -> createShipment(c, saga, order);
               case "COMPENSATE" -> compensate(c, saga, order);
+              case "CLOSE_PAYMENT" -> closeReturned(c, saga, order);
+              case "WAIT_RETURN" -> { park(c, null); yield false; }
               default -> { sagas.write(c, jdbc -> { }, true); yield false; }
             };
       if (!more) return;
@@ -162,7 +171,7 @@ public class SagaWorker {
     if (out.result() != Outcome.Result.OK) return retry(c, saga, out);
     UUID shipmentId = UUID.fromString(out.data().path("shipment_id").asString());
     sagas.write(c, jdbc -> jdbc.sql("""
-        update order_sagas set shipment_id = :s, status = 'DONE', step = 'DONE', retry_count = 0, last_error = null
+        update order_sagas set shipment_id = :s, shipment_state = 'CREATED', status = 'DONE', step = 'DONE', retry_count = 0, last_error = null
         where order_id = :id""").param("s", shipmentId).param("id", c.orderId()).update(), true);
     return false;
   }
@@ -179,54 +188,132 @@ public class SagaWorker {
     }, false);
   }
 
-  /** One obligation per pass: release what may be held, close the payment (always: tombstone), then CANCELLED. */
+  /**
+   * ORD-04 spec section 4, one obligation per pass, each call preceded by an intent that only counts the attempt (never
+   * UNKNOWN): shipment cancel, then stock (release; restore via /returns when inventory says committed), payment, CANCELLED.
+   */
   private boolean compensate(SagaRepository.Claim c, SagaRepository.Saga saga, SagaOrder order) {
     String reason = sagas.cancelReason(c.orderId());
     String stock = saga.inventoryState();
-    // Committed or restored stock needs return/restore (ORD-03/04), never a plain release (review M3).
-    if (stock.equals("COMMITTED") || stock.equals("RESTORED")) return manual(c, saga, "inventory " + stock);
-    if (!stock.equals("RELEASED")) {
-      // Always release, even NONE: the tombstone stops a reserve still in flight from holding stock (review I2).
+    String ship = saga.shipmentState();
+    // The goods left the shop: never restore stock; the return flow (shipping events) takes over.
+    if (ship.equals("HANDED_OVER")) { park(c, null); return false; }
+    // A shipment is only created after the commit, so this also covers a create whose response was lost.
+    boolean shipmentMayExist = stock.equals("COMMITTED") || stock.equals("RESTORED") || saga.shipmentId() != null || !ship.equals("NONE");
+    if (shipmentMayExist && !ship.equals("CANCELLED")) {
+      if (!intent(c, saga, null)) return false;
+      var out = shipping.cancel(order, reason);
+      if (out.result() == Outcome.Result.REJECTED && "SHIPMENT_HANDED_OVER".equals(out.code())) {
+        if (park(c, "HANDED_OVER")) {
+          handedOver.increment();
+          LOG.warn("Cancel found the shipment handed over, waiting for the return: order_id={}", c.orderId());
+        }
+        return false;
+      }
+      // Shipping answers QUOTE_* only when the order has no shipment row; quotes are immutable (no UPDATE/DELETE for its
+      // runtime), so a create from this snapshot can never succeed: nothing can leave the shop (PR #35 review I1).
+      if (out.result() == Outcome.Result.REJECTED && NO_SHIPMENT_POSSIBLE.contains(out.code()))
+        return settled(c, "shipment_state = 'CANCELLED'");
+      if (out.result() == Outcome.Result.REJECTED) return manual(c, saga, "shipment-cancel " + out.code());
+      // In doubt the goods may still leave: retry the same key, never touch the stock (T16).
+      if (out.result() != Outcome.Result.OK) return retry(c, saga, out);
+      return settled(c, "shipment_state = 'CANCELLED'");
+    }
+    if (!stock.equals("RELEASED") && !stock.equals("RESTORED")) {
+      if (!intent(c, saga, null)) return false;
+      // Always release, even NONE: the tombstone stops a reserve still in flight from holding stock (review I2); inventory
+      // also arbitrates a commit still in flight.
       var out = inventory.release(order, reason);
       // NONE + INVALID_INPUT: an unknown SKU (inventory answered OUT_OF_STOCK, rolls the tombstone back) was never held.
-      boolean nothingHeld = stock.equals("NONE") && Outcome.invalid("inventory", "INVALID_INPUT").equals(out.code());
-      if (!nothingHeld) {
-        if (out.result() == Outcome.Result.REJECTED) return manual(c, saga, "release " + out.code());
-        if (out.result() != Outcome.Result.OK) return retry(c, saga, out);
-      }
-      return sagas.write(c, jdbc -> state(jdbc, c.orderId(), "inventory_state", "RELEASED", "NONE", "HELD", "UNKNOWN"), false);
+      if (stock.equals("NONE") && Outcome.invalid("inventory", "INVALID_INPUT").equals(out.code()))
+        return settled(c, "inventory_state = 'RELEASED'");
+      if (out.result() == Outcome.Result.REJECTED) return manual(c, saga, "release " + out.code());
+      if (out.result() != Outcome.Result.OK) return retry(c, saga, out);
+      String held = out.data().path("status").asString("");
+      // Committed stock was taken: a release frees nothing, it must be restored (never recorded as RELEASED). A commit we
+      // did not know of is recorded first, so the shipment step runs before any restore (T16 holds on every path).
+      if (out.data().path("restore_required").asBoolean(false) || held.equals("COMMITTED"))
+        return stock.equals("COMMITTED") ? restore(c, order, reason) : settled(c, "inventory_state = 'COMMITTED'");
+      // We recorded the commit yet inventory says released: a contradiction for OPS, never trusted silently.
+      if (stock.equals("COMMITTED")) return manual(c, saga, "release " + held);
+      return settled(c, "inventory_state = 'RELEASED'");
     }
+    Boolean closing = closePayment(c, saga, order, reason);
+    if (closing != null) return closing;
+    return finish(c, "CANCELLING", "CANCELLED", reason);
+  }
+
+  /** ORD-04 spec section 5: a counted return (OrderReturnWorker) closes the payment like a cancel, then RETURNING -> RETURNED. */
+  private boolean closeReturned(SagaRepository.Claim c, SagaRepository.Saga saga, SagaOrder order) {
+    Boolean closing = closePayment(c, saga, order, sagas.cancelReason(c.orderId()));
+    if (closing != null) return closing;
+    return finish(c, "RETURNING", "RETURNED", null);
+  }
+
+  /** Closes the payment (key close:{order_id}); null once CLOSED, else the pass result. Collected money -> MANUAL PAID_NEEDS_REFUND. */
+  private Boolean closePayment(SagaRepository.Claim c, SagaRepository.Saga saga, SagaOrder order, String reason) {
     // PAYMENT_COMPLETED already recorded: the money is in, the order owes a refund (PAY-04/ORD-04).
     if (saga.paymentState().equals("PAID")) return manual(c, saga, "PAID_NEEDS_REFUND");
-    if (!saga.paymentState().equals("CLOSED")) {
-      var out = payments.close(order, reason);
-      if (out.result() == Outcome.Result.REJECTED) return manual(c, saga, "close " + out.code());
-      if (out.result() != Outcome.Result.OK) return retry(c, saga, out);
-      String money = out.data().path("status").asString("");
-      // Money already collected: closing keeps it, the order owes a refund (PAY-04/ORD-04) - not a plain CANCELLED.
-      if (money.equals("COD_COLLECTED") || money.equals("SUCCESS")) return manual(c, saga, "PAID_NEEDS_REFUND");
-      // A PAYMENT_COMPLETED recorded meanwhile stays PAID (paid_at kept too).
-      return sagas.write(c, jdbc -> jdbc.sql("""
-          update order_sagas set payment_state = case when payment_state = 'PAID' then 'PAID' else 'CLOSED' end where order_id = :id""")
-          .param("id", c.orderId()).update(), false);
-    }
+    if (saga.paymentState().equals("CLOSED")) return null;
+    if (!intent(c, saga, null)) return false;
+    var out = payments.close(order, reason);
+    if (out.result() == Outcome.Result.REJECTED) return manual(c, saga, "close " + out.code());
+    if (out.result() != Outcome.Result.OK) return retry(c, saga, out);
+    String money = out.data().path("status").asString("");
+    // Money already collected: closing keeps it, the order owes a refund (PAY-04/ORD-04) - not a plain CANCELLED/RETURNED.
+    if (money.equals("COD_COLLECTED") || money.equals("SUCCESS")) return manual(c, saga, "PAID_NEEDS_REFUND");
+    // A PAYMENT_COMPLETED recorded meanwhile stays PAID (paid_at kept too).
+    return settled(c, "payment_state = case when payment_state = 'PAID' then 'PAID' else 'CLOSED' end");
+  }
+
+  private boolean finish(SagaRepository.Claim c, String from, String to, String reason) {
     sagas.write(c, jdbc -> {
       jdbc.sql("update order_sagas set status = 'DONE', step = 'DONE', retry_count = 0, last_error = null where order_id = :id")
           .param("id", c.orderId()).update();
-      transitions.move(c.orderId(), "CANCELLING", "CANCELLED", reason);
+      transitions.move(c.orderId(), from, to, reason);
     }, true);
     return false;
+  }
+
+  /**
+   * Committed stock goes back through /returns: every SKU at its full ordered quantity, fixed key and evidence so a replay
+   * (after a crash the release replays first) matches. Its own intent: the release intent counted the other call.
+   */
+  private boolean restore(SagaRepository.Claim c, SagaOrder order, String reason) {
+    var saga = sagas.saga(c.orderId());
+    if (!intent(c, saga, null)) return false;
+    var out = inventory.restore(order, "cancel:" + order.id(), reason, "order-cancel:" + order.id());
+    if (out.result() == Outcome.Result.REJECTED) return manual(c, saga, "restore " + out.code());
+    if (out.result() != Outcome.Result.OK) return retry(c, saga, out);
+    return settled(c, "inventory_state = 'RESTORED'");
+  }
+
+  /** One compensation obligation settled: record it and reset the budget for the next one (as forward steps do). */
+  private boolean settled(SagaRepository.Claim c, String set) {
+    return sagas.write(c, jdbc -> jdbc.sql("update order_sagas set " + set + ", retry_count = 0, last_error = null where order_id = :id")
+        .param("id", c.orderId()).update(), false);
+  }
+
+  /** WAIT_RETURN (ORD-04 ruling): parked RETURN_PARK, lease released; a non-null shipment state is recorded with it. */
+  private boolean park(SagaRepository.Claim c, String shipment) {
+    return sagas.write(c, jdbc -> jdbc.sql("""
+        update order_sagas set status = 'WAITING', step = 'WAIT_RETURN', next_retry_at = :park, retry_count = 0,
+          shipment_state = coalesce(cast(:ship as varchar), shipment_state),
+          last_error = coalesce('SHIPMENT_' || cast(:ship as varchar), last_error)
+        where order_id = :id""")
+        .param("park", Timestamp.from(clock.instant().plus(RETURN_PARK))).param("ship", shipment).param("id", c.orderId()).update(), true);
   }
 
   /** A business refusal that retrying cannot change: MANUAL now, every obligation kept for OPS. */
   private boolean manual(SagaRepository.Claim c, SagaRepository.Saga saga, String error) { return manual(c, saga.retryCount() + 1, error); }
 
   private boolean manual(SagaRepository.Claim c, int attempts, String error) {
+    String step = sagas.saga(c.orderId()).step();
     if (sagas.write(c, jdbc -> jdbc.sql("""
         update order_sagas set status = 'MANUAL', retry_count = :n, last_error = :e where order_id = :id""")
         .param("n", attempts).param("e", error).param("id", c.orderId()).update(), true)) {
-      manual.increment();
-      LOG.warn("Saga moved to MANUAL: order_id={} last_error={}", c.orderId(), error);
+      Counter.builder("order.saga.manual").tag("step", step).description("Sagas moved to MANUAL").register(meters).increment();
+      LOG.warn("Saga moved to MANUAL: order_id={} step={} last_error={}", c.orderId(), step, error);
     }
     return false;
   }

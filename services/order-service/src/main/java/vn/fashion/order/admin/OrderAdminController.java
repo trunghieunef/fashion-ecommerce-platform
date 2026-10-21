@@ -12,22 +12,23 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import vn.fashion.order.web.Api;
 
-/** OPS/FINANCE orders (13, spec section 5): order.read lists and reads; contact data and phone search need order.fulfill; order.fulfill confirms COD, order.cancel cancels. */
+/** OPS/FINANCE orders (13, spec section 5): order.read lists and reads; contact data and phone search need order.fulfill; order.fulfill confirms COD, order.cancel cancels, order.return records return slips. */
 @RestController
 @RequestMapping("/admin/api/v1/orders")
 public class OrderAdminController {
   private final AdminAuth auth;
   private final OrderAdminQueries queries;
   private final OrderCommands commands;
+  private final OrderReturns returns;
   private final ObjectMapper json;
   private final Tracer tracer;
 
-  public OrderAdminController(AdminAuth auth, OrderAdminQueries queries, OrderCommands commands, ObjectMapper json, Tracer tracer) {
-    this.auth = auth; this.queries = queries; this.commands = commands; this.json = json; this.tracer = tracer;
+  public OrderAdminController(AdminAuth auth, OrderAdminQueries queries, OrderCommands commands, OrderReturns returns, ObjectMapper json,
+                              Tracer tracer) {
+    this.auth = auth; this.queries = queries; this.commands = commands; this.returns = returns; this.json = json; this.tracer = tracer;
   }
 
   @GetMapping
@@ -60,7 +61,7 @@ public class OrderAdminController {
     var actor = auth.require(authorization, "order.fulfill");
     Api.requireKey(key);
     var node = Api.object(json, body);
-    return Api.ok(HttpStatus.ACCEPTED, commands.confirmCod(actor, orderNo, key, version(node), text(node, "note", false)), tracer);
+    return Api.ok(HttpStatus.ACCEPTED, commands.confirmCod(actor, orderNo, key, Api.expectedVersion(node), Api.text(node, "note", false)), tracer);
   }
 
   /** Spec section 3: body {expected_version, reason (1..500)}; 202 + the order (CANCELLING). */
@@ -71,24 +72,36 @@ public class OrderAdminController {
     var actor = auth.require(authorization, "order.cancel");
     Api.requireKey(key);
     var node = Api.object(json, body);
-    return Api.ok(HttpStatus.ACCEPTED, commands.cancel(actor, orderNo, key, version(node), text(node, "reason", true)), tracer);
+    return Api.ok(HttpStatus.ACCEPTED, commands.cancel(actor, orderNo, key, Api.expectedVersion(node), Api.text(node, "reason", true)), tracer);
   }
 
-  private static long version(JsonNode body) {
-    var v = body.path("expected_version");
-    if (!v.isIntegralNumber() || !v.canConvertToLong() || v.asLong() < 0) throw fields("expected_version", "must be a non-negative integer");
-    return v.asLong();
+  /** ORD-04 spec section 5: body {expected_version, reason, evidence_ref (1..500), items[1..100]}; 202 + the order and the slip. */
+  @PostMapping("/{orderNo}/returns")
+  public ResponseEntity<?> returns(@RequestHeader(name = "Authorization", required = false) String authorization,
+                                   @RequestHeader(name = "Idempotency-Key", required = false) String key,
+                                   @PathVariable String orderNo, @RequestBody(required = false) String body) {
+    var actor = auth.require(authorization, "order.return");
+    Api.requireKey(key);
+    var node = Api.object(json, body);
+    long version = Api.expectedVersion(node);
+    String reason = Api.text(node, "reason", true);
+    String evidence = Api.text(node, "evidence_ref", true);
+    return Api.ok(HttpStatus.ACCEPTED, returns.create(actor, orderNo, key, version, reason, evidence, OrderReturns.lines(node)), tracer);
   }
-  /** Trimmed text up to 500 characters; blank is absent (required -> 400). */
-  private static String text(JsonNode body, String field, boolean required) {
-    var v = body.path(field);
-    if (!v.isMissingNode() && !v.isNull() && !v.isString()) throw fields(field, "must be a string");
-    String s = v.isString() ? v.asString().strip() : "";
-    if (s.length() > 500) throw fields(field, "must be at most 500 characters");
-    if (s.isEmpty() && required) throw fields(field, "is required");
-    return s.isEmpty() ? null : s;
+
+  /** PR #35 review I2: body {expected_version, reason (1..500)}; voids a MANUAL slip so the goods can be counted again. */
+  @PostMapping("/{orderNo}/returns/{returnId}/void")
+  public ResponseEntity<?> voidReturn(@RequestHeader(name = "Authorization", required = false) String authorization,
+                                      @RequestHeader(name = "Idempotency-Key", required = false) String key,
+                                      @PathVariable String orderNo, @PathVariable String returnId, @RequestBody(required = false) String body) {
+    var actor = auth.require(authorization, "order.return");
+    Api.requireKey(key);
+    var node = Api.object(json, body);
+    long version = Api.expectedVersion(node);
+    String reason = Api.text(node, "reason", true);
+    java.util.UUID id = Api.uuid(returnId);
+    if (id == null) throw new Api.Problem(HttpStatus.NOT_FOUND, "NOT_FOUND", "RETURN_NOT_FOUND", java.util.List.of());
+    return Api.ok(HttpStatus.ACCEPTED, returns.voidSlip(actor, orderNo, id, key, version, reason), tracer);
   }
-  private static Api.Problem fields(String field, String message) {
-    return new Api.Problem(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "INVALID_FIELDS", List.of(new Api.FieldError(field, message)));
-  }
+
 }

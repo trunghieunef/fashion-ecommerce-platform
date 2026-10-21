@@ -42,13 +42,25 @@ public class ShippingClient {
 
   /** SHP-01 SELF shipment for a packed order (key shipment:{id}); cod_amount is what the courier collects. */
   public Outcome create(SagaOrder o) {
+    return Outcome.of("shipping", http, "shipping-service", url + "/internal/api/v1/shipping/shipments", snapshot(o),
+        "Idempotency-Key", "shipment:" + o.id());
+  }
+
+  /** SHP-02 cancel (or tombstone) with the create snapshot + reason code (in shipping's hash); 409 message is the code. */
+  public Outcome cancel(SagaOrder o, String reason) {
+    var body = snapshot(o);
+    body.put("reason", reason);
+    return Outcome.of("shipping", http, "shipping-service", url + "/internal/api/v1/shipping/shipments/by-order/" + o.id() + "/cancel",
+        body, "Idempotency-Key", "shipment-cancel:" + o.id());
+  }
+
+  private static LinkedHashMap<String, Object> snapshot(SagaOrder o) {
     var body = new LinkedHashMap<String, Object>();
     body.put("order_id", o.id().toString());
     body.put("order_no", o.orderNo());
     body.put("quote_id", o.quoteId().toString());
     body.put("cod_amount", o.method().equals("COD") ? o.total() : 0L);
     body.put("to_address", o.toAddress());
-    return Outcome.of("shipping", http, "shipping-service", url + "/internal/api/v1/shipping/shipments", body,
-        "Idempotency-Key", "shipment:" + o.id());
+    return body;
   }
 }
