@@ -90,3 +90,56 @@ G0.
 - `pack` đơn online chờ TASK PAY-02/03; màn hình admin và hint "không nhập liên hệ khách vào ghi chú" ở ADM-01/02.
 - Minor để sau ở evidence: N+1 saga khi đọc danh sách, chưa index `contact_phone`, smoke chưa đọc trực tiếp `paid_at`.
 - Sửa ghi nhầm khi nghiệm thu: `REQ:PAY-03` là COD settlement (đã kiểm qua smoke), không phải phần online.
+
+## TASK:ORD-04 — khách tự hủy, OPS hủy sau xác nhận, hoàn hàng và kiểm đếm
+
+Chủ dự án yêu cầu Claude Code nghiệm thu `TASK:ORD-04` sau khi re-review PR #35 kết luận "đồng ý merge". **Không độc lập:**
+ORD-04 do Claude Code viết (6 task, mỗi task một subagent reviewer; review toàn nhánh trên Sonnet: 0 Critical / 1 Important,
+sửa ở `a4e511d`). Review trên PR #35 (`13f7eec..a4e511d`): 0 Critical, 2 Important, 8 Minor; sửa ở `1cd5a81` (M8 để sau).
+Re-review trên `1cd5a81`: cả 10 mục đã xử lý, không lỗi mới chặn merge; 4 gợi ý không chặn xử lý ở commit nghiệm thu (dưới).
+Merge do chủ dự án. Phạm vi: acceptance ở [10](../delivery/10_backlog.md) dòng ORD-04, REQ ORD-04/10 và SHP-06 ở 02 theo
+[spec đã duyệt](../superpowers/specs/2026-10-21-ord-04-cancel-return-design.md) (chủ dự án quyết §12: cơ chế trả hàng làm ngay,
+chưa enforce chính sách O05/D10; khách không hủy sau khi shop xác nhận; COD đã thu → `MANUAL` chờ PAY-04), mức local trước G0.
+
+### Bằng chứng chung
+
+- CI PR #35 trên `1cd5a81` SUCCESS: `s1-local`
+  ([run 39605780606](https://github.com/trunghieunef/fashion-ecommerce-platform/actions/runs/39605780606/job/119241469412),
+  gồm backend reactor, contract, local stack + smoke ORD-04) và `docs-check`.
+- Local: `./mvnw -B -pl services/order-service,services/gateway verify` **181 test** PASS trên `1cd5a81` (order 137, gateway 44);
+  contract **90 test** (docker Python 3.13); `redocly lint order.yaml` valid. Smoke local (`ORD-04 cancel after confirm PASS`,
+  `ORD-04 return PASS`, `ORD-04 customer cancel PASS`) chạy trước review PR, không chạy lại local sau sửa — bằng chứng sau sửa
+  là `s1-local` trên CI. Mutation 4 guard (T16, Σ received, key returns, `RELEASED` khi `restore_required`) đều bị test bắt;
+  mutation tắt nhánh I1 bị bắt. Chi tiết: [evidence ORD-04](ord-04-local-2026-10-21.md).
+
+### Kết quả theo tiêu chí
+
+| Tiêu chí (10 ORD-04 / 02 REQ / spec) | Bằng chứng | Kết quả |
+|---|---|---|
+| Khách tự hủy đơn chờ shop (`CONFIRMED` + `WAIT_OPS`), không hủy sau khi shop xác nhận (REQ ORD-04, §12.2) | `aMemberCancelsAnOrderWaitingForTheShop`, `aGuestCancelsByItsCookieAndOthersSeeNothing`, `aCustomerCannotCancelOnceTheShopConfirmed`, `aCustomerCancelReplayReturnsTheSameResponse`, `allowedActionsOfferCancelOnlyWhileWaitingForTheShop`; smoke `ORD-04 customer cancel PASS` | Pass |
+| OPS hủy tới trước bàn giao, kể cả saga `MANUAL`; `CANCELLING` đến khi bù trừ đủ: vận đơn → kho → payment, không `CANCELLED` sớm | `opsCancelsAPackingOrder`, `opsCancelsAStuckSaga`, `opsCancelAdmissionRefusals`, `cancellingAPackedOrderCancelsTheShipmentThenRestoresThenCloses` (thứ tự gọi), `aSagaStuckOnARefusedQuoteCanStillBeCancelled` (I1), `aCommitInFlightIsArbitratedByTheRelease`; smoke `ORD-04 cancel after confirm PASS` (tồn kho về như trước) | Pass |
+| Chỉ trả kho khi chứng minh hàng chưa rời shop (REQ SHP-06, T16) | `aShipmentCancelInDoubtNeverRestoresStock`, `aHandedOverShipmentWaitsForTheReturn` (0 returns, `WAIT_RETURN`, `READY`), `aCancelDuringALostShipmentCreateCancelsTheShipmentFirst`; mutation bỏ hủy vận đơn bị bắt | Pass |
+| Sau bàn giao đi đường hoàn hàng; giao muộn vẫn `DELIVERED` | `aFailedDeliveryComingBackMovesTheOrderToReturning`, `aReturnThatOvertookTheHandOverShipsThePackingOrderFirst`, `aCancelledOrderThatStillGotDeliveredIsDelivered`, `ownCancelAndForeignShipmentEventsAreQuiet` | Pass |
+| `RETURNED` cần OPS kiểm đếm trước cộng kho; cộng đúng một lần, không vượt số đã giao (REQ SHP-06, T17) | `aCountedReturnRestocksAndFinishesTheOrder`, `slipReplaysAndRefusals`, `concurrentSlipsNeverExceedTheQuantity`, `anotherOpsReusingAKeyOnTheOrderGets409`, `returnTablesGuardQuantities`; smoke `ORD-04 return PASS` (+1 đúng số restock) | Pass |
+| Đơn không kẹt: sự cố inventory thử lại mãi cùng key; phiếu bị từ chối có lối thoát (review PR I2) | `anInventoryOutageNeverParksTheSlipManual`, `anInventoryRefusalParksTheSlipForOps`, `opsVoidsAManualSlipAndCountsAgain` (403/409/404, replay), `aManualSlipStillCountsUntilVoided` | Pass |
+| Đổi trả sau giao qua OPS, giữ lịch sử `DELIVERED`, không tự refund (REQ ORD-10) | `aReturnAfterDeliveryKeepsTheOrderDelivered`, `aLateSlipOnAReturnedOrderOnlyRestocks` | Pass (cơ chế; chính sách O05/D10 chưa chốt, §12.1) |
+| Tiền đã thu khi hủy/hoàn → `MANUAL` `PAID_NEEDS_REFUND`, không `CANCELLED`/`RETURNED` (§12.3) | `aCollectedReturnStillRestocksButNeedsARefund`, `aPaymentCompletedDuringCompensationGoesManualForARefund` | Pass (refund chờ PAY-04) |
+| Follow-up ORD-02/03: intent bù trừ, đối chiếu `shipment_id`, metric `MANUAL` theo `step` | `aCrashAfterACompensationIntentStillEndsManual`, `ownCancelAndForeignShipmentEventsAreQuiet`, README metric | Pass |
+| Quyền và PII: `order.return`, FINANCE không thấy text tự do của phiếu | `financeSeesNoFreeTextOfASlip`, `aCancelWithoutOrderFulfillSeesNoContact`, gateway `orderCancelAndReturnPathsAreRouted` | Pass |
+
+**`TASK:ORD-04`: Done (local, trước G0)**; CI trên `1cd5a81` PASS, re-review PR #35 "đồng ý merge"; chủ dự án quyết định merge.
+
+### Gợi ý không chặn của re-review (xử lý ở commit nghiệm thu)
+
+- Bất biến shipping mà sửa I1 dựa vào (quote insert-only, shipment không xóa, kiểm quote tất định) đã ghi ở
+  [README shipping](../../services/shipping-service/README.md), kèm chỉ dẫn đổi `SagaWorker.NO_SHIPMENT_POSSIBLE` cùng lúc.
+- `opsVoidsAManualSlipAndCountsAgain` thêm replay cùng key + body → 202, không thêm `audit_logs` (`OrderReturnsIntegrationTest`
+  15 test PASS).
+- README order: `order_return_stalled_total` tăng mỗi lần thử sau lần 30 → alert theo rate.
+- Smoke sau sửa: dựa vào `s1-local` CI (không chạy lại local).
+
+### Ngoại lệ và việc còn lại (không chặn Done local)
+
+- Refund tiền đã thu (PAY-04); online/tiền đến muộn (PAY-02/03, ORD-05); chính sách đổi trả O05/D10; UI ADM-02/WEB-04.
+- Job quét đơn `WAIT_RETURN` quá lâu, alert `MANUAL` (PLT-05); M8 (N+1 danh sách phiếu, `shipment_state` trong chi tiết admin)
+  và minor theo task ở evidence.

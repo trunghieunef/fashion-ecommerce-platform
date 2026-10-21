@@ -308,6 +308,9 @@ class OrderReturnsIntegrationTest extends OrderTestSupport {
     data(send("POST", path, voidBody, "Authorization", ops(), "Idempotency-Key", "void-1"), 202);
     assertThat(slipStatus(returnId)).isEqualTo("VOIDED");
     assertThat(count("select count(*) from audit_logs where action = 'ORDER_RETURN_VOID'")).isEqualTo(1);
+    // Same key + body replays the stored 202, no second audit row.
+    data(send("POST", path, voidBody, "Authorization", ops(), "Idempotency-Key", "void-1"), 202);
+    assertThat(count("select count(*) from audit_logs where action = 'ORDER_RETURN_VOID'")).isEqualTo(1);
     // Only a MANUAL slip can be voided; an unknown slip is 404.
     String again = "{\"expected_version\":" + version(id) + ",\"reason\":\"x\"}";
     assertThat(problem(send("POST", path, again, "Authorization", ops(), "Idempotency-Key", "void-2"), 409)).isEqualTo("RETURN_NOT_MANUAL");
