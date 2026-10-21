@@ -5,6 +5,8 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.UUID;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -30,10 +32,11 @@ public class OrderReturnWorker {
   private final JdbcClient jdbc;
   private final TransactionTemplate tx;
   private final Clock clock;
+  private final MeterRegistry meters;
 
   public OrderReturnWorker(BackgroundTaskRepository tasks, SagaRepository sagas, InventoryClient inventory, JdbcClient jdbc,
-                           TransactionTemplate tx, Clock clock) {
-    this.tasks = tasks; this.sagas = sagas; this.inventory = inventory; this.jdbc = jdbc; this.tx = tx; this.clock = clock;
+                           TransactionTemplate tx, Clock clock, MeterRegistry meters) {
+    this.tasks = tasks; this.sagas = sagas; this.inventory = inventory; this.jdbc = jdbc; this.tx = tx; this.clock = clock; this.meters = meters;
   }
 
   public int runOnce() {
@@ -79,6 +82,8 @@ public class OrderReturnWorker {
           jdbc.sql("update order_returns set status = 'MANUAL', updated_at = now() where id = :id and status = 'REQUESTED'")
               .param("id", returnId).update();
         });
+        // No API exit for a MANUAL slip on a RETURNING order (it still counts in the received sum): visible for OPS runbook.
+        Counter.builder("order.return.manual").description("Return slips moved to MANUAL").register(meters).increment();
         return;
       }
     }

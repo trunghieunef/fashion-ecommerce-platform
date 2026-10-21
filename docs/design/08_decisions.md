@@ -541,6 +541,7 @@ các dòng "(SDD)" là phán quyết của controller khi triển khai, ghi lạ
 | (SDD) Migration V004 không cấp quyền riêng: default privileges như V001–V003 (test chứng minh); Gateway `CsrfOriginFilter` là `GlobalFilter` phủ `/api/v1/orders/**` | Không cần đổi Gateway ngoài test route |
 | (SDD) `allowed_actions` luôn là danh sách hành động của **khách** (`["CANCEL"]` hoặc `[]`); view admin của lệnh cũng mang cùng danh sách | Contract ghi audience; FE admin bỏ qua |
 | (SDD) Đơn qua `OrderCommands.customerCancel` (idempotency actor = `orders.actor_key`, operation `customer-cancel`, không `audit_logs`, history actor `CUSTOMER`) | Khách và OPS dùng chung lõi khóa + kiểm + chuyển (`execute`); điều kiện nhận (admit) là `Consumer` được phép ném lỗi vì confirm-cod cần phân biệt `INVALID_TRANSITION` với `ORDER_EXPIRED` |
+| (SDD, review toàn nhánh) Phiếu `MANUAL` (inventory `RETURN_EXCEEDS_COMMITTED`/`RESERVATION_NOT_COMMITTED` hoặc hết ngân sách retry) trên đơn `RETURNING` không có lối ra qua API: không endpoint mới, coi như `PAID_NEEDS_REFUND` — chỉ hiển thị (metric `order.return.manual`, log cảnh báo không PII) và ghi tài liệu | Đơn kẹt `RETURNING`/`WAIT_RETURN` tới khi OPS/DB xử lý theo runbook; ADM-02 thêm thử lại/hủy phiếu. Test `aManualSlipOnAReturningOrderHasNoApiExit` ghim hành vi |
 
 ## PAY-01 — quyết định 2026-10-20
 

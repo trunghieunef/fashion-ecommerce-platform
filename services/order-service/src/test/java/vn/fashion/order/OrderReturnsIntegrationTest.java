@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import vn.fashion.order.admin.OrderCommands;
@@ -22,6 +23,7 @@ class OrderReturnsIntegrationTest extends OrderTestSupport {
   static final UUID OPS = UUID.randomUUID();
   @Autowired SagaWorker worker;
   @Autowired OrderReturnWorker returns;
+  @Autowired MeterRegistry meters;
 
   private String ops() { return tokenWith(OPS, "order.read", "order.fulfill", "order.return"); }
 
@@ -241,6 +243,22 @@ class OrderReturnsIntegrationTest extends OrderTestSupport {
     assertThat(slipStatus(returnId)).isEqualTo("MANUAL");
     assertThat(taskStatus(returnId)).isEqualTo("MANUAL");
     assertThat(saga(id)).containsEntry("step", "WAIT_RETURN").containsEntry("status", "WAITING");
+  }
+
+  @Test void aManualSlipOnAReturningOrderHasNoApiExit() {
+    UUID id = inStatus("RETURNING");
+    UUID teeM = item(id, "TEE-M");
+    var d = data(slip(id, "ret-m", body(version(id), line(teeM, 2, 2, null)), ops()), 202);
+    inventoryReturns(409, StubServers.error("CONFLICT", "RETURN_EXCEEDS_COMMITTED"));
+    double before = meters.counter("order.return.manual").count();
+    returns.runOnce();
+    UUID returnId = UUID.fromString(d.path("return").path("return_id").asString());
+    assertThat(slipStatus(returnId)).isEqualTo("MANUAL");
+    assertThat(meters.counter("order.return.manual").count()).isEqualTo(before + 1);
+    assertThat(jdbc.queryForObject("select status from orders where id = ?", String.class, id)).isEqualTo("RETURNING");
+    assertThat(saga(id)).containsEntry("step", "WAIT_RETURN").containsEntry("status", "WAITING");
+    // The MANUAL slip still counts in the received sum, so the remainder cannot be re-submitted.
+    assertThat(problem(slip(id, "ret-m2", body(version(id), line(teeM, 1, 1, null)), ops()), 409)).isEqualTo("RETURN_EXCEEDS_ORDERED");
   }
 
   @Test void anUnavailableInventoryRetriesTheTask() {
