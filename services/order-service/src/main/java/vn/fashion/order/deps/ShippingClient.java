@@ -1,12 +1,14 @@
 package vn.fashion.order.deps;
 
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
+import vn.fashion.order.saga.SagaOrder;
 import vn.fashion.order.web.Api;
 
 /** SHP-01 stored fee quote (internal); the order snapshots it. */
@@ -36,5 +38,17 @@ public class ShippingClient {
           d.path("fee").longValue(), d.path("cod_fee").longValue(), Instant.parse(d.path("expires_at").asString()));
     } catch (DependencyUnavailable e) { throw e; }
     catch (RuntimeException e) { throw new DependencyUnavailable("shipping"); }
+  }
+
+  /** SHP-01 SELF shipment for a packed order (key shipment:{id}); cod_amount is what the courier collects. */
+  public Outcome create(SagaOrder o) {
+    var body = new LinkedHashMap<String, Object>();
+    body.put("order_id", o.id().toString());
+    body.put("order_no", o.orderNo());
+    body.put("quote_id", o.quoteId().toString());
+    body.put("cod_amount", o.method().equals("COD") ? o.total() : 0L);
+    body.put("to_address", o.toAddress());
+    return Outcome.of("shipping", http, "shipping-service", url + "/internal/api/v1/shipping/shipments", body,
+        "Idempotency-Key", "shipment:" + o.id());
   }
 }

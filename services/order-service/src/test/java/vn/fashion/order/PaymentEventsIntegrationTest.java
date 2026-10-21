@@ -1,7 +1,11 @@
 package vn.fashion.order;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import java.sql.Connection;
 import java.time.Instant;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import javax.sql.DataSource;
 import java.util.LinkedHashMap;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -16,6 +20,7 @@ class PaymentEventsIntegrationTest extends OrderTestSupport {
   @Autowired PaymentEvents events;
   @Autowired InboxGuard inbox;
   @Autowired SagaWorker saga;
+  @Autowired DataSource dataSource;
 
   EventEnvelope envelope(UUID eventId, String type, UUID orderId, String paidAt, String reason) {
     var payload = new LinkedHashMap<String, Object>();
@@ -43,6 +48,23 @@ class PaymentEventsIntegrationTest extends OrderTestSupport {
     deliver(envelope(UUID.randomUUID(), "PAYMENT_COMPLETED", id, "2026-10-21T05:00:00Z", null));
     assertThat(jdbc.queryForObject("select paid_at::text from orders where id = ?", String.class, id)).startsWith("2026-10-20 05:00:00");
     assertThat(count("select count(*) from processed_events where consumer_name = 'order-service'")).isEqualTo(2);
+  }
+
+  /** Lock order order_sagas -> orders: while another tx holds the saga row, PaymentEvents waits without having locked orders. */
+  @Test void paymentEventsLockTheSagaBeforeTheOrder() throws Exception {
+    UUID id = placeOrder();
+    try (Connection c = dataSource.getConnection()) {
+      c.setAutoCommit(false);
+      c.createStatement().execute("select 1 from order_sagas where order_id = '" + id + "' for update");
+      var pending = CompletableFuture.runAsync(
+          () -> deliver(envelope(UUID.randomUUID(), "PAYMENT_COMPLETED", id, "2026-10-20T05:00:00Z", null)));
+      Thread.sleep(1000);
+      assertThat(pending).isNotDone();                       // blocked on the saga lock
+      c.createStatement().execute("select 1 from orders where id = '" + id + "' for update nowait");   // fails if orders was locked first
+      c.commit();
+      pending.get(10, TimeUnit.SECONDS);
+    }
+    assertThat(saga(id)).containsEntry("payment_state", "PAID");
   }
 
   @Test void otherPaymentEventsAreOnlyAcknowledged() {

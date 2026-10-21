@@ -355,6 +355,22 @@ sequenceDiagram
 - Khách hủy hoặc hết hạn trước OPS xác nhận: CANCELLING → release stock/promotion → đóng payment COD chưa thu → CANCELLED.
 - Thu COD và tiền carrier chuyển về là hai việc riêng. ORDER_COMPLETED phục vụ review khi giao thành công; không đồng nghĩa doanh thu tiền đã đối soát. PAYMENT_COMPLETED của COD sau tiền về chỉ cập nhật tài chính, không chạy commit kho lần nữa.
 
+`ORD-03` (2026-10-21) hiện thực luồng này phía order ([spec](../superpowers/specs/2026-10-21-ord-03-cod-confirm-fulfil-design.md),
+08 ORD-03). OPS `POST /admin/api/v1/orders/{order_no}/confirm-cod` (một TX khóa `order_sagas` rồi `orders`, thứ tự khóa
+chung của worker/lệnh OPS/consumer shipping; kiểm version trước trạng thái): đơn `CONFIRMED` + COD + saga `WAIT_OPS` không
+lease sống + chưa quá `expires_at` → saga `COMMIT_STOCK`, `orders.version + 1`, đơn **vẫn `CONFIRMED`**. Worker chỉ kiểm hạn
+của order ở `RESERVE`/`CREATE_PAYMENT`/`WAIT_OPS`; từ `COMMIT_STOCK` inventory là trọng tài: commit (key `commit:{order_id}`,
+intent tính lần thử nhưng giữ `inventory_state = HELD`) OK → `COMMITTED` + `CONFIRMED → PACKING` (history SYSTEM, không
+outbox) và kết thúc lượt; `RESERVATION_EXPIRED` → `RELEASED` + hủy `EXPIRED`; `RESERVATION_CLOSED` → `RELEASED` + hủy
+`RESERVE_FAILED`; mã khác retry rồi `MANUAL`. Lượt sau `CREATE_SHIPMENT` (key `shipment:{order_id}`, body từ snapshot) →
+lưu `shipment_id`, saga `DONE`; mọi từ chối → `MANUAL`, đơn giữ `PACKING`. OPS `.../cancel` (reason bắt buộc) chỉ khi saga còn
+`WAIT_OPS` (kể cả đã quá hạn mà worker chưa chạy): `CONFIRMED → CANCELLING` (history ADMIN + reason, `cancel_reason =
+OPS_CANCELLED`) rồi bù trừ ORD-02. Consumer `shipping.events` (inbox, ACK sau commit): `shipment_version` ≤ bản đã áp
+dụng bỏ qua; `DELIVERING` có `handed_over_at` → `SHIPPING` (`shipped_at`); `DELIVERED` → (`SHIPPING` nếu còn `PACKING`)
+`DELIVERED` (`delivered_at`) + outbox `ORDER_COMPLETED`; trạng thái khác (FAILED/RETURNING/…) chỉ ghi version (ORD-04);
+`SHIPMENT_CREATED` ghi `shipment_id` nếu saga chưa có. COD_COLLECTED/REMITTED thuộc payment; FINANCE settlement →
+`PAYMENT_COMPLETED` → order ghi `paid_at` (ORD-02). Hủy sau xác nhận, giao thất bại/hoàn hàng, shipment `UNKNOWN` là ORD-04.
+
 ### 5.3 State machine đơn
 
 ```mermaid
@@ -419,7 +435,9 @@ từ chối → `PAYMENT_FAILED`) hoặc quá `expires_at` (`EXPIRED`, kể cả
 cùng transaction, rồi release (snapshot + hash gốc, mọi trạng thái trừ RELEASED — tombstone chặn reserve cùng key còn đang bay), luôn close payment (tombstone), mới
 `CANCELLED`. Release trả COMMITTED, hoặc tiền đã thu (close thấy COD_COLLECTED/SUCCESS hay đã ghi `PAYMENT_COMPLETED` — `PAID_NEEDS_REFUND`) → `MANUAL` ngay; mã từ chối khác danh sách nghiệp vụ (400, 404, `*_CONFLICT`), lỗi chưa rõ và exception trong bước backoff
 `min(2^n s, 5 phút)` ±20 %, 30 lần → `MANUAL` + metric `order_saga_manual_total`. Mỗi ghi kết quả là CAS theo lease token;
-worker mất lease bỏ kết quả. Khách/OPS hủy, return/restore khi đã commit là ORD-03/04.
+worker mất lease bỏ kết quả. `ORD-03` thêm OPS hủy đơn `CONFIRMED` còn chờ OPS (`OPS_CANCELLED`, §5.2) và commit
+`RESERVATION_EXPIRED`/`CLOSED` sau xác nhận (inventory đã nhả, ghi `RELEASED` trước khi vào bù trừ); khách hủy, OPS hủy sau
+xác nhận, return/restore khi đã commit là ORD-04.
 
 ## 6. `inventory-service`
 

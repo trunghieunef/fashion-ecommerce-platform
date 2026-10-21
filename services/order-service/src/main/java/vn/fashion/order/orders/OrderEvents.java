@@ -1,6 +1,7 @@
 package vn.fashion.order.orders;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -36,12 +37,32 @@ public class OrderEvents {
     payload.put("user_id", userId == null ? null : userId.toString());
     payload.put("status", view.status());
     payload.put("order_version", view.version());
-    payload.put("items", view.items().stream()
-        .map(i -> Map.of("variant_id", i.variantId().toString(), "sku", i.sku(), "quantity", i.quantity())).toList());
+    payload.put("items", items(view));
     payload.put("total_amount", view.totals().totalAmount());
     payload.put("currency", view.totals().currency());
     payload.put("method", view.method());
     if (reason != null) payload.put("reason", reason);
+    append(type, view, payload, correlationId);
+  }
+
+  /** ORDER_COMPLETED (OrderCompleted, ORD-03 spec section 6), in the transaction of the SHIPPING -> DELIVERED move. */
+  public void completed(OrderView view, UUID userId, Instant deliveredAt, String correlationId) {
+    var payload = new LinkedHashMap<String, Object>();
+    payload.put("order_id", view.orderId().toString());
+    payload.put("order_no", view.orderNo());
+    payload.put("user_id", userId == null ? null : userId.toString());
+    payload.put("order_version", view.version());
+    payload.put("items", items(view));
+    payload.put("delivered_at", deliveredAt.toString());
+    append("ORDER_COMPLETED", view, payload, correlationId);
+  }
+
+  private static java.util.List<Map<String, Object>> items(OrderView view) {
+    return view.items().stream()
+        .map(i -> Map.<String, Object>of("variant_id", i.variantId().toString(), "sku", i.sku(), "quantity", i.quantity())).toList();
+  }
+
+  private void append(String type, OrderView view, Map<String, Object> payload, String correlationId) {
     var route = routes.required(type);
     outbox.append(new OutboxEvent(UUID.randomUUID(), "order", (String) payload.get(route.required("aggregate_id").asString()),
         view.version(), type, 1, route.required("topic").asString(),

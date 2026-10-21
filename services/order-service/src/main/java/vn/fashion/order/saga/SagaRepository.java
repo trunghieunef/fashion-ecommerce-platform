@@ -75,9 +75,20 @@ public class SagaRepository {
         select cart_item_id, cart_item_version, sku, quantity from order_items where order_id = :id order by sku, cart_item_id""")
         .param("id", orderId).query(SagaOrder.Item.class).list();
     return jdbc.sql("""
-        select id, order_no, user_id, actor_key, cart_id, payment_method, total_amount, expires_at from orders where id = :id""")
+        select id, order_no, user_id, actor_key, cart_id, payment_method, total_amount, expires_at, (shipping_quote ->> 'quote_id')::uuid,
+          shipping_address ->> 'recipient_name', shipping_address ->> 'phone', shipping_address ->> 'province_code',
+          shipping_address ->> 'ward_code', shipping_address ->> 'address_line' from orders where id = :id""")
         .param("id", orderId).query((rs, n) -> new SagaOrder(rs.getObject(1, UUID.class), rs.getString(2), rs.getObject(3, UUID.class),
-            rs.getString(4), rs.getObject(5, UUID.class), rs.getString(6), rs.getLong(7), rs.getTimestamp(8).toInstant(), items))
+            rs.getString(4), rs.getObject(5, UUID.class), rs.getString(6), rs.getLong(7), rs.getTimestamp(8).toInstant(), items,
+            rs.getObject(9, UUID.class), address(rs)))
         .single();
+  }
+
+  /** ShipmentCreate.to_address keys; district_code is not collected, so it is omitted (additionalProperties false). */
+  private static java.util.Map<String, String> address(java.sql.ResultSet rs) throws java.sql.SQLException {
+    var a = new java.util.LinkedHashMap<String, String>();
+    a.put("recipient_name", rs.getString(10)); a.put("phone", rs.getString(11)); a.put("province_code", rs.getString(12));
+    a.put("ward_code", rs.getString(13)); a.put("address_line", rs.getString(14));
+    return a;
   }
 }

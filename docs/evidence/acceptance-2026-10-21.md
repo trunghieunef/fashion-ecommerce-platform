@@ -35,8 +35,8 @@ Phạm vi: acceptance ở [10](../delivery/10_backlog.md) dòng ORD-02 và REQ O
 | GET đơn phản ánh `processing_status`/`reason_code`; đặt lại sau hủy; guest tìm lại đơn | `processingStatusFollowsTheSaga`, `outOfStockCancels…` (đặt lại cùng giỏ, actor khác 409), `aGuestWhoseCartWasCleanedFindsItsOrderAgain`; contract `order.yaml` 83 test | Pass |
 | Worker chết sau inventory commit (T09) | Không có commit kho trong ORD-02; `COMMITTED` khi bù trừ → MANUAL | **Ngoại lệ (ORD-03)** |
 
-**`TASK:ORD-02`: Done (local, trước G0)**; CI trên `3b8ee5b` PASS, re-review PR #33 đồng ý merge, chờ chủ dự án merge vào
-`main`.
+**`TASK:ORD-02`: Done (local, trước G0)**; CI trên `3b8ee5b` PASS, re-review PR #33 đồng ý merge; chủ dự án đã merge vào
+`main` (`a11ec41`, 2026-10-21).
 
 ### Ngoại lệ và việc còn lại (không chặn Done local)
 
@@ -46,3 +46,47 @@ Phạm vi: acceptance ở [10](../delivery/10_backlog.md) dòng ORD-02 và REQ O
 - Minor để sau ở evidence: lease không gia hạn trong batch, cleanup MANUAL không metric, event payment không đối chiếu amount;
   bước bù trừ chưa ghi intent nên crash lặp đúng lúc release/close chưa vào MANUAL (ghi chú re-review, làm cùng ORD-03/04);
   grant bảng mới cho `order_runtime` ở `infra/environments` kiểm khi làm PLT-04.
+
+## TASK:ORD-03 — OPS xác nhận/hủy COD, commit kho, vận đơn SELF, giao hàng
+
+Chủ dự án yêu cầu Claude Code nghiệm thu `TASK:ORD-03` sau khi quyết định merge PR #34. **Không độc lập:** ORD-03 do Claude
+Code viết (6 task, mỗi task một subagent reviewer; review toàn nhánh 0 Critical / 1 Important sửa ở `61741ec`). Review trên
+PR #34 (`a11ec41..7c66b34`): 0 Critical, 0 Important, 8 Minor, kết luận "có thể merge"; cả 8 minor sửa ở `ad54847` và đã
+trả lời trên PR. Merge do chủ dự án. Phạm vi: acceptance ở [10](../delivery/10_backlog.md) dòng ORD-03, REQ ORD-03/06 và
+PAY-03 (COD) ở 02 theo [spec đã duyệt](../superpowers/specs/2026-10-21-ord-03-cod-confirm-fulfil-design.md), mức local trước
+G0.
+
+### Bằng chứng chung
+
+- Code trên `dev` `ad54847`. CI PR #34 trên `7c66b34` SUCCESS: `s1-local`
+  ([run 39505115599](https://github.com/trunghieunef/fashion-ecommerce-platform/actions/runs/39505115599/job/118911981664),
+  gồm backend reactor, contract, local stack + smoke) và `docs-check`. CI trên `ad54847` (sửa review PR): `docs-check`
+  SUCCESS, `s1-local` đang chạy lúc nghiệm thu — kết quả ghi bổ sung bên dưới.
+- Local: `./mvnw -B -pl services/order-service verify` **95 test** PASS sau sửa review PR; trước đó order-service +
+  gateway 138 test; contract 86 test (docker Python 3.13); `local-up` + `smoke-local` → `ORD-03 COD end-to-end PASS`.
+  Mutation 4 guard đều bị test bắt (một mutant sống lần đầu, đã thêm assert). Chi tiết: [evidence ORD-03](ord-03-local-2026-10-21.md).
+
+### Kết quả theo tiêu chí
+
+| Tiêu chí (10 ORD-03 / 02 REQ / spec) | Bằng chứng | Kết quả |
+|---|---|---|
+| OPS xác nhận COD từng đơn, chỉ khi `CONFIRMED` chờ OPS, chưa hết hạn; không set status tùy ý (REQ ORD-06) | `anOpsConfirmHandsTheOrderToTheSaga`, `confirmRefusals` (version, transition, `ORDER_EXPIRED`, `SAGA_BUSY`, quyền), idempotency replay/reuse; contract `order.yaml` | Pass |
+| OPS hủy đơn `CONFIRMED` có lý do → release + close → `CANCELLED OPS_CANCELLED` (phạm vi kéo từ ORD-04) | `anOpsCancelReleasesAndCloses`, cancel sau xác nhận → 409; `confirmAndCancelRaceHasOneWinner` | Pass |
+| Commit kho trước `PACKING`; race commit↔hết hạn một kết quả (REQ ORD-03, T12) | `aConfirmedOrderIsCommittedAndPacked`, T12a `inventorySaysExpiredSoTheOrderIsCancelled`, T12b `aCommitAfterTheOrderDeadlineStillPacks`, T12c `aWorkerCancellingAtTheDeadlineBeatsALateConfirm`, T12d race; mutation "PACKING trước commit" bị 9/10 test bắt | Pass |
+| Worker chết sau inventory commit (T09) | `aLostCommitResponseAfterTheDeadlineStillPacks` (cùng key, `HELD` giữ nguyên, 0 release); mutation key ngẫu nhiên bị bắt | Pass |
+| Tạo vận đơn SELF một lần, body snapshot; từ chối không tự hủy | `aPackedOrderGetsItsSelfShipment`, `aLostShipmentResponseIsRetriedWithTheSameBody`, `aRefusedShipmentGoesManualAndKeepsTheStock` | Pass |
+| `SHIPPING` chỉ trên bằng chứng `handed_over_at`; delivered event → `DELIVERED` + `ORDER_COMPLETED` một lần (REQ ORD-06) | `ShippingEventsIntegrationTest` (happy, `outOfOrderShippingEventsOnlyMoveForward`, trùng/cũ, CANCELLED); Kafka listener test | Pass |
+| End-to-end qua SELF + FINANCE settlement; COD `SUCCESS` chỉ khi FINANCE xác nhận, `DELIVERED` không suy ra đã thu (REQ PAY-03, T27) | Smoke `ORD-03 COD end-to-end PASS` local và trong CI `s1-local` trên `7c66b34`: DELIVERED → `COD_COLLECTED` → settlement → `SUCCESS` → `payment_state = PAID` | Pass |
+| Quyền và PII: kiểm tại service; FINANCE không thấy liên hệ/địa chỉ (13) | `financeSeesNoCustomerContact`, 401/403, gateway `orderAdminIsRouted`; smoke FINANCE detail không PII, FINANCE confirm 403 | Pass |
+| Không HTTP trong DB TX; thứ tự khóa `order_sagas` → `orders` toàn service | `aWorkerClaimTakenBeforeTheConfirmLosesItsWrite`, `paymentEventsLockTheSagaBeforeTheOrder`; review toàn nhánh | Pass |
+
+**`TASK:ORD-03`: Done (local, trước G0)**; CI trên `7c66b34` PASS, review PR #34 "có thể merge", 8 minor đã sửa ở
+`ad54847`; chủ dự án quyết định merge.
+
+### Ngoại lệ và việc còn lại (không chặn Done local)
+
+- ORD-04: hủy sau xác nhận/khách hủy, giao thất bại/hoàn hàng, shipment `UNKNOWN`, restore kho; đối chiếu `shipment_id` và
+  đặt lại `shipment_version` khi tạo vận đơn mới; alert/metric `MANUAL` cho `COMMIT_STOCK`/`CREATE_SHIPMENT`.
+- `pack` đơn online chờ TASK PAY-02/03; màn hình admin và hint "không nhập liên hệ khách vào ghi chú" ở ADM-01/02.
+- Minor để sau ở evidence: N+1 saga khi đọc danh sách, chưa index `contact_phone`, smoke chưa đọc trực tiếp `paid_at`.
+- Sửa ghi nhầm khi nghiệm thu: `REQ:PAY-03` là COD settlement (đã kiểm qua smoke), không phải phần online.

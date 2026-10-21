@@ -52,6 +52,14 @@ response và key, gửi lại nhận `409 CART_ALREADY_ORDERED` + `order_no` c�
 `PROCESSING` không giới hạn: FE giới hạn poll (ví dụ dừng sau khoảng 2 phút), hiển thị "đơn đang được xử lý, shop sẽ liên hệ" và
 link xem lại đơn, không tự tạo đơn mới.
 
+ORD-03: sau khi OPS xác nhận, đơn `CONFIRMED` chuyển `processing_status` `PROCESSING` (shop đang trừ kho) rồi `PACKING`
+(`PROCESSING` tới khi có vận đơn SELF, sau đó `READY`), `SHIPPING` `READY`, `DELIVERED` `FINISHED`; OPS hủy đơn chờ xác nhận →
+`CANCELLED` với `reason_code` `OPS_CANCELLED` (hiển thị "shop đã hủy đơn", không lộ lý do nội bộ). Trang đơn của khách chỉ poll
+khi `PROCESSING` (cùng giới hạn như trên); `READY`/`FINISHED` dừng poll, khách tải lại để xem tiến độ giao. `DELIVERED` không
+có nghĩa shop đã nhận tiền COD (T27). Admin UI (ADM-01/02) gửi `expected_version` từ GET detail và giữ `Idempotency-Key` qua
+retry; `409 VERSION_CONFLICT`/`INVALID_TRANSITION` → tải lại đơn (lỗi này không lưu theo key, retry cùng key được đánh giá
+lại); `409 ORDER_EXPIRED` → đơn sắp bị hủy, không xác nhận được.
+
 409 PRICE_CHANGED/QUOTE_EXPIRED: highlight số cũ/mới nếu có, yêu cầu xác nhận lại. 409 VERSION_CONFLICT: reload cart, không ghi đè thay đổi thiết bị khác. 429: chờ; 503: thông báo thử lại nhưng giữ key của mutation chưa biết kết quả.
 
 ## 4. Trạng thái đơn, tiền và nội dung UI

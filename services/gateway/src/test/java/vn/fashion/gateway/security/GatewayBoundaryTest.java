@@ -148,6 +148,15 @@ class GatewayBoundaryTest {
   }
 
   @Test
+  void orderAdminIsRouted() {
+    // TASK:ORD-03: OPS list/detail/confirm-cod/cancel go to order-service, which checks the permissions itself.
+    client.get().uri("/admin/api/v1/orders").exchange().expectStatus().isOk();
+    assertThat(CATALOG.path()).isEqualTo("/admin/api/v1/orders");
+    client.post().uri("/admin/api/v1/orders/ORD202610000001/confirm-cod").exchange().expectStatus().isOk();
+    assertThat(CATALOG.path()).isEqualTo("/admin/api/v1/orders/ORD202610000001/confirm-cod");
+  }
+
+  @Test
   void inventoryAdminIsRouted() {
     client.get().uri("/admin/api/v1/inventory/skus").exchange().expectStatus().isOk();
     assertThat(CATALOG.requestCount()).isEqualTo(1);

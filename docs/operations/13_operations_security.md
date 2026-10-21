@@ -35,7 +35,7 @@ Permission code do USR-02 seed (`V003` của user-service, từ 03 §3) và đư
 |---|---|---|---|
 | `user.manage` | users, roles, lock | SUPER_ADMIN | 1 |
 | `catalog.write` | products, variants, categories, brands, collections, size-guides, images | OPS | 1 |
-| `order.read` | GET orders (FINANCE nhận bản redacted) | OPS, FINANCE | 1 |
+| `order.read` | GET orders (FINANCE nhận bản redacted: `ORD-03` implemented — người gọi không có `order.fulfill` không nhận `contact_phone`/`contact_email`/`shipping_address`/`note`, history `reason` null, không tìm theo số điện thoại) | OPS, FINANCE | 1 |
 | `order.fulfill`, `order.cancel`, `order.return` | confirm-cod, pack; cancel; returns | OPS | 1 |
 | `inventory.read`, `inventory.adjust` | skus, transactions; adjust, import | OPS | 1 |
 | `shipping.read`, `shipping.self_event`, `shipping.rules` | shipments; self-events; rules | OPS | 1 |

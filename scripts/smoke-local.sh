@@ -307,6 +307,66 @@ test "$(status -H "Authorization: Bearer $finance" "$GATEWAY_URL/admin/api/v1/pa
 test "$(status -H "Authorization: Bearer $access" "$GATEWAY_URL/admin/api/v1/payments")" = 403
 test "$(status -X POST "$GATEWAY_URL/internal/api/v1/payments")" = 404
 echo 'PAY-01 payment admin route PASS'
+# TASK:ORD-03: the ORD-02 order end to end through the Gateway: OPS confirm-cod -> inventory commit -> PACKING + SELF
+# shipment -> shipper self-events -> DELIVERED -> FINANCE settlement -> payment SUCCESS -> order paid (payment_state PAID
+# is written with orders.paid_at in one transaction, ORD-02 PaymentEvents).
+ops="$(local_ops_token order.read order.fulfill shipping.read shipping.self_event)"
+finance="$(local_ops_token order.read payment.read payment.settle)"
+admin_order() {
+  curl -sS -H "Authorization: Bearer $1" "$GATEWAY_URL/admin/api/v1/orders/$order_no" | \
+    python3 -c "import json,sys; d=json.load(sys.stdin)['data']; s=d['saga'] or {}; print($2)"
+}
+test "$(admin_order "$finance" "'contact_phone' in d or 'shipping_address' in d")" = False
+order_version="$(admin_order "$ops" "d['version']")"
+test "$(status -X POST -H "Authorization: Bearer $finance" -H 'Content-Type: application/json' -H "Idempotency-Key: smoke-$catalog_suffix-confirm" \
+  -d "{\"expected_version\":$order_version}" "$GATEWAY_URL/admin/api/v1/orders/$order_no/confirm-cod")" = 403
+curl -sS -H "Authorization: Bearer $ops" -H 'Content-Type: application/json' -H "Idempotency-Key: smoke-$catalog_suffix-confirm" \
+  -d "{\"expected_version\":$order_version,\"note\":\"Smoke: khach dong y\"}" "$GATEWAY_URL/admin/api/v1/orders/$order_no/confirm-cod" | \
+  python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["status"]=="CONFIRMED" and d["processing_status"]=="PROCESSING", d'
+for _ in $(seq 1 20); do
+  order_status="$(admin_order "$ops" "d['status'] + ' ' + str(s.get('status')) + ' ' + str(s.get('shipment_id'))")"
+  [[ "$order_status" == PACKING\ DONE\ * || "$order_status" == CANCELLED* || "$order_status" == *MANUAL* ]] && break
+  sleep 1
+done
+[[ "$order_status" == PACKING\ DONE\ * ]] || { echo "ORD-03 commit/shipment FAIL: $order_status" >&2; exit 1; }
+shipment_id="${order_status##* }"
+self_event() {
+  curl -sS -H "Authorization: Bearer $ops" -H 'Content-Type: application/json' -H "Idempotency-Key: smoke-$catalog_suffix-$1" \
+    -d "$2" "$GATEWAY_URL/admin/api/v1/shipping/shipments/$shipment_id/self-events" | \
+    python3 -c 'import json,sys; r=json.load(sys.stdin); assert r["code"]=="OK", r; print(r["data"]["version"])'
+}
+shipment_version="$(curl -sS -H "Authorization: Bearer $ops" "$GATEWAY_URL/admin/api/v1/shipping/shipments/$shipment_id" | \
+  python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["version"])')"
+cod_amount="$(admin_order "$ops" "d['total_amount']")"
+shipment_version="$(self_event assign "{\"event_type\":\"ASSIGN\",\"expected_version\":$shipment_version,\"assigned_to\":\"11111111-1111-4111-8111-111111111111\"}")"
+shipment_version="$(self_event handover "{\"event_type\":\"HANDED_OVER\",\"expected_version\":$shipment_version,\"evidence_ref\":\"smoke-handover\"}")"
+shipment_version="$(self_event delivered "{\"event_type\":\"DELIVERED\",\"expected_version\":$shipment_version,\"evidence_ref\":\"smoke-pod\"}")"
+self_event cod "{\"event_type\":\"COD_COLLECTED\",\"expected_version\":$shipment_version,\"amount\":$cod_amount,\"evidence_ref\":\"smoke-cod\"}" >/dev/null
+for _ in $(seq 1 20); do
+  order_status="$(admin_order "$ops" "d['status'] + ' ' + str(d['shipped_at'] is not None)")"
+  [[ "$order_status" == DELIVERED* ]] && break
+  sleep 1
+done
+test "$order_status" = "DELIVERED True" || { echo "ORD-03 delivery FAIL: $order_status" >&2; exit 1; }
+payment_id="$(admin_order "$ops" "s['payment_id']")"
+for _ in $(seq 1 20); do
+  read -r payment_status payment_version < <(curl -sS -H "Authorization: Bearer $finance" "$GATEWAY_URL/admin/api/v1/payments/$payment_id" | \
+    python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; print(d["status"], d["version"])')
+  [ "$payment_status" = COD_COLLECTED ] && break
+  sleep 1
+done
+test "$payment_status" = COD_COLLECTED || { echo "ORD-03 COD evidence FAIL: $payment_status" >&2; exit 1; }
+curl -sS -H "Authorization: Bearer $finance" -H 'Content-Type: application/json' -H "Idempotency-Key: smoke-$catalog_suffix-settle" \
+  -d "{\"settlement_ref\":\"SMOKE-$catalog_suffix\",\"gross_amount\":$cod_amount,\"fee_amount\":0,\"net_amount\":$cod_amount,\"evidence_ref\":\"smoke-statement\",\"expected_version\":$payment_version}" \
+  "$GATEWAY_URL/admin/api/v1/payments/$payment_id/cod-settlements" | \
+  python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["status"]=="SUCCESS" and d["paid_at"], d'
+for _ in $(seq 1 20); do
+  order_status="$(admin_order "$ops" "s['payment_state']")"
+  [ "$order_status" = PAID ] && break
+  sleep 1
+done
+test "$order_status" = PAID || { echo "ORD-03 paid FAIL: $order_status" >&2; exit 1; }
+echo 'ORD-03 COD end-to-end PASS'
 # TASK:CAT-02b: public detail is cacheable for 5 s (Redis keeps it 300 s until invalidated).
 curl -sS -o /dev/null -D "$headers" "$GATEWAY_URL/api/v1/catalog/products/$product_id"
 grep -qi '^cache-control: public, max-age=5' "$headers"
