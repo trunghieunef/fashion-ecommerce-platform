@@ -70,4 +70,25 @@ class OrderSchemaIntegrationTest extends OrderTestSupport {
         .rootCause().hasMessageContaining("permission denied");
     assertThat(jdbc.queryForObject("select nextval('order_no_seq')", Long.class)).isPositive();
   }
+
+  @Test void returnTablesGuardQuantities() {
+    // TASK:ORD-04 V004 (spec section 8): restock <= received, one slip per (order, key), items never rewritten by the runtime.
+    UUID order = UUID.randomUUID(), item = UUID.randomUUID(), slip = UUID.randomUUID();
+    order(order, UUID.randomUUID(), 1, "user:" + MEMBER, MEMBER, null, 125000);
+    jdbc.update("""
+        insert into order_items(id, order_id, variant_id, sku, name, size, color, quantity, unit_price, line_total, catalog_version, cart_item_id,
+          cart_item_version) values (?, ?, ?, 'TEE-M', 'Ao thun', 'M', 'Den', 2, 50000, 100000, 1, gen_random_uuid(), 1)""", item, order, V1);
+    jdbc.update("insert into order_returns(id, order_id, operation_key, request_id) values (?, ?, 'r1', gen_random_uuid())", slip, order);
+    assertThat(jdbc.queryForObject("select status from order_returns where id = ?", String.class, slip)).isEqualTo("REQUESTED");
+    assertThatThrownBy(() -> jdbc.update("insert into order_returns(id, order_id, operation_key, request_id) values (gen_random_uuid(), ?, 'r1', gen_random_uuid())", order))
+        .isInstanceOf(DataAccessException.class).hasMessageContaining("order_returns_order_id_operation_key_key");
+    assertThatThrownBy(() -> jdbc.update("insert into order_return_items(return_id, order_item_id, received_quantity, restock_quantity) values (?, ?, 1, 2)", slip, item))
+        .isInstanceOf(DataAccessException.class).hasMessageContaining("order_return_items_check");
+    jdbc.update("insert into order_return_items(return_id, order_item_id, received_quantity, restock_quantity) values (?, ?, 2, 1)", slip, item);
+    assertThatThrownBy(() -> jdbc.update("update order_return_items set restock_quantity = 0 where return_id = ?", slip))
+        .rootCause().hasMessageContaining("permission denied");
+    assertThatThrownBy(() -> jdbc.update("delete from order_returns where id = ?", slip)).rootCause().hasMessageContaining("permission denied");
+    assertThat(jdbc.queryForObject("select column_default from information_schema.columns where table_name = 'order_sagas' and column_name = 'shipment_state'", String.class))
+        .contains("NONE");
+  }
 }

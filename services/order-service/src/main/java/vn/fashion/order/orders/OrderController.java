@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import tools.jackson.databind.ObjectMapper;
+import vn.fashion.order.admin.OrderCommands;
 import vn.fashion.order.quotes.Quote;
 import vn.fashion.order.quotes.QuoteRequest;
 import vn.fashion.order.quotes.QuoteService;
@@ -43,10 +44,12 @@ public class OrderController {
   private final OrderService orders;
   private final ObjectMapper json;
   private final Tracer tracer;
+  private final OrderCommands commands;
 
   public OrderController(OrderIdentity identity, QuoteService quotes, QuoteTokens tokens, OrderService orders, ObjectMapper json,
-                         Tracer tracer) {
+                         Tracer tracer, OrderCommands commands) {
     this.identity = identity; this.quotes = quotes; this.tokens = tokens; this.orders = orders; this.json = json; this.tracer = tracer;
+    this.commands = commands;
   }
 
   /** 202 + Location/Retry-After while PROCESSING (always in ORD-01); a retry with the same key gets the same order. */
@@ -91,10 +94,25 @@ public class OrderController {
   @GetMapping("/{orderNo}")
   public ResponseEntity<Api.Response<OrderView>> get(@PathVariable String orderNo, HttpServletRequest request) {
     var member = identity.member(request);
+    return Api.ok(HttpStatus.OK, orders.readable(orderNo, member.map(OrderActor::userId).orElse(null), access(member, request)), tracer);
+  }
+
+  /** ORD-04 spec section 3: the owner as for GET (else 404), then Idempotency-Key, then {expected_version, reason?}; 202 + its view. */
+  @PostMapping("/{orderNo}/cancel")
+  public ResponseEntity<?> cancel(@PathVariable String orderNo, @RequestHeader(name = "Idempotency-Key", required = false) String key,
+                                  @RequestBody(required = false) String body, HttpServletRequest request) {
+    var member = identity.member(request);
+    var owner = orders.owned(orderNo, member.map(OrderActor::userId).orElse(null), access(member, request));
+    Api.requireKey(key);
+    var node = Api.object(json, body);
+    return Api.ok(HttpStatus.ACCEPTED, commands.customerCancel(owner, key, Api.expectedVersion(node), Api.text(node, "reason", false)), tracer);
+  }
+
+  private static String access(java.util.Optional<OrderActor> member, HttpServletRequest request) {
     String access = null;
     if (member.isEmpty() && request.getCookies() != null)
       for (var cookie : request.getCookies()) if (ACCESS_COOKIE.equals(cookie.getName())) access = cookie.getValue();
-    return Api.ok(HttpStatus.OK, orders.readable(orderNo, member.map(OrderActor::userId).orElse(null), access), tracer);
+    return access;
   }
 
   @PostMapping("/quote")

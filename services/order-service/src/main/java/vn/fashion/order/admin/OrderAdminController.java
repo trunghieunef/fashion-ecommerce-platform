@@ -12,7 +12,6 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import vn.fashion.order.web.Api;
 
@@ -60,7 +59,7 @@ public class OrderAdminController {
     var actor = auth.require(authorization, "order.fulfill");
     Api.requireKey(key);
     var node = Api.object(json, body);
-    return Api.ok(HttpStatus.ACCEPTED, commands.confirmCod(actor, orderNo, key, version(node), text(node, "note", false)), tracer);
+    return Api.ok(HttpStatus.ACCEPTED, commands.confirmCod(actor, orderNo, key, Api.expectedVersion(node), Api.text(node, "note", false)), tracer);
   }
 
   /** Spec section 3: body {expected_version, reason (1..500)}; 202 + the order (CANCELLING). */
@@ -71,24 +70,7 @@ public class OrderAdminController {
     var actor = auth.require(authorization, "order.cancel");
     Api.requireKey(key);
     var node = Api.object(json, body);
-    return Api.ok(HttpStatus.ACCEPTED, commands.cancel(actor, orderNo, key, version(node), text(node, "reason", true)), tracer);
+    return Api.ok(HttpStatus.ACCEPTED, commands.cancel(actor, orderNo, key, Api.expectedVersion(node), Api.text(node, "reason", true)), tracer);
   }
 
-  private static long version(JsonNode body) {
-    var v = body.path("expected_version");
-    if (!v.isIntegralNumber() || !v.canConvertToLong() || v.asLong() < 0) throw fields("expected_version", "must be a non-negative integer");
-    return v.asLong();
-  }
-  /** Trimmed text up to 500 characters; blank is absent (required -> 400). */
-  private static String text(JsonNode body, String field, boolean required) {
-    var v = body.path(field);
-    if (!v.isMissingNode() && !v.isNull() && !v.isString()) throw fields(field, "must be a string");
-    String s = v.isString() ? v.asString().strip() : "";
-    if (s.length() > 500) throw fields(field, "must be at most 500 characters");
-    if (s.isEmpty() && required) throw fields(field, "is required");
-    return s.isEmpty() ? null : s;
-  }
-  private static Api.Problem fields(String field, String message) {
-    return new Api.Problem(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "INVALID_FIELDS", List.of(new Api.FieldError(field, message)));
-  }
 }

@@ -82,6 +82,19 @@ class OrderReadIntegrationTest extends OrderTestSupport {
         .path("processing_status").asString()).as(no).isEqualTo(status));
   }
 
+  @Test void allowedActionsOfferCancelOnlyWhileWaitingForTheShop() {
+    // TASK:ORD-04 spec section 3: CANCEL only for CONFIRMED + saga FULFILL/WAIT_OPS.
+    String waiting = seed(MEMBER, null, "CONFIRMED", 1), cancelled = seed(MEMBER, null, "CANCELLED", 2);
+    jdbc.update("insert into order_sagas(order_id, step, status) select id, 'WAIT_OPS', 'WAITING' from orders where order_no in (?, ?)",
+        waiting, cancelled);
+    var actions = (java.util.function.Function<String, String>) no ->
+        data(get("/api/v1/orders/" + no, "Authorization", memberToken()), 200).path("allowed_actions").toString();
+    assertThat(actions.apply(waiting)).isEqualTo("[\"CANCEL\"]");
+    assertThat(actions.apply(cancelled)).isEqualTo("[]");
+    jdbc.update("update order_sagas set step = 'COMMIT_STOCK', status = 'RUNNING' where order_id = (select id from orders where order_no = ?)", waiting);
+    assertThat(actions.apply(waiting)).isEqualTo("[]");
+  }
+
   @Test void guestsReadOnlyTheOrderOfTheirCookie() {
     String token = "t".repeat(43), otherToken = "u".repeat(43);
     String order = seed(null, sha256(token), "PENDING", 1), other = seed(null, sha256(otherToken), "PENDING", 2);

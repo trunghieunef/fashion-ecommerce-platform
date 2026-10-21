@@ -64,6 +64,24 @@ public final class Api {
     try { UUID id = UUID.fromString(raw); if (id.toString().equals(raw)) return id; } catch (RuntimeException ignored) { }
     return null;
   }
+  /** Command bodies (ORD-03/04): expected_version, a non-negative integer. */
+  public static long expectedVersion(JsonNode body) {
+    var v = body.path("expected_version");
+    if (!v.isIntegralNumber() || !v.canConvertToLong() || v.asLong() < 0) throw fields("expected_version", "must be a non-negative integer");
+    return v.asLong();
+  }
+  /** Trimmed text up to 500 characters; blank is absent (required -> 400). */
+  public static String text(JsonNode body, String field, boolean required) {
+    var v = body.path(field);
+    if (!v.isMissingNode() && !v.isNull() && !v.isString()) throw fields(field, "must be a string");
+    String s = v.isString() ? v.asString().strip() : "";
+    if (s.length() > 500) throw fields(field, "must be at most 500 characters");
+    if (s.isEmpty() && required) throw fields(field, "is required");
+    return s.isEmpty() ? null : s;
+  }
+  private static Problem fields(String field, String message) {
+    return new Problem(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "INVALID_FIELDS", List.of(new FieldError(field, message)));
+  }
   public static void requireKey(String key) {
     if (key == null || key.isBlank() || key.length() > 128)
       throw new Problem(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "INVALID_KEY", List.of(new FieldError("Idempotency-Key", "must be 1..128 characters")));
