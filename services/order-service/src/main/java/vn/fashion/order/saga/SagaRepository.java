@@ -18,7 +18,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class SagaRepository {
   public record Claim(UUID orderId, UUID leaseToken) { }
   public record Saga(UUID orderId, String intent, String step, String status, String inventoryState, String paymentState,
-                     int retryCount) { }
+                     int retryCount, UUID shipmentId, String shipmentState) { }
 
   private final JdbcClient jdbc;
   private final TransactionTemplate tx;
@@ -58,7 +58,7 @@ public class SagaRepository {
 
   public Saga saga(UUID orderId) {
     return jdbc.sql("""
-        select order_id, intent, step, status, inventory_state, payment_state, retry_count from order_sagas where order_id = :id""")
+        select order_id, intent, step, status, inventory_state, payment_state, retry_count, shipment_id, shipment_state from order_sagas where order_id = :id""")
         .param("id", orderId).query(Saga.class).single();
   }
 

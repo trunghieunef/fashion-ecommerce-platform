@@ -29,14 +29,27 @@ public class InventoryClient {
         Map.of("order_id", o.id().toString()), "Idempotency-Key", "commit:" + o.id());
   }
 
-  /** RELEASED/EXPIRED (also a tombstone before any reserve) is OK; COMMITTED is REJECTED "COMMITTED" (stock already taken). */
+  /**
+   * RELEASED/EXPIRED (also a tombstone before any reserve) is OK; COMMITTED is OK too with data.restore_required true: stock
+   * was taken, so the caller must restore it (ORD-04 spec section 4), never treat it as released.
+   */
   public Outcome release(SagaOrder o, String reason) {
     var body = Map.of("order_id", o.id().toString(), "original_reservation", snapshot(o), "original_request_hash", hash(o),
         "reason", reason);
-    var out = Outcome.of("inventory", http, "inventory-service", url + "/internal/api/v1/inventory/release", body,
+    return Outcome.of("inventory", http, "inventory-service", url + "/internal/api/v1/inventory/release", body,
         "Idempotency-Key", "release:" + o.id());
-    if (out.result() == Outcome.Result.OK && "COMMITTED".equals(out.data().path("status").asString(""))) return Outcome.rejected("COMMITTED");
-    return out;
+  }
+
+  /** INV-03 /returns for the full ordered quantity; Idempotency-Key = operation_key, a replay must send the same body. */
+  public Outcome restore(SagaOrder o, String operationKey, String reason, String evidenceRef) {
+    var body = new LinkedHashMap<String, Object>();
+    body.put("order_id", o.id().toString());
+    body.put("operation_key", operationKey);
+    body.put("reason", reason);
+    body.put("evidence_ref", evidenceRef);
+    body.put("items", snapshot(o).get("items"));
+    return Outcome.of("inventory", http, "inventory-service", url + "/internal/api/v1/inventory/returns", body,
+        "Idempotency-Key", operationKey);
   }
 
   static String hash(SagaOrder o) { return ReservationHash.of(o.id(), o.orderNo(), o.expiresAt(), skus(o)); }

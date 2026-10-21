@@ -45,11 +45,43 @@ class SagaClientsIntegrationTest extends OrderTestSupport {
     assertThat(rb.path("original_reservation").path("expires_at").asString()).isEqualTo("2026-10-21T03:00:30.123Z");
     assertThat(rb.path("original_reservation").path("order_no").asString()).isEqualTo("ORD202610000001");
     assertThat(rb.path("reason").asString()).isEqualTo("OUT_OF_STOCK");
-    // A release that finds the stock committed is not a release.
-    StubServers.INVENTORY.reply(s -> new StubServers.Reply(200, StubServers.ok("{\"status\":\"COMMITTED\"}")));
+    // ORD-04: a release that finds the stock committed is OK and says restore_required; the saga restores it via /returns.
+    StubServers.INVENTORY.reply(s -> new StubServers.Reply(200, StubServers.ok("{\"status\":\"COMMITTED\",\"restore_required\":true}")));
     var committed = inventory.release(ORDER, "EXPIRED");
-    assertThat(committed.result()).isEqualTo(Outcome.Result.REJECTED);
-    assertThat(committed.code()).isEqualTo("COMMITTED");
+    assertThat(committed.result()).isEqualTo(Outcome.Result.OK);
+    assertThat(committed.data().path("restore_required").asBoolean()).isTrue();
+  }
+
+  @Test void restoreSendsAReturnRequestUnderItsOperationKey() throws Exception {
+    StubServers.INVENTORY.reply(s -> new StubServers.Reply(200, StubServers.ok("{\"items\":[]}")));
+    assertThat(inventory.restore(ORDER, "cancel:" + ID, "OPS_CANCELLED", "order-cancel:" + ID).result()).isEqualTo(Outcome.Result.OK);
+    var seen = StubServers.INVENTORY.seen.get(0);
+    assertThat(seen.path()).isEqualTo("/internal/api/v1/inventory/returns");
+    assertThat(seen.idempotencyKey()).isEqualTo("cancel:" + ID);
+    assertThat(mapper.readTree(seen.body())).isEqualTo(mapper.readTree("{\"order_id\":\"" + ID + "\",\"operation_key\":\"cancel:" + ID
+        + "\",\"reason\":\"OPS_CANCELLED\",\"evidence_ref\":\"order-cancel:" + ID
+        + "\",\"items\":[{\"sku\":\"TEE-L\",\"quantity\":1},{\"sku\":\"TEE-M\",\"quantity\":2}]}"));
+    StubServers.INVENTORY.reply(s -> new StubServers.Reply(409, StubServers.error("CONFLICT", "RETURN_EXCEEDS_COMMITTED")));
+    var refused = inventory.restore(ORDER, "cancel:" + ID, "OPS_CANCELLED", "order-cancel:" + ID);
+    assertThat(refused.result()).isEqualTo(Outcome.Result.REJECTED);
+    assertThat(refused.code()).isEqualTo("RETURN_EXCEEDS_COMMITTED");
+  }
+
+  @Test void shipmentCancelSendsTheCreateSnapshotAndTheReasonCode() throws Exception {
+    StubServers.SHIPPING.reply(s -> new StubServers.Reply(200, StubServers.ok("{\"status\":\"CANCELLED\"}")));
+    shipping.create(ORDER);
+    assertThat(shipping.cancel(ORDER, "OPS_CANCELLED").result()).isEqualTo(Outcome.Result.OK);
+    var create = StubServers.SHIPPING.seen.get(0);
+    var cancel = StubServers.SHIPPING.seen.get(1);
+    assertThat(cancel.path()).isEqualTo("/internal/api/v1/shipping/shipments/by-order/" + ID + "/cancel");
+    assertThat(cancel.idempotencyKey()).isEqualTo("shipment-cancel:" + ID);
+    var body = (tools.jackson.databind.node.ObjectNode) mapper.readTree(cancel.body());
+    assertThat(body.path("reason").asString()).isEqualTo("OPS_CANCELLED");
+    assertThat(body.without("reason")).isEqualTo(mapper.readTree(create.body()));
+    StubServers.SHIPPING.reply(s -> new StubServers.Reply(409, StubServers.error("CONFLICT", "SHIPMENT_HANDED_OVER")));
+    var handed = shipping.cancel(ORDER, "OPS_CANCELLED");
+    assertThat(handed.result()).isEqualTo(Outcome.Result.REJECTED);
+    assertThat(handed.code()).isEqualTo("SHIPMENT_HANDED_OVER");
   }
 
   @Test void businessRefusalsAreRejectedAndTransportFailuresUnknown() {

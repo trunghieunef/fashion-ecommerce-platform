@@ -122,8 +122,10 @@ class OrderCommandsIntegrationTest extends OrderTestSupport {
   @Test void opsCancelsAStuckSaga() {
     UUID packing = confirmed();
     seedSaga(packing, "PACKING", "CREATE_SHIPMENT", "MANUAL");
+    jdbc.update("update order_sagas set retry_count = 7, last_error = 'REJECTED QUOTE_MISMATCH' where order_id = ?", packing);
     data(cancel(packing, "s1", version(packing), "x"), 202);
     assertThat(status(packing)).isEqualTo("CANCELLING");
+    assertThat(saga(packing)).containsEntry("status", "COMPENSATING").containsEntry("retry_count", 0).containsEntry("last_error", null);
     UUID commit = confirmed();
     seedSaga(commit, "CONFIRMED", "COMMIT_STOCK", "RUNNING");
     data(cancel(commit, "s2", version(commit), "x"), 202);

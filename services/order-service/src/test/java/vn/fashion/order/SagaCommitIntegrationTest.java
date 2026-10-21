@@ -171,7 +171,8 @@ class SagaCommitIntegrationTest extends OrderTestSupport {
         .contains("\"cod_amount\":" + jdbc.queryForObject("select total_amount from orders where id = ?", Long.class, id))
         .contains("\"province_code\":\"79\"").doesNotContain("district_code");
     assertThat(saga(id)).containsEntry("shipment_id", UUID.fromString(SHIPMENT)).containsEntry("status", "DONE")
-        .containsEntry("step", "DONE").containsEntry("retry_count", 0).containsEntry("last_error", null);
+        .containsEntry("step", "DONE").containsEntry("retry_count", 0).containsEntry("last_error", null)
+        .containsEntry("shipment_state", "CREATED");
     assertThat(status(id)).isEqualTo("PACKING");
     assertThat(processing(id)).isEqualTo("READY");
   }
