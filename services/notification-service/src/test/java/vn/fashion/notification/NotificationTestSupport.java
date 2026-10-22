@@ -18,7 +18,8 @@ import tools.jackson.databind.ObjectMapper;
 
 /** PostgreSQL with the migration/runtime roles; listener and relay are off, tests call the listener directly. */
 @Testcontainers
-@SpringBootTest(properties = {"fashion.messaging.relay.enabled=false", "spring.kafka.listener.auto-startup=false"})
+@SpringBootTest(properties = {"fashion.messaging.relay.enabled=false", "spring.kafka.listener.auto-startup=false",
+    "fashion.notification.worker.enabled=false"})
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 public abstract class NotificationTestSupport {
   @Container protected static final PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:17.11")
