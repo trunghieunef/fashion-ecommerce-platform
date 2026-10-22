@@ -99,6 +99,15 @@ class PasswordIntegrationTest {
     redisTemplate.getConnectionFactory().getConnection().serverCommands().flushAll();
   }
 
+  @Autowired
+  private vn.fashion.platform.outbox.OutboxRepository outboxBean;
+
+  /** The relay is on by default (NOT-01) and fails startup without this bean; tests turn the relay off, so pin it. */
+  @Test
+  void theOutboxRepositoryBeanExistsForTheRelay() {
+    assertThat(outboxBean).isNotNull();
+  }
+
   @Test
   void changePasswordNeedsTheCurrentPasswordAndRevokesEverySession() {
     var registered = register("change@example.test");
