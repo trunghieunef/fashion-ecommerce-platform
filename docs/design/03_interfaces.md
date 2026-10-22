@@ -577,7 +577,7 @@ Relay giữ thứ tự chưa gửi theo aggregate_sequence. Consumer dedupe tron
 | payment.events / order_no | payment | PAYMENT_CREATED, PAYMENT_COMPLETED, PAYMENT_FAILED, PAYMENT_REFUNDED | order saga/tài chính COD; không inventory tự deduct. `ORD-02`: order-service tiêu thụ (group `order-service`, inbox), COMPLETED chỉ ghi `paid_at` |
 | promotion.events / variant_id | promotion | PRICE_CHANGED | catalog invalidation |
 | shipping.events / order_no | shipping | SHIPMENT_CREATED, SHIPMENT_STATUS_UPDATED, COD_COLLECTED, COD_REMITTED | order giao hàng; payment COD evidence. `ORD-03`: order-service tiêu thụ (group `order-service`, inbox): `DELIVERING` có `handed_over_at` → SHIPPING, `DELIVERED` → DELIVERED + ORDER_COMPLETED, `shipment_version` cũ/trùng bỏ qua; COD_* chỉ ACK |
-| notification.events / dedupe_key | Domain owners | NOTIFY_* (schema thực thi: NOTIFY_RESET_PASSWORD do user, `TASK:USR-01` phần 1b) | Chỉ notification gửi |
+| notification.events / dedupe_key | Domain owners | NOTIFY_* (schema thực thi: NOTIFY_RESET_PASSWORD do user, `TASK:USR-01` phần 1b; NOTIFY_ORDER_CONFIRMED, NOTIFY_ORDER_PREPARING, NOTIFY_ORDER_DELIVERED, NOTIFY_ORDER_CANCELLED, NOTIFY_ORDER_RETURNED do order, `TASK:NOT-01`) | Chỉ notification gửi |
 | notification.results / dedupe_key | notification | NOTIFICATION_SENT, NOTIFICATION_FAILED | user dọn secret, inventory subscription result |
 
 NOTIFY_ORDER_CONFIRMED do order phát khi online ready hoặc COD tiếp nhận; NOTIFY_PAYMENT_SUCCESS/REFUND_RESULT do payment; NOTIFY_SHIPMENT_STATUS do shipping; NOTIFY_RESTOCK_ALERT/LOW_STOCK do inventory; NOTIFY_RESET_PASSWORD/EMAIL_VERIFY/OTP do user. Một business notification chỉ có một producer/dedupe key.

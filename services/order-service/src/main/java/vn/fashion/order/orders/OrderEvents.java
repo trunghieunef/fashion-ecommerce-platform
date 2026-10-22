@@ -11,7 +11,7 @@ import tools.jackson.databind.ObjectMapper;
 import vn.fashion.platform.outbox.OutboxEvent;
 import vn.fashion.platform.outbox.OutboxRepository;
 
-/** order.events through the outbox, routed by contracts/events/registry.json. No address or contact (PII) in events. */
+/** order.events (and NOTIFY_ORDER_* for NOT-01) through the outbox, routed by contracts/events/registry.json. No address or contact (PII) in events. */
 @Component
 public class OrderEvents {
   private final OutboxRepository outbox;
@@ -60,6 +60,16 @@ public class OrderEvents {
   private static java.util.List<Map<String, Object>> items(OrderView view) {
     return view.items().stream()
         .map(i -> Map.<String, Object>of("variant_id", i.variantId().toString(), "sku", i.sku(), "quantity", i.quantity())).toList();
+  }
+
+  /**
+   * NOTIFY_ORDER_* (notification-events schema NotifyOrder). The registry names order_id as aggregate_id, but the body has no
+   * order_id (additionalProperties false), so the id is passed in; the partition key (dedupe_key) is read from the payload.
+   */
+  public void notify(String type, UUID orderId, long version, Map<String, Object> payload, String correlationId) {
+    var route = routes.required(type);
+    outbox.append(new OutboxEvent(UUID.randomUUID(), "order", orderId.toString(), version, type, 1, route.required("topic").asString(),
+        (String) payload.get(route.required("partition_key").asString()), correlationId, json.writeValueAsString(payload)));
   }
 
   private void append(String type, OrderView view, Map<String, Object> payload, String correlationId) {

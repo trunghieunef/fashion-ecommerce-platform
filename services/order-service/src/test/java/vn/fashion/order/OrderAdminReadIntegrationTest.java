@@ -11,6 +11,7 @@ import vn.fashion.order.saga.OrderTransitions;
 class OrderAdminReadIntegrationTest extends OrderTestSupport {
   static final java.util.concurrent.atomic.AtomicInteger SEQ = new java.util.concurrent.atomic.AtomicInteger(100000);
   @Autowired OrderTransitions transitions;
+  @Autowired org.springframework.transaction.support.TransactionTemplate tx;
 
   private String ops() { return tokenWith(UUID.randomUUID(), "order.read", "order.fulfill"); }
   private String finance() { return tokenWith(UUID.randomUUID(), "order.read"); }
@@ -105,7 +106,8 @@ class OrderAdminReadIntegrationTest extends OrderTestSupport {
     String no = seed("CONFIRMED", 1, "0911111111");
     UUID id = jdbc.queryForObject("select id from orders where order_no = ?", UUID.class, no);
     UUID admin = UUID.randomUUID(), request = UUID.randomUUID();
-    transitions.move(id, "CONFIRMED", "PACKING", "r", new OrderTransitions.Actor("ADMIN", admin, request));
+    // CONFIRMED -> PACKING may append NOTIFY_ORDER_PREPARING, which joins the caller's transaction (as in the saga).
+    tx.executeWithoutResult(s -> transitions.move(id, "CONFIRMED", "PACKING", "r", new OrderTransitions.Actor("ADMIN", admin, request)));
     var row = jdbc.queryForMap("select * from order_status_history where to_status = 'PACKING' and order_id = ?", id);
     assertThat(row).containsEntry("actor_type", "ADMIN").containsEntry("actor_id", admin).containsEntry("request_id", request);
     transitions.move(id, "PACKING", "SHIPPING", null);
