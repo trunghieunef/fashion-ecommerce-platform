@@ -6,6 +6,7 @@ Bộ kế hoạch này chuyển baseline B1 thành các gói triển khai tuần
 |---|---|---|---|
 | 1 | [Sprint 1 — local foundation](2026-09-19-sprint-1-local-foundation.md) | Fresh clone chạy storefront shell → Gateway → catalog sample → PostgreSQL; version/contract/security proof | S1-local |
 | — | [Handoff Sprint 1 — 2026-09-22](2026-09-22-s1-local-handoff.md) | Trạng thái checkout, evidence đã có và thứ tự tiếp tục | Không thay gate |
+| — | [Handoff sang máy mới — 2026-10-22](2026-10-22-machine-handoff.md) | **Mới nhất.** Runbook clone → toolchain → test → local-up/smoke; trạng thái sau NOT-01 (PR #36), thứ không đi theo Git, việc tiếp theo tới G1 và quy ước làm việc | Không thay gate |
 | — | [Handoff sang máy mới — 2026-10-02](2026-10-02-s1-local-machine-handoff.md) | Toolchain, checklist fresh-clone, evidence/CI và phần cần nghiệm thu trên môi trường mới | Không thay gate |
 | — | [Handoff PLT-02 — 2026-10-04](2026-10-04-plt-02-handoff.md) | Contract core đã có, PR #3, việc còn lại và ý định PLT-03 | Không thay gate |
 | — | [Handoff Phase 0 — cuối ngày 2026-10-04](2026-10-04-phase-0-handoff.md) | Trạng thái PLT-02/03/04, SEC-01, O06; việc cần chủ dự án và bước tiếp theo | Không thay gate |
