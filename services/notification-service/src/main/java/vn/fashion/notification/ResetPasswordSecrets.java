@@ -14,6 +14,7 @@ import java.time.Duration;
 import java.util.Base64;
 import java.util.Optional;
 import java.util.UUID;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;
@@ -50,6 +51,7 @@ public class ResetPasswordSecrets {
             Clock.systemUTC());
       } catch (Exception e) { throw new IllegalStateException("invalid notification service key pair", e); }
     }
+    if (built == null) LoggerFactory.getLogger(ResetPasswordSecrets.class).warn("notification service key pair is not configured: reset-password emails cannot be sent");
     this.issuer = built;
   }
 

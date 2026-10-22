@@ -577,7 +577,7 @@ not01_fail() { echo "NOT-01 $1 FAIL: $2" >&2; exit 1; }
 not01_mail() {
   local out=""
   for _ in $(seq 1 60); do
-    out="$(curl -sS --get --data-urlencode "query=$1" "$MAILPIT_URL/api/v1/search" |       python3 -c 'import json,sys; ids=[m["ID"] for m in json.load(sys.stdin)["messages"] if sys.argv[1] in m["Subject"]]; print(ids[0] if len(ids)==1 else ("DUPLICATE" if ids else ""))' "$2")"
+    out="$(curl -sS --max-time 5 --get --data-urlencode "query=$1" "$MAILPIT_URL/api/v1/search" |       python3 -c 'import json,sys; ids=[m["ID"] for m in json.load(sys.stdin)["messages"] if sys.argv[1] in m["Subject"]]; print(ids[0] if len(ids)==1 else ("DUPLICATE" if ids else ""))' "$2" 2>/dev/null || true)"
     [[ -n "$out" ]] && break
     sleep 1
   done

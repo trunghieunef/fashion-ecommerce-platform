@@ -8,6 +8,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import vn.fashion.platform.messaging.PermanentEventException;
 
 class NotificationIntakeIntegrationTest extends NotificationTestSupport {
@@ -87,6 +88,22 @@ class NotificationIntakeIntegrationTest extends NotificationTestSupport {
   @Test void anInvalidEventIsPermanent() {
     String noRecipient = payload("CONFIRMED", "vi", "Áo", SHIP).replace("\"recipient\":{\"email\":\"an@example.invalid\"},", "");
     assertThatThrownBy(() -> deliver(envelope(UUID.randomUUID(), "NOTIFY_ORDER_CONFIRMED", noRecipient))).isInstanceOf(PermanentEventException.class);
+    assertThat(count("select count(*) from notifications")).isZero();
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"a@", "no-at-sign.example", "an@example.invalid\r\nBcc: x@y.z"})
+  void aBadRecipientIsPermanent(String email) {
+    assertBadRecipient(email);
+  }
+
+  @Test void aTooLongRecipientIsPermanent() {
+    assertBadRecipient("x".repeat(250) + "@example.com");
+  }
+
+  private void assertBadRecipient(String email) {
+    String bad = payload("CONFIRMED", "vi", "Áo", SHIP).replace("an@example.invalid", email);
+    assertThatThrownBy(() -> deliver(envelope(UUID.randomUUID(), "NOTIFY_ORDER_CONFIRMED", bad))).isInstanceOf(PermanentEventException.class);
     assertThat(count("select count(*) from notifications")).isZero();
   }
 }

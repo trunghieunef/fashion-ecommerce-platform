@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import org.springframework.web.util.HtmlUtils;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
@@ -18,6 +19,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.mail.MailAuthenticationException;
 import org.springframework.mail.MailSendException;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -153,6 +155,10 @@ public class NotificationSender {
    * may have delivered the message: UNKNOWN.
    */
   static Failure classify(Throwable error) {
+    // Spring reports a failure while connecting (greeting, EHLO, STARTTLS, AUTH) before any MAIL FROM as
+    // MailAuthenticationException or MailSendException("Mail server connection failed"): nothing was sent, so retry.
+    if (error instanceof MailAuthenticationException
+        || error instanceof MailSendException && String.valueOf(error.getMessage()).startsWith("Mail server connection failed")) return Failure.RETRY;
     // MailSendException keeps the real cause in its failed-messages map, not getCause().
     if (error instanceof MailSendException m && m.getCause() == null && !m.getFailedMessages().isEmpty()) {
       return classify(m.getFailedMessages().values().iterator().next());
@@ -175,18 +181,18 @@ public class NotificationSender {
     String reason = e.getClass().getSimpleName(); // never the message: it can carry the recipient address
     switch (failure) {
       case UNKNOWN -> {
-        if (finish(c, "status = 'UNKNOWN', last_error = '" + reason + "'", "UNKNOWN")) meters.counter("notification.unknown").increment();
+        if (finish(c, "status = 'UNKNOWN', last_error = :reason", "UNKNOWN", Map.of("reason", reason))) meters.counter("notification.unknown").increment();
       }
       case PERMANENT -> {
-        if (finish(c, "status = 'FAILED', last_error = '" + reason + "'", "FAILED")) failed(c);
+        if (finish(c, "status = 'FAILED', last_error = :reason", "FAILED", Map.of("reason", reason))) failed(c);
       }
       case RETRY -> {
         if (c.retryCount() >= MAX_RETRIES) {
-          if (finish(c, "retry_count = retry_count + 1, status = 'FAILED', last_error = '" + reason + "'", "FAILED")) failed(c);
+          if (finish(c, "retry_count = retry_count + 1, status = 'FAILED', last_error = :reason", "FAILED", Map.of("reason", reason))) failed(c);
         } else {
           double seconds = 60.0 * (1 << c.retryCount()) * (0.8 + 0.4 * ThreadLocalRandom.current().nextDouble());
-          finish(c, "retry_count = retry_count + 1, status = 'PENDING', next_retry_at = now() + make_interval(secs => " + seconds
-              + "), last_error = '" + reason + "'", "PENDING");
+          finish(c, "retry_count = retry_count + 1, status = 'PENDING', next_retry_at = now() + make_interval(secs => :seconds), last_error = :reason",
+              "PENDING", Map.of("reason", reason, "seconds", seconds));
         }
       }
     }
@@ -195,10 +201,12 @@ public class NotificationSender {
   private void failed(Claimed c) { meters.counter("notification.failed", "template", c.template()).increment(); }
 
   /** Writes the result only while our lease is still valid; clears the lease (the table CHECK requires it). */
-  private boolean finish(Claimed c, String set, String status) {
+  private boolean finish(Claimed c, String set, String status) { return finish(c, set, status, Map.of()); }
+
+  private boolean finish(Claimed c, String set, String status, Map<String, Object> params) {
     int rows = jdbc.sql("update notifications set " + set + ", lease_token = null, lease_until = null "
         + "where id = :id and lease_token = :token and lease_until > now()")
-        .param("id", c.id()).param("token", c.leaseToken()).update();
+        .param("id", c.id()).param("token", c.leaseToken()).params(params).update();
     if (rows == 0) log.warn("notification_id={} dedupe_key={} template={} status={} lease lost, result dropped", c.id(), c.dedupeKey(), c.template(), status);
     else log.info("notification_id={} dedupe_key={} template={} status={}", c.id(), c.dedupeKey(), c.template(), status);
     return rows == 1;

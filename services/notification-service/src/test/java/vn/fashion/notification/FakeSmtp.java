@@ -14,7 +14,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 
 /** Scripted SMTP server on a ServerSocket; stores the DATA of every message it accepts. */
 final class FakeSmtp implements AutoCloseable {
-  enum Mode { OK, TEMP_AT_MAIL, PERM_AT_RCPT, SILENT_AFTER_DATA }
+  enum Mode { OK, TEMP_AT_MAIL, PERM_AT_RCPT, SILENT_AFTER_DATA, GREETING_421, CLOSE_AFTER_EHLO }
 
   volatile Mode mode = Mode.OK;
   final List<String> messages = new CopyOnWriteArrayList<>();
@@ -47,10 +47,12 @@ final class FakeSmtp implements AutoCloseable {
     try (socket;
          var in = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
          Writer out = new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8)) {
+      if (mode == Mode.GREETING_421) { reply(out, "421 service not available"); return; }
       reply(out, "220 fake ESMTP");
       String line;
       while ((line = in.readLine()) != null) {
         String cmd = line.toUpperCase();
+        if (mode == Mode.CLOSE_AFTER_EHLO && (cmd.startsWith("EHLO") || cmd.startsWith("HELO"))) return;
         if (cmd.startsWith("MAIL")) reply(out, mode == Mode.TEMP_AT_MAIL ? "451 try again later" : "250 ok");
         else if (cmd.startsWith("RCPT")) reply(out, mode == Mode.PERM_AT_RCPT ? "550 no such mailbox" : "250 ok");
         else if (cmd.equals("DATA")) {

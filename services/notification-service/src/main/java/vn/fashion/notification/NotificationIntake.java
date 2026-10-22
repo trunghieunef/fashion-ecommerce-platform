@@ -37,6 +37,7 @@ public class NotificationIntake {
       } catch (RuntimeException e) { throw invalid(); }
     }
     String email = text(p.path("recipient"), "email");
+    if (email.length() < 3 || email.length() > 254 || email.indexOf('@') < 0 || email.contains("\r") || email.contains("\n")) throw invalid();
     UUID user = null;
     JsonNode u = p.path("user_id");
     if (!u.isMissingNode() && !u.isNull()) {

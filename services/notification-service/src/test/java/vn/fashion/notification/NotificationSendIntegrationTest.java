@@ -12,6 +12,8 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
@@ -107,6 +109,16 @@ class NotificationSendIntegrationTest extends NotificationTestSupport {
     assertThat(jdbc.queryForMap("select status, retry_count from notifications where id = ?", id))
         .containsEntry("status", "FAILED").containsEntry("retry_count", 0);
     assertThat(sender.runOnce()).isZero();
+  }
+
+  @ParameterizedTest
+  @EnumSource(value = FakeSmtp.Mode.class, names = {"GREETING_421", "CLOSE_AFTER_EHLO"})
+  void aFailureBeforeMailFromIsRetried(FakeSmtp.Mode mode) {
+    smtp.mode = mode;
+    UUID id = seed();
+    sender.runOnce();
+    assertThat(jdbc.queryForMap("select status, retry_count from notifications where id = ?", id))
+        .containsEntry("status", "PENDING").containsEntry("retry_count", 1);
   }
 
   @Test void silenceAfterDataIsUnknown() {
