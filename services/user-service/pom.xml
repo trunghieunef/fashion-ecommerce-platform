@@ -59,6 +59,7 @@
       <artifactId>platform-security</artifactId>
       <version>${project.version}</version>
     </dependency>
+    <dependency><groupId>com.fashion</groupId><artifactId>platform-messaging</artifactId><version>${project.version}</version></dependency>
     <!-- PLT-05: W3C trace context (Boot BOM, no exporter) and RED metrics. -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
@@ -114,6 +115,8 @@
         <configuration>
           <!-- pgjdbc sends the JVM zone; Windows VN resolves to legacy Asia/Saigon, which postgres:17.11 rejects. -->
           <argLine>-Duser.timezone=UTC</argLine>
+          <!-- Tests read the outbox rows themselves; no relay and no Kafka. -->
+          <environmentVariables><USER_RELAY_ENABLED>false</USER_RELAY_ENABLED></environmentVariables>
         </configuration>
       </plugin>
       <plugin>

@@ -20,6 +20,7 @@ public class NotificationEventsListener {
   @KafkaListener(topics = "notification.events", groupId = "notification-service", autoStartup = "${spring.kafka.listener.auto-startup:true}")
   public void receive(ConsumerRecord<String, byte[]> record, Acknowledgment ack) {
     support.handle(record, ack, Map.of("NOTIFY_ORDER_CONFIRMED", intake::accept, "NOTIFY_ORDER_PREPARING", intake::accept,
-        "NOTIFY_ORDER_DELIVERED", intake::accept, "NOTIFY_ORDER_CANCELLED", intake::accept, "NOTIFY_ORDER_RETURNED", intake::accept));
+        "NOTIFY_ORDER_DELIVERED", intake::accept, "NOTIFY_ORDER_CANCELLED", intake::accept, "NOTIFY_ORDER_RETURNED", intake::accept,
+        "NOTIFY_RESET_PASSWORD", intake::accept));
   }
 }

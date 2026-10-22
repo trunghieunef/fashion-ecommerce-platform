@@ -5,6 +5,8 @@ import org.eclipse.angus.mail.util.MailConnectException;
 import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeMessage;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import org.springframework.web.util.HtmlUtils;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -31,7 +33,7 @@ public class NotificationSender {
   private static final int BATCH = 20;
   private static final int MAX_RETRIES = 5;
 
-  private record Claimed(UUID id, UUID leaseToken, String dedupeKey, String template, String recipient, String subject, String body, int retryCount) { }
+  private record Claimed(UUID id, UUID leaseToken, String dedupeKey, String template, String recipient, String subject, String body, int retryCount, java.time.Instant expiresAt) { }
   private enum Failure { RETRY, PERMANENT, UNKNOWN }
 
   private final JdbcClient jdbc;
@@ -40,8 +42,11 @@ public class NotificationSender {
   private final String from;
   private final String messageIdDomain;
   private final boolean workerEnabled;
+  private final ResetPasswordSecrets secrets;
+  private final String storefront;
 
-  public NotificationSender(JdbcClient jdbc, JavaMailSenderImpl mail, MeterRegistry meters,
+  public NotificationSender(JdbcClient jdbc, JavaMailSenderImpl mail, MeterRegistry meters, ResetPasswordSecrets secrets,
+                            @Value("${fashion.notification.storefront-base-url}") String storefront,
                             @Value("${fashion.notification.mail-from}") String from,
                             @Value("${fashion.notification.message-id-domain}") String messageIdDomain,
                             @Value("${fashion.notification.worker.enabled:true}") boolean workerEnabled) {
@@ -51,6 +56,8 @@ public class NotificationSender {
     this.from = from;
     this.messageIdDomain = messageIdDomain;
     this.workerEnabled = workerEnabled;
+    this.secrets = secrets;
+    this.storefront = storefront.endsWith("/") ? storefront.substring(0, storefront.length() - 1) : storefront;
   }
 
   @Scheduled(fixedDelay = 2000)
@@ -90,16 +97,32 @@ public class NotificationSender {
         update notifications set status = 'SENDING', lease_token = gen_random_uuid(), lease_until = now() + interval '60 seconds'
         where id = (select id from notifications where status = 'PENDING' and next_retry_at <= now()
                     order by next_retry_at limit 1 for update skip locked)
-        returning id, lease_token, dedupe_key, recipient, rendered_subject, rendered_body, retry_count,
+        returning id, lease_token, dedupe_key, recipient, rendered_subject, rendered_body, retry_count, expires_at,
                   (select template_key from notification_templates t where t.id = template_id) as template
         """).query((rs, n) -> new Claimed(rs.getObject("id", UUID.class), rs.getObject("lease_token", UUID.class), rs.getString("dedupe_key"),
         rs.getString("template"), rs.getString("recipient"), rs.getString("rendered_subject"), rs.getString("rendered_body"),
-        rs.getInt("retry_count"))).optional();
+        rs.getInt("retry_count"), rs.getTimestamp("expires_at") == null ? null : rs.getTimestamp("expires_at").toInstant())).optional();
   }
 
   private void handle(Claimed c) {
+    String body = c.body();
+    if (c.template().equals("RESET_PASSWORD")) {
+      // The link is built here, in memory only; the HTTP call to user-service holds no transaction or row lock.
+      try {
+        Optional<String> secret = c.expiresAt() != null && !c.expiresAt().isAfter(Instant.now()) ? Optional.empty()
+            : secrets.fetch(UUID.fromString(c.dedupeKey().substring("RESET_PASSWORD:".length())));
+        if (secret.isEmpty()) {
+          if (finish(c, "status = 'EXPIRED', last_error = null", "EXPIRED")) meters.counter("notification.expired").increment();
+          return;
+        }
+        body = body.replace("@@RESET_URL@@", HtmlUtils.htmlEscape(storefront + "/reset-password#token=" + secret.get()));
+      } catch (RuntimeException e) {
+        fail(c, Failure.RETRY, e); // user-service down or slow: nothing was sent, same as a definite SMTP error
+        return;
+      }
+    }
     try {
-      send(c);
+      send(c, body);
     } catch (Exception e) {
       fail(c, classify(e), e);
       return;
@@ -107,9 +130,7 @@ public class NotificationSender {
     if (finish(c, "status = 'SENT', sent_at = now(), last_error = null", "SENT")) meters.counter("notification.sent").increment();
   }
 
-  /** Task 4 prepares the body (reset link) here, in memory, before the SMTP call. */
-  private void send(Claimed c) throws Exception {
-    String body = c.body();
+  private void send(Claimed c, String body) throws Exception {
     String id = c.id().toString();
     MimeMessage message = new MimeMessage(mail.getSession()) {
       @Override protected void updateMessageID() throws jakarta.mail.MessagingException { setHeader("Message-ID", "<" + id + "@" + messageIdDomain + ">"); }

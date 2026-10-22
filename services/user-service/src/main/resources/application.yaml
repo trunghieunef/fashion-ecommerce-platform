@@ -5,6 +5,8 @@ server:
 spring:
   application:
     name: user-service
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:19092}
   datasource:
     url: ${USER_DB_URL:jdbc:postgresql://localhost:5432/users}
     username: ${USER_DB_USERNAME:user_runtime}
@@ -31,6 +33,9 @@ spring:
 
 fashion:
   environment: ${FASHION_ENV:local}
+  messaging:
+    relay:
+      enabled: ${USER_RELAY_ENABLED:true}
   user:
     jwt:
       # Base64 PKCS#8 EC P-256 private key; no default so the service fails closed without it.

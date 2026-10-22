@@ -66,6 +66,10 @@ fashion:
     storefront-base-url: ${NOTIFICATION_STOREFRONT_BASE_URL:http://localhost:4173}
     public-asset-base-url: ${NOTIFICATION_PUBLIC_ASSET_BASE_URL:http://localhost:8080}
     message-id-domain: ${NOTIFICATION_MESSAGE_ID_DOMAIN:example.invalid}
+    # Reset-password link: the secret is fetched from user-service at send time (ADR-19, caller notification-service).
+    user-url: ${NOTIFICATION_USER_BASE_URL:http://localhost:8082}
+    service-private-key: ${NOTIFICATION_SERVICE_PRIVATE_KEY:}
+    service-public-key: ${NOTIFICATION_SERVICE_PUBLIC_KEY:}
 
 management:
   # PLT-05: no OTLP endpoint here on purpose: an empty value still creates the exporter. Traces leave

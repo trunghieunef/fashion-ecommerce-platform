@@ -24,25 +24,35 @@ public class NotificationIntake {
   public Object accept(EventEnvelope event) {
     JsonNode p = event.payload();
     String key = text(p, "template_key"), dedupe = text(p, "dedupe_key"), locale = text(p, "locale");
-    JsonNode data = p.path("data");
-    if (!KEYS.contains(key) || !event.eventType().equals("NOTIFY_" + key) || !"EMAIL".equals(p.path("channel").asString(null))
-        || !(locale.equals("vi") || locale.equals("en")) || !data.isObject() || !p.path("recipient").isObject()) throw invalid();
+    boolean reset = key.equals("RESET_PASSWORD");
+    JsonNode data = reset ? null : p.path("data");
+    if (!(reset || KEYS.contains(key)) || !event.eventType().equals("NOTIFY_" + key) || !"EMAIL".equals(p.path("channel").asString(null))
+        || !(locale.equals("vi") || locale.equals("en")) || !(reset || data.isObject()) || !p.path("recipient").isObject()) throw invalid();
+    Instant expiresAt = null;
+    if (reset) {
+      // The challenge_id is the secret reference; the sender reads it back from the dedupe_key, so they must agree.
+      try {
+        expiresAt = Instant.parse(text(p, "expires_at"));
+        if (!dedupe.equals("RESET_PASSWORD:" + UUID.fromString(text(p, "challenge_id")))) throw invalid();
+      } catch (RuntimeException e) { throw invalid(); }
+    }
     String email = text(p.path("recipient"), "email");
     UUID user = null;
     JsonNode u = p.path("user_id");
     if (!u.isMissingNode() && !u.isNull()) {
       try { user = UUID.fromString(u.asString()); } catch (RuntimeException e) { throw invalid(); }
     }
-    checkData(data, key);
+    if (!reset) checkData(data, key);
     var rendered = renderer.render(key, locale, data);
     jdbc.sql("""
         insert into notifications (id, event_id, dedupe_key, user_id, recipient, channel, template_id, template_version,
-          rendered_subject, rendered_body, locale)
-        values (:id, :event, :dedupe, :user, :to, 'EMAIL', :tpl, :version, :subject, :body, :locale)
+          rendered_subject, rendered_body, locale, expires_at)
+        values (:id, :event, :dedupe, :user, :to, 'EMAIL', :tpl, :version, :subject, :body, :locale, :expires)
         on conflict (dedupe_key, channel, recipient) do nothing""")
         .param("id", UUID.randomUUID()).param("event", event.eventId()).param("dedupe", dedupe).param("user", user)
         .param("to", email).param("tpl", rendered.templateId()).param("version", rendered.version())
-        .param("subject", rendered.subject()).param("body", rendered.html()).param("locale", locale).update();
+        .param("subject", rendered.subject()).param("body", rendered.html()).param("locale", locale)
+        .param("expires", expiresAt == null ? null : java.sql.Timestamp.from(expiresAt)).update();
     return null;
   }
 
