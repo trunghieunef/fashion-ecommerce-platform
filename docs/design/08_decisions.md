@@ -563,10 +563,11 @@ nghiệm thu mức local với Mailpit.
 | (plan) Email 1 chỉ in `address_line`: địa chỉ đơn chỉ có `province_code`/`ward_code`, chưa có danh mục tên hành chính (SHP-01) | Khi có danh mục tên (task sau) thêm vào `ship_to.address` |
 | (agent) Link `{storefront}/orders/{order_no}` không token; reset `{storefront}/reset-password#token={secret}` (fragment, không vào log server/Referer) | Trang đích do WEB-04 / WEB-02 làm đúng dạng link; guest xem đơn khi còn cookie |
 | (agent) Chỉ HTML, Mustache, Mailpit làm mail sink (SMTP 1025 nội bộ, UI `127.0.0.1:8025`) | Thêm plain-text khi chọn provider O07 nếu cần deliverability |
-| (agent) SMTP 5xx → `FAILED` ngay; 4xx/không kết nối → retry tối đa 5 lần; timeout sau khi kết nối → `UNKNOWN`; lease 60 s dài hơn timeout 10 s | Gửi chậm mà thành công không thành `UNKNOWN` |
+| (agent) SMTP 5xx → `FAILED` ngay; 4xx, không kết nối và mọi lỗi trước `MAIL FROM` (chào 421, rớt sau EHLO, AUTH) → retry tối đa 5 lần; timeout sau khi kết nối → `UNKNOWN`; lease 60 s dài hơn timeout 10 s | Gửi chậm mà thành công không thành `UNKNOWN` |
 | (agent) Chưa phát `notification.results`, chưa job dọn 90 ngày, không email cho đơn online | `notification.results` thêm khi NOT-02 cần; dọn 90 ngày trước G2 (O06); online chờ PAY-02/03 |
 | (plan) user-service chưa có relay nên email reset không tới Kafka | Bật `platform-messaging` + relay cho user-service (`USER_RELAY_ENABLED`, mặc định bật), thêm topic `user.events`/`notification.events` và DLT; outbox cũ đang chờ được phát khi bật; tắt trong test user-service bằng surefire env |
 | (plan) `local-up.sh` sinh khóa `NOTIFICATION` và thêm vào `USER_INTERNAL_CALLERS` | notification là caller duy nhất của `notification-secrets` |
+| (review toàn nhánh) Dòng outbox `NOTIFY_ORDER_*` dùng chung `aggregate_type='order'`/`aggregate_id=order_id` với `order.events`; relay phát theo thứ tự trong aggregate nên nếu `notification.events` chưa có hoặc bị từ chối ở một môi trường, `order.events` sau đó của cùng đơn bị chặn sau dòng NOTIFY | Follow-up PLT-04: danh sách topic staging phải có `notification.events`, `notification.events.DLT`, `user.events`, `user.events.DLT` (hiện chỉ `infra/local/kafka-init/create-topics.sh`) |
 
 ## PAY-01 — quyết định 2026-10-20
 

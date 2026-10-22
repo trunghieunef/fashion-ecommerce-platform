@@ -19,15 +19,15 @@ Không có route Gateway, không API public. Xem email local: Mailpit UI/API `ht
 
 ## Luồng
 
-- Consumer `notification.events` (group `notification-service`, inbox `processed_events`, ACK sau commit): validate schema → một TX ghi
+- Consumer `notification.events` (group `notification-service`, inbox `processed_events`, ACK sau commit): kiểm tra các trường bắt buộc theo schema (viết tay, chưa có validator JSON Schema) → một TX ghi
   `notifications` `PENDING` với snapshot template + `rendered_subject`/`rendered_body` đã escape (Mustache, layout chung
-  `templates/email/layout.mustache`). Trùng `(dedupe_key, channel, recipient)` → bỏ qua; sai schema → DLT. Thiếu bản `en` → `vi`.
+  `templates/email/layout.mustache`). Trùng `(dedupe_key, channel, recipient)` → bỏ qua; thiếu/sai trường bắt buộc → DLT. Thiếu bản `en` → `vi`.
 - Worker (poll 2 s, lease 60 s) gửi SMTP ngoài TX, `Message-ID` `<{notification_id}@{domain}>`:
 
 | Kết quả SMTP | Trạng thái |
 |---|---|
 | Nhận (250 sau DATA) | `SENT` (SMTP nhận, không có nghĩa khách đã đọc) |
-| Không kết nối được, 4xx | `PENDING` + `retry_count + 1`, backoff 1/2/4/8/16 phút ±20 %; lần thất bại thứ 6 → `FAILED` |
+| Không kết nối được, lỗi trước `MAIL FROM` (chào 421, rớt sau EHLO, AUTH), 4xx | `PENDING` + `retry_count + 1`, backoff 1/2/4/8/16 phút ±20 %; lần thất bại thứ 6 → `FAILED` |
 | 5xx | `FAILED` ngay |
 | Timeout/đứt kết nối sau khi đã kết nối, không có mã trả lời | `UNKNOWN` (không gửi lại) |
 | `SENDING` hết lease (worker chết) | `UNKNOWN`, không gửi lại mù (T22) |
@@ -66,4 +66,4 @@ Metric `notification.sent`, `notification.failed{template}`, `notification.unkno
 Giới hạn: chỉ email HTML (không plain-text); chưa `notification.results`; chưa job dọn recipient/nội dung 90 ngày (O06, trước G2); chưa
 email đơn online (chờ PAY-02/03); chưa SMS/OTP/marketing/unsubscribe (NOT-02/03, USR-03); chưa UI/alert cho `FAILED`/`UNKNOWN` (ADM-02, PLT-05;
 hiện chỉ metric/log/DB); `UNKNOWN` có thể nghĩa là khách không nhận email, gửi lại thủ công cần key mới + audit (chưa có API); địa chỉ giao
-trong email 1 chỉ gồm `address_line` (chưa có danh mục tên tỉnh/phường); provider thật và domain gửi chờ O07.
+trong email 1 chỉ gồm `address_line` (chưa có danh mục tên tỉnh/phường); provider thật và domain gửi chờ O07; topic `notification.events`, `notification.events.DLT`, `user.events`, `user.events.DLT` phải có ở mọi môi trường (chỉ `infra/local/kafka-init` tạo; follow-up PLT-04) vì thiếu chúng chặn cả `order.events` cùng đơn.
