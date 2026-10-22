@@ -145,6 +145,17 @@ class ResetPasswordEmailIntegrationTest extends NotificationTestSupport {
     assertThat(meters.counter("notification.expired").count()).isEqualTo(before + 2);
   }
 
+  @Test void aBodyWithoutTheMarkerFailsWithoutCallingUser() {
+    intake(Instant.now().plusSeconds(1800));
+    jdbc.update("update notifications set rendered_body = '<p>no link</p>'");
+    double before = meters.counter("notification.failed", "template", "RESET_PASSWORD").count();
+    sender.runOnce();
+    assertThat(status()).isEqualTo("FAILED");
+    assertThat(paths).isEmpty();
+    assertThat(smtp.messages).isEmpty();
+    assertThat(meters.counter("notification.failed", "template", "RESET_PASSWORD").count()).isEqualTo(before + 1);
+  }
+
   @Test void aUserOutageRetries() {
     reply.set(new Reply(503, "{}"));
     intake(Instant.now().plusSeconds(1800));

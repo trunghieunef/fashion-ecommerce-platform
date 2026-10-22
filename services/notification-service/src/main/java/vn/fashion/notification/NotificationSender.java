@@ -106,7 +106,11 @@ public class NotificationSender {
 
   private void handle(Claimed c) {
     String body = c.body();
-    if (c.template().equals("RESET_PASSWORD")) {
+    if ("RESET_PASSWORD".equals(c.template())) {
+      if (!body.contains("@@RESET_URL@@")) { // a template edit dropped the marker: never fetch the secret or send a link-less email
+        if (finish(c, "status = 'FAILED', last_error = 'missing reset marker'", "FAILED")) failed(c);
+        return;
+      }
       // The link is built here, in memory only; the HTTP call to user-service holds no transaction or row lock.
       try {
         Optional<String> secret = c.expiresAt() != null && !c.expiresAt().isAfter(Instant.now()) ? Optional.empty()
