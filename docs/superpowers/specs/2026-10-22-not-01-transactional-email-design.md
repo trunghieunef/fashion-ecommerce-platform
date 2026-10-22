@@ -87,8 +87,9 @@ SMTP đã nhận; gửi lại mù khi không biết lần trước đã gửi ch
   nullable, `recipient.email`, `channel = EMAIL`, `locale`, `template_key`, `data`. `data` chứa đủ để render, vì notification
   không đọc DB order (06 §10): `order_no`, `placed_at`, `items[] {name, size, color, quantity, line_total, image_url}`,
   `subtotal`, `shipping_fee`, `total`, `payment_method`; chỉ email 1 thêm `ship_to {name, phone_masked, address}` —
-  `address` là một chuỗi order ghép từ `shipping_address` theo thứ tự địa chỉ chi tiết, phường/xã, quận/huyện, tỉnh/thành
-  (agent); email 4
+  `name` = `shipping_address.recipient_name`, `phone_masked` từ `shipping_address.phone`, `address` =
+  `shipping_address.address_line` — địa chỉ đơn chỉ có `province_code`/`ward_code`, chưa có danh mục tên hành chính (SHP-01),
+  nên email không in mã tỉnh/phường (agent, sửa khi viết plan); email 4
   thêm `cancel_category` (`CUSTOMER`/`SHOP`/`EXPIRED`/`OUT_OF_STOCK`/`OTHER`). **Order che số điện thoại trước khi ghi event**,
   không gửi `reason` tự do (agent).
 - Người nhận = `orders.contact_email`. Đơn không có email liên hệ → không ghi event (ô email lúc checkout không bắt buộc).
@@ -125,6 +126,12 @@ Theo 06 §10 và 05 §11.2; Spring Boot như các service khác, DB `notificatio
 9. Retention 90 ngày cho recipient/nội dung (13): ghi giới hạn, job dọn chưa làm (trước G2, O06).
 
 ## 6. Hạ tầng local và cấu hình
+
+- **user-service chưa có relay** (README: outbox `NOTIFY_RESET_PASSWORD`/`USER_CREATED` "chưa có relay"), nên email 6 cần bật
+  relay `platform-messaging` cho user-service (dependency, Kafka bootstrap, `fashion.messaging.relay.enabled`), thêm topic
+  `user.events` + DLT; outbox cũ đang chờ sẽ được phát khi bật (phát hiện khi viết plan).
+- notification-service gọi user internal bằng service token: `local-up.sh` sinh khóa `NOTIFICATION` và thêm vào
+  `USER_INTERNAL_CALLERS` như các caller khác.
 
 - `infra/local/compose.yaml`: thêm `notification-service` và **Mailpit** (mail sink, image pin version, chỉ bind
   `127.0.0.1`; UI xem email local). Không mở ra ngoài.
