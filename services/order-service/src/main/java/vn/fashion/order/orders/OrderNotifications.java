@@ -40,11 +40,19 @@ public class OrderNotifications {
         select name, size, color, quantity, line_total, image_url from order_items where order_id = :id order by id""")
         .param("id", orderId).query().listOfRows());
     data.put("subtotal", row.get("subtotal"));
-    data.put("shipping_fee", row.get("shipping_fee"));
+    // Net of shipping discount, plus COD fee (discount_amount is 0 until promotions): subtotal + shipping_fee == total.
+    data.put("shipping_fee", (Long) row.get("total_amount") - (Long) row.get("subtotal"));
     data.put("total", row.get("total_amount"));
     data.put("payment_method", "COD");
     if (kind.equals("confirmed")) {
-      data.put("ship_to", Map.of("name", row.get("name"), "phone_masked", mask((String) row.get("phone")), "address", row.get("address")));
+      Object name = row.get("name"), address = row.get("address");
+      // A snapshot without them cannot yield a valid event; never fail the status move over an email.
+      if (name == null || address == null) return;
+      var shipTo = new LinkedHashMap<String, Object>();
+      shipTo.put("name", name);
+      shipTo.put("phone_masked", mask((String) row.get("phone")));
+      shipTo.put("address", address);
+      data.put("ship_to", shipTo);
     }
     if (kind.equals("cancelled")) data.put("cancel_category", category((String) row.get("cancel_reason")));
     var payload = new LinkedHashMap<String, Object>();
@@ -58,8 +66,11 @@ public class OrderNotifications {
     events.notify("NOTIFY_ORDER_" + kind.toUpperCase(), orderId, (Long) row.get("version"), payload, "saga:" + orderId);
   }
 
-  /** First 3 and last 3 digits, 0901234123 -> 090****123. */
-  static String mask(String phone) { return phone.substring(0, 3) + "****" + phone.substring(phone.length() - 3); }
+  /** First 3 and last 3 digits, 0901234123 -> 090****123; a missing or short (under 7) phone is fully hidden. */
+  static String mask(String phone) {
+    if (phone == null || phone.length() < 7) return "****";
+    return phone.substring(0, 3) + "****" + phone.substring(phone.length() - 3);
+  }
 
   static String category(String cancelReason) {
     if (cancelReason == null) return "OTHER";

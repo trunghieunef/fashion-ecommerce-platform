@@ -65,7 +65,8 @@ class OrderNotificationsIntegrationTest extends OrderTestSupport {
     assertThat(data.path("order_no").asString()).isEqualTo(no(a));
     assertThat(data.path("payment_method").asString()).isEqualTo("COD");
     assertThat(data.path("items")).hasSize(2);
-    assertThat(data.path("subtotal").asLong() + data.path("shipping_fee").asLong()).isLessThanOrEqualTo(data.path("total").asLong());
+    assertThat(jdbc.queryForObject("select cod_fee from orders where id = ?", Long.class, a)).isPositive();
+    assertThat(data.path("subtotal").asLong() + data.path("shipping_fee").asLong()).isEqualTo(data.path("total").asLong());
     assertThat(data.path("items").get(0).propertyNames()).containsExactlyInAnyOrder("name", "size", "color", "quantity", "line_total", "image_url");
     assertMatchesSchema(confirmed);
 
@@ -115,6 +116,14 @@ class OrderNotificationsIntegrationTest extends OrderTestSupport {
     assertThat(shipTo.path("address").asString()).isEqualTo("1 Synthetic St");
     rows.forEach(r -> assertThat((String) r.get("payload")).doesNotContain("0912345678"));
     assertThat(payload(rows.get(1)).path("data").has("ship_to")).isFalse();
+  }
+
+  @Test void aShortPhoneIsHiddenAndNeverBlocksTheMove() {
+    UUID a = order("PENDING", "buyer@example.test", null);
+    asOwner("update orders set shipping_address = jsonb_set(shipping_address, '{phone}', '\"12345\"') where id = '" + a + "'");
+    move(a, "PENDING", "CONFIRMED", null);
+    assertThat(status(a)).isEqualTo("CONFIRMED");
+    assertThat(only(a, "NOTIFY_ORDER_CONFIRMED").path("data").path("ship_to").path("phone_masked").asString()).isEqualTo("****");
   }
 
   @Test void everyCancelPathSendsOneFixedReason() {

@@ -128,6 +128,12 @@ class NotifyOrderTest(unittest.TestCase):
         self.assertTrue(self.errors(lambda p: p["data"].update(cancel_category="BECAUSE"), "cancelled"))
         self.assertTrue(self.errors(lambda p: p["data"].update(cancel_category="SHOP"), "returned"))
 
+    def test_a_fully_hidden_phone_is_valid_but_a_clear_one_is_not(self):
+        def phone(p, value):
+            p["data"]["ship_to"]["phone_masked"] = value
+        self.assertEqual(self.errors(lambda p: phone(p, "****"), "confirmed"), [])
+        self.assertTrue(self.errors(lambda p: phone(p, "0912345678"), "confirmed"))
+
     def test_unknown_fields_and_bad_dedupe_key_are_rejected(self):
         self.assertTrue(self.errors(lambda p: p.update(reason="free text")))
         self.assertTrue(self.errors(lambda p: p["data"].update(reason="free text")))

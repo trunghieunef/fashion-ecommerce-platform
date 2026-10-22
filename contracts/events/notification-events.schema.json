@@ -54,7 +54,7 @@
           "required": ["name", "phone_masked", "address"],
           "properties": {
             "name": {"type": "string"},
-            "phone_masked": {"type": "string", "pattern": "^[0-9+]{1,4}[*]{4}[0-9]{3}$"},
+            "phone_masked": {"type": "string", "pattern": "^([0-9+]{1,4}[*]{4}[0-9]{3}|[*]{4})$"},
             "address": {"type": "string"}
           },
           "additionalProperties": false
