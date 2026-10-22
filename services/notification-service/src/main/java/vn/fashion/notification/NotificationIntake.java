@@ -1,5 +1,7 @@
 package vn.fashion.notification;
 
+import jakarta.mail.internet.AddressException;
+import jakarta.mail.internet.InternetAddress;
 import java.time.Instant;
 import java.util.Set;
 import java.util.UUID;
@@ -37,7 +39,7 @@ public class NotificationIntake {
       } catch (RuntimeException e) { throw invalid(); }
     }
     String email = text(p.path("recipient"), "email");
-    if (email.length() < 3 || email.length() > 254 || email.indexOf('@') < 0 || email.contains("\r") || email.contains("\n")) throw invalid();
+    if (email.length() < 3 || email.length() > 254 || !oneAddress(email)) throw invalid();
     UUID user = null;
     JsonNode u = p.path("user_id");
     if (!u.isMissingNode() && !u.isNull()) {
@@ -55,6 +57,12 @@ public class NotificationIntake {
         .param("subject", rendered.subject()).param("body", rendered.html()).param("locale", locale)
         .param("expires", expiresAt == null ? null : java.sql.Timestamp.from(expiresAt)).update();
     return null;
+  }
+
+  /** One plain address, as the sender parses it (strict, no list, no display name, no CR/LF): PR #36 M1. */
+  static boolean oneAddress(String email) {
+    if (email.indexOf('@') <= 0 || email.contains("\r") || email.contains("\n")) return false;
+    try { return new InternetAddress(email, true).getAddress().equals(email); } catch (AddressException e) { return false; }
   }
 
   /** No JSON Schema validator at runtime: check what the renderer and the row need. */

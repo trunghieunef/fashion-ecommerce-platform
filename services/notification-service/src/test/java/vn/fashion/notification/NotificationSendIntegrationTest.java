@@ -121,6 +121,15 @@ class NotificationSendIntegrationTest extends NotificationTestSupport {
         .containsEntry("status", "PENDING").containsEntry("retry_count", 1);
   }
 
+  @Test void aRecipientThatIsNotOneAddressFailsWithoutSending() {
+    // PR #36 M1: a bad address fails while the message is built, before any SMTP call: FAILED, not UNKNOWN.
+    UUID id = seed();
+    jdbc.update("update notifications set recipient = 'a@b.co,postmaster' where id = ?", id);
+    sender.runOnce();
+    assertThat(status(id)).isEqualTo("FAILED");
+    assertThat(smtp.messages).isEmpty();
+  }
+
   @Test void silenceAfterDataIsUnknown() {
     smtp.mode = FakeSmtp.Mode.SILENT_AFTER_DATA;
     UUID id = seed();

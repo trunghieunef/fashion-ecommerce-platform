@@ -11,7 +11,11 @@ import tools.jackson.databind.ObjectMapper;
 import vn.fashion.platform.outbox.OutboxEvent;
 import vn.fashion.platform.outbox.OutboxRepository;
 
-/** order.events (and NOTIFY_ORDER_* for NOT-01) through the outbox, routed by contracts/events/registry.json. No address or contact (PII) in events. */
+/**
+ * order.events (and NOTIFY_ORDER_* for NOT-01) through the outbox, routed by contracts/events/registry.json. No address or
+ * contact (PII) in order.events; NOTIFY_* carry the recipient email, name, masked phone and address line the email needs
+ * (notification does not read the order DB; 05 section 11.2, 08 NOT-01).
+ */
 @Component
 public class OrderEvents {
   private final OutboxRepository outbox;

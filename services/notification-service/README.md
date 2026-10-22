@@ -19,17 +19,18 @@ Không có route Gateway, không API public. Xem email local: Mailpit UI/API `ht
 
 ## Luồng
 
-- Consumer `notification.events` (group `notification-service`, inbox `processed_events`, ACK sau commit): kiểm tra các trường bắt buộc theo schema (viết tay, chưa có validator JSON Schema) → một TX ghi
+- Consumer `notification.events` (group `notification-service`, inbox `processed_events`, ACK sau commit): kiểm tra các trường bắt buộc theo schema (viết tay, chưa có validator JSON Schema; người nhận phải là đúng một địa chỉ strict, không danh sách/tên hiển thị) → một TX ghi
   `notifications` `PENDING` với snapshot template + `rendered_subject`/`rendered_body` đã escape (Mustache, layout chung
   `templates/email/layout.mustache`). Trùng `(dedupe_key, channel, recipient)` → bỏ qua; thiếu/sai trường bắt buộc → DLT. Thiếu bản `en` → `vi`.
-- Worker (poll 2 s, lease 60 s) gửi SMTP ngoài TX, `Message-ID` `<{notification_id}@{domain}>`:
+- Worker (poll 2 s, lease 120 s — timeout SMTP 10 s là theo từng bước socket) gửi SMTP ngoài TX, `Message-ID` `<{notification_id}@{domain}>`:
 
 | Kết quả SMTP | Trạng thái |
 |---|---|
 | Nhận (250 sau DATA) | `SENT` (SMTP nhận, không có nghĩa khách đã đọc) |
 | Không kết nối được, lỗi trước `MAIL FROM` (chào 421, rớt sau EHLO, AUTH), 4xx | `PENDING` + `retry_count + 1`, backoff 1/2/4/8/16 phút ±20 %; lần thất bại thứ 6 → `FAILED` |
 | 5xx | `FAILED` ngay |
-| Timeout/đứt kết nối sau khi đã kết nối, không có mã trả lời | `UNKNOWN` (không gửi lại) |
+| Timeout/đứt kết nối sau khi đã kết nối, không có mã trả lời (kể cả rớt ở RCPT/DATA) | `UNKNOWN` (không gửi lại; đánh đổi có chủ ý, review PR #36 M2) |
+| Địa chỉ người nhận không phải đúng một địa chỉ hợp lệ (lỗi khi dựng thư, chưa gọi SMTP) | `FAILED` |
 | `SENDING` hết lease (worker chết) | `UNKNOWN`, không gửi lại mù (T22) |
 | Quá `expires_at`, hoặc user 404 (reset) | `EXPIRED` |
 

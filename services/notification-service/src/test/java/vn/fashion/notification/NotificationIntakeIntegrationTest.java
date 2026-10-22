@@ -92,7 +92,9 @@ class NotificationIntakeIntegrationTest extends NotificationTestSupport {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"a@", "no-at-sign.example", "an@example.invalid\r\nBcc: x@y.z"})
+  @ValueSource(strings = {"a@", "no-at-sign.example", "an@example.invalid\r\nBcc: x@y.z",
+      // PR #36 M1: order's email regex accepts these, but they are not one plain address.
+      "a@b.co,postmaster", "Name <a@b.co>"})
   void aBadRecipientIsPermanent(String email) {
     assertBadRecipient(email);
   }

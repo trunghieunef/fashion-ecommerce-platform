@@ -2,6 +2,7 @@ package vn.fashion.notification;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import org.eclipse.angus.mail.util.MailConnectException;
+import jakarta.mail.MessagingException;
 import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeMessage;
 import java.nio.charset.StandardCharsets;
@@ -26,8 +27,9 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * Sends PENDING emails: one-row claim with a 60 s lease (no transaction held during SMTP), result written only while
- * the lease is still ours. SENDING rows whose lease ran out are UNKNOWN: SMTP has no lookup, so never resend blindly.
+ * Sends PENDING emails: one-row claim with a 120 s lease (no transaction held during SMTP), result written only while
+ * the lease is still ours. The 10 s SMTP timeouts apply per socket step, so a slow session (connect, greeting, EHLO, MAIL,
+ * RCPT, DATA, body, end) plus the secret fetch stays under 120 s (PR #36 M3). SENDING rows whose lease ran out are UNKNOWN: SMTP has no lookup, so never resend blindly.
  */
 @Component
 public class NotificationSender {
@@ -96,7 +98,7 @@ public class NotificationSender {
 
   private Optional<Claimed> claim() {
     return jdbc.sql("""
-        update notifications set status = 'SENDING', lease_token = gen_random_uuid(), lease_until = now() + interval '60 seconds'
+        update notifications set status = 'SENDING', lease_token = gen_random_uuid(), lease_until = now() + interval '120 seconds'
         where id = (select id from notifications where status = 'PENDING' and next_retry_at <= now()
                     order by next_retry_at limit 1 for update skip locked)
         returning id, lease_token, dedupe_key, recipient, rendered_subject, rendered_body, retry_count, expires_at,
@@ -127,8 +129,15 @@ public class NotificationSender {
         return;
       }
     }
+    MimeMessage message;
     try {
-      send(c, body);
+      message = message(c, body);
+    } catch (MessagingException e) {
+      fail(c, Failure.PERMANENT, e); // a bad stored address or header: no SMTP call yet, retrying cannot help (PR #36 M1)
+      return;
+    }
+    try {
+      mail.send(message);
     } catch (Exception e) {
       fail(c, classify(e), e);
       return;
@@ -136,16 +145,17 @@ public class NotificationSender {
     if (finish(c, "status = 'SENT', sent_at = now(), last_error = null", "SENT")) meters.counter("notification.sent").increment();
   }
 
-  private void send(Claimed c, String body) throws Exception {
+  private MimeMessage message(Claimed c, String body) throws MessagingException {
     String id = c.id().toString();
     MimeMessage message = new MimeMessage(mail.getSession()) {
-      @Override protected void updateMessageID() throws jakarta.mail.MessagingException { setHeader("Message-ID", "<" + id + "@" + messageIdDomain + ">"); }
+      @Override protected void updateMessageID() throws MessagingException { setHeader("Message-ID", "<" + id + "@" + messageIdDomain + ">"); }
     };
     message.setFrom(new InternetAddress(from));
-    message.setRecipients(jakarta.mail.Message.RecipientType.TO, InternetAddress.parse(c.recipient(), false));
+    // Exactly one strict address: a lenient parse would split "a@b.co,x" into two recipients (PR #36 M1).
+    message.setRecipient(jakarta.mail.Message.RecipientType.TO, new InternetAddress(c.recipient(), true));
     message.setSubject(c.subject(), StandardCharsets.UTF_8.name());
     message.setContent(body, "text/html; charset=UTF-8");
-    mail.send(message);
+    return message;
   }
 
   /**
