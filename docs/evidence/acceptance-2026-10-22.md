@@ -33,7 +33,7 @@ chưa chốt: theo 15, task mock/mail sink được hoàn tất trước; gửi 
 | Email không làm hỏng đơn; không HTTP/SMTP trong DB TX | `aShortPhoneIsHiddenAndNeverBlocksTheMove`; review toàn nhánh và PR (claim một dòng, gửi ngoài TX) | Pass |
 | PII/log: không email người nhận, nội dung, token trong log | `logsCarryNoRecipientOrBody`, `theResetTokenIsNeverStored`; `last_error` chỉ tên class | Pass |
 
-**`TASK:NOT-01`: Done (local, trước G0)**; CI trên `9db3196` PASS, re-review PR #36 "đồng ý merge"; chủ dự án quyết định merge.
+**`TASK:NOT-01`: Done (local, trước G0)**; CI trên `9db3196` PASS, re-review PR #36 "đồng ý merge"; chủ dự án đã merge vào `main` (`5f76885`, 2026-10-22).
 
 ### Ngoại lệ và việc còn lại (không chặn Done local)
 
