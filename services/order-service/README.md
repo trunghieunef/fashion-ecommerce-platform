@@ -106,6 +106,15 @@ outbox `ORDER_CONFIRMED`/`ORDER_CANCELLED` cùng transaction.
   `processing_status`: CONFIRMED đã qua `WAIT_OPS` và PACKING chưa có shipment → PROCESSING; PACKING có shipment, SHIPPING →
   READY; DELIVERED → FINISHED.
 
+## Email giao dịch (NOT-01)
+
+`OrderNotifications` (gọi cuối `OrderTransitions.move`, cùng transaction) ghi outbox `notification.events` cho đơn COD có `contact_email`:
+`NOTIFY_ORDER_CONFIRMED` (`PENDING → CONFIRMED`), `NOTIFY_ORDER_PREPARING` (`CONFIRMED → PACKING`, sau khi kho commit),
+`NOTIFY_ORDER_DELIVERED`, `NOTIFY_ORDER_CANCELLED` (kèm `cancel_category` tính từ mã `cancel_reason`, không bao giờ từ `reason` tự do),
+`NOTIFY_ORDER_RETURNED`. `dedupe_key` `order:{order_id}:{confirmed|preparing|delivered|cancelled|returned}` nên replay/retry không tạo email
+thứ hai. Payload mang đủ dữ liệu render (`shipping_fee` = total − subtotal, `ship_to` chỉ ở CONFIRMED với số điện thoại che `090****123`);
+đơn online và đơn không có email liên hệ không phát. Contract: `contracts/events/notification-events.schema.json`, 03 §5.2.
+
 ## Cấu hình
 
 | Biến | Mặc định | Ý nghĩa |

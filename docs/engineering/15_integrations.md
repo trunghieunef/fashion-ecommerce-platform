@@ -34,7 +34,7 @@ Không sao chép công thức nối secret “SHA-256” hoặc ACK form minh h�
 | GHTK / SHP-03 subtask | Account/token, API version, callback auth, query khả năng, COD statement | Như GHN nhưng fixture/source riêng, không giả cùng HMAC header |
 | Viettel Post / SHP-03 subtask | Account/token lifecycle, API version, callback auth, địa chỉ, settlement | Như trên; thêm token expiry/refresh và outage |
 | SELF / SHP-01/02 | Vùng giao, bảng phí/COD fee, người giao, bằng chứng OPS | State guard, cancel-before-create, handover, delivered/collected/settled độc lập |
-| Email / NOT-01 | Provider/domain/sender, sandbox hoặc mail sink, idempotency/query support | Delivery accepted, bounce/error/timeout query, duplicate key, template VI/EN, no PII logs |
+| Email / NOT-01 | Provider/domain/sender, sandbox hoặc mail sink, idempotency/query support. Local: Mailpit (`axllent/mailpit` pin tag + digest, SMTP 1025 nội bộ, UI `127.0.0.1:8025`) thay provider tới khi O07 chốt | Delivery accepted, bounce/error/timeout query, duplicate key, template VI/EN, no PII logs (NOT-01 local: SMTP 4xx/5xx/timeout, trùng `dedupe_key`, VI/EN, không log PII bằng test + Mailpit smoke; bounce/query provider chờ O07) |
 | SMS / USR-03 | Provider/brandname, OTP template, hạn mức/cost, delivery query | Expired challenge không gửi, delayed ACK, retry cap, rate limit; không log code |
 | Google/Facebook / USR-04 | OAuth apps, redirect allowlist, audience/issuer/config phù hợp | State/nonce invalid, redirect mismatch, verified email/link conflict, revoke/unlink |
 

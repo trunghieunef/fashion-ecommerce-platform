@@ -12,11 +12,11 @@ while IFS= read -r line; do
   grep -q "^${BASH_REMATCH[1]}=" "$ENV_FILE" || printf '%s\n' "$line" >> "$ENV_FILE"
 done < infra/local/.env.example
 
-# TASK:INV-01/CART-01/SHP-01/PAY-01/ORD-01: preserve generated inventory, cart, shipping, payment and order role credentials
+# TASK:INV-01/CART-01/SHP-01/PAY-01/ORD-01/NOT-01: preserve generated inventory, cart, shipping, payment and order role credentials
 # across restarts.
 for inventory_key in INVENTORY_MIGRATION_DB_PASSWORD INVENTORY_DB_PASSWORD CART_MIGRATION_DB_PASSWORD CART_DB_PASSWORD \
     SHIPPING_MIGRATION_DB_PASSWORD SHIPPING_DB_PASSWORD PAYMENT_MIGRATION_DB_PASSWORD PAYMENT_DB_PASSWORD \
-    ORDER_MIGRATION_DB_PASSWORD ORDER_DB_PASSWORD; do
+    ORDER_MIGRATION_DB_PASSWORD ORDER_DB_PASSWORD NOTIFICATION_MIGRATION_DB_PASSWORD NOTIFICATION_DB_PASSWORD; do
   if ! grep -q "^${inventory_key}=." "$ENV_FILE"; then
     sed -i "s|^${inventory_key}=.*|${inventory_key}=$(openssl rand -hex 32)|" "$ENV_FILE"
   fi
@@ -80,6 +80,8 @@ service_key CART cart-service CATALOG_INTERNAL_CALLERS INVENTORY_INTERNAL_CALLER
 service_key SHIPPING shipping-service CATALOG_INTERNAL_CALLERS                     # TASK:SHP-01: catalog quote for weights
 service_key ORDER order-service CART_INTERNAL_CALLERS CATALOG_INTERNAL_CALLERS SHIPPING_INTERNAL_CALLERS \
   INVENTORY_INTERNAL_CALLERS PAYMENT_INTERNAL_CALLERS  # TASK:ORD-01 quote/create, ORD-02 saga
+
+service_key NOTIFICATION notification-service USER_INTERNAL_CALLERS  # TASK:NOT-01: reset-email secret from user
 
 # TASK:ORD-01: guest checkout token key pair (cart signs, order verifies) and the quote HMAC secret; generated once.
 if ! grep -q '^CART_CHECKOUT_PRIVATE_KEY=.' "$ENV_FILE"; then

@@ -545,6 +545,29 @@ các dòng "(SDD)" là phán quyết của controller khi triển khai, ghi lạ
 | (review PR #35 I1) Hủy vận đơn nhận `QUOTE_NOT_FOUND`/`QUOTE_MISMATCH`/`QUOTE_ALREADY_USED` → coi như đã hủy (`shipment_state CANCELLED`), bù trừ đi tiếp | Shipping chỉ trả các mã này khi đơn chưa có shipment; quote bất biến (runtime không UPDATE/DELETE) nên không bao giờ tạo được vận đơn từ snapshot đó; đơn kẹt `MANUAL` ở `CREATE_SHIPMENT` vì quote bị từ chối nay hủy được. Mã từ chối khác vẫn `MANUAL` |
 | (review PR #35 M1–M3, M6) `CANCELLING` chờ hàng đã bàn giao (`WAIT_RETURN`) → `processing_status READY`; đơn đã hủy mà vẫn giao → `cancel_reason` null, saga `FULFILL`; OPS khác dùng lại key phiếu trên cùng đơn → 409 `IDEMPOTENCY_KEY_REUSED` (không 500); không `order.fulfill` thì ẩn `evidence_ref` và `condition` của phiếu | Khách không poll nhiều ngày; admin không thấy lý do hủy trên đơn đã giao; text tự do OPS nhập không lộ cho FINANCE |
 
+## NOT-01 — quyết định 2026-10-22
+
+`TASK:NOT-01` · `REQ:NOT-01`, `REQ:NOT-05` (seed), `REQ:NOT-06`. [Spec](../superpowers/specs/2026-10-22-not-01-transactional-email-design.md) và
+[plan](../superpowers/plans/2026-10-22-not-01-transactional-email.md); chủ dự án duyệt spec ngày 2026-10-22. O07 (provider email thật) chưa chốt:
+nghiệm thu mức local với Mailpit.
+
+| Quyết định | Hệ quả |
+|---|---|
+| Chủ dự án: 6 email giao dịch (đặt đơn, đang chuẩn bị, giao thành công, hủy, hoàn về shop, reset mật khẩu); không có email "đang giao" | 5 event order + `NOTIFY_RESET_PASSWORD` có sẵn |
+| Chủ dự án: kiểu giao diện B (dải tên shop, khối trắng, nút đen, chân email hotline) | Layout chung một file Mustache, không chép khung 12 lần |
+| Chủ dự án: câu lý do hủy cố định theo loại, không bao giờ in `reason` OPS nhập | `cancel_category` tính từ mã `orders.cancel_reason`; mã lạ → "Đơn không thể xử lý, vui lòng liên hệ hotline." |
+| Chủ dự án (phương án A): email "đang chuẩn bị" gửi khi `CONFIRMED → PACKING`, không phải lúc OPS bấm `confirm-cod` | Email luôn đúng: kho đã trừ, đơn không còn bị hủy do commit thất bại |
+| Chủ dự án: tên shop, hotline, địa chỉ gửi, domain storefront là cấu hình, giá trị mẫu | `NOTIFICATION_SHOP_NAME`, `NOTIFICATION_HOTLINE`, `NOTIFICATION_MAIL_FROM`, `NOTIFICATION_STOREFRONT_BASE_URL`, `NOTIFICATION_PUBLIC_ASSET_BASE_URL`, `NOTIFICATION_MESSAGE_ID_DOMAIN`; chủ dự án điền giá trị thật sau |
+| (agent) Email "giao thành công" do order phát (`NOTIFY_ORDER_DELIVERED`), không phải shipping như 03 cũ | Shipping không có email/locale khách; `NOTIFY_SHIPMENT_STATUS` để dành cho carrier ngoài (SHP-03) |
+| (agent) Event mang dữ liệu render, notification không đọc DB order; order che số điện thoại (`090****123`), chỉ email 1 có địa chỉ; không bao giờ gửi `reason` tự do | Rủi ro PII trên Kafka giảm; giữ retention topic theo 13 |
+| (plan) Email 1 chỉ in `address_line`: địa chỉ đơn chỉ có `province_code`/`ward_code`, chưa có danh mục tên hành chính (SHP-01) | Khi có danh mục tên (task sau) thêm vào `ship_to.address` |
+| (agent) Link `{storefront}/orders/{order_no}` không token; reset `{storefront}/reset-password#token={secret}` (fragment, không vào log server/Referer) | Trang đích do WEB-04 / WEB-02 làm đúng dạng link; guest xem đơn khi còn cookie |
+| (agent) Chỉ HTML, Mustache, Mailpit làm mail sink (SMTP 1025 nội bộ, UI `127.0.0.1:8025`) | Thêm plain-text khi chọn provider O07 nếu cần deliverability |
+| (agent) SMTP 5xx → `FAILED` ngay; 4xx/không kết nối → retry tối đa 5 lần; timeout sau khi kết nối → `UNKNOWN`; lease 60 s dài hơn timeout 10 s | Gửi chậm mà thành công không thành `UNKNOWN` |
+| (agent) Chưa phát `notification.results`, chưa job dọn 90 ngày, không email cho đơn online | `notification.results` thêm khi NOT-02 cần; dọn 90 ngày trước G2 (O06); online chờ PAY-02/03 |
+| (plan) user-service chưa có relay nên email reset không tới Kafka | Bật `platform-messaging` + relay cho user-service (`USER_RELAY_ENABLED`, mặc định bật), thêm topic `user.events`/`notification.events` và DLT; outbox cũ đang chờ được phát khi bật; tắt trong test user-service bằng surefire env |
+| (plan) `local-up.sh` sinh khóa `NOTIFICATION` và thêm vào `USER_INTERNAL_CALLERS` | notification là caller duy nhất của `notification-secrets` |
+
 ## PAY-01 — quyết định 2026-10-20
 
 `TASK:PAY-01` · `REQ:PAY-03/07/08`. Chủ dự án giao agent tự chốt và duyệt [spec](../superpowers/specs/2026-10-20-pay-01-payment-cod-design.md) (cả các mặc định §9):

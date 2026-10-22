@@ -48,6 +48,8 @@ services:
       PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:?run scripts/local-up.sh}
       ORDER_MIGRATION_DB_PASSWORD: ${ORDER_MIGRATION_DB_PASSWORD:?run scripts/local-up.sh}
       ORDER_DB_PASSWORD: ${ORDER_DB_PASSWORD:?run scripts/local-up.sh}
+      NOTIFICATION_MIGRATION_DB_PASSWORD: ${NOTIFICATION_MIGRATION_DB_PASSWORD:?run scripts/local-up.sh}
+      NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?run scripts/local-up.sh}
     ports:
       - "127.0.0.1:${CATALOG_POSTGRES_PORT:-5432}:5432"
     volumes:
@@ -59,6 +61,7 @@ services:
       - ./postgres-init/05-shipping-db.sh:/docker-entrypoint-initdb.d/05-shipping-db.sh:ro
       - ./postgres-init/06-payment-db.sh:/docker-entrypoint-initdb.d/06-payment-db.sh:ro
       - ./postgres-init/07-order-db.sh:/docker-entrypoint-initdb.d/07-order-db.sh:ro
+      - ./postgres-init/08-notification-db.sh:/docker-entrypoint-initdb.d/08-notification-db.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
@@ -303,6 +306,54 @@ services:
       timeout: 3s
       retries: 30
 
+  # TASK:NOT-01: dev SMTP sink standing in for the real provider (15, O07). SMTP 1025 is internal only;
+  # the web UI/API is published on loopback only. Never use outside local.
+  mailpit:
+    image: axllent/mailpit:v1.31.4@sha256:b68349e3a014b90c5610bfb26b2ae36f3892d7b8cf25ee140c6c71c98d2fcf48
+    ports:
+      - "127.0.0.1:${MAILPIT_PORT:-8025}:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # TASK:NOT-01: transactional email worker (notification.events consumer + SMTP sender). Private, no
+  # Gateway route; the reset link secret is fetched from user-service with an ADR-19 service token.
+  notification:
+    build: ../../services/notification-service
+    environment:
+      MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT: http://tempo:4318/v1/traces
+      TRACING_SAMPLING_PROBABILITY: ${TRACING_SAMPLING_PROBABILITY:-1.0}
+      NOTIFICATION_DB_URL: jdbc:postgresql://postgres:5432/notification
+      NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?run scripts/local-up.sh}
+      NOTIFICATION_MIGRATION_DB_URL: jdbc:postgresql://postgres:5432/notification
+      NOTIFICATION_MIGRATION_DB_PASSWORD: ${NOTIFICATION_MIGRATION_DB_PASSWORD:?run scripts/local-up.sh}
+      NOTIFICATION_SERVICE_PRIVATE_KEY: ${NOTIFICATION_SERVICE_PRIVATE_KEY:-}
+      NOTIFICATION_SERVICE_PUBLIC_KEY: ${NOTIFICATION_SERVICE_PUBLIC_KEY:-}
+      NOTIFICATION_USER_BASE_URL: http://user-service:8082
+      NOTIFICATION_STOREFRONT_BASE_URL: http://localhost:${STOREFRONT_PORT:-4173}
+      NOTIFICATION_PUBLIC_ASSET_BASE_URL: http://localhost:${GATEWAY_PORT:-8080}
+      NOTIFICATION_SHOP_NAME: ${NOTIFICATION_SHOP_NAME:-Fashion Shop (local)}
+      NOTIFICATION_HOTLINE: ${NOTIFICATION_HOTLINE:-0900 000 000}
+      NOTIFICATION_MAIL_FROM: ${NOTIFICATION_MAIL_FROM:-no-reply@fashion.local}
+      NOTIFICATION_MESSAGE_ID_DOMAIN: ${NOTIFICATION_MESSAGE_ID_DOMAIN:-fashion.local}
+      SPRING_MAIL_HOST: mailpit
+      SPRING_MAIL_PORT: "1025"
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8087/actuator/health/readiness"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
   user-service:
     build: ../../services/user-service
     environment:
@@ -325,8 +376,11 @@ services:
       USER_SECRET_KEY: ${USER_SECRET_KEY:?run scripts/local-up.sh to generate USER_SECRET_KEY}
       USER_INTERNAL_CALLERS: ${USER_INTERNAL_CALLERS:-}
       USER_TRUSTED_GATEWAYS: gateway
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     depends_on:
       postgres:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
       redis:
         condition: service_healthy

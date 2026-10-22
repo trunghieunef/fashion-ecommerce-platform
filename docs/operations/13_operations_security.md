@@ -56,7 +56,7 @@ Một người có thể nhiều role nhưng audit phải ghi actor/action/reaso
 | OTP/reset secret tạm | Redis mã hóa TTL, user API có scope | notification duy nhất nhận secret tạm; no-store | OTP 5m, reset 30m; xóa sau ACK/hết hạn |
 | Profile/address/contact snapshot | user/order/shipping DB tương ứng | Owner và nhân viên có nhu cầu; hạn chế FINANCE xem địa chỉ | O06 chốt thời hạn từng loại, quyền xóa/ẩn danh |
 | Payment/refund/settlement/audit | payment/order DB | FINANCE/TL scoped support, payload redacted | Không tự purge trước khi policy O06 được chốt |
-| Notification recipient/rendered content | notification-db | Sender/support có scope; OTP dùng marker | O06 chốt TTL ngắn, cleanup verified trước launch |
+| Notification recipient/rendered content | notification-db | Sender/support có scope; OTP/reset dùng marker `@@RESET_URL@@` (NOT-01: token reset chỉ có trong bộ nhớ lúc gửi, không vào DB/log/metric; log chỉ `notification_id`, `dedupe_key`, template, status — không email, nội dung, token) | O06 chốt TTL ngắn, cleanup verified trước launch (NOT-01: chưa có job dọn 90 ngày) |
 | Marketing preferences | notification-db | Opt-in, consent timestamp và unsubscribe hash | O06 chốt bằng chứng consent/retention |
 | Outbox/inbox | DB service | Application/ops bounded replay | Dự kiến SENT 30 ngày, dedupe 90 ngày; phải đủ replay window |
 | Logs/traces | Observability storage | RBAC, mask phone/email/token, không body webhook secret; span relay chỉ có topic/event_type/event_id, không payload/partition key (PLT-05) (Gateway: log JSON ECS qua `PiiRedactingJsonCustomizer`, PLT-05) | PO duyệt khung logs 30–90 ngày tại bảng O06 bên dưới; traces theo budget và O06 |
