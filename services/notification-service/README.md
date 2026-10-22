@@ -5,7 +5,7 @@ hủy, hoàn về shop (order phát) và đặt lại mật khẩu (user phát).
 [contract event](../../contracts/events/notification-events.schema.json) ·
 [evidence](../../docs/evidence/not-01-local-2026-10-22.md) · quyết định ở [08 NOT-01](../../docs/design/08_decisions.md#not-01--quyết-định-2026-10-22).
 
-Trạng thái: **In review (local)**, chưa nghiệm thu. Gửi qua SMTP; local là Mailpit. Chưa có provider thật (O07).
+Trạng thái: **Done (local, trước G0)** — [nghiệm thu](../../docs/evidence/acceptance-2026-10-22.md#tasknot-01--email-giao-dịch-vien). Gửi qua SMTP; local là Mailpit. Chưa có provider thật (O07).
 
 ## Chạy và test
 
