@@ -127,7 +127,7 @@ chưa enforce chính sách O05/D10; khách không hủy sau khi shop xác nhận
 | Follow-up ORD-02/03: intent bù trừ, đối chiếu `shipment_id`, metric `MANUAL` theo `step` | `aCrashAfterACompensationIntentStillEndsManual`, `ownCancelAndForeignShipmentEventsAreQuiet`, README metric | Pass |
 | Quyền và PII: `order.return`, FINANCE không thấy text tự do của phiếu | `financeSeesNoFreeTextOfASlip`, `aCancelWithoutOrderFulfillSeesNoContact`, gateway `orderCancelAndReturnPathsAreRouted` | Pass |
 
-**`TASK:ORD-04`: Done (local, trước G0)**; CI trên `1cd5a81` PASS, re-review PR #35 "đồng ý merge"; chủ dự án quyết định merge.
+**`TASK:ORD-04`: Done (local, trước G0)**; CI trên `1cd5a81` PASS, re-review PR #35 "đồng ý merge"; CI trên `e054a8f` (commit nghiệm thu) PASS ([run 39638452594](https://github.com/trunghieunef/fashion-ecommerce-platform/actions/runs/39638452594/job/119355364444)); chủ dự án đã merge vào `main` (`229d3d4`, 2026-10-22).
 
 ### Gợi ý không chặn của re-review (xử lý ở commit nghiệm thu)
 

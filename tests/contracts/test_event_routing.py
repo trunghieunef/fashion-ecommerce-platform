@@ -47,7 +47,12 @@ class EventRoutingTest(unittest.TestCase):
             with self.subTest(fixture=path.name):
                 entry = REGISTRY[event["event_type"]]
                 self.assertIn("aggregate_id", entry, "registry must name the payload field used as aggregate_id")
-                self.assertEqual(event["aggregate_id"], event["payload"][entry["aggregate_id"]])
+                field = entry["aggregate_id"]
+                if field in event["payload"]:
+                    self.assertEqual(event["aggregate_id"], event["payload"][field])
+                else:   # NOTIFY_ORDER_*: the order id is in the dedupe_key, not the body
+                    self.assertEqual(field, "order_id")
+                    self.assertIn(event["aggregate_id"], event["payload"]["dedupe_key"])
 
 
 if __name__ == "__main__":

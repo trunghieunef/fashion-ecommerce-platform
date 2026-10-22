@@ -1,0 +1,28 @@
+{
+  "event_id": "77777777-7777-4777-8777-7777777777a4",
+  "event_type": "NOTIFY_ORDER_CANCELLED",
+  "version": 1,
+  "occurred_at": "2026-10-22T03:10:00Z",
+  "aggregate_id": "11111111-1111-4111-8111-111111111111",
+  "aggregate_version": 3,
+  "aggregate_sequence": 2,
+  "correlation_id": "synthetic-contract-example",
+  "payload": {
+    "dedupe_key": "order:11111111-1111-4111-8111-111111111111:cancelled",
+    "user_id": null,
+    "recipient": {"email": "guest@example.test"},
+    "channel": "EMAIL",
+    "locale": "vi",
+    "template_key": "ORDER_CANCELLED",
+    "data": {
+      "order_no": "ORD202610000001",
+      "placed_at": "2026-10-22T03:00:00Z",
+      "items": [{"name": "Ao thun", "size": "M", "color": "Den", "quantity": 2, "line_total": 300000, "image_url": null}],
+      "subtotal": 300000,
+      "shipping_fee": 30000,
+      "total": 330000,
+      "payment_method": "COD",
+      "cancel_category": "SHOP"
+    }
+  }
+}

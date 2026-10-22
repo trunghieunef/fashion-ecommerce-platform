@@ -103,9 +103,11 @@ Migration: `V001__users.sql` (users, refresh_tokens, outbox_events), `V002__user
 `V003__roles_permissions_audit.sql` (roles/permissions + seed theo 13 §2, `audit_logs` chỉ
 INSERT/SELECT cho `user_runtime`, `idempotency_requests`), `V004__user_action_tokens.sql`
 (token reset một lần, chỉ hash). Ghi outbox `notification.events` / `NOTIFY_RESET_PASSWORD`
-(partition `dedupe_key` = `RESET_PASSWORD:<challenge_id>`), cũng **chưa có relay**. Topic: ghi outbox
-`user.events` / `USER_CREATED`, **chưa có relay** vì stack local chưa có Kafka và chưa có
-consumer bắt buộc (03 §5.2). Health: `/actuator/health/{liveness,readiness}` trên port 8082.
+(partition `dedupe_key` = `RESET_PASSWORD:<challenge_id>`) và `user.events` / `USER_CREATED`. Từ `TASK:NOT-01` relay
+`platform-messaging` **bật mặc định** (`USER_RELAY_ENABLED=true`, `SPRING_KAFKA_BOOTSTRAP_SERVERS`, mặc định `localhost:19092`;
+compose: `kafka:9092`, user-service chờ Kafka healthy); test tắt relay bằng surefire env. Outbox đang chờ được phát khi bật.
+notification-service là consumer của `notification.events` và gọi `GET /internal/api/v1/users/notification-secrets/{challenge_id}`
+(caller `notification-service` trong `USER_INTERNAL_CALLERS`). Health: `/actuator/health/{liveness,readiness}` trên port 8082.
 
 ## Admin bootstrap
 

@@ -23,6 +23,77 @@
         "expires_at": {"$ref": "common.schema.json#/$defs/utc_timestamp"}
       },
       "additionalProperties": false
+    },
+    "OrderEmailItem": {
+      "type": "object",
+      "required": ["name", "size", "color", "quantity", "line_total", "image_url"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "size": {"type": "string"},
+        "color": {"type": "string"},
+        "quantity": {"type": "integer", "minimum": 1, "maximum": 99},
+        "line_total": {"$ref": "common.schema.json#/$defs/vnd_amount"},
+        "image_url": {"type": ["string", "null"]}
+      },
+      "additionalProperties": false
+    },
+    "OrderEmailData": {
+      "description": "Everything the order emails render (notification does not read the order DB). ship_to only on ORDER_CONFIRMED with the phone already masked, cancel_category only on ORDER_CANCELLED; never the free-text cancel reason",
+      "type": "object",
+      "required": ["order_no", "placed_at", "items", "subtotal", "shipping_fee", "total", "payment_method"],
+      "properties": {
+        "order_no": {"type": "string", "minLength": 1},
+        "placed_at": {"$ref": "common.schema.json#/$defs/utc_timestamp"},
+        "items": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/OrderEmailItem"}},
+        "subtotal": {"$ref": "common.schema.json#/$defs/vnd_amount"},
+        "shipping_fee": {"$ref": "common.schema.json#/$defs/vnd_amount"},
+        "total": {"$ref": "common.schema.json#/$defs/vnd_amount"},
+        "payment_method": {"const": "COD"},
+        "ship_to": {
+          "type": "object",
+          "required": ["name", "phone_masked", "address"],
+          "properties": {
+            "name": {"type": "string"},
+            "phone_masked": {"type": "string", "pattern": "^([0-9+]{1,4}[*]{4}[0-9]{3}|[*]{4})$"},
+            "address": {"type": "string"}
+          },
+          "additionalProperties": false
+        },
+        "cancel_category": {"enum": ["CUSTOMER", "SHOP", "EXPIRED", "OUT_OF_STOCK", "OTHER"]}
+      },
+      "additionalProperties": false
+    },
+    "NotifyOrder": {
+      "description": "Produced by order (NOT-01) for COD orders with a contact email, in the transition's transaction. aggregate_id is the order id (not in the body); dedupe_key order:{order_id}:{kind} gives one email per order and kind",
+      "type": "object",
+      "required": ["dedupe_key", "user_id", "recipient", "channel", "locale", "template_key", "data"],
+      "properties": {
+        "dedupe_key": {"type": "string", "pattern": "^order:[0-9a-f-]{36}:(confirmed|preparing|delivered|cancelled|returned)$"},
+        "user_id": {"$ref": "common.schema.json#/$defs/nullable_uuid"},
+        "recipient": {
+          "type": "object",
+          "required": ["email"],
+          "properties": {"email": {"type": "string", "minLength": 3, "maxLength": 254}},
+          "additionalProperties": false
+        },
+        "channel": {"const": "EMAIL"},
+        "locale": {"enum": ["vi", "en"]},
+        "template_key": {"enum": ["ORDER_CONFIRMED", "ORDER_PREPARING", "ORDER_DELIVERED", "ORDER_CANCELLED", "ORDER_RETURNED"]},
+        "data": {"$ref": "#/$defs/OrderEmailData"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"template_key": {"const": "ORDER_CONFIRMED"}}},
+          "then": {"properties": {"data": {"required": ["ship_to"]}}},
+          "else": {"properties": {"data": {"not": {"required": ["ship_to"]}}}}
+        },
+        {
+          "if": {"properties": {"template_key": {"const": "ORDER_CANCELLED"}}},
+          "then": {"properties": {"data": {"required": ["cancel_category"]}}},
+          "else": {"properties": {"data": {"not": {"required": ["cancel_category"]}}}}
+        }
+      ],
+      "additionalProperties": false
     }
   }
 }

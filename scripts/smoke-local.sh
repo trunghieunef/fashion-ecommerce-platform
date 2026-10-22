@@ -569,6 +569,46 @@ test "$(status -X POST -H "Origin: $ORIGIN" -H "Cookie: refresh_token=$first" "$
 test "$(status -X POST -H "Origin: https://evil.example" -H "Cookie: refresh_token=$second" "$GATEWAY_URL/api/v1/auth/logout")" = 403
 test "$(status -X POST -H "Origin: $ORIGIN" -H "Cookie: refresh_token=$second" "$GATEWAY_URL/api/v1/auth/logout")" = 204
 
+# TASK:NOT-01: transactional e-mail through Mailpit (loopback UI/API). Never prints bodies or tokens.
+MAILPIT_URL="${MAILPIT_URL:-http://127.0.0.1:${MAILPIT_PORT:-8025}}"
+export PYTHONUTF8=1
+not01_fail() { echo "NOT-01 $1 FAIL: $2" >&2; exit 1; }
+# not01_mail <search> <subject-substring>: polls up to 60 s for exactly one matching message, prints its id.
+not01_mail() {
+  local out=""
+  for _ in $(seq 1 60); do
+    out="$(curl -sS --max-time 5 --get --data-urlencode "query=$1" "$MAILPIT_URL/api/v1/search" |       python3 -c 'import json,sys; ids=[m["ID"] for m in json.load(sys.stdin)["messages"] if sys.argv[1] in m["Subject"]]; print(ids[0] if len(ids)==1 else ("DUPLICATE" if ids else ""))' "$2" 2>/dev/null || true)"
+    [[ -n "$out" ]] && break
+    sleep 1
+  done
+  printf '%s' "$out"
+}
+not01_text() { curl -sS "$MAILPIT_URL/api/v1/message/$1" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("Text","") + d.get("HTML",""))'; }
+mail_a1="$(not01_mail "$order_a" 'đã được đặt thành công')"
+mail_a2="$(not01_mail "$order_a" 'đang được chuẩn bị')"
+mail_c="$(not01_mail "$order_c" 'đã bị hủy')"
+for id in "$mail_a1" "$mail_a2" "$mail_c"; do
+  [[ -n "$id" && "$id" != DUPLICATE ]] || not01_fail orders 'missing or duplicated order email'
+done
+not01_text "$mail_a1" | grep -q "$order_a" || not01_fail orders 'order number missing from the placed email'
+not01_text "$mail_c" | grep -q 'Bạn đã hủy đơn\.' || not01_fail orders 'customer cancel sentence missing'
+echo 'NOT-01 order emails PASS'
+
+reset_email="reset-$EMAIL"
+test "$(status -H 'Content-Type: application/json' -d "{\"email\":\"$reset_email\",\"password\":\"Smoke-pass-123\",\"full_name\":\"Smoke Reset\",\"locale\":\"vi\"}" \
+  "$GATEWAY_URL/api/v1/auth/register")" = 201
+test "$(status -X POST -H 'Content-Type: application/json' -d "{\"email\":\"$reset_email\"}" "$GATEWAY_URL/api/v1/auth/password/forgot")" = 202
+mail_r="$(not01_mail "to:$reset_email" 'Đặt lại mật khẩu')"
+[[ -n "$mail_r" && "$mail_r" != DUPLICATE ]] || not01_fail reset 'reset email missing or duplicated'
+reset_token="$(not01_text "$mail_r" | grep -oE 'reset-password#token=[A-Za-z0-9_-]+' | head -n1 | cut -d= -f2)"
+[[ -n "$reset_token" ]] || not01_fail reset 'no reset link in the email'
+test "$(status -X POST -H 'Content-Type: application/json' -d "{\"token\":\"$reset_token\",\"new_password\":\"Smoke-pass-789\"}" \
+  "$GATEWAY_URL/api/v1/auth/password/reset")" = 204 || not01_fail reset 'reset call rejected' # gitleaks:allow synthetic smoke password
+test "$(status -H 'Content-Type: application/json' -d "{\"email\":\"$reset_email\",\"password\":\"Smoke-pass-789\"}" "$GATEWAY_URL/api/v1/auth/login")" = 200 \
+  || not01_fail reset 'login with the new password failed'
+unset reset_token
+echo 'NOT-01 reset email PASS'
+
 test "$(status "$STOREFRONT_URL/api/not-found")" = 404
 test "$(status "$STOREFRONT_URL/api")" = 404
 test "$(status "$STOREFRONT_URL/assets/missing.js")" = 404

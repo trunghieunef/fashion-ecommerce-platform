@@ -5,6 +5,7 @@ import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 import vn.fashion.order.orders.OrderEvents;
+import vn.fashion.order.orders.OrderNotifications;
 import vn.fashion.order.orders.OrderService;
 
 /** Order status edges of 06 section 5.3 used by the saga: status + version + history + outbox in the caller's transaction. */
@@ -14,8 +15,11 @@ public class OrderTransitions {
   private final JdbcClient jdbc;
   private final OrderService orders;
   private final OrderEvents events;
+  private final OrderNotifications notifications;
 
-  public OrderTransitions(JdbcClient jdbc, OrderService orders, OrderEvents events) { this.jdbc = jdbc; this.orders = orders; this.events = events; }
+  public OrderTransitions(JdbcClient jdbc, OrderService orders, OrderEvents events, OrderNotifications notifications) {
+    this.jdbc = jdbc; this.orders = orders; this.events = events; this.notifications = notifications;
+  }
 
   /** Who moved the order (history actor_type SYSTEM | CUSTOMER | ADMIN, actor_id, request_id). */
   public record Actor(String type, UUID id, UUID requestId) {
@@ -49,5 +53,6 @@ public class OrderTransitions {
           .query((rs, n) -> rs.getObject(1, UUID.class)).list().get(0);
       events.lifecycle(type, orders.view(orderId), userId, to.equals("CANCELLED") ? cancelReason : null, "saga:" + orderId);
     }
+    notifications.onTransition(orderId, from, to);
   }
 }

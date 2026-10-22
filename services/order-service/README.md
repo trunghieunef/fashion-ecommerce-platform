@@ -106,6 +106,15 @@ outbox `ORDER_CONFIRMED`/`ORDER_CANCELLED` cùng transaction.
   `processing_status`: CONFIRMED đã qua `WAIT_OPS` và PACKING chưa có shipment → PROCESSING; PACKING có shipment, SHIPPING →
   READY; DELIVERED → FINISHED.
 
+## Email giao dịch (NOT-01)
+
+`OrderNotifications` (gọi cuối `OrderTransitions.move`, cùng transaction) ghi outbox `notification.events` cho đơn COD có `contact_email`:
+`NOTIFY_ORDER_CONFIRMED` (`PENDING → CONFIRMED`), `NOTIFY_ORDER_PREPARING` (`CONFIRMED → PACKING`, sau khi kho commit),
+`NOTIFY_ORDER_DELIVERED`, `NOTIFY_ORDER_CANCELLED` (kèm `cancel_category` tính từ mã `cancel_reason`, không bao giờ từ `reason` tự do),
+`NOTIFY_ORDER_RETURNED`. `dedupe_key` `order:{order_id}:{confirmed|preparing|delivered|cancelled|returned}` nên replay/retry không tạo email
+thứ hai. Payload mang đủ dữ liệu render (`shipping_fee` = total − subtotal, `ship_to` chỉ ở CONFIRMED với số điện thoại che `090****123`);
+đơn online và đơn không có email liên hệ không phát. Contract: `contracts/events/notification-events.schema.json`, 03 §5.2.
+
 ## Cấu hình
 
 | Biến | Mặc định | Ý nghĩa |
@@ -143,3 +152,5 @@ Admin `q` chỉ coi `ORD` + 12 chữ số (không phân biệt hoa thường) l�
 không lọc; chuỗi khác là số điện thoại, so theo chữ số với `84` đầu quy về `0` (`+84 912…` khớp `0912…`). Consumer shipping
 cảnh báo log (`order_id`, status, không PII) khi shipment cần OPS (`FAILED`/`MANUAL`) hoặc lệch trạng thái đơn; `shipment_version` lưu theo đơn và `shipment_id` của event được đối chiếu với saga (ORD-04: chưa tạo vận đơn thứ hai cho một đơn).
 Giới hạn ORD-04: `WAIT_RETURN` đỗ 30 ngày chờ event shipping (không có job quét đơn chờ hàng quá lâu); phiếu chỉ `MANUAL` khi inventory từ chối (không ghi kho; metric `order_return_manual_total` + log `order_id`/`return_id`/mã lỗi), lỗi hạ tầng được thử lại cùng key mãi (backoff tối đa 5 phút ±20 %, quá 30 lần thì metric `order_return_stalled_total` + log, tăng mỗi lần thử sau đó nên alert theo rate, không theo tổng); OPS thoát phiếu `MANUAL` bằng `POST .../returns/{return_id}/void` rồi lập phiếu mới (review PR #35 I2); chưa có UI (ADM-02); `allowed_actions` luôn là hành động của khách; đơn đã thu tiền không tự `CANCELLED`/`RETURNED` (chờ PAY-04).
+
+Giới hạn NOT-01: dòng outbox `NOTIFY_ORDER_*` cùng `aggregate_id` với `order.events` nên topic `notification.events` (+ `.DLT`) phải tồn tại ở mọi môi trường, nếu không `order.events` của đơn đó chờ sau dòng NOTIFY (follow-up PLT-04; chỉ `infra/local/kafka-init` tạo topic hiện nay).

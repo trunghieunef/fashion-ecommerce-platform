@@ -93,5 +93,53 @@ class EventPayloadTest(unittest.TestCase):
         self.assertEqual(payload_errors(self.validators, event), ["unregistered event_type ORDER_SHIPPED_TYPO"])
 
 
+class NotifyOrderTest(unittest.TestCase):
+    """TASK:NOT-01: the five order emails share one schema; ship_to and cancel_category are per-kind."""
+    KINDS = ["confirmed", "preparing", "delivered", "cancelled", "returned"]
+
+    @classmethod
+    def setUpClass(cls):
+        cls.validators = load_payload_validators()
+
+    def errors(self, mutate, kind="preparing"):
+        event = load_fixture("notify-order-%s.json" % kind)
+        mutate(event["payload"])
+        return payload_errors(self.validators, event)
+
+    def test_each_kind_has_a_valid_example_routed_to_notification_events(self):
+        registry = load_json(EVENTS / "registry.json")
+        for kind in self.KINDS:
+            with self.subTest(kind=kind):
+                event = load_fixture("notify-order-%s.json" % kind)
+                self.assertEqual(payload_errors(self.validators, event), [])
+                entry = registry[event["event_type"]]
+                self.assertEqual((entry["topic"], entry["partition_key"], entry["aggregate_id"]),
+                                 ("notification.events", "dedupe_key", "order_id"))
+
+    def test_confirmed_needs_ship_to_and_no_other_kind_may_carry_it(self):
+        self.assertTrue(self.errors(lambda p: p["data"].pop("ship_to"), "confirmed"))
+        ship_to = load_fixture("notify-order-confirmed.json")["payload"]["data"]["ship_to"]
+        for kind in self.KINDS[1:]:
+            with self.subTest(kind=kind):
+                self.assertTrue(self.errors(lambda p: p["data"].update(ship_to=ship_to), kind))
+
+    def test_cancel_category_is_required_on_cancelled_only_and_closed(self):
+        self.assertTrue(self.errors(lambda p: p["data"].pop("cancel_category"), "cancelled"))
+        self.assertTrue(self.errors(lambda p: p["data"].update(cancel_category="BECAUSE"), "cancelled"))
+        self.assertTrue(self.errors(lambda p: p["data"].update(cancel_category="SHOP"), "returned"))
+
+    def test_a_fully_hidden_phone_is_valid_but_a_clear_one_is_not(self):
+        def phone(p, value):
+            p["data"]["ship_to"]["phone_masked"] = value
+        self.assertEqual(self.errors(lambda p: phone(p, "****"), "confirmed"), [])
+        self.assertTrue(self.errors(lambda p: phone(p, "0912345678"), "confirmed"))
+
+    def test_unknown_fields_and_bad_dedupe_key_are_rejected(self):
+        self.assertTrue(self.errors(lambda p: p.update(reason="free text")))
+        self.assertTrue(self.errors(lambda p: p["data"].update(reason="free text")))
+        self.assertTrue(self.errors(lambda p: p.update(dedupe_key="order:1:shipped")))
+        self.assertTrue(self.errors(lambda p: p["data"].update(payment_method="VNPAY")))
+
+
 if __name__ == "__main__":
     unittest.main()
