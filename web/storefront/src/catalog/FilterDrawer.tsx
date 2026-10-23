@@ -14,26 +14,14 @@ export const flatCategories = (list: Category[]): Category[] =>
 
 const FIELD = 'min-h-11 w-full border border-line bg-bg px-3 aria-[invalid=true]:border-danger';
 
-/**
- * A text/number filter that stays mounted while the URL changes (final review: re-keying the form destroyed the field
- * Tab had just moved to). It shows what the user types and resyncs when the applied URL value changes.
- */
-function TextFilter({ name, label, applied, numeric, invalid, onApply }: {
-  name: string; label: string; applied: string; numeric: boolean; invalid: boolean; onApply: (value: string) => void;
-}) {
-  const [value, setValue] = useState(applied);
-  useEffect(() => setValue(applied), [applied]);
-  return (
-    <label className="grid gap-1">
-      <span className={LABEL}>{label}</span>
-      <input name={name} value={value} className={FIELD} onChange={(e) => setValue(e.currentTarget.value)}
-        {...(numeric ? { type: 'number', min: 0, step: 1, inputMode: 'numeric' as const } : {})}
-        {...(numeric ? { 'aria-invalid': invalid, 'aria-describedby': invalid ? 'price-error' : undefined } : {})}
-        onBlur={(e) => onApply(e.currentTarget.value)}
-        onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => { if (e.key === 'Enter') onApply(e.currentTarget.value); }} />
-    </label>
-  );
-}
+const TEXT_KEYS = ['size', 'color', 'min_price', 'max_price'] as const;
+type TextKey = (typeof TEXT_KEYS)[number];
+type Draft = Record<TextKey, string>;
+const PRICE_KEYS = ['min_price', 'max_price'] as const;
+const draftOf = (filters: Filters): Draft =>
+  Object.fromEntries(TEXT_KEYS.map((k) => [k, filters[k] ?? ''])) as Draft;
+const sameFilters = (a: Filters, b: Filters) =>
+  JSON.stringify(Object.entries(a).sort()) === JSON.stringify(Object.entries(b).sort());
 
 export function FilterDrawer({ open, onClose, filters, onChange, categories, brands }: {
   open: boolean;
@@ -44,23 +32,51 @@ export function FilterDrawer({ open, onClose, filters, onChange, categories, bra
   brands: Load<Brand[]>;
 }) {
   const { t, pick } = useLang();
+  // What the text fields show. Fields stay mounted (focus survives an apply); the draft follows the URL whenever an
+  // applied value changes, so a field never shows a value the listing is not filtered by (PR #37 item 2).
+  const [draft, setDraft] = useState<Draft>(() => draftOf(filters));
   const [priceError, setPriceError] = useState(false);
+  const applied = TEXT_KEYS.map((k) => filters[k] ?? '').join('\u0000');
+  useEffect(() => { setDraft(draftOf(filters)); setPriceError(false); }, [applied]);
 
   function set(name: keyof Filters, raw: string) {
     const value = raw.trim();
-    if ((filters[name] ?? '') === value) return;
-    const next: Filters = { ...filters, [name]: value };
-    if (!value) delete next[name];
-    if (name === 'min_price' || name === 'max_price') {
-      const inverted = next.min_price && next.max_price && Number(next.min_price) > Number(next.max_price);
-      setPriceError(Boolean(inverted));
+    const next: Filters = { ...filters };
+    if ((PRICE_KEYS as readonly string[]).includes(name)) {
+      // The price pair is validated and applied together, from what both fields currently show (PR #37 items 1-2).
+      const pair = { ...draft, [name]: value };
+      setDraft(pair);
+      const inverted = Boolean(pair.min_price.trim() && pair.max_price.trim() && Number(pair.min_price) > Number(pair.max_price));
+      setPriceError(inverted);
       if (inverted) return;
+      for (const key of PRICE_KEYS) {
+        const v = pair[key].trim();
+        if (v) next[key] = v;
+        else delete next[key];
+      }
+    } else {
+      if ((TEXT_KEYS as readonly string[]).includes(name)) setDraft((d) => ({ ...d, [name]: raw }));
+      if (value) next[name] = value;
+      else delete next[name];
     }
-    onChange(next);
+    if (!sameFilters(next, filters)) onChange(next);
   }
-  const text = (name: keyof Filters, label: StringKey, numeric = false) => (
-    <TextFilter name={name} label={t(label)} applied={filters[name] ?? ''} numeric={numeric} invalid={numeric && priceError}
-      onApply={(value) => set(name, value)} />
+  function clear() {
+    const keep: Filters = { ...(filters.q ? { q: filters.q } : {}), ...(filters.sort ? { sort: filters.sort } : {}) };
+    setDraft(draftOf(keep));
+    setPriceError(false);
+    onChange(keep);
+  }
+  const text = (name: TextKey, label: StringKey, numeric = false) => (
+    <label className="grid gap-1">
+      <span className={LABEL}>{t(label)}</span>
+      <input name={name} value={draft[name]} className={FIELD}
+        onChange={(e) => { const v = e.currentTarget.value; setDraft((d) => ({ ...d, [name]: v })); }}
+        {...(numeric ? { type: 'number', min: 0, step: 1, inputMode: 'numeric' as const } : {})}
+        {...(numeric ? { 'aria-invalid': priceError, 'aria-describedby': priceError ? 'price-error' : undefined } : {})}
+        onBlur={(e) => set(name, e.currentTarget.value)}
+        onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => { if (e.key === 'Enter') set(name, e.currentTarget.value); }} />
+    </label>
   );
 
   return (
@@ -92,10 +108,7 @@ export function FilterDrawer({ open, onClose, filters, onChange, categories, bra
           {priceError && <p id="price-error" role="alert" className="col-span-2 text-sm text-danger">{t('priceOrder')}</p>}
         </div>
         <div className="flex gap-2 pt-2">
-          <button type="button" className={`${BUTTON_OUTLINE} flex-1 px-4`}
-            onClick={() => onChange({ ...(filters.q ? { q: filters.q } : {}), ...(filters.sort ? { sort: filters.sort } : {}) })}>
-            {t('clear')}
-          </button>
+          <button type="button" className={`${BUTTON_OUTLINE} flex-1 px-4`} onClick={clear}>{t('clear')}</button>
           <button type="button" className={`${BUTTON} flex-[2]`} onClick={onClose}>{t('showResults')}</button>
         </div>
       </div>

@@ -62,6 +62,7 @@ export function ListingPage() {
   const apply = (next: Filters) => setParams(next as Record<string, string>);
   const keep = { ...(filters.q ? { q: filters.q } : {}), ...(filters.sort ? { sort: filters.sort } : {}) };
   const chipKeys = Object.keys(filters).filter((k) => !NOT_CHIPS.has(k)) as (keyof Filters)[];
+  const filtered = Object.keys(filters).some((k) => k !== 'sort');
   const category = filters.category_id && categories.status === 'ready' ? findCategory(categories.data, filters.category_id) : undefined;
   const display = (key: keyof Filters, value: string) => {
     if (key === 'category_id') return category ? pick(category.name_vi, category.name_en) : value;
@@ -137,10 +138,10 @@ export function ListingPage() {
         {state.status === 'error' && invalid !== null && (
           <section data-testid="invalid-filter" className="grid justify-items-start gap-3 py-8" aria-live="polite">
             <p>{t('invalidFilter')}{invalid.length > 0 && `: ${invalid.map((f) => t(LABELS[f] ?? 'filters')).join(', ')}`}</p>
-            <button type="button" className={BUTTON_OUTLINE} onClick={() => setParams(filters.q ? { q: filters.q } : {})}>{t('clear')}</button>
+            <button type="button" className={BUTTON_OUTLINE} onClick={() => apply(keep)}>{t('clear')}</button>
           </section>
         )}
-        {state.status === 'ready' && state.items.length === 0 && <p aria-live="polite">{chipKeys.length > 0 ? t('noResults') : t('empty')}</p>}
+        {state.status === 'ready' && state.items.length === 0 && <p aria-live="polite">{filtered ? t('noResults') : t('empty')}</p>}
         {state.status === 'ready' && state.items.length > 0 && (
           <>
             <ProductGrid products={state.items} label={t('productList')} columns={columns} />

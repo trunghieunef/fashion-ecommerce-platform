@@ -105,6 +105,14 @@ test('detail with contract fixtures: keyboard variant choice, stock states, imag
   } else {
     const nav = page.getByRole('navigation', { name: 'Điều hướng chính' });
     const tops = nav.getByRole('button', { name: 'Áo', exact: true });
+    // PR #37 item 5: moving the pointer straight down from the button into the panel must keep it open.
+    await tops.hover();
+    const panel = page.locator(`#${await tops.getAttribute('aria-controls')}`);
+    const button = (await tops.boundingBox())!;
+    await page.mouse.move(button.x + button.width / 2, ((await panel.boundingBox())!).y + 10, { steps: 20 });
+    await expect(panel).toBeVisible();
+    await page.mouse.move(0, 400);
+    await expect(panel).toBeHidden();
     await tops.focus();
     await expect(nav.getByRole('link', { name: 'Áo thun' })).toBeVisible();
     await page.keyboard.press('Escape');

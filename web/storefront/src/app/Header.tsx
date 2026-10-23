@@ -126,7 +126,7 @@ export function Header() {
         </button>
         <Link to="/" className="py-3 text-xl font-bold uppercase tracking-[-0.02em]">{t('store')}</Link>
 
-        <nav aria-label={t('nav')} className="hidden flex-1 lg:block"
+        <nav aria-label={t('nav')} className="hidden flex-1 self-stretch lg:flex"
           onPointerLeave={() => setOpenMenu(null)} onKeyDown={closeOnEscape}
           onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOpenMenu(null); }}>
           <ul className="flex flex-wrap items-center gap-x-6">

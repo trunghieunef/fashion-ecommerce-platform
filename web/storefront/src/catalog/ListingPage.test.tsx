@@ -203,3 +203,49 @@ it('applying a field on blur keeps focus on the field Tab moved to (final review
   expect(color.isConnected).toBe(true);
   expect(document.activeElement).toBe(color);
 });
+
+// PR #37 review.
+
+it('a min > max error clears once max is emptied, and Clear resets it (PR #37 item 1)', async () => {
+  mockFetch((path) => passthrough(path) ?? json(products));
+  const container = await render('/products?min_price=500000');
+  await setFilter(container, 'max_price', '100000');
+  const dialog = container.querySelector('main dialog')!;
+  expect(dialog.querySelector('[role="alert"]')).not.toBeNull();
+  await setFilter(container, 'max_price', '');
+  expect(dialog.querySelector('[role="alert"]')).toBeNull();
+  expect(dialog.querySelector('[name="min_price"]')!.getAttribute('aria-invalid')).toBe('false');
+
+  await setFilter(container, 'max_price', '100000');
+  expect(dialog.querySelector('[role="alert"]')).not.toBeNull();
+  await click(byText(dialog, 'button', 'Xóa lọc'));
+  expect(dialog.querySelector('[role="alert"]')).toBeNull();
+  expect((dialog.querySelector('[name="max_price"]') as HTMLInputElement).value).toBe('');
+});
+
+it('a refused max is applied together with a min that makes the pair valid (PR #37 item 2)', async () => {
+  const calls = mockFetch((path) => passthrough(path) ?? json(products));
+  const container = await render('/products?min_price=500000');
+  await setFilter(container, 'max_price', '100000');
+  await setFilter(container, 'min_price', '50000');
+  const last = productCalls(calls).at(-1)!.url;
+  expect(last).toContain('min_price=50000');
+  expect(last).toContain('max_price=100000');
+  expect(container.querySelector('main dialog [role="alert"]')).toBeNull();
+  expect(container.querySelector('ul[aria-label="Bộ lọc đang chọn"]')!.textContent).toMatch(/Giá đến/);
+});
+
+it('an empty search says no matching products, not "no products yet" (PR #37 item 3)', async () => {
+  mockFetch((path) => passthrough(path) ?? json(empty));
+  const container = await render('/search?q=xyz');
+  expect(container.textContent).toContain('Không có sản phẩm phù hợp');
+  expect(container.textContent).not.toContain('Chưa có sản phẩm');
+});
+
+it('Clear on the invalid-filter screen keeps q and sort (PR #37 item 4)', async () => {
+  const calls = mockFetch((path) => passthrough(path) ?? (path.includes('category_id=') ? json({ code: 'VALIDATION_ERROR',
+    message: 'INVALID_FILTER', errors: [{ field: 'category_id', message: 'invalid value' }], metadata: products.metadata }, 400) : json(products)));
+  const container = await render('/products?category_id=not-a-uuid&sort=PRICE_ASC');
+  await click(byText(container, '[data-testid="invalid-filter"] button', 'Xóa lọc'));
+  expect(productCalls(calls).at(-1)!.url).toBe('/api/v1/catalog/products?sort=PRICE_ASC&limit=24');
+});
