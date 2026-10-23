@@ -64,6 +64,11 @@ const STRINGS = {
     previous: 'Trước',
     next: 'Sau',
     explore: 'Khám phá',
+    showResults: 'Xem kết quả',
+    columns: 'Số cột',
+    activeFilters: 'Bộ lọc đang chọn',
+    removeFilter: 'Bỏ lọc',
+    clearAll: 'Xóa tất cả',
   },
   en: {
     store: 'Fashion Store',
@@ -125,6 +130,11 @@ const STRINGS = {
     previous: 'Previous',
     next: 'Next',
     explore: 'Explore',
+    showResults: 'Show results',
+    columns: 'Columns',
+    activeFilters: 'Active filters',
+    removeFilter: 'Remove filter',
+    clearAll: 'Clear all',
   },
 } as const;
 
