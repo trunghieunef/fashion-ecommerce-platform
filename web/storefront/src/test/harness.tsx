@@ -33,7 +33,8 @@ function fallback(path: string): Response {
  * handler gets the path+query after /api/v1/catalog (other APIs: the full path, e.g. /api/v1/auth/login) and returns a Response (or a promise of one); null/undefined
  * means "not mine" and falls back to the shared fixtures above.
  */
-export function mockFetch(handler: (path: string) => Response | Promise<Response> | null | undefined, honourAbort = true) {
+type Handled = Response | null | undefined;
+export function mockFetch(handler: (path: string) => Handled | Promise<Handled>, honourAbort = true) {
   const calls: Call[] = [];
   vi.stubGlobal('fetch', vi.fn((input: string, init?: RequestInit) => {
     const headers = new Headers(init?.headers);
@@ -47,7 +48,7 @@ export function mockFetch(handler: (path: string) => Response | Promise<Response
       if (honourAbort && signal?.aborted) return reject(new DOMException('aborted', 'AbortError'));
       if (honourAbort) signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
       const path = input.replace('/api/v1/catalog', '');
-      Promise.resolve().then(() => handler(path) ?? fallback(path)).then(resolve, reject);
+      Promise.resolve().then(() => handler(path)).then((response) => response ?? fallback(path)).then(resolve, reject);
     });
   }));
   return calls;
