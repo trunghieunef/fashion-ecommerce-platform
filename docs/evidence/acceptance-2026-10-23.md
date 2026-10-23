@@ -16,7 +16,7 @@ contract, service và fixture không đổi. `TASK:WEB-01` giữ Done.
   ([run 39986067998](https://github.com/trunghieunef/fashion-ecommerce-platform/actions/runs/39986067998), gồm verify
   toolchain/lockfile, backend reactor, frontend typecheck/test/build, contract, local stack + smoke, browser smoke
   `web-01.spec.ts`/`s1-local.spec.ts` ở desktop và 360px) và `docs-check`.
-- CI trên `main` sau merge (`a55a30b`): Application CI đang chạy lúc nghiệm thu (run 39989069566); kết quả cập nhật trước khi push.
+- CI trên `main` sau merge (`a55a30b`): Application CI SUCCESS ([run 39989069566](https://github.com/trunghieunef/fashion-ecommerce-platform/actions/runs/39989069566)) và Documentation CI SUCCESS.
 - Local (Windows, 7.4 GB RAM): typecheck, **56 test** Vitest, build, contract 95 OK, docs check; Playwright test fixture
   2/2 trên `vite preview` và Vite dev (StrictMode). Linux thật (WSL glibc): `npm ci`, `npm ls --all`, typecheck, test, build.
   Stack thật và smoke không chạy được trên máy này; bằng chứng là CI `s1-local`. Chi tiết:
