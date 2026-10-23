@@ -1,6 +1,8 @@
 import { BrowserRouter, Route, Routes } from 'react-router';
 
 import { AuthProvider } from '../auth/AuthProvider';
+import { LoginPage } from '../auth/LoginPage';
+import { RegisterPage } from '../auth/RegisterPage';
 import { RequireAuth } from '../auth/RequireAuth';
 
 import { CollectionPage } from '../catalog/CollectionPage';
@@ -38,8 +40,8 @@ export function AppRoutes() {
         <Route path="/search" element={<ListingPage />} />
         <Route path="/products/:id" element={<ProductPage />} />
         <Route path="/collections/:slug" element={<CollectionPage />} />
-        <Route path="/login" element={<Pending title="signIn" />} />
-        <Route path="/register" element={<Pending title="register" />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
         <Route path="/forgot-password" element={<Pending title="forgotPassword" />} />
         <Route path="/reset-password" element={<Pending title="resetPassword" />} />
         <Route path="/account" element={<RequireAuth><Pending title="account" /></RequireAuth>} />
