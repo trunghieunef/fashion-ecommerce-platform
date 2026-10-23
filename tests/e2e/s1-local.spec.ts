@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 // Runs against the real chain: storefront -> Gateway -> catalog -> PostgreSQL.
 test('deep link renders catalog from the real chain while API misses stay 404', async ({ page, request }) => {
   await page.goto('/products');
-  await expect(page.getByRole('heading', { name: 'Sản phẩm' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Tất cả sản phẩm' })).toBeVisible();
   await expect(
     page.getByText('Chưa có sản phẩm').or(page.getByRole('list', { name: 'Danh sách sản phẩm' })),
   ).toBeVisible();

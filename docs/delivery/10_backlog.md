@@ -4,6 +4,11 @@ B1 · 2026-09-19 · Work package mặc định: **Planned; Assignee TBD; Reviewe
 
 ## 1. Cách nhận việc
 
+Update 2026-10-23 — `TASK:WEB-01b` **In progress — code local xong, chờ review/nghiệm thu**: làm lại giao diện và UX storefront
+theo [spec](../superpowers/specs/2026-10-23-web-01b-storefront-redesign-design.md) (style Grotesk kiểu Thụy Sĩ, Tailwind CSS
+4.3.3, font tự host; header mega-menu, home editorial, drawer lọc + chip, gallery + panel dính); chỉ frontend, không đổi
+contract. Evidence [local](../evidence/web-01b-local-2026-10-23.md). `TASK:WEB-01` giữ Done.
+
 Update 2026-10-22 — `TASK:NOT-01` **Done (local, trước G0)** ([nghiệm thu](../evidence/acceptance-2026-10-22.md#tasknot-01--email-giao-dịch-vien)), PR #36 merge `5f76885` (CI trên `9db3196` PASS): notification-service (6 email giao dịch VI/EN qua SMTP, local dùng Mailpit; template seed, snapshot đã escape, lease 120 s, retry/`FAILED`/`UNKNOWN`/`EXPIRED`, T22; email reset lấy token từ user internal lúc gửi và không lưu token), order phát `NOTIFY_ORDER_CONFIRMED|PREPARING|DELIVERED|CANCELLED|RETURNED` trong `OrderTransitions.move` (email "đang chuẩn bị" ở `CONFIRMED → PACKING`), user-service bật relay outbox; `REQ:NOT-01/05/06`; dependency PLT-03, USR-01; T22/U20. O07 chưa chốt nên chưa gửi qua provider thật; chưa có `notification.results`, job dọn 90 ngày, email đơn online. [spec](../superpowers/specs/2026-10-22-not-01-transactional-email-design.md), [evidence](../evidence/not-01-local-2026-10-22.md), [README](../../services/notification-service/README.md).
 
 Update 2026-10-21 — `TASK:ORD-04` **Done (local, trước G0)** ([nghiệm thu](../evidence/acceptance-2026-10-21.md#taskord-04--khách-tự-hủy-ops-hủy-sau-xác-nhận-hoàn-hàng-và-kiểm-đếm)), PR #35 merge `229d3d4`: khách tự hủy đơn chờ OPS (`POST /api/v1/orders/{order_no}/cancel`, `allowed_actions`), OPS hủy tới trước bàn giao (`CONFIRMED`/`PACKING`, kể cả saga `MANUAL`) với bù trừ vận đơn → kho (`/returns` key `cancel:{order_id}`) → payment (T16), hoàn hàng theo `shipping.events` (`RETURNING`/`WAIT_RETURN`, giao muộn `CANCELLING → SHIPPING → DELIVERED`), phiếu kiểm đếm OPS `POST /admin/api/v1/orders/{order_no}/returns` (`order.return`; cộng kho đúng một lần, T17; `RETURNING → RETURNED`; trả hàng sau giao REQ ORD-10 giữ `DELIVERED`), V004, metric `order.saga.manual{step}`; `REQ:ORD-04/10`, `REQ:SHP-06`; dependency ORD-03, INV-03 (Done local); T04/T16/T17. CI PR #35 trên `1cd5a81` PASS; không suy ra MVP. [spec](../superpowers/specs/2026-10-21-ord-04-cancel-return-design.md), [evidence](../evidence/ord-04-local-2026-10-21.md).
@@ -291,6 +296,7 @@ Subtasks PLT-04.A–F, owner theo vai trò, dependencies và acceptance ở [16 
 | Task | Owner role / ngày | Phụ thuộc | REQ | Đầu ra và acceptance |
 |---|---|---|---|---|
 | WEB-01 | FE / 3–5 | PLT-02 | CAT-03/04/05/06, XCT-01/05 | Storefront shell/list/detail/collection/zoom/size guide, responsive VI/EN, loading/empty/error; mock có contract, keyboard và mobile 360px |
+| WEB-01b | FE / 2–3 | WEB-01 | CAT-03/04/05/06, XCT-01/05 | Làm lại giao diện/UX 5 màn WEB-01 (Tailwind, Hanken Grotesk): mega-menu, home editorial, drawer lọc + chip, gallery + panel dính; không đổi contract; keyboard, 360px, reduced motion |
 | WEB-02 | FE / 2–4 | WEB-01, USR-01, CART-02 | USR-05/06/07, CART-01–04 | Login/profile/address/guest cart/merge, access token in-memory, refresh single-flight; version conflict và mất credential không làm mất item |
 | WEB-03 | FE / 3–5 | WEB-02, ORD-01 | ORD-01/05/07, CART-05 | Quote confirmation/price changed/submit same key/202 polling/order history; không success từ redirect; browser interruption/resume test với mock |
 | WEB-04 | FE / 2–3 | WEB-03, ORD-05, NOT-01 | ORD-04/08, PAY-03/05 | Tích hợp thật online/COD/cancel/refund status; email link không lộ credential; UAT VNPay/MoMo/COD; poll dừng terminal |

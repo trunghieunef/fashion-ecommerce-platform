@@ -109,7 +109,9 @@ không đồng nghĩa spec đã duyệt, storage đã nghiệm thu hoặc stagin
 | Vite | **8.3.0** | Build SPA cho cả storefront và admin |
 | @vitejs/plugin-react | **6.1.1** | Plugin chính thức cho Vite 8; chưa bật React Compiler thử nghiệm |
 | React Router | **8.4.0**, Data Mode | Routing phía client; không dùng server/framework mode mặc định |
-| CSS, state, HTTP, format | CSS Modules/native CSS; React state/context; fetch; Intl | Chưa cần Tailwind/Redux/Axios; chỉ thêm khi có nhu cầu cụ thể |
+| CSS | **Tailwind CSS 4.3.3** + `@tailwindcss/vite` **4.3.3** (WEB-01b, 2026-10-23) | Token trong `@theme`; peer `vite ^8`; không component library |
+| Font | `@fontsource-variable/hanken-grotesk` **5.3.0** | Tự host trong bundle (subset vietnamese), không gọi CDN font lúc chạy |
+| State, HTTP, format | React state/context; fetch; Intl | Chưa cần Redux/Axios; chỉ thêm khi có nhu cầu cụ thể |
 
 Nguồn: [Node 24.21.0](https://nodejs.org/en/blog/release/v24.21.0), [npm đi kèm Node](https://raw.githubusercontent.com/nodejs/node/v24.21.0/deps/npm/package.json), [React releases](https://github.com/facebook/react/releases), [TypeScript releases](https://github.com/microsoft/TypeScript/releases), [Vite 8.3.0 package](https://raw.githubusercontent.com/vitejs/vite/v8.3.0/packages/vite/package.json), [React plugin release](https://github.com/vitejs/vite-plugin-react/releases/tag/plugin-react%406.1.1), [Router 8.4.0 package](https://raw.githubusercontent.com/remix-run/react-router/react-router%408.4.0/packages/react-router/package.json).
 

@@ -159,3 +159,9 @@ it('breadcrumb links to the category', async () => {
   const crumb = container.querySelector('[data-testid="product-info"] a[href="/products?category_id=44444444-4444-4444-8444-444444444444"]');
   expect(crumb?.textContent).toBe('Áo');
 });
+
+it('a single image fills the gallery instead of half of a two-column grid', async () => {
+  mockFetch((path) => (path.startsWith('/products/') ? json(product) : null));
+  const container = await render(PATH);
+  expect(container.querySelector('[data-testid="gallery"] ul')!.className).not.toContain('lg:grid-cols-2');
+});

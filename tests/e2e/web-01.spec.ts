@@ -1,21 +1,40 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+
+// TASK:WEB-01b: below lg the desktop navigation and language button are hidden, so these helpers go through the menu.
+const isMobile = (page: Page) => (page.viewportSize()?.width ?? 1280) < 1024;
+async function goToProducts(page: Page) {
+  if (isMobile(page)) {
+    await page.getByRole('button', { name: 'Menu' }).click();
+    await page.getByRole('dialog', { name: 'Menu' }).getByRole('link', { name: 'Sản phẩm', exact: true }).click();
+  } else {
+    await page.getByRole('navigation', { name: 'Điều hướng chính' }).getByRole('link', { name: 'Sản phẩm', exact: true }).click();
+  }
+}
+async function switchToEnglish(page: Page) {
+  if (isMobile(page)) await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: 'English' }).click();
+}
+const noHorizontalScroll = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
 
 // TASK:WEB-01 on the real chain (storefront -> Gateway -> catalog -> PostgreSQL), desktop and 360px projects.
 // Data is whatever the local smoke left behind, so the detail part runs only when a public product exists.
-test('home, listing with URL filters, detail by keyboard and language switch', async ({ page }) => {
+test('home, listing with drawer filters and chips, detail by keyboard and language switch', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Bộ sưu tập' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Hàng mới' })).toBeVisible();
   await expect(page.getByText('Không thể tải dữ liệu')).toHaveCount(0);
 
-  await page.getByRole('navigation', { name: 'Điều hướng chính' }).getByRole('link', { name: 'Sản phẩm' }).click();
-  await expect(page.getByRole('heading', { name: 'Sản phẩm' })).toBeVisible();
-  await page.getByLabel('Size').fill('M');
-  await page.getByRole('button', { name: 'Áp dụng' }).click();
+  await goToProducts(page);
+  await expect(page.getByRole('heading', { level: 1, name: 'Tất cả sản phẩm' })).toBeVisible();
+  await page.getByRole('button', { name: /^Bộ lọc/ }).click();
+  const filters = page.getByRole('dialog', { name: 'Bộ lọc' });
+  await filters.getByLabel('Size').fill('M');
+  await page.keyboard.press('Tab');
   await expect(page).toHaveURL(/size=M/);
+  await filters.getByRole('button', { name: 'Xem kết quả' }).click();
+  await expect(page.getByRole('button', { name: 'Bỏ lọc Size: M' })).toBeVisible();
   await expect(page.getByText('Không thể tải dữ liệu')).toHaveCount(0);
 
   const list = page.getByRole('list', { name: 'Danh sách sản phẩm' });
@@ -23,7 +42,7 @@ test('home, listing with URL filters, detail by keyboard and language switch', a
     await list.getByRole('link').first().click();
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     await expect(page.getByText('Tồn kho chỉ để tham khảo')).toBeVisible();
-    const size = page.getByRole('radio').first();
+    const size = page.getByRole('group', { name: 'Size' }).getByRole('radio').first();
     await size.focus();
     await page.keyboard.press('Space');
     await expect(size).toBeChecked();
@@ -31,16 +50,15 @@ test('home, listing with URL filters, detail by keyboard and language switch', a
     await expect(page.getByText(/Chưa có sản phẩm|Không có sản phẩm phù hợp/)).toBeVisible();
   }
 
-  await page.getByRole('button', { name: 'English' }).click();
+  await switchToEnglish(page);
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
-  await expect(page.getByRole('button', { name: 'Tiếng Việt' })).toBeVisible();
-  // No horizontal scroll at either viewport.
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  expect(await noHorizontalScroll(page)).toBe(true);
 });
 
 // The local smoke unpublishes its product, so the detail flow also runs against the contract-validated fixtures
-// (tests/contracts/test_storefront_fixtures.py) to be deterministic on both viewports.
-test('detail with contract fixtures: keyboard variant choice, stock states, image fallback, English', async ({ page }) => {
+// (tests/contracts/test_storefront_fixtures.py) to be deterministic on both viewports. Needs no backend, so it also
+// runs against `vite preview` (TASK:WEB-01b evidence screenshots).
+test('detail with contract fixtures: keyboard variant choice, stock states, image fallback, size guide, English', async ({ page }) => {
   const fixture = (name: string) => readFileSync(join(__dirname, '../../web/storefront/src/test/fixtures', name), 'utf8');
   await page.route('**/api/v1/catalog/**', (route) => {
     const url = new URL(route.request().url());
@@ -52,29 +70,45 @@ test('detail with contract fixtures: keyboard variant choice, stock states, imag
       : url.pathname.startsWith('/api/v1/catalog/brands') ? 'brands.json' : 'products.json';
     return route.fulfill({ status: 200, contentType: 'application/json', body: fixture(name) });
   });
-  await page.goto('/products');
-  await page.getByRole('list', { name: 'Danh sách sản phẩm' }).getByRole('link', { name: 'Áo thun mẫu' }).click();
+  const shot = (name: string) => page.screenshot({ path: test.info().outputPath(`${name}.png`), fullPage: true });
+
+  await page.goto('/');
+  await expect(page.getByRole('heading', { level: 1, name: 'Hè 2026 (mẫu)' })).toBeVisible();
+  await shot('home');
+
+  await page.goto('/products?size=M');
+  await expect(page.getByRole('button', { name: 'Bỏ lọc Size: M' })).toBeVisible();
+  await shot('listing');
+  await page.getByRole('list', { name: 'Danh sách sản phẩm' }).getByRole('link', { name: /Áo thun mẫu/ }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Áo thun mẫu' })).toBeVisible();
   await expect(page.getByText('Chọn size và màu')).toBeVisible();
 
-  const sizeM = page.getByRole('radio', { name: 'M' });
+  const blue = page.getByRole('radio', { name: 'Blue' });
+  await blue.focus();
+  await page.keyboard.press('Space');
+  await expect(blue).toBeChecked();
+  const sizeM = page.getByRole('radio', { name: 'M', exact: true });
   await sizeM.focus();
   await page.keyboard.press('Space');
   await expect(sizeM).toBeChecked();
-  await page.keyboard.press('Tab');
-  await page.keyboard.press('Space');
-  await expect(page.getByRole('radio', { name: 'Blue' })).toBeChecked();
   await expect(page.getByText('Còn hàng (tham khảo)')).toBeVisible();
+  await blue.focus();
   await page.keyboard.press('ArrowRight');
   await expect(page.getByRole('radio', { name: 'Red' })).toBeChecked();
   await expect(page.getByText('Chưa rõ tồn kho')).toBeVisible();
 
   // Image endpoint 404s here, so the placeholder keeps the alt text.
   await expect(page.getByRole('img', { name: 'Áo thun mẫu' }).first()).toBeVisible();
-  await expect(page.getByRole('table')).toBeVisible();
-  await page.getByRole('button', { name: 'English' }).click();
+  await shot('detail');
+  await page.getByRole('button', { name: 'Bảng size' }).click();
+  const guide = page.getByRole('dialog', { name: 'Bảng size' });
+  await expect(guide.getByRole('table')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(guide).toBeHidden();
+
+  await switchToEnglish(page);
   await expect(page.getByRole('heading', { level: 1, name: 'Sample tee' })).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  expect(await noHorizontalScroll(page)).toBe(true);
 });
 
 test('unknown route and unknown product show not found', async ({ page }) => {

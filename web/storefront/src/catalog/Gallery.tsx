@@ -35,7 +35,7 @@ export function Gallery({ images, fallbackAlt, focusColor }: { images: GalleryIm
   return (
     <div data-testid="gallery" className="relative">
       <ul ref={strip} onScroll={onScroll} aria-label={t('images')}
-        className="flex snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] lg:grid lg:grid-cols-2 lg:gap-1 lg:overflow-visible">
+        className={`flex snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] lg:grid lg:gap-1 lg:overflow-visible ${images.length > 1 ? 'lg:grid-cols-2' : 'lg:grid-cols-1'}`}>
         {images.map((image, i) => (
           <li key={image.assetId} className="w-full shrink-0 snap-start">
             <button type="button" aria-label={`${t('zoom')}: ${image.alt}`} className="block w-full cursor-zoom-in"
