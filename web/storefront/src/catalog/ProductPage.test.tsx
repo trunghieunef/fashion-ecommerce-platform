@@ -14,7 +14,7 @@ async function choose(container: Element, name: string, value: string) {
 }
 
 it('asks for a variant, then shows its price and the three stock states', async () => {
-  mockFetch(() => json(product));
+  mockFetch((path) => (path.startsWith('/products/') ? json(product) : null));
   const container = await render(PATH);
   expect(container.querySelector('h1')!.textContent).toBe('Áo thun mẫu');
   expect(container.querySelector('.stock')!.textContent).toBe('Chọn size và màu');
@@ -37,19 +37,20 @@ it('asks for a variant, then shows its price and the three stock states', async 
 });
 
 it('renders the size guide table and sends Accept-Language, refetching in English', async () => {
-  const calls = mockFetch(() => json(product));
+  const calls = mockFetch((path) => (path.startsWith('/products/') ? json(product) : null));
   const container = await render(PATH);
-  expect(calls[0].lang).toBe('vi');
+  const detailCalls = () => calls.filter((c) => c.url.includes('/products/'));
+  expect(detailCalls()[0].lang).toBe('vi');
   expect(byText(container, 'h2', 'Bảng size')).toBeDefined();
   expect([...container.querySelectorAll('th')].map((th) => th.textContent)).toEqual(['Size', 'Ngực (cm)']);
   await click(byText(container, 'button', 'English'));
-  expect(calls.at(-1)!.lang).toBe('en');
+  expect(detailCalls().at(-1)!.lang).toBe('en');
   expect(container.querySelector('h1')!.textContent).toBe('Sample tee');
   expect(document.documentElement.lang).toBe('en');
 });
 
 it('opens the zoom dialog from the image button', async () => {
-  mockFetch(() => json(product));
+  mockFetch((path) => (path.startsWith('/products/') ? json(product) : null));
   const container = await render(PATH);
   const dialog = container.querySelector('dialog') as HTMLDialogElement;
   dialog.showModal = vi.fn(() => dialog.setAttribute('open', ''));
@@ -59,11 +60,11 @@ it('opens the zoom dialog from the image button', async () => {
 });
 
 it('shows not found for a 404 and keeps the image alt when it fails to load', async () => {
-  mockFetch(() => json({ code: 'NOT_FOUND', message: 'PRODUCT_NOT_FOUND', errors: [] }, 404));
+  mockFetch((path) => (path.startsWith('/products/') ? json({ code: 'NOT_FOUND', message: 'PRODUCT_NOT_FOUND', errors: [] }, 404) : null));
   expect((await render(PATH)).textContent).toContain('Không tìm thấy trang hoặc sản phẩm.');
   document.body.innerHTML = '';
   vi.unstubAllGlobals();
-  mockFetch(() => json(product));
+  mockFetch((path) => (path.startsWith('/products/') ? json(product) : null));
   const container = await render(PATH);
   const img = container.querySelector('.gallery img')!;
   await act(async () => { img.dispatchEvent(new Event('error')); });
@@ -76,7 +77,7 @@ it('partial size/colour matrix never gets stuck (review 1)', async () => {
     { ...product.data.variants[0], id: '55555555-5555-4555-8555-555555555561', size: 'S', color: 'Red', sku: 'S-RED' },
     { ...product.data.variants[0], id: '55555555-5555-4555-8555-555555555562', size: 'M', color: 'Blue', sku: 'M-BLUE' },
   ] } };
-  mockFetch(() => json(partial));
+  mockFetch((path) => (path.startsWith('/products/') ? json(partial) : null));
   const container = await render(PATH);
   await choose(container, 'size', 'S');
   await choose(container, 'color', 'Red');
@@ -95,7 +96,7 @@ it('every image is reachable and the zoom shows the chosen one (PR #28 P2)', asy
     { asset_id: '66666666-6666-4666-8666-666666666663', alt_vi: 'Đỏ trước', alt_en: 'Red front', variant_color: 'Red', sort_order: 2 },
     { asset_id: '66666666-6666-4666-8666-666666666664', alt_vi: 'Đỏ sau', alt_en: 'Red back', variant_color: 'Red', sort_order: 3 },
   ] } };
-  mockFetch(() => json(many));
+  mockFetch((path) => (path.startsWith('/products/') ? json(many) : null));
   const container = await render(PATH);
   const thumbs = () => [...container.querySelectorAll('.thumbs button')] as HTMLButtonElement[];
   expect(thumbs()).toHaveLength(4);
