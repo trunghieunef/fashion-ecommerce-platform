@@ -6,9 +6,14 @@ import { Loading, PAGE } from '../catalog/ui';
 import { useAuth } from './AuthProvider';
 
 export function RequireAuth({ children }: { children: ReactNode }) {
-  const { status } = useAuth();
+  const { status, pendingExit } = useAuth();
   const { pathname, search } = useLocation();
   if (status === 'unknown') return <main id="main" tabIndex={-1} className={PAGE}><Loading /></main>;
-  if (status === 'guest') return <Navigate to={`/login?next=${encodeURIComponent(pathname + search)}`} replace />;
+  if (status === 'guest') {
+    // Signed out on purpose (sign out, password change): go where that action said, not back to /login?next=.
+    const exit = pendingExit();
+    if (exit) return <Navigate to={exit.to} state={exit.state} replace />;
+    return <Navigate to={`/login?next=${encodeURIComponent(pathname + search)}`} replace />;
+  }
   return <>{children}</>;
 }

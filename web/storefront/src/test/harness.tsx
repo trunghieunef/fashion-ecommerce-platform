@@ -76,25 +76,32 @@ export class FakeChannel {
   close() { FakeChannel.all = FakeChannel.all.filter((c) => c !== this); }
 }
 
+function splitPath(path: string) {
+  const url = new URL(path, 'http://harness.test');
+  return { pathname: url.pathname, search: url.search, hash: url.hash };
+}
+
 /** The router location as text, so tests can assert redirects (`/login?next=...`). */
 function LocationProbe() {
-  const { pathname, search, hash } = useLocation();
-  return <output data-testid="location" hidden>{pathname + search + hash}</output>;
+  const { pathname, search, hash, state } = useLocation();
+  return <output data-testid="location" data-state={JSON.stringify(state ?? null)} hidden>{pathname + search + hash}</output>;
 }
 
 export const locationOf = (container: Element) => container.querySelector('[data-testid="location"]')?.textContent ?? '';
+export const locationStateOf = (container: Element): unknown =>
+  JSON.parse(container.querySelector('[data-testid="location"]')?.getAttribute('data-state') ?? 'null');
 
 export async function flush() {
   for (let i = 0; i < 5; i++) await act(async () => { await Promise.resolve(); });
 }
 
-export async function render(path: string, lang: Lang = 'vi', { strict = false } = {}) {
+export async function render(path: string, lang: Lang = 'vi', { strict = false, state }: { strict?: boolean; state?: unknown } = {}) {
   resetSessionForTests();
   const container = document.createElement('div');
   document.body.appendChild(container);
   const app = (
     <LangProvider initial={lang}>
-      <MemoryRouter initialEntries={[path]}>
+      <MemoryRouter initialEntries={[state === undefined ? path : { ...splitPath(path), state }]}>
         <AppRoutes />
         <LocationProbe />
       </MemoryRouter>

@@ -1,7 +1,7 @@
 // TASK:WEB-02a: the member's account — profile (name and the language e-mails are sent in; the UI language stays the
 // visitor's own choice), password change (the server ends every session, so the member signs in again), sign out.
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link } from 'react-router';
 
 import * as api from '../auth/api';
 import { useAuth } from '../auth/AuthProvider';
@@ -59,7 +59,7 @@ function ProfileForm({ profile }: { profile: api.Profile }) {
 
 function PasswordForm() {
   const { t } = useLang();
-  const navigate = useNavigate();
+  const { leaveSession } = useAuth();
   const form = useForm({ current_password: '', new_password: '' }, { current_password: required, new_password: password });
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -70,9 +70,8 @@ function PasswordForm() {
     setMessage(null);
     try {
       await api.changePassword(values.current_password, values.new_password);
-      // The server already ended every session. The local one ends on the login page (signOut flag): ending it here
-      // would let RequireAuth redirect to /login?next=/account before this navigation lands, losing the notice.
-      navigate('/login', { replace: true, state: { notice: 'passwordChanged', signOut: true } });
+      // The server already ended every session; RequireAuth takes the member to /login with the notice.
+      leaveSession('/login', { notice: 'passwordChanged' });
     } catch (error) {
       if (error instanceof HttpError && error.status === 400 && error.fields.length > 0)
         error.fields.forEach((f) => form.setFieldError(
@@ -98,9 +97,9 @@ function PasswordForm() {
 
 export function AccountPage() {
   const { t } = useLang();
-  const { signOut } = useAuth();
-  const navigate = useNavigate();
+  const { signOut, me } = useAuth();
   const [profile, setProfile] = useState<api.Profile | null>(null);
+  const [signOutError, setSignOutError] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
 
@@ -109,7 +108,8 @@ export function AccountPage() {
     setFailed(false);
     api.getMe().then((p) => { if (alive) setProfile(p); }, () => { if (alive) setFailed(true); });
     return () => { alive = false; };
-  }, [attempt]);
+    // Reloads when the signed-in account changes (sign in as someone else in another tab).
+  }, [attempt, me?.id]);
 
   return (
     <main id="main" tabIndex={-1} className={PAGE}>
@@ -120,10 +120,18 @@ export function AccountPage() {
         </div>
         {failed && <Failed notFound={false} retry={() => setAttempt((n) => n + 1)} />}
         {!failed && !profile && <Loading />}
-        {profile && <ProfileForm profile={profile} />}
+        {profile && <ProfileForm key={profile.id} profile={profile} />}
         <PasswordForm />
+        {signOutError && <p role="alert" className="border border-danger p-3 text-sm">{signOutError}</p>}
         <button type="button" className={BUTTON_OUTLINE}
-          onClick={async () => { navigate('/', { replace: true }); await signOut(); }}>
+          onClick={async () => {
+            setSignOutError(null);
+            try {
+              await signOut();
+            } catch {
+              setSignOutError(t('errSignOut'));
+            }
+          }}>
           {t('signOut')}
         </button>
       </div>

@@ -53,9 +53,14 @@ export function AddressForm({ initial, onSaved, onCancel }: { initial: api.Addre
       else await api.createAddress(input);
       onSaved();
     } catch (error) {
-      if (error instanceof HttpError && error.status === 400 && error.fields.length > 0)
-        error.fields.forEach((f) => { if ((FIELDS as readonly string[]).includes(f.field)) form.setFieldError(f.field as Name, t('errInvalid')); });
-      else { setMessage(t(commonError(error))); form.refocus(); }
+      const known = error instanceof HttpError ? error.fields.filter((f) => (FIELDS as readonly string[]).includes(f.field)) : [];
+      if (known.length > 0) known.forEach((f) => form.setFieldError(f.field as Name, t('errInvalid')));
+      else {
+        // user.yaml: unsetting the current default without choosing another → 400 DEFAULT_ADDRESS_REQUIRED.
+        setMessage(t(error instanceof HttpError && error.code === 'DEFAULT_ADDRESS_REQUIRED' ? 'errDefaultRequired'
+          : error instanceof HttpError && error.status === 400 ? 'errFormInvalid' : commonError(error)));
+        form.refocus();
+      }
     } finally {
       setPending(false);
     }

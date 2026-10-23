@@ -86,3 +86,26 @@ it('onSignedIn callbacks run after signIn, with the user from the session respon
   expect(auth!.me?.email).toBe('member@example.test');
   expect(calls.some((c) => c.url === '/api/v1/users/me')).toBe(false);
 });
+
+it('a sign-in in another tab reloads the profile, even when this tab was already a member (final review)', async () => {
+  let current = profile;
+  mockFetch((path) => (path === '/api/v1/auth/refresh' ? json(refresh) : path === '/api/v1/users/me' ? json(current) : listing(path)));
+  const container = await render('/account');
+  expect(container.querySelector('main')!.textContent).toContain('member@example.test');
+  current = { ...profile, data: { ...profile.data, id: '99999999-0000-4000-8000-000000000002', email: 'other@example.test', full_name: 'Người Khác' } };
+  await act(async () => { new FakeChannel('storefront.auth').postMessage({ type: 'login' }); });
+  await flush();
+  expect(container.querySelector('main')!.textContent).toContain('other@example.test');
+  expect((container.querySelector('main [name="full_name"]') as HTMLInputElement).value).toBe('Người Khác');
+});
+
+it('a login visit carrying a stale signOut state does not sign the member out (final review)', async () => {
+  // Reload/Back onto a /login entry left by an older flow must not end sessions — here or in other tabs.
+  const otherTab = new FakeChannel('storefront.auth');
+  const received: unknown[] = [];
+  otherTab.onmessage = (event) => received.push(event.data);
+  mockFetch(member);
+  const container = await render('/login', 'vi', { state: { notice: 'passwordChanged', signOut: true } });
+  expect(accountLink(container).getAttribute('href')).toBe('/account');
+  expect(received).not.toContainEqual({ type: 'logout' });
+});

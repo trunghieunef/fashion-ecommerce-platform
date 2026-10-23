@@ -1,6 +1,6 @@
 // TASK:WEB-02a: sign in. One message for a wrong email or password (the server does not tell which); `next` may only
 // point inside the site.
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router';
 
 import { PAGE } from '../catalog/ui';
@@ -8,12 +8,21 @@ import { HttpError } from '../http';
 import { useLang, type StringKey } from '../i18n';
 import { ErrorSummary, Field, PasswordField, StatusMessage, SubmitButton, useForm } from '../ui/form';
 import { useAuth } from './AuthProvider';
-import { broadcast, endSession } from './session';
 import { email, required } from './validate';
 
-/** Only same-site paths: "/x" yes; "//host", "/\host" and absolute URLs fall back to the account page. */
+const SAME_SITE = 'https://storefront.invalid';
+/**
+ * Only same-site paths survive. URL parsers drop tabs/newlines and treat "\" as "/", so "/\t/host" or "/\host" would
+ * become "//host": reject backslashes and control characters, then confirm the resolved origin is still ours.
+ */
 export function safeNext(next: string | null): string {
-  return next && next.startsWith('/') && !next.startsWith('//') && !next.startsWith('/\\') ? next : '/account';
+  if (!next || !next.startsWith('/') || /[\u0000-\u001f\u007f\\]/.test(next)) return '/account';
+  try {
+    const url = new URL(next, SAME_SITE);
+    return url.origin === SAME_SITE ? url.pathname + url.search + url.hash : '/account';
+  } catch {
+    return '/account';
+  }
 }
 
 /** Message for errors every auth form shares; null when the caller handles it. */
@@ -27,13 +36,7 @@ export function LoginPage() {
   const { signIn } = useAuth();
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const state = useLocation().state as { notice?: StringKey; signOut?: boolean } | null;
-  const notice = state?.notice;
-  // Arriving here after a password change: the server revoked the session; end the local one now that the protected
-  // page is gone (AccountPage cannot do it itself without RequireAuth racing its navigation).
-  useEffect(() => {
-    if (state?.signOut) { endSession(); broadcast('logout'); }
-  }, []);
+  const notice = (useLocation().state as { notice?: StringKey } | null)?.notice;
   const form = useForm({ email: '', password: '' }, { email, password: required });
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);

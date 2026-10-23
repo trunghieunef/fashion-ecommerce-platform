@@ -13,8 +13,11 @@ type Tokens = { access_token: string; expires_in: number };
 let token: string | null = null;
 let expiresAt = 0;
 let inflight: Promise<boolean> | null = null;
+// Bumped by startSession/endSession: a refresh answered after either belongs to an older state and is ignored.
+let epoch = 0;
 let channel: BroadcastChannel | null = null;
-const listeners = new Set<(signedIn: boolean) => void>();
+/** `otherTab` is true when another tab signed in (the account may have changed even if this tab was signed in). */
+const listeners = new Set<(signedIn: boolean, otherTab?: boolean) => void>();
 
 export const getAccessToken = () => token;
 
@@ -27,14 +30,16 @@ function setToken(next: string | null, expiresIn = 0) {
 
 export function startSession(accessToken: string, expiresIn: number) {
   connect();
+  epoch++;
   setToken(accessToken, expiresIn);
 }
 
 export function endSession() {
+  epoch++;
   setToken(null);
 }
 
-export function onSessionChange(listener: (signedIn: boolean) => void): () => void {
+export function onSessionChange(listener: (signedIn: boolean, otherTab?: boolean) => void): () => void {
   connect();
   listeners.add(listener);
   return () => listeners.delete(listener);
@@ -44,13 +49,15 @@ export function onSessionChange(listener: (signedIn: boolean) => void): () => vo
 export function refreshAccessToken(): Promise<boolean> {
   if (inflight) return inflight;
   const run = async () => {
+    const started = epoch;
     try {
       const tokens = await request<Tokens>('/api/v1/auth/refresh', { method: 'POST' });
+      if (epoch !== started) return false;
       setToken(tokens.access_token, tokens.expires_in);
       return true;
     } catch (error) {
       if (error instanceof HttpError && (error.status === 401 || error.status === 403)) {
-        endSession();
+        if (epoch === started) endSession();
         return false;
       }
       throw error;
@@ -81,7 +88,8 @@ function connect() {
   channel = new BroadcastChannel(CHANNEL);
   channel.onmessage = (event: MessageEvent<Message>) => {
     if (event.data?.type === 'logout') endSession();
-    if (event.data?.type === 'login') refreshAccessToken().catch(() => undefined);
+    if (event.data?.type === 'login')
+      refreshAccessToken().then((ok) => { if (ok) listeners.forEach((listener) => listener(true, true)); }, () => undefined);
   };
 }
 

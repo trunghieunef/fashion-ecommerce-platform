@@ -153,3 +153,15 @@ it('broadcast posts to the other tabs', async () => {
   session.broadcast('logout');
   expect(received).toEqual([{ type: 'logout' }]);
 });
+
+it('a refresh that resolves after endSession does not revive the session (final review)', async () => {
+  let release: (r: Response) => void = () => {};
+  mockFetch((path) => (path === '/api/v1/auth/refresh' ? new Promise<Response>((resolve) => { release = resolve; }) : null));
+  const session = await freshSession();
+  const pending = session.refreshAccessToken();
+  await new Promise((r) => setTimeout(r, 0));
+  session.endSession();
+  release(ok(refresh.data));
+  await expect(pending).resolves.toBe(false);
+  expect(session.getAccessToken()).toBeNull();
+});

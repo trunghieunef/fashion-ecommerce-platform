@@ -46,7 +46,10 @@ test.describe('real chain', () => {
 
     await page.getByRole('main').getByRole('link', { name: 'Tài khoản' }).click();
     await page.getByRole('button', { name: 'Đăng xuất' }).click();
+    // Sign out ends the session only after the server dropped the cookie; wait for the header to say so before
+    // navigating, so the goto cannot abort an in-flight logout.
     await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByRole('banner').getByRole('link', { name: 'Đăng nhập' })).toBeAttached();
     await page.goto('/account');
     await expect(page).toHaveURL(/\/login\?next=%2Faccount$/);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

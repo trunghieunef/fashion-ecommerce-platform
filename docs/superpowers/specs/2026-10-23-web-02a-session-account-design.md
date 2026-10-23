@@ -83,7 +83,9 @@ Kết quả `--domain product` cho thương mại điện tử gợi ý style "V
 - Tỉnh/phường chọn từ **danh mục mẫu** `src/account/geo.sample.json` (vài tỉnh/phường, gồm mã `79`/`26734` smoke dùng), ghi
   rõ "danh mục mẫu" trong README; danh mục thật thay khi O04 chốt nguồn. Địa chỉ đã lưu có mã ngoài danh mục mẫu vẫn hiển
   thị mã thô, không lỗi.
-- Xóa địa chỉ mặc định khi còn địa chỉ khác: server trả 400 → hiện lý do; một địa chỉ duy nhất luôn là mặc định.
+- Luôn đúng một địa chỉ mặc định (user.yaml): xóa địa chỉ mặc định thì server tự chọn địa chỉ mới nhất còn lại làm mặc định;
+  bỏ đánh dấu "mặc định" của địa chỉ đang mặc định (PUT) mà không chọn địa chỉ khác → 400 `DEFAULT_ADDRESS_REQUIRED`, hiện
+  lý do trong form. (Sửa 2026-10-24 theo review: bản trước ghi nhầm là xóa địa chỉ mặc định trả 400.)
 
 ## 5. Cấu trúc code
 

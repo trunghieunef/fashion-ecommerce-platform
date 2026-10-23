@@ -118,12 +118,12 @@ it('sets another address as default', async () => {
 
 it('a server 400 on delete is shown', async () => {
   mockFetch(member((path) => (path === `${LIST}/${addresses.data[0].id}`
-    ? json({ code: 'VALIDATION_ERROR', message: 'DEFAULT_ADDRESS_REQUIRED', errors: [], metadata }, 400) : null)));
+    ? json({ code: 'VALIDATION_ERROR', message: 'invalid', errors: [], metadata }, 400) : null)));
   const container = await render('/account/addresses');
   await click(button(cards(container)[0], 'Xóa'));
   await click(button(openDialog(container), 'Xóa địa chỉ'));
-  expect(container.querySelector('main [role="alert"]')!.textContent)
-    .toContain('Không xóa được địa chỉ này. Hãy đặt một địa chỉ khác làm mặc định trước.');
+  // Deleting the default is allowed (the server promotes another address); a 400 here is a plain failure (final review).
+  expect(container.querySelector('main [role="alert"]')!.textContent).toBe('Không xóa được địa chỉ. Vui lòng thử lại.');
 });
 
 it('codes outside the sample directory are shown raw', async () => {
@@ -132,4 +132,16 @@ it('codes outside the sample directory are shown raw', async () => {
   const container = await render('/account/addresses');
   expect(cards(container)[0].textContent).toContain('96');
   expect(cards(container)[0].textContent).toContain('32248');
+});
+
+it('unchecking default on the default address shows the server rule in the form (final review)', async () => {
+  mockFetch(member((path) => (path === `${LIST}/${addresses.data[0].id}`
+    ? json({ code: 'DEFAULT_ADDRESS_REQUIRED', message: 'DEFAULT_ADDRESS_REQUIRED', metadata }, 400) : null)));
+  const container = await render('/account/addresses');
+  await click(button(cards(container)[0], 'Sửa'));
+  const dialog = openDialog(container);
+  await act(async () => { (dialog.querySelector('[name="is_default"]') as HTMLInputElement).click(); });
+  await submit(dialog);
+  expect(dialog.querySelector('[role="alert"]')!.textContent).toContain('Phải luôn có một địa chỉ mặc định. Hãy đặt địa chỉ khác làm mặc định.');
+  expect(openDialog(container)).not.toBeNull();
 });

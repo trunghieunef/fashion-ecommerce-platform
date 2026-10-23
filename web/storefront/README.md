@@ -38,7 +38,11 @@ Drawer dùng chung (`src/ui/Drawer.tsx`) là `<dialog>` native (`showModal`): fo
   rồi xóa fragment), `/account` và `/account/addresses` (bọc `RequireAuth`). Header có nút tài khoản.
 - Form dùng `src/ui/form.tsx`: label luôn hiện, lỗi tại ô khi rời ô/submit, hộp tóm tắt lỗi nhận focus, nút hiện/ẩn mật
   khẩu (không chặn paste), nút submit có trạng thái đang gửi, thông báo trạng thái tự ẩn 5 s.
-- Đổi mật khẩu: server thu hồi mọi phiên; trang đăng nhập (`state.signOut`) kết thúc phiên local khi tới nơi.
+- Đăng xuất chỉ kết thúc phiên local sau khi `POST /auth/logout` thành công (cookie HttpOnly chỉ server xóa được); lỗi →
+  báo "Chưa đăng xuất được" và vẫn đăng nhập. Đổi mật khẩu: server thu hồi mọi phiên, `leaveSession('/login', notice)`.
+  Kết thúc phiên có chủ đích thì `RequireAuth` chuyển tới điểm đến đó; phiên mất ngoài ý muốn (tab khác đăng xuất, refresh
+  bị từ chối) mới về `/login?next=`. Đăng nhập ở tab khác (kể cả tài khoản khác) làm tab này tải lại hồ sơ.
+- Một lần refresh trả về sau khi phiên đã bắt đầu/kết thúc lại (epoch) bị bỏ qua, nên không "hồi sinh" phiên vừa đăng xuất.
 - Tỉnh/phường lấy từ **danh mục mẫu** `src/account/geo.sample.json` (đánh dấu "mẫu") cho tới khi O04 chốt nguồn; mã ngoài
   danh mục hiển thị thô.
 - Local: dùng **`http://localhost:4173`**. Gateway chỉ nhận request ghi có cookie từ origin trong `GATEWAY_ALLOWED_ORIGINS`

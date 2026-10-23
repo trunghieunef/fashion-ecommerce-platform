@@ -76,7 +76,8 @@ it('signs in and goes to next', async () => {
 
 it('ignores an external next', async () => {
   mockFetch((path) => (path === '/api/v1/auth/login' ? json(session) : null));
-  for (const next of ['https%3A%2F%2Fevil.example', '%2F%2Fevil.example']) {
+  // Also backslash and control-character variants a URL parser turns into a protocol-relative URL (final review).
+  for (const next of ['https%3A%2F%2Fevil.example', '%2F%2Fevil.example', '%2F%5Cevil.example', '%2F%09%2Fevil.example', '%2F%0A%2Fevil.example']) {
     const container = await render(`/login?next=${next}`);
     await fillLogin(container);
     await submit(container);

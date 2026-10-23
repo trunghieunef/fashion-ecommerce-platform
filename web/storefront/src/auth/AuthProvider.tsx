@@ -11,7 +11,12 @@ type Auth = {
   me: api.User | null;
   signIn(email: string, password: string): Promise<void>;
   register(input: api.RegisterInput): Promise<void>;
+  /** Ends the session only after the server revoked it; throws (still signed in) when that failed. Leaves for `/`. */
   signOut(): Promise<void>;
+  /** The server already ended the session (password change): end it here and leave protected pages for `to`. */
+  leaveSession(to: string, state?: unknown): void;
+  /** Where RequireAuth sends a member whose session was ended on purpose; null = /login?next=… */
+  pendingExit(): { to: string; state?: unknown } | null;
   reloadMe(): Promise<void>;
   onSignedIn(callback: () => void): () => void;
 };
@@ -23,6 +28,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [me, setMeState] = useState<api.User | null>(null);
   const meRef = useRef<api.User | null>(null);
   const signedIn = useRef(new Set<() => void>());
+  const exit = useRef<{ to: string; state?: unknown } | null>(null);
 
   const setMe = (user: api.User | null) => { meRef.current = user; setMeState(user); };
   const reloadMe = useCallback(async () => {
@@ -36,19 +42,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const off = onSessionChange((active) => {
+    const off = onSessionChange((active, otherTab) => {
       if (!active) { setMe(null); setStatus('guest'); }
-      // Signed in from another tab: we have a token but not the profile yet.
-      else if (!meRef.current) void reloadMe();
+      // A token without a profile (boot restore), or another tab signed in — possibly as someone else.
+      else if (otherTab || !meRef.current) void reloadMe();
     });
-    // StrictMode runs this twice; refreshAccessToken is single-flight, so only one request goes out.
+    // StrictMode runs this twice; refreshAccessToken is single-flight, so only one request goes out. A successful
+    // restore loads the profile through the listener above.
     refreshAccessToken()
-      .then((ok) => (ok ? reloadMe() : setStatus('guest')))
+      .then((ok) => { if (!ok) setStatus('guest'); })
       .catch(() => setStatus('guest'));
     return off;
   }, [reloadMe]);
 
   const begin = useCallback(async (session: api.Session) => {
+    exit.current = null;
     if (session.user) setMe(session.user);
     startSession(session.access_token, session.expires_in);
     if (!session.user) await reloadMe();
@@ -63,14 +71,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signIn: async (email, password) => begin(await api.login(email, password)),
     register: async (input) => begin(await api.register(input)),
     signOut: async () => {
-      try {
-        await api.logout();
-      } catch {
-        // The local session ends anyway; the server-side family expires on its own.
-      }
+      // The refresh cookie is HttpOnly: only the server can drop it. If that fails, stay signed in rather than pretend.
+      await api.logout();
+      exit.current = { to: '/' };
       endSession();
       broadcast('logout');
     },
+    leaveSession: (to, state) => {
+      exit.current = { to, state };
+      endSession();
+      broadcast('logout');
+    },
+    pendingExit: () => exit.current,
     reloadMe,
     onSignedIn: (callback) => {
       signedIn.current.add(callback);

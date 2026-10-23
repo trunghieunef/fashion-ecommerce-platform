@@ -96,3 +96,14 @@ it('sign out returns home as a guest', async () => {
   expect(locationOf(container)).toBe('/');
   expect(container.querySelector('header a[href="/login"]')).not.toBeNull();
 });
+
+it('a failed sign out keeps the member signed in and says so (final review)', async () => {
+  mockFetch(member((path) => (path === '/api/v1/auth/logout' ? json({ code: 'INTERNAL', message: 'x', metadata }, 503) : null)));
+  const container = await render('/account');
+  const button = [...container.querySelectorAll('main button')].find((b) => b.textContent === 'Đăng xuất') as HTMLButtonElement;
+  await act(async () => { button.click(); });
+  await flush();
+  expect(locationOf(container)).toBe('/account');
+  expect(container.querySelector('main [role="alert"]')!.textContent).toContain('Chưa đăng xuất được. Vui lòng thử lại.');
+  expect(container.querySelector('header a[href="/account"]')).not.toBeNull();
+});

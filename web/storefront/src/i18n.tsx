@@ -132,7 +132,10 @@ const STRINGS = {
     addressDeleted: 'Đã xóa địa chỉ.',
     noAddresses: 'Bạn chưa lưu địa chỉ nào.',
     sampleGeo: 'Danh sách tỉnh/phường đang là dữ liệu mẫu.',
-    errDeleteAddress: 'Không xóa được địa chỉ này. Hãy đặt một địa chỉ khác làm mặc định trước.',
+    errDeleteAddress: 'Không xóa được địa chỉ. Vui lòng thử lại.',
+    errDefaultRequired: 'Phải luôn có một địa chỉ mặc định. Hãy đặt địa chỉ khác làm mặc định.',
+    errFormInvalid: 'Thông tin chưa hợp lệ. Vui lòng kiểm tra lại.',
+    errSignOut: 'Chưa đăng xuất được. Vui lòng thử lại.',
   },
   en: {
     store: 'Fashion Store',
@@ -262,7 +265,10 @@ const STRINGS = {
     addressDeleted: 'Address deleted.',
     noAddresses: 'You have no saved addresses.',
     sampleGeo: 'The province/ward list is sample data.',
-    errDeleteAddress: 'This address cannot be deleted. Make another address the default first.',
+    errDeleteAddress: 'Could not delete the address. Please try again.',
+    errDefaultRequired: 'There must always be a default address. Make another address the default.',
+    errFormInvalid: 'Some details are not valid. Please check them.',
+    errSignOut: 'Could not sign out. Please try again.',
   },
 } as const;
 
