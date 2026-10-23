@@ -11,7 +11,8 @@ import collections from './fixtures/collections.json';
 import type { Lang } from '../catalog/api';
 import { LangProvider } from '../i18n';
 
-export type Call = { url: string; lang: string | null };
+/** One fetch the code under test made; method/auth/body/headers added for the account and cart APIs (TASK:WEB-02a). */
+export type Call = { url: string; lang: string | null; method: string; auth: string | null; body: unknown; headers: Record<string, string> };
 
 export function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -22,18 +23,23 @@ function fallback(path: string): Response {
   if (path.startsWith('/categories')) return json(categories);
   if (path.startsWith('/brands')) return json(brands);
   if (path.startsWith('/collections?')) return json(collections);
-  throw new Error(`unmocked catalog path: ${path}`);
+  // TASK:WEB-02a: no session unless a test signs in, so every catalog test runs as a guest.
+  if (path === '/api/v1/auth/refresh')
+    return json({ code: 'UNAUTHORIZED', message: 'refresh token missing', metadata: { request_id: 'harness', trace_id: 'harness' } }, 401);
+  throw new Error(`unmocked path: ${path}`);
 }
 
 /**
- * handler gets the path+query after /api/v1/catalog and returns a Response (or a promise of one); null/undefined
+ * handler gets the path+query after /api/v1/catalog (other APIs: the full path, e.g. /api/v1/auth/login) and returns a Response (or a promise of one); null/undefined
  * means "not mine" and falls back to the shared fixtures above.
  */
 export function mockFetch(handler: (path: string) => Response | Promise<Response> | null | undefined, honourAbort = true) {
   const calls: Call[] = [];
   vi.stubGlobal('fetch', vi.fn((input: string, init?: RequestInit) => {
     const headers = new Headers(init?.headers);
-    calls.push({ url: input, lang: headers.get('Accept-Language') });
+    const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
+    calls.push({ url: input, lang: headers.get('Accept-Language'), method: init?.method ?? 'GET', auth: headers.get('Authorization'),
+      body, headers: Object.fromEntries(headers.entries()) });
     const signal = init?.signal;
     return new Promise<Response>((resolve, reject) => {
       // honourAbort=false models a response already in flight when abort fires (it still resolves).

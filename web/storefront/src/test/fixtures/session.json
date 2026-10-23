@@ -1,0 +1,18 @@
+{
+  "code": "OK",
+  "data": {
+    "user": {
+      "id": "99999999-0000-4000-8000-000000000001",
+      "email": "member@example.test",
+      "full_name": "Khách Mẫu",
+      "locale": "vi"
+    },
+    "access_token": "header.payload.signature-synthetic",
+    "token_type": "Bearer",
+    "expires_in": 900
+  },
+  "metadata": {
+    "request_id": "web02a-fixture",
+    "trace_id": "web02a-fixture"
+  }
+}

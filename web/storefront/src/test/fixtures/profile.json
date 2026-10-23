@@ -1,0 +1,14 @@
+{
+  "code": "OK",
+  "data": {
+    "id": "99999999-0000-4000-8000-000000000001",
+    "email": "member@example.test",
+    "full_name": "Khách Mẫu",
+    "locale": "vi",
+    "email_verified": false
+  },
+  "metadata": {
+    "request_id": "web02a-fixture",
+    "trace_id": "web02a-fixture"
+  }
+}
