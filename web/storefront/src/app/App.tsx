@@ -1,6 +1,7 @@
 import { BrowserRouter, Route, Routes } from 'react-router';
 
 import { AccountPage } from '../account/AccountPage';
+import { AddressesPage } from '../account/AddressesPage';
 import { AuthProvider } from '../auth/AuthProvider';
 import { ForgotPasswordPage } from '../auth/ForgotPasswordPage';
 import { LoginPage } from '../auth/LoginPage';
@@ -13,7 +14,7 @@ import { HomePage } from '../catalog/HomePage';
 import { ListingPage } from '../catalog/ListingPage';
 import { ProductPage } from '../catalog/ProductPage';
 import { NotFound, PAGE } from '../catalog/ui';
-import { LangProvider, useLang, type StringKey } from '../i18n';
+import { LangProvider, useLang } from '../i18n';
 import { Header } from './Header';
 import './styles.css';
 
@@ -24,12 +25,6 @@ function SkipLink() {
       {t('skipToContent')}
     </a>
   );
-}
-
-/** Placeholder until the WEB-02a page lands (plan tasks 4-7 replace each one). */
-function Pending({ title }: { title: StringKey }) {
-  const { t } = useLang();
-  return <main id="main" tabIndex={-1} className={PAGE}><h1 className="text-3xl font-bold uppercase">{t(title)}</h1></main>;
 }
 
 export function AppRoutes() {
@@ -48,7 +43,7 @@ export function AppRoutes() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/account" element={<RequireAuth><AccountPage /></RequireAuth>} />
-        <Route path="/account/addresses" element={<RequireAuth><Pending title="addresses" /></RequireAuth>} />
+        <Route path="/account/addresses" element={<RequireAuth><AddressesPage /></RequireAuth>} />
         <Route path="*" element={<main id="main" tabIndex={-1} className={PAGE}><NotFound /></main>} />
       </Routes>
     </AuthProvider>

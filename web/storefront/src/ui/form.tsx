@@ -33,6 +33,22 @@ export function Field({ label, name, error, hint, ...input }: FieldProps) {
   );
 }
 
+/** Native select with the same label/error wiring as Field; `placeholder` is the empty first option. */
+export function SelectField({ label, name, error, placeholder, options, value, onChange, onBlur }: {
+  label: string; name: string; error?: string | null; placeholder: string; options: { value: string; label: string }[];
+  value: string; onChange: (e: { currentTarget: { value: string } }) => void; onBlur?: () => void;
+}) {
+  return (
+    <FieldShell label={label} name={name} error={error}>
+      <select id={name} name={name} value={value} onChange={onChange} onBlur={onBlur} aria-invalid={Boolean(error)}
+        aria-describedby={describedBy(name, error)} className={INPUT}>
+        <option value="">{placeholder}</option>
+        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </FieldShell>
+  );
+}
+
 /** Password with a show/hide toggle; paste and password managers stay allowed (Accessible Authentication). */
 export function PasswordField({ label, name, error, hint, ...input }: FieldProps) {
   const { t } = useLang();
@@ -132,6 +148,7 @@ export function useForm<K extends string>(initial: Record<K, string>, validators
       },
       onBlur: () => setTouched((x) => ({ ...x, [name]: true })),
     }),
+    setValue: (name: K, value: string) => setValues((v) => ({ ...v, [name]: value })),
     /** Server-side error for one field (409, 400 fields); also refocuses the summary. */
     setFieldError: (name: K, message: string) => { setServer((s) => ({ ...s, [name]: message })); setFocusKey((k) => k + 1); },
     refocus: () => setFocusKey((k) => k + 1),
