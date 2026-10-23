@@ -1,81 +1,36 @@
-/* TASK:WEB-01: plain, mobile-first styles (visual polish is a later task). */
-:root {
-  --fg: #1d1b20;
-  --muted: #5f5b66;
-  --line: #d6d2da;
-  --bg: #fff;
-  --soft: #f4f2f6;
-  --focus: #005fcc;
-  color: var(--fg);
-  background: var(--bg);
-  font-family: Inter, system-ui, sans-serif;
-  line-height: 1.5;
+/* TASK:WEB-01b: Tailwind entry, self-hosted Hanken Grotesk (Vietnamese subset) and the design tokens of spec section 2. */
+@import "tailwindcss";
+@import "@fontsource-variable/hanken-grotesk";
+
+@theme {
+  --color-fg: #000000;
+  --color-bg: #ffffff;
+  --color-muted: #555555;
+  --color-line: #d4d4d4;
+  --color-soft: #f2f2f2;
+  --color-danger: #b3261e;
+  --color-focus: #005fcc;
+  --font-sans: "Hanken Grotesk Variable", system-ui, sans-serif;
 }
 
-body { margin: 0; }
-a { color: inherit; }
-img { display: block; max-width: 100%; height: auto; }
-button, input, select { font: inherit; }
-button { cursor: pointer; padding: 0.5rem 0.9rem; border: 1px solid var(--fg); border-radius: 0.4rem; background: var(--bg); }
-button:disabled { cursor: not-allowed; opacity: 0.5; }
-input, select { padding: 0.45rem; border: 1px solid var(--line); border-radius: 0.4rem; min-width: 0; }
-
-a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, .option input:focus-visible + span {
-  outline: 3px solid var(--focus);
-  outline-offset: 2px;
-}
-
-.visually-hidden {
-  position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
-}
-
-.site-header, .page { box-sizing: border-box; margin: 0 auto; max-width: 70rem; padding: 1rem; }
-.site-header { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 1rem; border-bottom: 1px solid var(--line); }
-.site-header .brand { font-weight: 700; text-decoration: none; }
-.site-header nav { display: flex; gap: 1rem; }
-.site-header form { display: flex; gap: 0.5rem; flex: 1 1 14rem; }
-.site-header form input { flex: 1; }
-
-.product-grid, .collection-list, .lookbook { display: grid; gap: 1rem; grid-template-columns: repeat(2, minmax(0, 1fr)); list-style: none; padding: 0; }
-.product-card a, .collection-list a { display: grid; gap: 0.4rem; text-decoration: none; }
-.product-card .price { color: var(--muted); }
-.image-placeholder { display: grid; place-items: center; aspect-ratio: 3 / 4; background: var(--soft); color: var(--muted); font-size: 0.85rem; }
-.product-card img, .collection-list img { aspect-ratio: 3 / 4; object-fit: cover; width: 100%; }
-
-.filters { display: grid; gap: 0.75rem; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 1rem; }
-.filters label { display: grid; gap: 0.25rem; font-size: 0.9rem; }
-.filter-actions { display: flex; gap: 0.5rem; align-items: end; grid-column: 1 / -1; }
-.more, .state { display: grid; gap: 0.5rem; justify-items: start; margin: 1rem 0; }
-
-.product { display: grid; gap: 1.5rem; }
-.gallery .zoom { padding: 0; border: 0; background: none; width: 100%; }
-.thumbs { display: flex; gap: 0.5rem; margin-top: 0.5rem; overflow-x: auto; }
-.thumbs button { padding: 0; width: 4rem; flex: none; border: 2px solid transparent; }
-.thumbs button[aria-pressed="true"] { border-color: var(--fg); }
-.product-info { display: grid; gap: 0.75rem; align-content: start; }
-.product-info h1 { margin: 0; }
-.product-info .price { font-size: 1.25rem; font-weight: 600; }
-fieldset { border: 0; margin: 0; padding: 0; }
-legend { font-weight: 600; margin-bottom: 0.4rem; }
-.options { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-.option input { position: absolute; opacity: 0; }
-.option span { display: inline-block; min-width: 2.5rem; padding: 0.4rem 0.7rem; text-align: center; border: 1px solid var(--line); border-radius: 0.4rem; }
-.option input:checked + span { border-color: var(--fg); background: var(--fg); color: var(--bg); }
-.option input:disabled + span { opacity: 0.4; text-decoration: line-through; }
-.stock { font-weight: 600; margin: 0; }
-.note { color: var(--muted); font-size: 0.85rem; margin: 0; }
-.field-error { color: #b3261e; grid-column: 1 / -1; margin: 0; }
-table { border-collapse: collapse; }
-th, td { border: 1px solid var(--line); padding: 0.3rem 0.6rem; text-align: left; }
-dialog { max-width: min(90vw, 50rem); padding: 1rem; }
-dialog::backdrop { background: rgb(0 0 0 / 0.6); }
-dialog form { margin-top: 0.5rem; }
-figure { margin: 0; }
-figcaption { color: var(--muted); font-size: 0.9rem; }
-
-@media (min-width: 48rem) {
-  .product-grid, .collection-list { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .lookbook { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .filters { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .product { grid-template-columns: 1fr 1fr; }
+@layer base {
+  body {
+    background: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    font-size: 1rem;
+    line-height: 1.5;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+  button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
+  @media (prefers-reduced-motion: reduce) {
+    *, ::before, ::after {
+      transition-duration: 0s !important;
+      animation-duration: 0s !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }

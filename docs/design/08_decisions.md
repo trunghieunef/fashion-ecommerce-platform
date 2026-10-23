@@ -614,6 +614,22 @@ tinh chỉnh thẩm mỹ sau (task riêng):
 | Chưa có "Thêm vào giỏ" | WEB-02 |
 | Fixture mock được validate với `catalog.yaml` bằng contract test | Mock không lệch contract |
 
+## WEB-01b — quyết định 2026-10-23
+
+`TASK:WEB-01b`. Chủ dự án duyệt [spec](../superpowers/specs/2026-10-23-web-01b-storefront-redesign-design.md) (task thẩm mỹ
+mà WEB-01 đã hẹn); nghiên cứu thiết kế bằng skill ui-ux-pro-max và mockup. WEB-01 giữ Done.
+
+| Quyết định | Hệ quả |
+|---|---|
+| Làm lại cả giao diện và UX của 5 màn WEB-01 dưới mã task mới WEB-01b | Được sửa hành vi đã chốt ở WEB-01; lịch sử nghiệm thu WEB-01 giữ nguyên |
+| Định vị tối giản cao cấp, style "Grotesk kiểu Thụy Sĩ": Hanken Grotesk, đơn sắc, không màu nhấn | Token ở `web/storefront/src/app/styles.css` |
+| Dùng **Tailwind CSS 4.3.3** (`@tailwindcss/vite`), không shadcn/Radix | Thay quyết định WEB-01 "CSS thuần" cho phần CSS; vẫn không thêm component/state/i18n/icon library |
+| Font tự host bằng `@fontsource-variable/hanken-grotesk` 5.3.0 | Không gọi Google Fonts lúc chạy; có subset vietnamese |
+| Chỉ sửa frontend, không đổi contract | Không có ảnh thứ hai khi hover card, không mã màu hex: ô màu dùng thumbnail ảnh `variant_color` hoặc chữ |
+| Bộ lọc trong drawer áp dụng ngay qua URL, chip xóa từng tham số | Quy tắc WEB-01 (bỏ cursor, abort, không trộn trang) giữ nguyên; size/màu vẫn là ô chữ vì API không có danh sách |
+| Size không có trong màu đang chọn: gạch ngang nhưng vẫn chọn được | Lệch chữ "disabled" của spec để giữ sửa lỗi review 1 của WEB-01 (không kẹt lựa chọn) |
+| Giữ "Tải thêm", link theo `id`, ngôn ngữ trong `localStorage` | Như WEB-01 |
+
 ## CART-02 — quyết định 2026-10-18
 
 `TASK:CART-02` · `REQ:CART-03`. Chủ dự án giao agent tự chốt và duyệt [spec](../superpowers/specs/2026-10-18-cart-02-merge-design.md):
