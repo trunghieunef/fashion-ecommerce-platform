@@ -1,6 +1,6 @@
 // TASK:WEB-02a: sign in. One message for a wrong email or password (the server does not tell which); `next` may only
 // point inside the site.
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router';
 
 import { PAGE } from '../catalog/ui';
@@ -8,6 +8,7 @@ import { HttpError } from '../http';
 import { useLang, type StringKey } from '../i18n';
 import { ErrorSummary, Field, PasswordField, StatusMessage, SubmitButton, useForm } from '../ui/form';
 import { useAuth } from './AuthProvider';
+import { broadcast, endSession } from './session';
 import { email, required } from './validate';
 
 /** Only same-site paths: "/x" yes; "//host", "/\host" and absolute URLs fall back to the account page. */
@@ -26,7 +27,13 @@ export function LoginPage() {
   const { signIn } = useAuth();
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const notice = (useLocation().state as { notice?: StringKey } | null)?.notice;
+  const state = useLocation().state as { notice?: StringKey; signOut?: boolean } | null;
+  const notice = state?.notice;
+  // Arriving here after a password change: the server revoked the session; end the local one now that the protected
+  // page is gone (AccountPage cannot do it itself without RequireAuth racing its navigation).
+  useEffect(() => {
+    if (state?.signOut) { endSession(); broadcast('logout'); }
+  }, []);
   const form = useForm({ email: '', password: '' }, { email, password: required });
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);

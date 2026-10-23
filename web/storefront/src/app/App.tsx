@@ -1,5 +1,6 @@
 import { BrowserRouter, Route, Routes } from 'react-router';
 
+import { AccountPage } from '../account/AccountPage';
 import { AuthProvider } from '../auth/AuthProvider';
 import { ForgotPasswordPage } from '../auth/ForgotPasswordPage';
 import { LoginPage } from '../auth/LoginPage';
@@ -46,7 +47,7 @@ export function AppRoutes() {
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/account" element={<RequireAuth><Pending title="account" /></RequireAuth>} />
+        <Route path="/account" element={<RequireAuth><AccountPage /></RequireAuth>} />
         <Route path="/account/addresses" element={<RequireAuth><Pending title="addresses" /></RequireAuth>} />
         <Route path="*" element={<main id="main" tabIndex={-1} className={PAGE}><NotFound /></main>} />
       </Routes>
