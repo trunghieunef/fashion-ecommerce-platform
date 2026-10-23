@@ -69,6 +69,7 @@ const STRINGS = {
     activeFilters: 'Bộ lọc đang chọn',
     removeFilter: 'Bỏ lọc',
     clearAll: 'Xóa tất cả',
+    description: 'Mô tả',
   },
   en: {
     store: 'Fashion Store',
@@ -135,6 +136,7 @@ const STRINGS = {
     activeFilters: 'Active filters',
     removeFilter: 'Remove filter',
     clearAll: 'Clear all',
+    description: 'Description',
   },
 } as const;
 

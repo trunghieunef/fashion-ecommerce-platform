@@ -1,17 +1,21 @@
-// TASK:WEB-01 SF-03: product detail. Stock is a labeled reference; nothing is reserved here.
-import { useRef, useState } from 'react';
-import { useParams } from 'react-router';
+// TASK:WEB-01 SF-03, TASK:WEB-01b: product detail — gallery plus a sticky panel with colour swatches, sizes, a
+// size-guide drawer and stock (spec 3.5). Stock is a labeled reference; nothing is reserved here.
+import { useState } from 'react';
+import { Link, useParams } from 'react-router';
 
 import { useLang } from '../i18n';
-import { getProduct, imageUrl, type Product, type Variant } from './api';
-import { CatalogImage, Failed, Loading, Price, useLoad } from './ui';
+import { Drawer } from '../ui/Drawer';
+import { ChevronDown } from '../ui/icons';
+import { getProduct, type Product, type Variant } from './api';
+import { Gallery } from './Gallery';
+import { CatalogImage, Failed, LABEL, Loading, PAGE, Price, useLoad } from './ui';
 
 export function ProductPage() {
   const { id = '' } = useParams();
   const { lang } = useLang();
   const [state, retry] = useLoad((signal) => getProduct(id, lang, signal), [id, lang]);
   return (
-    <main id="main" tabIndex={-1} className="page">
+    <main id="main" tabIndex={-1} className={PAGE}>
       {state.status === 'loading' && <Loading />}
       {state.status === 'error' && <Failed notFound={state.notFound} retry={retry} />}
       {state.status === 'ready' && <ProductDetail key={state.data.id} product={state.data} />}
@@ -20,6 +24,7 @@ export function ProductPage() {
 }
 
 const unique = (values: string[]) => [...new Set(values)];
+const desktop = () => window.matchMedia?.('(min-width: 1024px)')?.matches ?? true;
 
 function ProductDetail({ product }: { product: Product }) {
   const { t, pick } = useLang();
@@ -27,47 +32,89 @@ function ProductDetail({ product }: { product: Product }) {
   const colors = unique(product.variants.map((v) => v.color));
   const [size, setSize] = useState(sizes.length === 1 ? sizes[0] : '');
   const [color, setColor] = useState(colors.length === 1 ? colors[0] : '');
+  const [guide, setGuide] = useState(false);
   const chosen = product.variants.find((v) => v.size === size && v.color === color);
   const name = pick(product.name_vi, product.name_en);
-  const sorted = [...product.images].sort((a, b) => a.sort_order - b.sort_order);
-  // The chosen colour's images come first; every image stays reachable (PR #28 review).
-  const images = color ? [...sorted.filter((i) => i.variant_color === color), ...sorted.filter((i) => i.variant_color !== color)] : sorted;
+  const images = [...product.images].sort((a, b) => a.sort_order - b.sort_order);
+  // Exact match on the variant colour, as in WEB-01 (Review Focus 4): no case folding.
+  const swatch = (c: string) => images.find((i) => i.variant_color === c);
+  const exists = (s: string, c: string) => product.variants.some((v) => v.size === s && v.color === c);
 
   return (
-    <article className="product">
-      <Gallery key={color} images={images.map((i) => ({ assetId: i.asset_id, alt: pick(i.alt_vi, i.alt_en) || name }))} fallbackAlt={name} />
-      <div className="product-info">
-        <h1>{name}</h1>
-        {chosen ? <Price min={chosen.effective_price} max={chosen.effective_price} /> : <Price min={product.min_price} max={product.max_price} />}
+    <article className="grid gap-8 lg:grid-cols-[1.4fr_1fr] lg:gap-12">
+      <Gallery images={images.map((i) => ({ assetId: i.asset_id, alt: pick(i.alt_vi, i.alt_en) || name, color: i.variant_color }))}
+        fallbackAlt={name} focusColor={color} />
+      <div data-testid="product-info" className="grid content-start gap-6 self-start lg:sticky lg:top-20">
+        <div className="grid gap-2">
+          <Link to={`/products?category_id=${product.category.id}`} className="text-xs font-semibold tracking-[0.02em] text-muted uppercase hover:underline">
+            {product.category.name}
+          </Link>
+          <h1 className="text-2xl font-bold tracking-[-0.02em] break-words uppercase lg:text-3xl">{name}</h1>
+          {chosen ? <Price min={chosen.effective_price} max={chosen.effective_price} className="text-lg" />
+            : <Price min={product.min_price} max={product.max_price} className="text-lg" />}
+        </div>
+
         <fieldset>
-          <legend>{t('size')}</legend>
-          <Options values={sizes} selected={size} name="size" onSelect={(s) => {
-            // Every size stays reachable; a colour that does not exist in the new size is cleared (review 1).
-            setSize(s);
-            if (color && !product.variants.some((v) => v.size === s && v.color === color)) setColor('');
-          }} />
+          <legend className={`${LABEL} mb-2`}>{color ? `${t('color')}: ${color}` : t('color')}</legend>
+          <div className="flex flex-wrap gap-2">
+            {colors.map((c) => {
+              const image = swatch(c);
+              return (
+                <label key={c} className={`cursor-pointer border has-checked:outline-2 has-checked:outline-offset-2 has-checked:outline-fg has-focus-visible:outline-2 has-focus-visible:outline-focus ${image ? 'w-12 border-transparent' : 'min-h-11 border-line px-4 has-checked:border-fg'} grid place-items-center`}>
+                  <input type="radio" name="color" value={c} checked={color === c} className="sr-only" onChange={() => {
+                    setColor(c);
+                    if (size && !exists(size, c)) setSize('');
+                  }} />
+                  {image ? <CatalogImage assetId={image.asset_id} alt={c} /> : <span className="text-sm">{c}</span>}
+                </label>
+              );
+            })}
+          </div>
         </fieldset>
+
         <fieldset>
-          <legend>{t('color')}</legend>
-          <Options values={colors} selected={color} name="color" onSelect={(c) => {
-            setColor(c);
-            if (size && !product.variants.some((v) => v.color === c && v.size === size)) setSize('');
-          }} />
+          <div className="mb-2 flex items-center justify-between">
+            <legend className={LABEL}>{t('size')}</legend>
+            {product.size_guide && (
+              <button type="button" onClick={() => setGuide(true)} className={`${LABEL} min-h-11 underline underline-offset-4`}>{t('sizeGuide')}</button>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {sizes.map((s) => (
+              // Every size stays selectable (WEB-01 review 1); one that does not exist in the chosen colour is struck through.
+              <label key={s} className={`grid min-h-11 min-w-11 cursor-pointer place-items-center border px-3 has-checked:border-fg has-checked:bg-fg has-checked:text-bg has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-focus ${color && !exists(s, color) ? 'border-line text-muted line-through' : 'border-fg'}`}>
+                <input type="radio" name="size" value={s} checked={size === s} className="sr-only" onChange={() => {
+                  setSize(s);
+                  if (color && !exists(s, color)) setColor('');
+                }} />
+                <span className="text-sm font-semibold">{s}</span>
+              </label>
+            ))}
+          </div>
         </fieldset>
-        <p aria-live="polite" className="stock">{chosen ? <Stock variant={chosen} /> : t('chooseVariant')}</p>
-        <p className="note">{t('stockNote')}</p>
-        <div className="description" dangerouslySetInnerHTML={{ __html: pick(product.description_vi, product.description_en) }} />
-        {product.size_guide && (
-          <section aria-labelledby="size-guide">
-            <h2 id="size-guide">{t('sizeGuide')}</h2>
-            <div dangerouslySetInnerHTML={{ __html: product.size_guide.guideline_html }} />
-            <table>
-              <thead><tr>{product.size_guide.table.columns.map((c) => <th key={c} scope="col">{c}</th>)}</tr></thead>
-              <tbody>{product.size_guide.table.rows.map((row, i) => <tr key={i}>{row.map((cell, j) => <td key={j}>{cell}</td>)}</tr>)}</tbody>
-            </table>
-          </section>
-        )}
+
+        <div className="grid gap-1">
+          <p data-testid="stock" aria-live="polite" className="font-semibold">{chosen ? <Stock variant={chosen} /> : t('chooseVariant')}</p>
+          <p className="text-sm text-muted">{t('stockNote')}</p>
+        </div>
+
+        <details open={desktop()} className="group border-t border-fg pt-4">
+          <summary className={`${LABEL} flex min-h-11 cursor-pointer list-none items-center justify-between`}>
+            {t('description')}<ChevronDown className="size-5 transition group-open:rotate-180" />
+          </summary>
+          <div className="pt-2 text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: pick(product.description_vi, product.description_en) }} />
+        </details>
       </div>
+
+      {product.size_guide && (
+        <Drawer open={guide} onClose={() => setGuide(false)} title={t('sizeGuide')}>
+          <div className="mb-4 text-sm" dangerouslySetInnerHTML={{ __html: product.size_guide.guideline_html }} />
+          <table className="w-full border-collapse text-sm">
+            <thead><tr>{product.size_guide.table.columns.map((c) => <th key={c} scope="col" className="border-b border-fg py-2 text-left">{c}</th>)}</tr></thead>
+            <tbody>{product.size_guide.table.rows.map((row, i) => <tr key={i}>{row.map((cell, j) => <td key={j} className="border-b border-line py-2">{cell}</td>)}</tr>)}</tbody>
+          </table>
+        </Drawer>
+      )}
     </article>
   );
 }
@@ -76,50 +123,4 @@ function Stock({ variant }: { variant: Variant }) {
   const { t } = useLang();
   if (variant.available === null) return <>{t('unknownStock')}</>;
   return <>{variant.available > 0 ? t('inStock') : t('outOfStock')}</>;
-}
-
-/** Native radio inputs: arrow keys move inside a group; every value comes from an ACTIVE variant, so all stay enabled. */
-function Options({ values, selected, onSelect, name }: {
-  values: string[]; selected: string; onSelect: (v: string) => void; name: string;
-}) {
-  return (
-    <div className="options">
-      {values.map((value) => (
-        <label key={value} className="option">
-          <input type="radio" name={name} value={value} checked={selected === value} onChange={() => onSelect(value)} />
-          <span>{value}</span>
-        </label>
-      ))}
-    </div>
-  );
-}
-
-function Gallery({ images, fallbackAlt }: { images: { assetId: string; alt: string }[]; fallbackAlt: string }) {
-  const { t } = useLang();
-  const dialog = useRef<HTMLDialogElement>(null);
-  const opener = useRef<HTMLButtonElement>(null);
-  const [index, setIndex] = useState(0);
-  const current = images[index];
-  if (!current) return <div className="gallery"><CatalogImage assetId={null} alt={fallbackAlt} kind="image" /></div>;
-  const { assetId, alt } = current;
-  return (
-    <div className="gallery">
-      <button type="button" ref={opener} className="zoom" aria-label={`${t('zoom')}: ${alt}`} onClick={() => dialog.current?.showModal?.()}>
-        <CatalogImage key={assetId} assetId={assetId} alt={alt} kind="image" />
-      </button>
-      <dialog ref={dialog} aria-label={alt} onClose={() => opener.current?.focus()}>
-        <img src={imageUrl(assetId, 'image')} alt={alt} />
-        <form method="dialog"><button type="submit">{t('close')}</button></form>
-      </dialog>
-      {images.length > 1 && (
-        <div className="thumbs" role="group" aria-label={t('images')}>
-          {images.map((image, i) => (
-            <button key={image.assetId} type="button" aria-pressed={i === index} aria-label={`${i + 1}: ${image.alt}`} onClick={() => setIndex(i)}>
-              <CatalogImage assetId={image.assetId} alt="" />
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
 }

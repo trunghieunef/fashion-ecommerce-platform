@@ -17,7 +17,7 @@ it('asks for a variant, then shows its price and the three stock states', async 
   mockFetch((path) => (path.startsWith('/products/') ? json(product) : null));
   const container = await render(PATH);
   expect(container.querySelector('h1')!.textContent).toBe('Áo thun mẫu');
-  expect(container.querySelector('.stock')!.textContent).toBe('Chọn size và màu');
+  expect(container.querySelector('[data-testid="stock"]')!.textContent).toBe('Chọn size và màu');
   expect(container.textContent).toContain('Tồn kho chỉ để tham khảo');
 
   await choose(container, 'size', 'L');
@@ -27,13 +27,13 @@ it('asks for a variant, then shows its price and the three stock states', async 
   await choose(container, 'size', 'L');
   expect((container.querySelector('input[name="color"][value="Red"]') as HTMLInputElement).checked).toBe(false);
   await choose(container, 'color', 'Blue');
-  expect(container.querySelector('.stock')!.textContent).toBe('Hết hàng');
-  expect(container.querySelector('.product-info [data-testid="price"]')!.textContent).toMatch(/^120\.000\s₫$/);
+  expect(container.querySelector('[data-testid="stock"]')!.textContent).toBe('Hết hàng');
+  expect(container.querySelector('[data-testid="product-info"] [data-testid="price"]')!.textContent).toMatch(/^120\.000\s₫$/);
 
   await choose(container, 'size', 'M');
-  expect(container.querySelector('.stock')!.textContent).toBe('Còn hàng (tham khảo)');
+  expect(container.querySelector('[data-testid="stock"]')!.textContent).toBe('Còn hàng (tham khảo)');
   await choose(container, 'color', 'Red');
-  expect(container.querySelector('.stock')!.textContent).toBe('Chưa rõ tồn kho');
+  expect(container.querySelector('[data-testid="stock"]')!.textContent).toBe('Chưa rõ tồn kho');
 });
 
 it('renders the size guide table and sends Accept-Language, refetching in English', async () => {
@@ -41,8 +41,10 @@ it('renders the size guide table and sends Accept-Language, refetching in Englis
   const container = await render(PATH);
   const detailCalls = () => calls.filter((c) => c.url.includes('/products/'));
   expect(detailCalls()[0].lang).toBe('vi');
-  expect(byText(container, 'h2', 'Bảng size')).toBeDefined();
-  expect([...container.querySelectorAll('th')].map((th) => th.textContent)).toEqual(['Size', 'Ngực (cm)']);
+  await click(byText(container, 'main button', 'Bảng size'));
+  const guide = container.querySelector('main dialog[open]')!;
+  expect(byText(guide, 'h2', 'Bảng size')).toBeDefined();
+  expect([...guide.querySelectorAll('th')].map((th) => th.textContent)).toEqual(['Size', 'Ngực (cm)']);
   await click(byText(container, 'button', 'English'));
   expect(detailCalls().at(-1)!.lang).toBe('en');
   expect(container.querySelector('h1')!.textContent).toBe('Sample tee');
@@ -52,9 +54,9 @@ it('renders the size guide table and sends Accept-Language, refetching in Englis
 it('opens the zoom dialog from the image button', async () => {
   mockFetch((path) => (path.startsWith('/products/') ? json(product) : null));
   const container = await render(PATH);
-  const dialog = container.querySelector('main dialog') as HTMLDialogElement;
+  const dialog = container.querySelector('[data-testid="zoom"]') as HTMLDialogElement;
   dialog.showModal = vi.fn(() => dialog.setAttribute('open', ''));
-  await click(container.querySelector('button.zoom'));
+  await click(container.querySelector('button[aria-label^="Phóng to ảnh"]'));
   expect(dialog.showModal).toHaveBeenCalled();
   expect(dialog.querySelector('img')!.getAttribute('src')).toBe('/api/v1/catalog/images/66666666-6666-4666-8666-666666666666?kind=image');
 });
@@ -66,10 +68,10 @@ it('shows not found for a 404 and keeps the image alt when it fails to load', as
   vi.unstubAllGlobals();
   mockFetch((path) => (path.startsWith('/products/') ? json(product) : null));
   const container = await render(PATH);
-  const img = container.querySelector('.gallery img')!;
+  const img = container.querySelector('[data-testid="gallery"] img')!;
   await act(async () => { img.dispatchEvent(new Event('error')); });
   await flush();
-  expect(container.querySelector('.gallery [role="img"]')!.getAttribute('aria-label')).toBe('Áo thun mẫu');
+  expect(container.querySelector('[data-testid="gallery"] [role="img"]')!.getAttribute('aria-label')).toBe('Áo thun mẫu');
 });
 
 it('partial size/colour matrix never gets stuck (review 1)', async () => {
@@ -86,7 +88,7 @@ it('partial size/colour matrix never gets stuck (review 1)', async () => {
   await choose(container, 'size', 'M');
   expect((container.querySelector('input[name="color"][value="Red"]') as HTMLInputElement).checked).toBe(false);
   await choose(container, 'color', 'Blue');
-  expect(container.querySelector('.stock')!.textContent).toBe('Còn hàng (tham khảo)');
+  expect(container.querySelector('[data-testid="stock"]')!.textContent).toBe('Còn hàng (tham khảo)');
 });
 
 it('every image is reachable and the zoom shows the chosen one (PR #28 P2)', async () => {
@@ -98,14 +100,62 @@ it('every image is reachable and the zoom shows the chosen one (PR #28 P2)', asy
   ] } };
   mockFetch((path) => (path.startsWith('/products/') ? json(many) : null));
   const container = await render(PATH);
-  const thumbs = () => [...container.querySelectorAll('.thumbs button')] as HTMLButtonElement[];
-  expect(thumbs()).toHaveLength(4);
-  await click(thumbs()[1]);
-  expect(thumbs()[1].getAttribute('aria-pressed')).toBe('true');
-  expect(container.querySelector('dialog img')!.getAttribute('src')).toContain('666666666662');
+  // TASK:WEB-01b: every image is in the gallery (no thumbnail strip); each one opens the zoom on itself.
+  const zooms = () => [...container.querySelectorAll('[data-testid="gallery"] button[aria-label^="Phóng to ảnh"]')] as HTMLButtonElement[];
+  expect(zooms()).toHaveLength(4);
+  const zoomed = () => container.querySelector('[data-testid="zoom"] img')!.getAttribute('src');
+  await click(zooms()[1]);
+  expect(zoomed()).toContain('666666666662');
   await choose(container, 'color', 'Red');
-  // Colour choice shows that colour's images first; both red images stay reachable.
-  expect(container.querySelector('dialog img')!.getAttribute('src')).toContain('666666666663');
-  await click(thumbs().find((b) => b.getAttribute('aria-label')?.includes('Đỏ sau')));
-  expect(container.querySelector('dialog img')!.getAttribute('src')).toContain('666666666664');
+  expect(zooms()).toHaveLength(4);
+  await click(zooms().find((b) => b.getAttribute('aria-label')?.includes('Đỏ sau')));
+  expect(zoomed()).toContain('666666666664');
+});
+
+// TASK:WEB-01b — swatches, legend, size-guide drawer, breadcrumb.
+
+const withImages = (images: unknown[]) => ({ ...product, data: { ...product.data, images } });
+
+it('colour swatch is a thumbnail when an image has that variant_color, a text pill otherwise', async () => {
+  mockFetch((path) => (path.startsWith('/products/') ? json(withImages([
+    { asset_id: '66666666-6666-4666-8666-666666666671', alt_vi: 'Xanh', alt_en: 'Blue', variant_color: 'Blue', sort_order: 0 },
+    // Matching is exact (as in WEB-01): a lower-case "red" image does not illustrate the "Red" variant.
+    { asset_id: '66666666-6666-4666-8666-666666666672', alt_vi: 'Đỏ', alt_en: 'Red', variant_color: 'red', sort_order: 1 },
+  ])) : null));
+  const container = await render(PATH);
+  const swatch = (color: string) => container.querySelector(`input[name="color"][value="${color}"]`)!.closest('label')!;
+  const blue = swatch('Blue').querySelector('img')!;
+  expect(blue.getAttribute('src')).toBe('/api/v1/catalog/images/66666666-6666-4666-8666-666666666671?kind=thumb');
+  expect(blue.getAttribute('alt')).toBe('Blue');
+  expect(swatch('Red').querySelector('img, [role="img"]')).toBeNull();
+  expect(swatch('Red').textContent).toBe('Red');
+});
+
+it('legend shows the chosen colour', async () => {
+  mockFetch((path) => (path.startsWith('/products/') ? json(product) : null));
+  const container = await render(PATH);
+  const legend = () => container.querySelector('input[name="color"]')!.closest('fieldset')!.querySelector('legend')!.textContent;
+  expect(legend()).toBe('Màu');
+  await choose(container, 'color', 'Red');
+  expect(legend()).toBe('Màu: Red');
+});
+
+it('size guide opens in a drawer and is hidden without a guide', async () => {
+  mockFetch((path) => (path.startsWith('/products/') ? json(product) : null));
+  const container = await render(PATH);
+  await click(byText(container, 'main button', 'Bảng size'));
+  const open = container.querySelector('main dialog[open]')!;
+  expect(byText(open, 'th', 'Ngực (cm)')).toBeDefined();
+  document.body.innerHTML = '';
+  vi.unstubAllGlobals();
+  mockFetch((path) => (path.startsWith('/products/') ? json({ ...product, data: { ...product.data, size_guide: null } }) : null));
+  const none = await render(PATH);
+  expect(byText(none, 'main button', 'Bảng size')).toBeUndefined();
+});
+
+it('breadcrumb links to the category', async () => {
+  mockFetch((path) => (path.startsWith('/products/') ? json(product) : null));
+  const container = await render(PATH);
+  const crumb = container.querySelector('[data-testid="product-info"] a[href="/products?category_id=44444444-4444-4444-8444-444444444444"]');
+  expect(crumb?.textContent).toBe('Áo');
 });

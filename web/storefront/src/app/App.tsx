@@ -4,7 +4,7 @@ import { CollectionPage } from '../catalog/CollectionPage';
 import { HomePage } from '../catalog/HomePage';
 import { ListingPage } from '../catalog/ListingPage';
 import { ProductPage } from '../catalog/ProductPage';
-import { NotFound } from '../catalog/ui';
+import { NotFound, PAGE } from '../catalog/ui';
 import { LangProvider, useLang } from '../i18n';
 import { Header } from './Header';
 import './styles.css';
@@ -29,7 +29,7 @@ export function AppRoutes() {
         <Route path="/search" element={<ListingPage />} />
         <Route path="/products/:id" element={<ProductPage />} />
         <Route path="/collections/:slug" element={<CollectionPage />} />
-        <Route path="*" element={<main id="main" tabIndex={-1} className="page"><NotFound /></main>} />
+        <Route path="*" element={<main id="main" tabIndex={-1} className={PAGE}><NotFound /></main>} />
       </Routes>
     </>
   );
