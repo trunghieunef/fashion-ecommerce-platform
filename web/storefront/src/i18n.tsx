@@ -97,6 +97,13 @@ const STRINGS = {
     errCredentials: 'Email hoặc mật khẩu không đúng.',
     errRateLimited: 'Bạn thử quá nhiều lần. Vui lòng thử lại sau ít phút.',
     errEmailTaken: 'Email này đã có tài khoản.',
+    forgotIntro: 'Nhập email bạn dùng để đăng ký. Chúng tôi sẽ gửi hướng dẫn đặt lại mật khẩu.',
+    forgotSent: 'Nếu email này có tài khoản, chúng tôi đã gửi hướng dẫn đặt lại mật khẩu.',
+    sendResetLink: 'Gửi hướng dẫn',
+    backToSignIn: 'Quay lại đăng nhập',
+    newPassword: 'Mật khẩu mới',
+    resetInvalid: 'Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn.',
+    passwordChanged: 'Mật khẩu đã đổi. Vui lòng đăng nhập lại.',
   },
   en: {
     store: 'Fashion Store',
@@ -191,6 +198,13 @@ const STRINGS = {
     errCredentials: 'Incorrect email or password.',
     errRateLimited: 'Too many attempts. Please try again in a few minutes.',
     errEmailTaken: 'This email already has an account.',
+    forgotIntro: 'Enter the email you signed up with. We will send password reset instructions.',
+    forgotSent: 'If this email has an account, we have sent password reset instructions.',
+    sendResetLink: 'Send instructions',
+    backToSignIn: 'Back to sign in',
+    newPassword: 'New password',
+    resetInvalid: 'This password reset link is invalid or has expired.',
+    passwordChanged: 'Password changed. Please sign in again.',
   },
 } as const;
 

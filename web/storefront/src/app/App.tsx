@@ -1,8 +1,10 @@
 import { BrowserRouter, Route, Routes } from 'react-router';
 
 import { AuthProvider } from '../auth/AuthProvider';
+import { ForgotPasswordPage } from '../auth/ForgotPasswordPage';
 import { LoginPage } from '../auth/LoginPage';
 import { RegisterPage } from '../auth/RegisterPage';
+import { ResetPasswordPage } from '../auth/ResetPasswordPage';
 import { RequireAuth } from '../auth/RequireAuth';
 
 import { CollectionPage } from '../catalog/CollectionPage';
@@ -42,8 +44,8 @@ export function AppRoutes() {
         <Route path="/collections/:slug" element={<CollectionPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
-        <Route path="/forgot-password" element={<Pending title="forgotPassword" />} />
-        <Route path="/reset-password" element={<Pending title="resetPassword" />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/account" element={<RequireAuth><Pending title="account" /></RequireAuth>} />
         <Route path="/account/addresses" element={<RequireAuth><Pending title="addresses" /></RequireAuth>} />
         <Route path="*" element={<main id="main" tabIndex={-1} className={PAGE}><NotFound /></main>} />
