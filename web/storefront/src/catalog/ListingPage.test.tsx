@@ -189,3 +189,17 @@ it('the toolbar button counts active filters, not the query or sort', async () =
   const container = await render('/products?size=M&sort=PRICE_ASC');
   expect(byText(container, 'main button', /^Bộ lọc/)!.textContent).toBe('Bộ lọc (1)');
 });
+
+it('applying a field on blur keeps focus on the field Tab moved to (final review)', async () => {
+  mockFetch((path) => passthrough(path) ?? json(products));
+  const container = await render('/products');
+  await click(byText(container, 'main button', /^Bộ lọc/));
+  const dialog = container.querySelector('main dialog') as HTMLDialogElement;
+  const size = dialog.querySelector('[name="size"]') as HTMLInputElement;
+  const color = dialog.querySelector('[name="color"]') as HTMLInputElement;
+  await act(async () => { size.focus(); size.value = 'M'; color.focus(); });
+  await flush();
+  expect(container.querySelector('ul[aria-label="Bộ lọc đang chọn"]')).not.toBeNull();
+  expect(color.isConnected).toBe(true);
+  expect(document.activeElement).toBe(color);
+});

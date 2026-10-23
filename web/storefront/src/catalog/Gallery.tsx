@@ -21,7 +21,8 @@ export function Gallery({ images, fallbackAlt, focusColor }: { images: GalleryIm
   useEffect(() => {
     if (!focusColor) return;
     const index = images.findIndex((image) => image.color === focusColor);
-    if (index >= 0) strip.current?.children[index]?.scrollIntoView?.({ block: 'nearest', inline: 'start', behavior: 'smooth' });
+    const child = strip.current?.children[index] as HTMLElement | undefined;
+    if (child) strip.current?.scrollTo?.({ left: child.offsetLeft, behavior: 'smooth' });
   }, [focusColor]);
 
   if (images.length === 0)

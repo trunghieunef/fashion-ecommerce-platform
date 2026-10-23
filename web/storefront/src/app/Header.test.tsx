@@ -111,3 +111,10 @@ it('the skip link targets main', async () => {
   expect(container.querySelector('a[href="#main"]')?.textContent).toBe('Bỏ qua tới nội dung chính');
   expect(document.getElementById('main')?.tagName).toBe('MAIN');
 });
+
+it('the collections panel loads under StrictMode (final review: aborted controller)', async () => {
+  mockFetch(listing);
+  const container = await render('/products', 'vi', { strict: true });
+  await click(byText(nav(container), 'button', 'Bộ sưu tập'));
+  expect(nav(container).querySelector('a[href="/collections/he-2026"]')?.textContent).toBe('Hè 2026 (mẫu)');
+});

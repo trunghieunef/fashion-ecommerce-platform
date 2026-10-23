@@ -18,14 +18,19 @@ type Lazy = { status: 'idle' | 'loading' | 'error' } | { status: 'ready'; items:
 /** Collections are fetched the first time a menu needs them, not on every page view (spec 3.1). */
 function useLazyCollections(): [Lazy, () => void] {
   const [state, setState] = useState<Lazy>({ status: 'idle' });
-  const alive = useRef(new AbortController());
-  useEffect(() => () => alive.current.abort(), []);
+  const alive = useRef<AbortController | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    alive.current = controller;
+    return () => controller.abort();
+  }, []);
   function load() {
-    if (state.status === 'loading' || state.status === 'ready') return;
+    const controller = alive.current;
+    if (!controller || state.status === 'loading' || state.status === 'ready') return;
     setState({ status: 'loading' });
-    listCollections(alive.current.signal)
+    listCollections(controller.signal)
       .then((page) => setState({ status: 'ready', items: page.items }))
-      .catch(() => { if (!alive.current.signal.aborted) setState({ status: 'error' }); });
+      .catch(() => { if (!controller.signal.aborted) setState({ status: 'error' }); });
   }
   return [state, load];
 }

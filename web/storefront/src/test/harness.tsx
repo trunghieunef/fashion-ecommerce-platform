@@ -1,5 +1,5 @@
 // TASK:WEB-01 test harness: renders the real routes in jsdom with a scripted fetch (fixtures match catalog.yaml).
-import { act } from 'react';
+import { act, StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router';
 import { vi } from 'vitest';
@@ -37,6 +37,8 @@ export function mockFetch(handler: (path: string) => Response | Promise<Response
     const signal = init?.signal;
     return new Promise<Response>((resolve, reject) => {
       // honourAbort=false models a response already in flight when abort fires (it still resolves).
+      // Like real fetch, an already-aborted signal rejects at once (final review: StrictMode reused an aborted controller).
+      if (honourAbort && signal?.aborted) return reject(new DOMException('aborted', 'AbortError'));
       if (honourAbort) signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
       const path = input.replace('/api/v1/catalog', '');
       Promise.resolve().then(() => handler(path) ?? fallback(path)).then(resolve, reject);
@@ -59,16 +61,18 @@ export async function flush() {
   for (let i = 0; i < 5; i++) await act(async () => { await Promise.resolve(); });
 }
 
-export async function render(path: string, lang: Lang = 'vi') {
+export async function render(path: string, lang: Lang = 'vi', { strict = false } = {}) {
   const container = document.createElement('div');
   document.body.appendChild(container);
-  await act(async () => createRoot(container).render(
+  const app = (
     <LangProvider initial={lang}>
       <MemoryRouter initialEntries={[path]}>
         <AppRoutes />
       </MemoryRouter>
-    </LangProvider>,
-  ));
+    </LangProvider>
+  );
+  // strict: main.tsx renders under StrictMode (mount → cleanup → mount), which unit tests must be able to reproduce.
+  await act(async () => createRoot(container).render(strict ? <StrictMode>{app}</StrictMode> : app));
   await flush();
   return container;
 }

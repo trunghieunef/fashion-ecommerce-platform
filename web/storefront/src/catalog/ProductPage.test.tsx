@@ -165,3 +165,31 @@ it('a single image fills the gallery instead of half of a two-column grid', asyn
   const container = await render(PATH);
   expect(container.querySelector('[data-testid="gallery"] ul')!.className).not.toContain('lg:grid-cols-2');
 });
+
+it('the size group is named by a legend that is the fieldset\'s first child (final review)', async () => {
+  mockFetch((path) => (path.startsWith('/products/') ? json(product) : null));
+  const container = await render(PATH);
+  const fieldset = container.querySelector('input[name="size"]')!.closest('fieldset')!;
+  expect(fieldset.firstElementChild?.tagName).toBe('LEGEND');
+  expect(fieldset.firstElementChild?.textContent).toBe('Size');
+});
+
+it('choosing a colour scrolls the gallery strip, never the page (final review)', async () => {
+  const scrollIntoView = vi.fn();
+  const scrollTo = vi.fn();
+  Element.prototype.scrollIntoView = scrollIntoView;
+  HTMLElement.prototype.scrollTo = scrollTo as unknown as HTMLElement['scrollTo'];
+  try {
+    mockFetch((path) => (path.startsWith('/products/') ? json({ ...product, data: { ...product.data, images: [
+      { asset_id: '66666666-6666-4666-8666-666666666681', alt_vi: 'Xanh', alt_en: 'Blue', variant_color: 'Blue', sort_order: 0 },
+      { asset_id: '66666666-6666-4666-8666-666666666682', alt_vi: 'Đỏ', alt_en: 'Red', variant_color: 'Red', sort_order: 1 },
+    ] } }) : null));
+    const container = await render(PATH);
+    await choose(container, 'color', 'Red');
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    expect(scrollTo).toHaveBeenCalled();
+  } finally {
+    delete (Element.prototype as Partial<Element>).scrollIntoView;
+    delete (HTMLElement.prototype as Partial<HTMLElement>).scrollTo;
+  }
+});

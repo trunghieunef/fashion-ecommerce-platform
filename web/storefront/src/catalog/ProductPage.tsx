@@ -72,13 +72,12 @@ function ProductDetail({ product }: { product: Product }) {
           </div>
         </fieldset>
 
-        <fieldset>
-          <div className="mb-2 flex items-center justify-between">
-            <legend className={LABEL}>{t('size')}</legend>
-            {product.size_guide && (
-              <button type="button" onClick={() => setGuide(true)} className={`${LABEL} min-h-11 underline underline-offset-4`}>{t('sizeGuide')}</button>
-            )}
-          </div>
+        <fieldset className="relative">
+          <legend className={`${LABEL} mb-2 flex min-h-11 items-center`}>{t('size')}</legend>
+          {product.size_guide && (
+            <button type="button" onClick={() => setGuide(true)}
+              className={`${LABEL} absolute top-0 right-0 min-h-11 underline underline-offset-4`}>{t('sizeGuide')}</button>
+          )}
           <div className="flex flex-wrap gap-2">
             {sizes.map((s) => (
               // Every size stays selectable (WEB-01 review 1); one that does not exist in the chosen colour is struck through.

@@ -17,6 +17,18 @@ async function switchToEnglish(page: Page) {
   if (isMobile(page)) await page.getByRole('button', { name: 'Menu' }).click();
   await page.getByRole('button', { name: 'English' }).click();
 }
+/** Opens "Bộ sưu tập" (desktop mega-menu panel or mobile menu accordion); returns where its links render. */
+async function openCollections(page: Page) {
+  if (isMobile(page)) {
+    await page.getByRole('button', { name: 'Menu' }).click();
+    const menu = page.getByRole('dialog', { name: 'Menu' });
+    await menu.getByText('Bộ sưu tập', { exact: true }).click();
+    return menu;
+  }
+  const nav = page.getByRole('navigation', { name: 'Điều hướng chính' });
+  await nav.getByRole('button', { name: 'Bộ sưu tập' }).click();
+  return nav;
+}
 const noHorizontalScroll = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
 
 // TASK:WEB-01 on the real chain (storefront -> Gateway -> catalog -> PostgreSQL), desktop and 360px projects.
@@ -25,6 +37,12 @@ test('home, listing with drawer filters and chips, detail by keyboard and langua
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Hàng mới' })).toBeVisible();
   await expect(page.getByText('Không thể tải dữ liệu')).toHaveCount(0);
+
+  // TASK:WEB-01b: the lazily loaded collections menu settles (links or "no collections"), never stuck loading.
+  const collections = await openCollections(page);
+  await expect(collections.getByText('Đang tải…')).toHaveCount(0);
+  await expect(collections.getByText('Không thể tải dữ liệu')).toHaveCount(0);
+  if (isMobile(page)) await page.keyboard.press('Escape');
 
   await goToProducts(page);
   await expect(page.getByRole('heading', { level: 1, name: 'Tất cả sản phẩm' })).toBeVisible();
@@ -75,6 +93,27 @@ test('detail with contract fixtures: keyboard variant choice, stock states, imag
   await page.goto('/');
   await expect(page.getByRole('heading', { level: 1, name: 'Hè 2026 (mẫu)' })).toBeVisible();
   await shot('home');
+
+  // Category menu from categories.json ("Áo" → "Áo thun") and the lazy collections list.
+  if (isMobile(page)) {
+    await page.getByRole('button', { name: 'Menu' }).click();
+    const menu = page.getByRole('dialog', { name: 'Menu' });
+    await menu.getByText('Áo', { exact: true }).click();
+    await expect(menu.getByRole('link', { name: 'Áo thun' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+  } else {
+    const nav = page.getByRole('navigation', { name: 'Điều hướng chính' });
+    const tops = nav.getByRole('button', { name: 'Áo', exact: true });
+    await tops.focus();
+    await expect(nav.getByRole('link', { name: 'Áo thun' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(tops).toHaveAttribute('aria-expanded', 'false');
+    await expect(tops).toBeFocused();
+  }
+  const collections = await openCollections(page);
+  await expect(collections.getByRole('link', { name: 'Hè 2026 (mẫu)' })).toBeVisible();
+  if (isMobile(page)) await page.keyboard.press('Escape');
 
   await page.goto('/products?size=M');
   await expect(page.getByRole('button', { name: 'Bỏ lọc Size: M' })).toBeVisible();
