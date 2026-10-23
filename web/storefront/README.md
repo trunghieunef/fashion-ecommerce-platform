@@ -25,6 +25,25 @@ Drawer dùng chung (`src/ui/Drawer.tsx`) là `<dialog>` native (`showModal`): fo
 | Drawer bộ lọc | `src/catalog/FilterDrawer.tsx` |
 | Gallery + zoom | `src/catalog/Gallery.tsx` |
 
+## Phiên đăng nhập và tài khoản (WEB-02a)
+
+[Spec](../../docs/superpowers/specs/2026-10-23-web-02a-session-account-design.md) ·
+[evidence](../../docs/evidence/web-02a-local-2026-10-24.md). Trạng thái: **chờ review/nghiệm thu**.
+
+- Access token chỉ ở biến module `src/auth/session.ts` (không storage); tải trang → một lần `POST /auth/refresh` (cookie
+  HttpOnly) để khôi phục phiên. Refresh single-flight: một Promise trong tab, bọc Web Lock `storefront.auth.refresh` giữa
+  các tab (trình duyệt không có Web Locks → chỉ trong tab). `authRequest` gắn Bearer, refresh trước khi token còn < 30 s,
+  sau 401 refresh một lần và thử lại một lần. Đăng nhập/đăng xuất đồng bộ giữa tab qua `BroadcastChannel('storefront.auth')`.
+- Route: `/login?next=` (chỉ nhận đường dẫn nội bộ), `/register`, `/forgot-password`, `/reset-password#token=…` (đọc token
+  rồi xóa fragment), `/account` và `/account/addresses` (bọc `RequireAuth`). Header có nút tài khoản.
+- Form dùng `src/ui/form.tsx`: label luôn hiện, lỗi tại ô khi rời ô/submit, hộp tóm tắt lỗi nhận focus, nút hiện/ẩn mật
+  khẩu (không chặn paste), nút submit có trạng thái đang gửi, thông báo trạng thái tự ẩn 5 s.
+- Đổi mật khẩu: server thu hồi mọi phiên; trang đăng nhập (`state.signOut`) kết thúc phiên local khi tới nơi.
+- Tỉnh/phường lấy từ **danh mục mẫu** `src/account/geo.sample.json` (đánh dấu "mẫu") cho tới khi O04 chốt nguồn; mã ngoài
+  danh mục hiển thị thô.
+- Local: dùng **`http://localhost:4173`**. Gateway chỉ nhận request ghi có cookie từ origin trong `GATEWAY_ALLOWED_ORIGINS`
+  (mặc định `http://localhost:4173`); mở bằng `127.0.0.1` thì refresh bị 403 và phiên không khôi phục được.
+
 ## Màn hình
 
 | Path | Màn | API (same-origin qua Gateway) |
@@ -70,7 +89,8 @@ npm test --workspace @fashion/storefront -- --run      # Vitest + jsdom, fetch m
 npm run build --workspace @fashion/storefront
 npx playwright install chromium && npx playwright test  # stack thật, desktop + 360px
 
-# Không cần Docker: test fixture chạy trên build + vite preview, chụp home/listing/detail vào test-results/
+# Không cần Docker: test fixture chạy trên build + vite preview (WEB-01: chụp home/listing/detail vào test-results/;
+# WEB-02a: tests/e2e/web-02.spec.ts -g fixture)
 npm run build && (cd web/storefront && npx vite preview --port 4174 --strictPort &)
 PLAYWRIGHT_BASE_URL=http://127.0.0.1:4174 npx playwright test tests/e2e/web-01.spec.ts -g "contract fixtures"
 ```
