@@ -52,7 +52,7 @@ it('renders the size guide table and sends Accept-Language, refetching in Englis
 it('opens the zoom dialog from the image button', async () => {
   mockFetch((path) => (path.startsWith('/products/') ? json(product) : null));
   const container = await render(PATH);
-  const dialog = container.querySelector('dialog') as HTMLDialogElement;
+  const dialog = container.querySelector('main dialog') as HTMLDialogElement;
   dialog.showModal = vi.fn(() => dialog.setAttribute('open', ''));
   await click(container.querySelector('button.zoom'));
   expect(dialog.showModal).toHaveBeenCalled();

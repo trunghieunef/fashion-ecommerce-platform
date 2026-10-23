@@ -13,14 +13,14 @@ export function CollectionPage() {
       .then((d) => ({ items: d.products, cursor: d.next_cursor, head: { collection: d.collection, lookbook: d.lookbook } })),
     (cursor, signal) => getCollection(slug, cursor, signal).then((d) => ({ items: d.products, cursor: d.next_cursor })),
     slug);
-  if (state.status === 'loading') return <main className="page"><Loading /></main>;
+  if (state.status === 'loading') return <main id="main" tabIndex={-1} className="page"><Loading /></main>;
   if (state.status === 'error')
-    return <main className="page"><Failed notFound={state.error instanceof ApiError && state.error.status === 404} retry={retry} /></main>;
+    return <main id="main" tabIndex={-1} className="page"><Failed notFound={state.error instanceof ApiError && state.error.status === 404} retry={retry} /></main>;
   const { collection, lookbook } = state.head;
   const products = state.items;
   const name = pick(collection.name_vi, collection.name_en);
   return (
-    <main className="page">
+    <main id="main" tabIndex={-1} className="page">
       <h1>{name}</h1>
       {lookbook.length > 0 && (
         <section aria-labelledby="lookbook">

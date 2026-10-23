@@ -29,7 +29,7 @@ export function ListingPage() {
   const searching = Boolean(filters.q);
   const filtered = Object.keys(filters).some((k) => k !== 'sort');
   return (
-    <main className="page">
+    <main id="main" tabIndex={-1} className="page">
       <h1>{searching ? `${t('search')}: ${filters.q}` : t('products')}</h1>
       <FilterForm filters={filters} onApply={(next) => setParams(next)} pick={pick} />
       {state.status === 'loading' && <Loading />}

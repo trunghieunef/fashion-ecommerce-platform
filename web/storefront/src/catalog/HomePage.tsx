@@ -10,7 +10,7 @@ export function HomePage() {
   const [collections, retryCollections] = useLoad(listCollections, []);
   const [products, retryProducts] = useLoad((signal) => listProducts({ sort: 'NEWEST' }, undefined, signal, 8), []);
   return (
-    <main className="page">
+    <main id="main" tabIndex={-1} className="page">
       <h1 className="visually-hidden">{t('store')}</h1>
       <section aria-labelledby="collections">
         <h2 id="collections">{t('collections')}</h2>

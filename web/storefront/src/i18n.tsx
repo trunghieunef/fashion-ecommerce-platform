@@ -55,6 +55,12 @@ const STRINGS = {
     query: 'Từ khóa',
     images: 'Ảnh sản phẩm',
     tag: 'Nhãn',
+    skipToContent: 'Bỏ qua tới nội dung chính',
+    menu: 'Menu',
+    openSearch: 'Mở tìm kiếm',
+    closeSearch: 'Đóng tìm kiếm',
+    allProducts: 'Tất cả sản phẩm',
+    viewAll: 'Xem tất cả',
   },
   en: {
     store: 'Fashion Store',
@@ -107,6 +113,12 @@ const STRINGS = {
     query: 'Keyword',
     images: 'Product images',
     tag: 'Tag',
+    skipToContent: 'Skip to main content',
+    menu: 'Menu',
+    openSearch: 'Open search',
+    closeSearch: 'Close search',
+    allProducts: 'All products',
+    viewAll: 'View all',
   },
 } as const;
 

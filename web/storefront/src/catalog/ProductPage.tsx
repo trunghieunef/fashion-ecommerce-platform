@@ -11,7 +11,7 @@ export function ProductPage() {
   const { lang } = useLang();
   const [state, retry] = useLoad((signal) => getProduct(id, lang, signal), [id, lang]);
   return (
-    <main className="page">
+    <main id="main" tabIndex={-1} className="page">
       {state.status === 'loading' && <Loading />}
       {state.status === 'error' && <Failed notFound={state.notFound} retry={retry} />}
       {state.status === 'ready' && <ProductDetail key={state.data.id} product={state.data} />}
