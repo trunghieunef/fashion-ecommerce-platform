@@ -1,8 +1,9 @@
-// TASK:WEB-01: shared catalog UI pieces and the abortable loader every screen uses.
+// TASK:WEB-01: shared catalog UI pieces and the abortable loader every screen uses (restyled for TASK:WEB-01b).
 import { useEffect, useRef, useState, type DependencyList } from 'react';
 import { Link } from 'react-router';
 
 import { useLang } from '../i18n';
+import { ChevronLeft, ChevronRight } from '../ui/icons';
 import { ApiError, imageUrl, type ImageRef, type ProductSummary } from './api';
 
 export type Load<T> = { status: 'loading' } | { status: 'ready'; data: T } | { status: 'error'; notFound: boolean };
@@ -74,66 +75,124 @@ export function LoadMore({ state, onClick }: { state: { cursor: string | null; m
   const { t } = useLang();
   if (!state.cursor) return null;
   return (
-    <div className="more">
+    <div className="mt-10 grid justify-items-center gap-2">
       {state.more === 'error' && <p aria-live="polite">{t('loadError')}</p>}
-      <button type="button" onClick={onClick} disabled={state.more === 'loading'}>
+      <button type="button" onClick={onClick} disabled={state.more === 'loading'} className={BUTTON_OUTLINE}>
         {state.more === 'error' ? t('retry') : t('loadMore')}
       </button>
     </div>
   );
 }
 
+export const LABEL = 'text-sm font-semibold uppercase tracking-[0.02em]';
+export const BUTTON = `${LABEL} inline-flex min-h-11 items-center justify-center bg-fg px-6 text-bg disabled:opacity-50`;
+export const BUTTON_OUTLINE = `${LABEL} inline-flex min-h-11 items-center justify-center border border-fg px-8 disabled:opacity-50`;
+export const PAGE = 'mx-auto w-full max-w-screen-2xl px-4 py-8 lg:px-8';
+
 const VND = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' });
 /** Server amounts only; no arithmetic on the client. */
-export function Price({ min, max }: { min: number; max: number }) {
-  return <span className="price">{min === max ? VND.format(min) : `${VND.format(min)} – ${VND.format(max)}`}</span>;
+export function Price({ min, max, className = '' }: { min: number; max: number; className?: string }) {
+  return (
+    <span data-testid="price" className={`tabular-nums ${className}`}>
+      {min === max ? VND.format(min) : `${VND.format(min)} – ${VND.format(max)}`}
+    </span>
+  );
 }
 
-export function CatalogImage({ assetId, alt, kind = 'thumb' }: { assetId: string | null | undefined; alt: string; kind?: 'thumb' | 'image' }) {
+const FRAME = 'aspect-[3/4] w-full';
+/** Fixed 3:4 frame (no layout shift); a missing or broken image keeps its alt on a placeholder. */
+export function CatalogImage({ assetId, alt, kind = 'thumb', className = FRAME, eager = false }: {
+  assetId: string | null | undefined; alt: string; kind?: 'thumb' | 'image'; className?: string; eager?: boolean;
+}) {
   const { t } = useLang();
   const [failed, setFailed] = useState(false);
   if (!assetId || failed)
-    return <div className="image-placeholder" role="img" aria-label={alt || t('imageMissing')}>{t('imageMissing')}</div>;
-  return <img src={imageUrl(assetId, kind)} alt={alt} loading="lazy" onError={() => setFailed(true)} />;
+    return (
+      <div className={`${className} grid place-items-center bg-soft text-xs text-muted`} role="img" aria-label={alt || t('imageMissing')}>
+        {t('imageMissing')}
+      </div>
+    );
+  return <img src={imageUrl(assetId, kind)} alt={alt} loading={eager ? 'eager' : 'lazy'} onError={() => setFailed(true)}
+    className={`${className} bg-soft object-cover`} />;
 }
 
 export function imageAlt(image: ImageRef | null, pick: (vi: string, en: string) => string, fallback: string) {
   return image ? pick(image.alt_vi, image.alt_en) : fallback;
 }
 
-export function ProductCard({ product }: { product: ProductSummary }) {
+export function ProductCard({ product, className }: { product: ProductSummary; className?: string }) {
   const { pick } = useLang();
   const name = pick(product.name_vi, product.name_en);
   return (
-    <li className="product-card">
-      <Link to={`/products/${product.id}`}>
-        <CatalogImage assetId={product.image?.asset_id} alt={imageAlt(product.image, pick, name)} />
-        <span className="product-name">{name}</span>
+    <li className={className}>
+      <Link to={`/products/${product.id}`} className="group grid gap-2">
+        <div className="overflow-hidden">
+          <CatalogImage assetId={product.image?.asset_id} alt={imageAlt(product.image, pick, name)}
+            className={`${FRAME} transition duration-200 group-hover:scale-[1.03] group-focus-visible:scale-[1.03]`} />
+        </div>
+        <span className="text-xs font-semibold uppercase tracking-[0.02em]">{name}</span>
+        <Price min={product.min_price} max={product.max_price} className="text-sm" />
       </Link>
-      <Price min={product.min_price} max={product.max_price} />
     </li>
   );
 }
 
-export function ProductGrid({ products, label }: { products: ProductSummary[]; label: string }) {
+/** Mobile is always two columns; from lg the viewer picks 2 or 4 (listing). */
+export function ProductGrid({ products, label, columns = 4 }: { products: ProductSummary[]; label: string; columns?: 2 | 4 }) {
   return (
-    <ul className="product-grid" aria-label={label}>
+    <ul aria-label={label} className={`grid grid-cols-2 gap-x-2 gap-y-8 lg:gap-x-4 ${columns === 2 ? 'lg:grid-cols-2' : 'lg:grid-cols-4'}`}>
       {products.map((p) => <ProductCard key={p.id} product={p} />)}
     </ul>
   );
 }
 
+/** Horizontal scroll-snap rail; desktop arrows scroll by most of a viewport and disable at either end. */
+export function ProductRail({ products, label }: { products: ProductSummary[]; label: string }) {
+  const { t } = useLang();
+  const rail = useRef<HTMLUListElement>(null);
+  const [ends, setEnds] = useState({ start: true, end: true });
+  const measure = () => {
+    const el = rail.current;
+    if (!el) return;
+    setEnds({ start: el.scrollLeft <= 0, end: el.scrollLeft + el.clientWidth >= el.scrollWidth - 1 });
+  };
+  useEffect(measure, [products]);
+  const scroll = (direction: 1 | -1) => rail.current?.scrollBy?.({ left: direction * rail.current.clientWidth * 0.8, behavior: 'smooth' });
+  return (
+    <div className="relative">
+      <ul ref={rail} aria-label={label} onScroll={measure}
+        className="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-2 lg:gap-4 [scrollbar-width:none]">
+        {products.map((p) => (
+          <ProductCard key={p.id} product={p} className="w-[45%] shrink-0 snap-start sm:w-[30%] lg:w-[22%]" />
+        ))}
+      </ul>
+      <div className="mt-4 hidden justify-end gap-2 lg:flex">
+        <button type="button" aria-label={t('previous')} disabled={ends.start} onClick={() => scroll(-1)}
+          className="grid size-11 place-items-center border border-fg disabled:border-line disabled:text-line"><ChevronLeft /></button>
+        <button type="button" aria-label={t('next')} disabled={ends.end} onClick={() => scroll(1)}
+          className="grid size-11 place-items-center border border-fg disabled:border-line disabled:text-line"><ChevronRight /></button>
+      </div>
+    </div>
+  );
+}
+
+/** Skeleton grid of the right size so the page does not jump; the status text is for screen readers. */
 export function Loading() {
   const { t } = useLang();
-  return <p role="status">{t('loading')}</p>;
+  return (
+    <div role="status" className="grid grid-cols-2 gap-x-2 gap-y-8 lg:grid-cols-4 lg:gap-x-4">
+      <span className="sr-only">{t('loading')}</span>
+      {[0, 1, 2, 3].map((i) => <div key={i} aria-hidden="true" className="aspect-[3/4] animate-pulse bg-soft" />)}
+    </div>
+  );
 }
 
 export function NotFound() {
   const { t } = useLang();
   return (
-    <section className="state">
-      <p>{t('notFound')}</p>
-      <Link to="/">{t('backHome')}</Link>
+    <section className="grid justify-items-start gap-4 py-16">
+      <p className="text-2xl font-bold uppercase tracking-[-0.03em]">{t('notFound')}</p>
+      <Link to="/" className={BUTTON}>{t('backHome')}</Link>
     </section>
   );
 }
@@ -143,9 +202,9 @@ export function Failed({ notFound, retry }: { notFound: boolean; retry: () => vo
   const { t } = useLang();
   if (notFound) return <NotFound />;
   return (
-    <section className="state" aria-live="polite">
+    <section className="grid justify-items-start gap-3 py-8" aria-live="polite">
       <p>{t('loadError')}</p>
-      <button type="button" onClick={retry}>{t('retry')}</button>
+      <button type="button" onClick={retry} className={BUTTON_OUTLINE}>{t('retry')}</button>
     </section>
   );
 }

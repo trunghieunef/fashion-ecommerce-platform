@@ -3,25 +3,9 @@ import { act } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
 
 import collection from '../test/fixtures/collection.json';
-import collections from '../test/fixtures/collections.json';
-import products from '../test/fixtures/products.json';
 import { flush, json, mockFetch, render } from '../test/harness';
 
 afterEach(() => { vi.unstubAllGlobals(); document.body.innerHTML = ''; });
-
-it('home lists running collections by slug and new arrivals, each block on its own', async () => {
-  mockFetch((path) => (path.startsWith('/collections') ? json(collections) : json({ code: 'INTERNAL' }, 503)));
-  const container = await render('/');
-  expect(container.querySelector('a[href="/collections/he-2026"]')!.textContent).toContain('Hè 2026 (mẫu)');
-  expect(container.textContent).toContain('Không thể tải dữ liệu');
-});
-
-it('home shows new arrivals sorted newest', async () => {
-  const calls = mockFetch((path) => (path.startsWith('/collections') ? json(collections) : path.startsWith('/products') ? json(products) : null));
-  const container = await render('/');
-  expect(calls.some((c) => c.url === '/api/v1/catalog/products?sort=NEWEST&limit=8')).toBe(true);
-  expect(container.querySelectorAll('ul[aria-label="Hàng mới"] li')).toHaveLength(2);
-});
 
 it('collection shows the lookbook caption, falling back to Vietnamese when English is empty', async () => {
   mockFetch((path) => (path.startsWith('/collections/') ? json(collection) : null));

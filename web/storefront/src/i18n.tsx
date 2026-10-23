@@ -61,6 +61,9 @@ const STRINGS = {
     closeSearch: 'Đóng tìm kiếm',
     allProducts: 'Tất cả sản phẩm',
     viewAll: 'Xem tất cả',
+    previous: 'Trước',
+    next: 'Sau',
+    explore: 'Khám phá',
   },
   en: {
     store: 'Fashion Store',
@@ -119,6 +122,9 @@ const STRINGS = {
     closeSearch: 'Close search',
     allProducts: 'All products',
     viewAll: 'View all',
+    previous: 'Previous',
+    next: 'Next',
+    explore: 'Explore',
   },
 } as const;
 

@@ -28,7 +28,7 @@ it('asks for a variant, then shows its price and the three stock states', async 
   expect((container.querySelector('input[name="color"][value="Red"]') as HTMLInputElement).checked).toBe(false);
   await choose(container, 'color', 'Blue');
   expect(container.querySelector('.stock')!.textContent).toBe('Hết hàng');
-  expect(container.querySelector('.product-info .price')!.textContent).toMatch(/^120\.000\s₫$/);
+  expect(container.querySelector('.product-info [data-testid="price"]')!.textContent).toMatch(/^120\.000\s₫$/);
 
   await choose(container, 'size', 'M');
   expect(container.querySelector('.stock')!.textContent).toBe('Còn hàng (tham khảo)');
