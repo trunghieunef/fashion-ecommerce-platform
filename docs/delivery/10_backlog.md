@@ -4,7 +4,8 @@ B1 · 2026-09-19 · Work package mặc định: **Planned; Assignee TBD; Reviewe
 
 ## 1. Cách nhận việc
 
-Update 2026-10-23 — `TASK:WEB-01b` **In progress — code local xong, chờ review/nghiệm thu**: làm lại giao diện và UX storefront
+Update 2026-10-23 — `TASK:WEB-01b` **Done (local, trước G0)** theo [nghiệm thu](../evidence/acceptance-2026-10-23.md#taskweb-01b--làm-lại-giao-diện-và-ux-storefront)
+(PR #37 CI PASS trên `114174b`, đã merge `main` `a55a30b`): làm lại giao diện và UX storefront
 theo [spec](../superpowers/specs/2026-10-23-web-01b-storefront-redesign-design.md) (style Grotesk kiểu Thụy Sĩ, Tailwind CSS
 4.3.3, font tự host; header mega-menu, home editorial, drawer lọc + chip, gallery + panel dính); chỉ frontend, không đổi
 contract. Evidence [local](../evidence/web-01b-local-2026-10-23.md). `TASK:WEB-01` giữ Done.

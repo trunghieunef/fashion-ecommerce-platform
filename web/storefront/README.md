@@ -6,7 +6,7 @@ Spec [WEB-01](../../docs/superpowers/specs/2026-10-18-web-01-storefront-design.m
 [WEB-01](../../docs/evidence/web-01-local-2026-10-18.md), [WEB-01b](../../docs/evidence/web-01b-local-2026-10-23.md).
 React 19 SPA (Vite, React Router) + Tailwind CSS 4; không component/i18n/state/icon library.
 Trạng thái: WEB-01 **Done (local) — bản thô** ([nghiệm thu 2026-10-19](../../docs/evidence/acceptance-2026-10-19.md));
-WEB-01b (làm lại giao diện/UX) **chờ nghiệm thu**. Chưa có giỏ, login (WEB-02) hay checkout (WEB-03).
+WEB-01b (làm lại giao diện/UX) **Done (local)** ([nghiệm thu 2026-10-23](../../docs/evidence/acceptance-2026-10-23.md)). Chưa có giỏ, login (WEB-02) hay checkout (WEB-03).
 
 ## Hệ thiết kế (WEB-01b)
 
