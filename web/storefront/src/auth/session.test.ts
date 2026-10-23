@@ -3,23 +3,12 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 import refresh from '../test/fixtures/refresh.json';
-import { json, mockFetch } from '../test/harness';
+import { FakeChannel, json, mockFetch } from '../test/harness';
 
 const metadata = { request_id: 'web02a-test', trace_id: 'web02a-test' };
 const unauthorized = () => json({ code: 'UNAUTHORIZED', message: 'no', metadata }, 401);
 const ok = (data: unknown) => json({ code: 'OK', data, metadata });
 type Session = typeof import('./session');
-
-/** Fake BroadcastChannel: every instance with the same name receives the others' messages (like real tabs). */
-class FakeChannel {
-  static all: FakeChannel[] = [];
-  onmessage: ((event: MessageEvent) => void) | null = null;
-  constructor(readonly name: string) { FakeChannel.all.push(this); }
-  postMessage(data: unknown) {
-    for (const other of FakeChannel.all) if (other !== this && other.name === this.name) other.onmessage?.({ data } as MessageEvent);
-  }
-  close() { FakeChannel.all = FakeChannel.all.filter((c) => c !== this); }
-}
 
 /** Fake Web Locks: one holder at a time per name, FIFO; records names and the most holders seen at once. */
 function fakeLocks() {

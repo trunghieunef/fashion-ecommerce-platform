@@ -1,10 +1,11 @@
 // TASK:WEB-01 test harness: renders the real routes in jsdom with a scripted fetch (fixtures match catalog.yaml).
 import { act, StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, useLocation } from 'react-router';
 import { vi } from 'vitest';
 
 import { AppRoutes } from '../app/App';
+import { resetSessionForTests } from '../auth/session';
 import brands from './fixtures/brands.json';
 import categories from './fixtures/categories.json';
 import collections from './fixtures/collections.json';
@@ -64,17 +65,38 @@ if (typeof HTMLDialogElement !== 'undefined' && !HTMLDialogElement.prototype.sho
   };
 }
 
+/** Fake BroadcastChannel: instances with the same name receive each other's messages, like real tabs (TASK:WEB-02a). */
+export class FakeChannel {
+  static all: FakeChannel[] = [];
+  onmessage: ((event: MessageEvent) => void) | null = null;
+  constructor(readonly name: string) { FakeChannel.all.push(this); }
+  postMessage(data: unknown) {
+    for (const other of FakeChannel.all) if (other !== this && other.name === this.name) other.onmessage?.({ data } as MessageEvent);
+  }
+  close() { FakeChannel.all = FakeChannel.all.filter((c) => c !== this); }
+}
+
+/** The router location as text, so tests can assert redirects (`/login?next=...`). */
+function LocationProbe() {
+  const { pathname, search, hash } = useLocation();
+  return <output data-testid="location" hidden>{pathname + search + hash}</output>;
+}
+
+export const locationOf = (container: Element) => container.querySelector('[data-testid="location"]')?.textContent ?? '';
+
 export async function flush() {
   for (let i = 0; i < 5; i++) await act(async () => { await Promise.resolve(); });
 }
 
 export async function render(path: string, lang: Lang = 'vi', { strict = false } = {}) {
+  resetSessionForTests();
   const container = document.createElement('div');
   document.body.appendChild(container);
   const app = (
     <LangProvider initial={lang}>
       <MemoryRouter initialEntries={[path]}>
         <AppRoutes />
+        <LocationProbe />
       </MemoryRouter>
     </LangProvider>
   );

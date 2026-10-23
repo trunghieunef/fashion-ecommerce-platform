@@ -70,6 +70,12 @@ const STRINGS = {
     removeFilter: 'Bỏ lọc',
     clearAll: 'Xóa tất cả',
     description: 'Mô tả',
+    account: 'Tài khoản',
+    signIn: 'Đăng nhập',
+    register: 'Đăng ký',
+    forgotPassword: 'Quên mật khẩu',
+    resetPassword: 'Đặt lại mật khẩu',
+    addresses: 'Địa chỉ',
   },
   en: {
     store: 'Fashion Store',
@@ -137,6 +143,12 @@ const STRINGS = {
     removeFilter: 'Remove filter',
     clearAll: 'Clear all',
     description: 'Description',
+    account: 'Account',
+    signIn: 'Sign in',
+    register: 'Create account',
+    forgotPassword: 'Forgot password',
+    resetPassword: 'Reset password',
+    addresses: 'Addresses',
   },
 } as const;
 
