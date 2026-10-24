@@ -47,6 +47,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const cartRef = useRef<api.Cart | null>(null);
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  // One app-wide status line for screen readers (spec: Contextual Live Badge Updates).
+  const [announcement, setAnnouncement] = useState('');
   const pending = useRef<{ variantId: string; quantity: number; key: string } | null>(null);
 
   const setCart = (next: api.Cart | null) => { cartRef.current = next; setCartState(next); };
@@ -107,8 +109,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
           if (!member) writeHint(current.cart_id);
           setCart(current);
         }
-        setCart(await api.addItem(member, current.cart_id, { variant_id: variantId, quantity, expected_version: current.version }, key));
+        const next = await api.addItem(member, current.cart_id, { variant_id: variantId, quantity, expected_version: current.version }, key);
+        setCart(next);
         pending.current = null;
+        setAnnouncement(t('addedAnnounce').replace('{n}', String(next.items.reduce((sum, item) => sum + item.quantity, 0))));
         return 'added';
       } catch (error) {
         if (!isRetryable(error)) pending.current = null;
@@ -120,9 +124,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
     remove: (itemId) => write((c) => api.removeItem(member, c.cart_id, itemId, c.version)),
     clear: () => write((c) => api.clearCart(member, c.cart_id, c.version)),
     reload,
-  }), [cart, loading, notice, member, conflict, write, reload]);
+  }), [cart, loading, notice, member, conflict, write, reload, t]);
 
-  return <Context.Provider value={value}>{children}</Context.Provider>;
+  return (
+    <Context.Provider value={value}>
+      <p role="status" className="sr-only">{announcement}</p>
+      {children}
+    </Context.Provider>
+  );
 }
 
 export function useCart(): CartContext {

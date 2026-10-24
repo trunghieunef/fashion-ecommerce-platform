@@ -18,4 +18,5 @@ export const CloseIcon = (p: IconProps) => <Icon {...p}><path d="m5 5 14 14M19 5
 export const ChevronLeft = (p: IconProps) => <Icon {...p}><path d="m15 5-7 7 7 7" /></Icon>;
 export const ChevronRight = (p: IconProps) => <Icon {...p}><path d="m9 5 7 7-7 7" /></Icon>;
 export const UserIcon = (p: IconProps) => <Icon {...p}><circle cx="12" cy="8" r="4" /><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" /></Icon>;
+export const BagIcon = (p: IconProps) => <Icon {...p}><path d="M5 8h14l-1 13H6L5 8Z" /><path d="M9 8V6a3 3 0 0 1 6 0v2" /></Icon>;
 export const ChevronDown = (p: IconProps) => <Icon {...p}><path d="m5 9 7 7 7-7" /></Icon>;

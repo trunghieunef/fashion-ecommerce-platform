@@ -7,6 +7,7 @@ import { useLang } from '../i18n';
 import { Drawer } from '../ui/Drawer';
 import { ChevronDown } from '../ui/icons';
 import { getProduct, type Product, type Variant } from './api';
+import { AddToCart } from '../cart/AddToCart';
 import { Gallery } from './Gallery';
 import { CatalogImage, Failed, LABEL, Loading, PAGE, Price, useLoad } from './ui';
 
@@ -96,6 +97,8 @@ function ProductDetail({ product }: { product: Product }) {
           <p data-testid="stock" aria-live="polite" className="font-semibold">{chosen ? <Stock variant={chosen} /> : t('chooseVariant')}</p>
           <p className="text-sm text-muted">{t('stockNote')}</p>
         </div>
+
+        <AddToCart product={product} variant={chosen} />
 
         <details open={desktop()} className="group border-t border-fg pt-4">
           <summary className={`${LABEL} flex min-h-11 cursor-pointer list-none items-center justify-between`}>
