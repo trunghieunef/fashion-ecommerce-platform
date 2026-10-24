@@ -27,9 +27,10 @@ type CartContext = {
   notice: string | null;
   clearNotice(): void;
   add(variantId: string, quantity: number): Promise<AddResult>;
-  setQuantity(itemId: string, quantity: number): Promise<void>;
-  remove(itemId: string): Promise<void>;
-  clear(): Promise<void>;
+  /** true when the server applied the change (false: conflict reloaded, or failed with a notice). */
+  setQuantity(itemId: string, quantity: number): Promise<boolean>;
+  remove(itemId: string): Promise<boolean>;
+  clear(): Promise<boolean>;
   reload(): Promise<void>;
 };
 
@@ -83,12 +84,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const write = useCallback(async (run: (c: api.Cart) => Promise<api.Cart>) => {
     const current = cartRef.current;
-    if (!current) return;
+    if (!current) return false;
     try {
       setCart(await run(current));
+      return true;
     } catch (error) {
       if (isVersionConflict(error)) await conflict();
       else setNotice(t('loadError'));
+      return false;
     }
   }, [conflict, t]);
 
