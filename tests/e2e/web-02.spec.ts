@@ -183,7 +183,7 @@ test.describe('fixture', () => {
     await expect(page.getByTestId('cart-line').nth(1)).toContainText('Không còn bán');
     await page.getByTestId('cart-line').first().getByRole('button', { name: 'Tăng số lượng' }).click();
     await expect(page.getByRole('main').getByRole('alert')).toContainText('Giỏ hàng vừa thay đổi ở nơi khác, vui lòng kiểm tra lại.');
-    await expect(page.getByRole('button', { name: 'Thanh toán' })).toBeDisabled();
+    await expect(page.getByRole('main').getByRole('link', { name: 'Thanh toán' })).toHaveAttribute('href', '/checkout');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
 

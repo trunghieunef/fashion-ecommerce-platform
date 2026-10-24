@@ -25,6 +25,24 @@ Drawer dùng chung (`src/ui/Drawer.tsx`) là `<dialog>` native (`showModal`): fo
 | Drawer bộ lọc | `src/catalog/FilterDrawer.tsx` |
 | Gallery + zoom | `src/catalog/Gallery.tsx` |
 
+## Checkout COD và đơn hàng (WEB-03)
+
+[Spec](../../docs/superpowers/specs/2026-10-25-web-03-checkout-design.md) ·
+[evidence](../../docs/evidence/web-03-local-2026-10-25.md). Trạng thái: **chờ review/nghiệm thu**.
+
+- `/checkout` (một trang): liên hệ, địa chỉ giao (member chọn từ sổ địa chỉ, địa chỉ mặc định chọn sẵn; nhập ở đây không tự lưu
+  vào sổ), COD, ghi chú. "Xem tổng tiền" gọi `POST /orders/quote`; tổng chỉ từ server. Báo giá giữ 2 phút: hết hạn hoặc sửa bất
+  kỳ trường nào → về "Xem tổng tiền"; **không bao giờ tự đặt đơn**. Desktop: tóm tắt dính bên phải; mobile: tóm tắt ở cuối trang.
+- Guest: `POST /carts/{id}/checkout-token`, token chỉ trong bộ nhớ, header `Checkout-Token`; `401 INVALID_CHECKOUT_TOKEN` →
+  token mới, gửi lại một lần cùng body. Member: Bearer.
+- Đặt đơn: một `Idempotency-Key` cho một lần bấm; `{key, body}` lưu `sessionStorage['storefront.checkout']` trước khi gửi.
+  Mạng/503 → gửi lại cùng key sau 1, 2, 4, 8, 16 s, rồi nút "Thử lại" (cùng key); tải lại trang → gửi lại ngay.
+  `PRICE_CHANGED` → báo giá mới + giá cũ → mới, khách bấm lại (key mới); `QUOTE_EXPIRED`/`INVALID_QUOTE` → báo giá lại;
+  `CART_ALREADY_ORDERED` → mở đơn đó.
+- `/orders/:orderNo`: trạng thái theo 14 §4, mốc tiến độ, snapshot; poll khi `PROCESSING` theo `retry_after_seconds`, dừng khi
+  tab ẩn, backoff tới 30 s khi lỗi mạng, dừng sau 2 phút với "Kiểm tra lại". Guest đọc bằng cookie `order_access`; 404 → không
+  xem được (không tra cứu bằng số điện thoại). `/account/orders`: đơn của member, "Tải thêm" theo cursor.
+
 ## Giỏ hàng và gộp giỏ (WEB-02b)
 
 [Spec](../../docs/superpowers/specs/2026-10-23-web-02b-cart-merge-design.md) ·

@@ -4,6 +4,10 @@ B1 · 2026-09-19 · Work package mặc định: **Planned; Assignee TBD; Reviewe
 
 ## 1. Cách nhận việc
 
+Update 2026-10-25 — `TASK:WEB-03` (checkout COD, trang đơn, đơn của member —
+[spec](../superpowers/specs/2026-10-25-web-03-checkout-design.md)) **In progress — code local xong, chờ review/nghiệm thu**
+([evidence](../evidence/web-03-local-2026-10-25.md)).
+
 Update 2026-10-24 — `TASK:WEB-02` tách thành hai phần theo chủ dự án: **WEB-02a** (phiên đăng nhập, tài khoản, địa chỉ —
 [spec](../superpowers/specs/2026-10-23-web-02a-session-account-design.md)) **Done (local, trước G0)** theo
 [nghiệm thu](../evidence/acceptance-2026-10-24.md#taskweb-02-phần-a--phiên-đăng-nhập-tài-khoản-địa-chỉ) (PR #38 CI PASS trên
