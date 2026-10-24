@@ -16,7 +16,7 @@ contract, service, dependency không đổi. **`TASK:WEB-02` chưa Done** cho t�
   typecheck/test/build, contract, local stack + smoke, **browser smoke** gồm `web-02.spec.ts` chuỗi thật trên
   `http://localhost:4173` ở desktop và 360px) và `docs-check`.
 - Merge: chủ dự án merge PR #38 vào `main` tại `227bad9` (2026-10-24). Documentation CI trên `227bad9` SUCCESS; Application
-  CI trên `main` đang chạy lúc nghiệm thu, kết quả cập nhật trước khi push.
+  CI trên `main` SUCCESS ([run 40071567589](https://github.com/trunghieunef/fashion-ecommerce-platform/actions/runs/40071567589)).
 - Local (Windows, 7.4 GB RAM): typecheck, **122 test** Vitest (66 mới), build, contract 95 OK, docs check; Playwright test
   fixture 6/6 (WEB-01 + WEB-02) trên `vite preview`; phản chứng: tắt Web Locks → test hai tab FAIL. Stack thật không chạy
   được trên máy này; bằng chứng chuỗi thật là CI `s1-local`. Chi tiết: [evidence WEB-02a](web-02a-local-2026-10-24.md).
