@@ -8,10 +8,12 @@ import { CatalogImage, LABEL, Price } from '../catalog/ui';
 import { useLang } from '../i18n';
 import type { Quote } from './api';
 
-export function Summary({ cartItems, quote, children }: { cartItems: CartItem[]; quote: Quote | null; children: ReactNode }) {
+export function Summary({ cartItems, quote, heldUntil, children }: {
+  cartItems: CartItem[]; quote: Quote | null; heldUntil: number | null; children: ReactNode;
+}) {
   const { t, pick, lang } = useLang();
   const count = (quote?.items ?? cartItems).reduce((sum, item) => sum + item.quantity, 0);
-  const time = quote && new Date(quote.expires_at).toLocaleTimeString(lang === 'vi' ? 'vi-VN' : 'en-GB', { hour: '2-digit', minute: '2-digit' });
+  const time = quote && heldUntil !== null ? new Date(heldUntil).toLocaleTimeString(lang === 'vi' ? 'vi-VN' : 'en-GB', { hour: '2-digit', minute: '2-digit' }) : '';
   const rows = quote && ([
     ['subtotal', quote.totals.subtotal], ['discount', quote.totals.discount_amount], ['shippingFee', quote.totals.shipping_fee],
     ['discount', quote.totals.shipping_discount], ['codFee', quote.totals.cod_fee],

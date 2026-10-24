@@ -31,12 +31,12 @@ Drawer dùng chung (`src/ui/Drawer.tsx`) là `<dialog>` native (`showModal`): fo
 [evidence](../../docs/evidence/web-03-local-2026-10-25.md). Trạng thái: **chờ review/nghiệm thu**.
 
 - `/checkout` (một trang): liên hệ, địa chỉ giao (member chọn từ sổ địa chỉ, địa chỉ mặc định chọn sẵn; nhập ở đây không tự lưu
-  vào sổ), COD, ghi chú. "Xem tổng tiền" gọi `POST /orders/quote`; tổng chỉ từ server. Báo giá giữ 2 phút: hết hạn hoặc sửa bất
-  kỳ trường nào → về "Xem tổng tiền"; **không bao giờ tự đặt đơn**. Desktop: tóm tắt dính bên phải; mobile: tóm tắt ở cuối trang.
+  vào sổ), COD, ghi chú. "Xem tổng tiền" gọi `POST /orders/quote`; tổng chỉ từ server. Báo giá giữ 2 phút, tính từ lúc nhận (115 s, không dựa vào
+  đồng hồ máy khách): hết hạn hoặc sửa bất kỳ trường nào → về "Xem tổng tiền"; **không bao giờ tự đặt đơn**. Desktop: tóm tắt dính bên phải; mobile: tóm tắt ở cuối trang.
 - Guest: `POST /carts/{id}/checkout-token`, token chỉ trong bộ nhớ, header `Checkout-Token`; `401 INVALID_CHECKOUT_TOKEN` →
   token mới, gửi lại một lần cùng body. Member: Bearer.
 - Đặt đơn: một `Idempotency-Key` cho một lần bấm; `{key, body}` lưu `sessionStorage['storefront.checkout']` trước khi gửi.
-  Mạng/503 → gửi lại cùng key sau 1, 2, 4, 8, 16 s, rồi nút "Thử lại" (cùng key); tải lại trang → gửi lại ngay.
+  Mạng/503 → gửi lại cùng key sau 1, 2, 4, 8, 16 s, rồi nút "Thử lại" (cùng key; nút chính lúc đó cũng gửi lại cùng key); tải lại trang → gửi lại ngay.
   `PRICE_CHANGED` → báo giá mới + giá cũ → mới, khách bấm lại (key mới); `QUOTE_EXPIRED`/`INVALID_QUOTE` → báo giá lại;
   `CART_ALREADY_ORDERED` → mở đơn đó.
 - `/orders/:orderNo`: trạng thái theo 14 §4, mốc tiến độ, snapshot; poll khi `PROCESSING` theo `retry_after_seconds`, dừng khi

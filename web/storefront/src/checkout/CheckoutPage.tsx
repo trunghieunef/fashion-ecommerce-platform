@@ -22,6 +22,9 @@ const FIELDS = ['contact_phone', 'contact_email', 'recipient_name', 'phone', 'pr
 type Name = (typeof FIELDS)[number];
 const ADDRESS_FIELDS = ['recipient_name', 'phone', 'province_code', 'ward_code', 'address_line'] as const;
 const NEW = 'new';
+// order.yaml: a quote lasts 2 minutes. Timed from its arrival, not from expires_at, so a wrong device clock cannot
+// expire it at once; the margin covers the round trip, and the server still answers QUOTE_EXPIRED if we are late.
+const QUOTE_HOLD_MS = 115_000;
 /** PRICE_CHANGED errors carry `old=..,new=..` per variant_id (order.yaml). */
 const prices = (message: string) => message.match(/old=(\d+),new=(\d+)/)?.slice(1).map(Number) ?? null;
 
@@ -47,7 +50,7 @@ export function CheckoutPage() {
       contact_phone: phone, contact_email: member ? optional(email) : email, note: upTo(500),
       ...(useSaved ? {} : { recipient_name: maxLength(100), phone, province_code: maxLength(10), ward_code: maxLength(10), address_line: maxLength(255) }),
     });
-  const [quoted, setQuoted] = useState<{ quote: api.Quote; request: string } | null>(null);
+  const [quoted, setQuoted] = useState<{ quote: api.Quote; request: string; heldUntil: number } | null>(null);
   const [expired, setExpired] = useState(false);
   const [message, setMessage] = useState<{ text: string; toCart?: boolean } | null>(null);
   const [status_, setStatus] = useState<string | null>(null);
@@ -85,9 +88,7 @@ export function CheckoutPage() {
   useEffect(() => {
     if (!quoted) return;
     setExpired(false);
-    // setTimeout fires at once past 2^31 - 1 ms, so a far expiry is clamped.
-    const timer = setTimeout(() => { setExpired(true); setStatus(t('quoteExpired')); },
-      Math.min(Date.parse(quoted.quote.expires_at) - Date.now(), 2 ** 31 - 1));
+    const timer = setTimeout(() => { setExpired(true); setStatus(t('quoteExpired')); }, quoted.heldUntil - Date.now());
     return () => clearTimeout(timer);
   }, [quoted]);
 
@@ -106,7 +107,7 @@ export function CheckoutPage() {
     setMessage(null);
     try {
       const quote = await api.quote(member, body, lang);
-      setQuoted({ quote, request: JSON.stringify(body) });
+      setQuoted({ quote, request: JSON.stringify(body), heldUntil: Date.now() + QUOTE_HOLD_MS });
     } catch (error) {
       quoteFailed(error);
     }
@@ -120,7 +121,8 @@ export function CheckoutPage() {
       void reload();
       setMessage({ text: t('cartChanged') });
     } else if (e?.message === 'ITEM_UNAVAILABLE') {
-      const skus = e.fields.map((f) => cart!.items.find((i) => i.variant_id === f.field)?.sku ?? f.field);
+      // cart may not be loaded yet when a stored order is resent right after a reload.
+      const skus = e.fields.map((f) => cart?.items.find((i) => i.variant_id === f.field)?.sku ?? f.field);
       setMessage({ text: t('errItemsUnavailable').replace('{skus}', skus.join(', ')), toCart: true });
     } else if (e?.message === 'NO_SHIPPING_RULE') {
       form.setFieldError('province_code', t('errNoShipping'));
@@ -186,7 +188,9 @@ export function CheckoutPage() {
     busy.current = true;
     setPending(true);
     try {
-      if (!current) await getQuote(request);
+      // Outcome still unknown: the main button resends the same key, never a new one for the same order (spec §4.1).
+      if (stuck) await place(stuck);
+      else if (!current) await getQuote(request);
       else await place(startPending({ cart_id: request.cart_id, cart_version: current.cart_version, quote_token: current.quote_token }));
     } finally {
       busy.current = false;
@@ -269,9 +273,9 @@ export function CheckoutPage() {
           </fieldset>
         </form>
 
-        <Summary cartItems={cart.items} quote={current}>
+        <Summary cartItems={cart.items} quote={current} heldUntil={quoted?.heldUntil ?? null}>
           <button type="submit" form="checkout" disabled={pending} aria-busy={pending || undefined} className={`${BUTTON} w-full`}>
-            {current ? `${t('placeOrder')} · ${formatVnd(current.totals.total_amount)}` : t('seeTotal')}
+            {stuck ? t('retry') : current ? `${t('placeOrder')} · ${formatVnd(current.totals.total_amount)}` : t('seeTotal')}
           </button>
           {retrying && <p role="status" className="text-sm">{t('retryingOrder')}</p>}
           {stuck && (

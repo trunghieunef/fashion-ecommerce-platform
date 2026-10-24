@@ -122,13 +122,13 @@ it('editing a field drops the quote', async () => {
 
 it('an expired quote asks for a new one', async () => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-  const soon = { ...quoteFixture, data: { ...quoteFixture.data, expires_at: new Date(Date.now() + 2000).toISOString() } };
-  const calls = mockFetch(guestShop((path) => (path === '/api/v1/orders/quote' ? json(soon) : null)));
+  const calls = mockFetch(guestShop());
   const c = await render('/checkout');
   await fillGuest(c);
   await press(c);
+  await act(async () => { await vi.advanceTimersByTimeAsync(110_000); });
   expect(primary(c).textContent).toMatch(/^Đặt hàng/);
-  await act(async () => { await vi.advanceTimersByTimeAsync(2500); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
   expect(primary(c).textContent).toBe('Xem tổng tiền');
   expect(main(c).querySelector('[role="status"]')!.textContent).toBe('Báo giá đã hết hạn, bấm Xem tổng tiền để cập nhật.');
   expect(calls.some((x) => x.url === '/api/v1/orders')).toBe(false);
@@ -283,4 +283,39 @@ it('an expired checkout token is renewed with the same key', async () => {
   expect(sent).toHaveLength(2);
   expect(sent[1].headers['idempotency-key']).toBe(sent[0].headers['idempotency-key']);
   expect(location(c)).toBe('/orders/ORD202610000001');
+});
+
+// --- final review fixes ---
+it('a client clock running fast still gets a usable quote', async () => {
+  const skewed = { ...quoteFixture, data: { ...quoteFixture.data, expires_at: new Date(Date.now() - 60_000).toISOString() } };
+  mockFetch(guestShop((path) => (path === '/api/v1/orders/quote' ? json(skewed) : null)));
+  const c = await render('/checkout');
+  await fillGuest(c);
+  await press(c);
+  expect(primary(c).textContent).toMatch(/^Đặt hàng · 340\.000\s₫$/);
+});
+
+it('the main button resends the stuck order with the same key', async () => {
+  let up = false;
+  const { c, calls } = await quoted((path) => (path === '/api/v1/orders' ? (up ? placed() : Promise.reject(new TypeError('offline'))) : null));
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  await press(c);
+  await act(async () => { await vi.advanceTimersByTimeAsync(31_000); });
+  await flush();
+  expect(main(c).textContent).toContain('Chưa xác nhận được đơn. Bấm Thử lại');
+  up = true;
+  await press(c);
+  const keys = new Set(orders(calls).map((x) => x.headers['idempotency-key']));
+  expect(keys.size).toBe(1);
+  expect(location(c)).toBe('/orders/ORD202610000001');
+});
+
+it('a resumed order with unavailable items says so and links to the cart', async () => {
+  sessionStorage.setItem('storefront.checkout', JSON.stringify({ key: 'saved-key', body: { cart_id: GUEST, cart_version: 2, quote_token: 'q' } }));
+  mockFetch(guestShop((path) => (path === '/api/v1/orders'
+    ? problem(409, 'ITEM_UNAVAILABLE', 'ITEM_UNAVAILABLE', [{ field: cartGuest.data.items[1].variant_id, message: 'inactive' }]) : null)));
+  const c = await render('/checkout');
+  await flush();
+  const alert = [...main(c).querySelectorAll('[role="alert"]')].find((x) => x.querySelector('a[href="/cart"]'));
+  expect(alert).toBeTruthy();
 });
