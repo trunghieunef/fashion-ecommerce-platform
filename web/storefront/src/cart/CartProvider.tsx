@@ -7,6 +7,8 @@ import { useAuth } from '../auth/AuthProvider';
 import { HttpError } from '../http';
 import { useLang } from '../i18n';
 import * as api from './api';
+import { mergeGuestCart } from './merge';
+import { MergeNotice } from './MergeNotice';
 
 const HINT = 'storefront.cart';
 export const readHint = () => { try { return localStorage.getItem(HINT); } catch { return null; } };
@@ -42,7 +44,7 @@ const isNotFound = (e: unknown) => e instanceof HttpError && e.status === 404;
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const { t } = useLang();
-  const { status } = useAuth();
+  const { status, onSignedIn } = useAuth();
   const member = status === 'member';
   const [cart, setCartState] = useState<api.Cart | null>(null);
   const cartRef = useRef<api.Cart | null>(null);
@@ -51,25 +53,57 @@ export function CartProvider({ children }: { children: ReactNode }) {
   // One app-wide status line for screen readers (spec: Contextual Live Badge Updates).
   const [announcement, setAnnouncement] = useState('');
   const pending = useRef<{ variantId: string; quantity: number; key: string } | null>(null);
+  const [adjustments, setAdjustments] = useState<api.Adjustment[] | null>(null);
+  // Every load/merge takes a number; an answer for an older number is dropped (e.g. a member-cart load that lands after
+  // the merge result must not overwrite the merged cart).
+  const seq = useRef(0);
+  const merging = useRef<Promise<void> | null>(null);
 
   const setCart = (next: api.Cart | null) => { cartRef.current = next; setCartState(next); };
 
-  const reload = useCallback(async () => {
-    if (status === 'unknown') return;
+  const load = useCallback(async (asMember: boolean) => {
+    const mine = ++seq.current;
     const hint = readHint();
-    if (status === 'guest' && !hint) { setCart(null); return; }
+    if (!asMember && !hint) { setCart(null); return; }
     setLoading(true);
     try {
-      setCart(status === 'member' ? await api.getMyCart() : await api.getCart(false, hint!));
+      const next = asMember ? await api.getMyCart() : await api.getCart(false, hint!);
+      if (mine === seq.current) setCart(next);
     } catch (error) {
-      if (isNotFound(error)) {
-        if (status === 'guest') writeHint(null);
+      if (isNotFound(error) && mine === seq.current) {
+        if (!asMember) writeHint(null);
         setCart(null);
       }
     } finally {
-      setLoading(false);
+      if (mine === seq.current) setLoading(false);
     }
-  }, [status]);
+  }, []);
+
+  /** Single-flight: sign-in (onSignedIn) and the status change both ask for it; one merge runs. */
+  const runMerge = useCallback(() => {
+    if (merging.current) return merging.current;
+    merging.current = (async () => {
+      const mine = ++seq.current;
+      setLoading(true);
+      const { outcome, result } = await mergeGuestCart();
+      if (outcome === 'merged' && result) {
+        if (mine === seq.current) { setCart(result.cart); setLoading(false); }
+        if (result.adjustments.length > 0) setAdjustments(result.adjustments);
+        return;
+      }
+      if (outcome === 'later') setNotice(t('mergeLater'));
+      await load(true);
+    })().finally(() => { merging.current = null; });
+    return merging.current;
+  }, [load, t]);
+
+  const reload = useCallback(async () => {
+    if (status === 'unknown') return;
+    if (status === 'member' && readHint()) return runMerge();
+    return load(status === 'member');
+  }, [status, load, runMerge]);
+
+  useEffect(() => onSignedIn(() => (readHint() ? runMerge() : undefined)), [onSignedIn, runMerge]);
 
   // Status changes (restore, sign in, sign out): show the cart that belongs to who the visitor is now.
   useEffect(() => {
@@ -133,6 +167,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     <Context.Provider value={value}>
       <p role="status" className="sr-only">{announcement}</p>
       {children}
+      <MergeNotice adjustments={adjustments} onClose={() => setAdjustments(null)} />
     </Context.Provider>
   );
 }
