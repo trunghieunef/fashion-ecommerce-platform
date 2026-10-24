@@ -45,7 +45,9 @@ export function AddressForm({ initial, onSaved, onCancel }: { initial: api.Addre
     setMessage(null);
     const input: api.AddressInput = {
       recipient_name: values.recipient_name.trim(), phone: values.phone.trim(), province_code: values.province_code,
-      district_code: initial?.district_code ?? null, ward_code: values.ward_code, address_line: values.address_line.trim(),
+      district_code: initial && values.province_code === initial.province_code && values.ward_code === initial.ward_code
+        ? initial.district_code : null,
+      ward_code: values.ward_code, address_line: values.address_line.trim(),
       is_default: isDefault,
     };
     try {

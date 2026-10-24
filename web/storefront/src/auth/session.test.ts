@@ -165,3 +165,19 @@ it('a refresh that resolves after endSession does not revive the session (final 
   await expect(pending).resolves.toBe(false);
   expect(session.getAccessToken()).toBeNull();
 });
+
+it('a refresh superseded by a sign-in reports the newer session instead of signing out (PR #38 item 1)', async () => {
+  for (const answer of [() => ok(refresh.data), () => unauthorized()]) {
+    let release: (r: Response) => void = () => {};
+    mockFetch((path) => (path === '/api/v1/auth/refresh' ? new Promise<Response>((resolve) => { release = resolve; }) : null));
+    const session = await freshSession();
+    const pending = session.refreshAccessToken();
+    await new Promise((r) => setTimeout(r, 0));
+    session.startSession('signed-in-meanwhile', 900);
+    release(answer());
+    await expect(pending).resolves.toBe(true);
+    expect(session.getAccessToken()).toBe('signed-in-meanwhile');
+    vi.unstubAllGlobals();
+    vi.stubGlobal('BroadcastChannel', FakeChannel);
+  }
+});

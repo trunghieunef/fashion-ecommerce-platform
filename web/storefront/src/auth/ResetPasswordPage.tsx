@@ -9,7 +9,7 @@ import { useLang } from '../i18n';
 import { ErrorSummary, PasswordField, SubmitButton, useForm } from '../ui/form';
 import { resetPassword } from './api';
 import { commonError } from './LoginPage';
-import { endSession } from './session';
+import { broadcast, endSession } from './session';
 import { password } from './validate';
 
 const tokenOf = (hash: string) => new URLSearchParams(hash.replace(/^#/, '')).get('token')?.trim() ?? '';
@@ -36,6 +36,7 @@ export function ResetPasswordPage() {
       await resetPassword(token, values.password);
       // The server revoked every session of this account.
       endSession();
+      broadcast('logout');
       navigate('/login', { replace: true, state: { notice: 'passwordChanged' } });
     } catch (error) {
       if (error instanceof HttpError && error.status === 400) setInvalid(true);

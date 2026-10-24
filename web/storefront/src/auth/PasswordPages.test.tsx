@@ -90,3 +90,14 @@ it('a 400 on reset shows the invalid-link state', async () => {
   expect(container.querySelector('main a[href="/forgot-password"]')).not.toBeNull();
   expect(container.querySelector('main form')).toBeNull();
 });
+
+it('a successful reset tells the other tabs to sign out (PR #38 item 5)', async () => {
+  const otherTab = new FakeChannel('storefront.auth');
+  const received: unknown[] = [];
+  otherTab.onmessage = (event) => received.push(event.data);
+  mockFetch((path) => (path === '/api/v1/auth/password/reset' ? new Response(null, { status: 204 }) : null));
+  const container = await render('/reset-password#token=synthetic-reset-token');
+  await type(field(container, 'password'), 'brand new pass');
+  await submit(container);
+  expect(received).toContainEqual({ type: 'logout' });
+});

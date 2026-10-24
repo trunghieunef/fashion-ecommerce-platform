@@ -45,19 +45,23 @@ export function onSessionChange(listener: (signedIn: boolean, otherTab?: boolean
   return () => listeners.delete(listener);
 }
 
-/** Single-flight refresh: true = new token, false = no valid refresh cookie (signed out). Network/5xx errors throw. */
+/**
+ * Single-flight refresh: true = a session exists afterwards, false = signed out. Network/5xx errors throw. A refresh
+ * answered after startSession/endSession (epoch moved) changes nothing and reports the current state.
+ */
 export function refreshAccessToken(): Promise<boolean> {
   if (inflight) return inflight;
   const run = async () => {
     const started = epoch;
     try {
       const tokens = await request<Tokens>('/api/v1/auth/refresh', { method: 'POST' });
-      if (epoch !== started) return false;
+      if (epoch !== started) return token !== null;
       setToken(tokens.access_token, tokens.expires_in);
       return true;
     } catch (error) {
       if (error instanceof HttpError && (error.status === 401 || error.status === 403)) {
-        if (epoch === started) endSession();
+        if (epoch !== started) return token !== null;
+        endSession();
         return false;
       }
       throw error;

@@ -145,3 +145,20 @@ it('unchecking default on the default address shows the server rule in the form 
   expect(dialog.querySelector('[role="alert"]')!.textContent).toContain('Phải luôn có một địa chỉ mặc định. Hãy đặt địa chỉ khác làm mặc định.');
   expect(openDialog(container)).not.toBeNull();
 });
+
+it('changing province or ward drops the old district code (PR #38 item 4)', async () => {
+  const withDistrict = { ...addresses, data: [{ ...addresses.data[0], district_code: '760' }, addresses.data[1]] };
+  const calls = mockFetch(member(() => null, withDistrict));
+  const container = await render('/account/addresses');
+  await click(button(cards(container)[0], 'Sửa'));
+  let dialog = openDialog(container);
+  await submit(dialog);
+  expect(calls.filter((c) => c.method === 'PUT').at(-1)!.body).toMatchObject({ province_code: '79', district_code: '760' });
+
+  await click(button(cards(container)[0], 'Sửa'));
+  dialog = openDialog(container);
+  await set(dialog.querySelector('[name="province_code"]') as HTMLSelectElement, '01');
+  await set(dialog.querySelector('[name="ward_code"]') as HTMLSelectElement, '00004');
+  await submit(dialog);
+  expect(calls.filter((c) => c.method === 'PUT').at(-1)!.body).toMatchObject({ province_code: '01', ward_code: '00004', district_code: null });
+});

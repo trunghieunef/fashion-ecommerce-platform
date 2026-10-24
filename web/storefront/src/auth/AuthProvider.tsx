@@ -2,8 +2,9 @@
 // other tabs, and lets later features (WEB-02b cart merge) run code right after a sign in through onSignedIn.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
+import { HttpError } from '../http';
 import * as api from './api';
-import { broadcast, endSession, onSessionChange, refreshAccessToken, startSession } from './session';
+import { broadcast, endSession, getAccessToken, onSessionChange, refreshAccessToken, startSession } from './session';
 
 export type AuthStatus = 'unknown' | 'guest' | 'member';
 type Auth = {
@@ -17,6 +18,8 @@ type Auth = {
   leaveSession(to: string, state?: unknown): void;
   /** Where RequireAuth sends a member whose session was ended on purpose; null = /login?next=… */
   pendingExit(): { to: string; state?: unknown } | null;
+  /** RequireAuth calls this once it has sent the member to the pending exit. */
+  clearExit(): void;
   reloadMe(): Promise<void>;
   onSignedIn(callback: () => void): () => void;
 };
@@ -35,7 +38,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setMe(await api.getMe());
       setStatus('member');
-    } catch {
+    } catch (error) {
+      // authRequest already refreshed and retried once, so a 401 means the session is gone. Anything else (5xx, 429,
+      // network) says nothing about the session: keep a valid token signed in; the profile can load later.
+      if (!(error instanceof HttpError && error.status === 401) && getAccessToken()) { setStatus('member'); return; }
       setMe(null);
       setStatus('guest');
     }
@@ -60,7 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (session.user) setMe(session.user);
     startSession(session.access_token, session.expires_in);
     if (!session.user) await reloadMe();
-    setStatus('member');
+    if (getAccessToken()) setStatus('member');
     broadcast('login');
     signedIn.current.forEach((callback) => callback());
   }, [reloadMe]);
@@ -83,6 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       broadcast('logout');
     },
     pendingExit: () => exit.current,
+    clearExit: () => { exit.current = null; },
     reloadMe,
     onSignedIn: (callback) => {
       signedIn.current.add(callback);

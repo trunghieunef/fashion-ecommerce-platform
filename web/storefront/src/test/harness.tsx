@@ -1,7 +1,7 @@
 // TASK:WEB-01 test harness: renders the real routes in jsdom with a scripted fetch (fixtures match catalog.yaml).
 import { act, StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MemoryRouter, useLocation } from 'react-router';
+import { MemoryRouter, useLocation, useNavigate, type NavigateFunction } from 'react-router';
 import { vi } from 'vitest';
 
 import { AppRoutes } from '../app/App';
@@ -82,7 +82,15 @@ function splitPath(path: string) {
 }
 
 /** The router location as text, so tests can assert redirects (`/login?next=...`). */
+let routerNavigate: NavigateFunction | null = null;
+/** Navigate the rendered app (like the user following a link or typing a URL). */
+export async function navigateTo(path: string) {
+  await act(async () => { await routerNavigate?.(path); });
+  await flush();
+}
+
 function LocationProbe() {
+  routerNavigate = useNavigate();
   const { pathname, search, hash, state } = useLocation();
   return <output data-testid="location" data-state={JSON.stringify(state ?? null)} hidden>{pathname + search + hash}</output>;
 }
