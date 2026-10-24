@@ -630,6 +630,21 @@ mà WEB-01 đã hẹn); nghiên cứu thiết kế bằng skill ui-ux-pro-max v�
 | Size không có trong màu đang chọn: gạch ngang nhưng vẫn chọn được | Lệch chữ "disabled" của spec để giữ sửa lỗi review 1 của WEB-01 (không kẹt lựa chọn) |
 | Giữ "Tải thêm", link theo `id`, ngôn ngữ trong `localStorage` | Như WEB-01 |
 
+## WEB-02a — quyết định 2026-10-23
+
+`TASK:WEB-02` phần a. Chủ dự án chọn tách WEB-02 thành a (phiên, tài khoản, địa chỉ) và b (giỏ, gộp giỏ) và duyệt
+[spec](../superpowers/specs/2026-10-23-web-02a-session-account-design.md); các mặc định do agent chốt:
+
+| Quyết định | Hệ quả |
+|---|---|
+| Khôi phục phiên bằng một lần refresh khi tải trang; access token chỉ trong bộ nhớ | Reload luôn tốn một request refresh; token không bao giờ vào storage |
+| Single-flight refresh: Promise trong tab + Web Lock `storefront.auth.refresh` giữa tab; BroadcastChannel đồng bộ đăng nhập/xuất | Không dùng lại refresh token đã xoay (server thu hồi cả family); trình duyệt không có Web Locks chỉ được bảo vệ trong tab |
+| Danh mục tỉnh/phường mẫu trong frontend | Thay khi O04 chốt nguồn; mã ngoài danh mục hiển thị thô |
+| `locale` hồ sơ chỉ dùng cho email; ngôn ngữ giao diện theo người xem | Đổi ngôn ngữ email không đổi UI |
+| `next` sau đăng nhập chỉ nhận đường dẫn nội bộ | Chống open redirect (`//host`, `/\host`, URL tuyệt đối → `/account`) |
+| Không thêm thư viện | fetch, React context, Web Locks, BroadcastChannel có sẵn |
+| Local dùng `http://localhost:4173` (origin trong allowlist ADR-20) | E2E chuỗi thật của WEB-02 chạy trên `localhost`; `127.0.0.1` làm refresh 403 |
+
 ## CART-02 — quyết định 2026-10-18
 
 `TASK:CART-02` · `REQ:CART-03`. Chủ dự án giao agent tự chốt và duyệt [spec](../superpowers/specs/2026-10-18-cart-02-merge-design.md):

@@ -1,0 +1,17 @@
+{
+  "code": "OK",
+  "data": {
+    "id": "99999999-0000-4000-8000-0000000000a1",
+    "recipient_name": "Khách Mẫu",
+    "phone": "0912345678",
+    "province_code": "79",
+    "district_code": null,
+    "ward_code": "26734",
+    "address_line": "1 Đường Mẫu",
+    "is_default": true
+  },
+  "metadata": {
+    "request_id": "web02a-fixture",
+    "trace_id": "web02a-fixture"
+  }
+}

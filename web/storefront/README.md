@@ -6,7 +6,7 @@ Spec [WEB-01](../../docs/superpowers/specs/2026-10-18-web-01-storefront-design.m
 [WEB-01](../../docs/evidence/web-01-local-2026-10-18.md), [WEB-01b](../../docs/evidence/web-01b-local-2026-10-23.md).
 React 19 SPA (Vite, React Router) + Tailwind CSS 4; không component/i18n/state/icon library.
 Trạng thái: WEB-01 **Done (local) — bản thô** ([nghiệm thu 2026-10-19](../../docs/evidence/acceptance-2026-10-19.md));
-WEB-01b (làm lại giao diện/UX) **chờ nghiệm thu**. Chưa có giỏ, login (WEB-02) hay checkout (WEB-03).
+WEB-01b (làm lại giao diện/UX) **Done (local)** ([nghiệm thu 2026-10-23](../../docs/evidence/acceptance-2026-10-23.md)). Chưa có giỏ, login (WEB-02) hay checkout (WEB-03).
 
 ## Hệ thiết kế (WEB-01b)
 
@@ -24,6 +24,34 @@ Drawer dùng chung (`src/ui/Drawer.tsx`) là `<dialog>` native (`showModal`): fo
 | Card, lưới 2/4 cột, rail cuộn ngang, skeleton, trạng thái | `src/catalog/ui.tsx` |
 | Drawer bộ lọc | `src/catalog/FilterDrawer.tsx` |
 | Gallery + zoom | `src/catalog/Gallery.tsx` |
+
+## Phiên đăng nhập và tài khoản (WEB-02a)
+
+[Spec](../../docs/superpowers/specs/2026-10-23-web-02a-session-account-design.md) ·
+[evidence](../../docs/evidence/web-02a-local-2026-10-24.md). Trạng thái: **chờ review/nghiệm thu**.
+
+- Access token chỉ ở biến module `src/auth/session.ts` (không storage); tải trang → một lần `POST /auth/refresh` (cookie
+  HttpOnly) để khôi phục phiên. Refresh single-flight: một Promise trong tab, bọc Web Lock `storefront.auth.refresh` giữa
+  các tab (trình duyệt không có Web Locks → chỉ trong tab). `authRequest` gắn Bearer, refresh trước khi token còn < 30 s,
+  sau 401 refresh một lần và thử lại một lần. Đăng nhập/đăng xuất đồng bộ giữa tab qua `BroadcastChannel('storefront.auth')`.
+- Route: `/login?next=` (chỉ nhận đường dẫn nội bộ), `/register`, `/forgot-password`, `/reset-password#token=…` (đọc token
+  rồi xóa fragment), `/account` và `/account/addresses` (bọc `RequireAuth`). Header có nút tài khoản.
+- Form dùng `src/ui/form.tsx`: label luôn hiện, lỗi tại ô khi rời ô/submit, hộp tóm tắt lỗi nhận focus, nút hiện/ẩn mật
+  khẩu (không chặn paste), nút submit có trạng thái đang gửi, thông báo trạng thái tự ẩn 5 s.
+- Đăng xuất chỉ kết thúc phiên local sau khi `POST /auth/logout` thành công (cookie HttpOnly chỉ server xóa được); lỗi →
+  báo "Chưa đăng xuất được" và vẫn đăng nhập. Đổi mật khẩu: server thu hồi mọi phiên, `leaveSession('/login', notice)`.
+  Kết thúc phiên có chủ đích thì `RequireAuth` chuyển tới điểm đến đó; phiên mất ngoài ý muốn (tab khác đăng xuất, refresh
+  bị từ chối) mới về `/login?next=`. Đăng nhập ở tab khác (kể cả tài khoản khác) làm tab này tải lại hồ sơ.
+- Một lần refresh trả về sau khi phiên đã bắt đầu/kết thúc lại (epoch) không đổi gì và báo trạng thái hiện tại: không
+  "hồi sinh" phiên vừa đăng xuất, cũng không đá member vừa đăng nhập về khách.
+- Chỉ 401 từ `/users/me` (sau một lần refresh + thử lại) mới là đăng xuất; 5xx/429/lỗi mạng giữ phiên còn hợp lệ.
+- Điểm đến khi rời phiên có chủ đích chỉ dùng một lần; lần sau khách mở `/account` vẫn về `/login?next=`.
+- Đặt lại mật khẩu phát `logout` cho các tab khác (server đã thu hồi mọi phiên). Sửa địa chỉ mà đổi tỉnh/phường thì gửi
+  `district_code: null` (form không sửa quận).
+- Tỉnh/phường lấy từ **danh mục mẫu** `src/account/geo.sample.json` (đánh dấu "mẫu") cho tới khi O04 chốt nguồn; mã ngoài
+  danh mục hiển thị thô.
+- Local: dùng **`http://localhost:4173`**. Gateway chỉ nhận request ghi có cookie từ origin trong `GATEWAY_ALLOWED_ORIGINS`
+  (mặc định `http://localhost:4173`); mở bằng `127.0.0.1` thì refresh bị 403 và phiên không khôi phục được.
 
 ## Màn hình
 
@@ -70,7 +98,8 @@ npm test --workspace @fashion/storefront -- --run      # Vitest + jsdom, fetch m
 npm run build --workspace @fashion/storefront
 npx playwright install chromium && npx playwright test  # stack thật, desktop + 360px
 
-# Không cần Docker: test fixture chạy trên build + vite preview, chụp home/listing/detail vào test-results/
+# Không cần Docker: test fixture chạy trên build + vite preview (WEB-01: chụp home/listing/detail vào test-results/;
+# WEB-02a: tests/e2e/web-02.spec.ts -g fixture)
 npm run build && (cd web/storefront && npx vite preview --port 4174 --strictPort &)
 PLAYWRIGHT_BASE_URL=http://127.0.0.1:4174 npx playwright test tests/e2e/web-01.spec.ts -g "contract fixtures"
 ```

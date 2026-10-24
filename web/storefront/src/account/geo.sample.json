@@ -1,0 +1,28 @@
+{
+  "sample": true,
+  "note": "TASK:WEB-02a sample province/ward directory until O04 picks the real source; names marked (mẫu)/(sample).",
+  "provinces": [
+    {
+      "code": "79", "name_vi": "TP. Hồ Chí Minh (mẫu)", "name_en": "Ho Chi Minh City (sample)",
+      "wards": [
+        { "code": "26734", "name_vi": "Phường Bến Thành (mẫu)", "name_en": "Ben Thanh Ward (sample)" },
+        { "code": "26737", "name_vi": "Phường Sài Gòn (mẫu)", "name_en": "Sai Gon Ward (sample)" },
+        { "code": "27139", "name_vi": "Phường Tân Định (mẫu)", "name_en": "Tan Dinh Ward (sample)" }
+      ]
+    },
+    {
+      "code": "01", "name_vi": "TP. Hà Nội (mẫu)", "name_en": "Ha Noi City (sample)",
+      "wards": [
+        { "code": "00004", "name_vi": "Phường Ba Đình (mẫu)", "name_en": "Ba Dinh Ward (sample)" },
+        { "code": "00008", "name_vi": "Phường Ngọc Hà (mẫu)", "name_en": "Ngoc Ha Ward (sample)" }
+      ]
+    },
+    {
+      "code": "48", "name_vi": "TP. Đà Nẵng (mẫu)", "name_en": "Da Nang City (sample)",
+      "wards": [
+        { "code": "20194", "name_vi": "Phường Hải Châu (mẫu)", "name_en": "Hai Chau Ward (sample)" },
+        { "code": "20197", "name_vi": "Phường Thạch Thang (mẫu)", "name_en": "Thach Thang Ward (sample)" }
+      ]
+    }
+  ]
+}

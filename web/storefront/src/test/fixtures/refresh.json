@@ -1,0 +1,12 @@
+{
+  "code": "OK",
+  "data": {
+    "access_token": "header.payload.signature-synthetic-rotated",
+    "token_type": "Bearer",
+    "expires_in": 900
+  },
+  "metadata": {
+    "request_id": "web02a-fixture",
+    "trace_id": "web02a-fixture"
+  }
+}

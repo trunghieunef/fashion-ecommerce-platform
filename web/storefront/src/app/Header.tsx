@@ -5,9 +5,10 @@ import { Link, useLocation, useNavigate } from 'react-router';
 
 import { listCategories, listCollections, type Category, type Collection } from '../catalog/api';
 import { useLoad } from '../catalog/ui';
+import { useAuth } from '../auth/AuthProvider';
 import { useLang } from '../i18n';
 import { Drawer } from '../ui/Drawer';
-import { ChevronDown, CloseIcon, MenuIcon, SearchIcon } from '../ui/icons';
+import { ChevronDown, CloseIcon, MenuIcon, SearchIcon, UserIcon } from '../ui/icons';
 
 const LABEL = 'text-sm font-semibold uppercase tracking-[0.02em]';
 const COLLECTIONS = 'collections';
@@ -55,6 +56,9 @@ export function Header() {
   const location = useLocation();
   const navigate = useNavigate();
   const [categories] = useLoad(listCategories, []);
+  const { status } = useAuth();
+  // TASK:WEB-02a: while the session is being restored the button points at /account (RequireAuth waits) and is busy.
+  const account = status === 'guest' ? { href: '/login', label: t('signIn') } : { href: '/account', label: t('account') };
   const [collections, loadCollections] = useLazyCollections();
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
@@ -161,6 +165,9 @@ export function Header() {
           <button type="button" ref={searchButton} aria-label={t('openSearch')} onClick={() => setSearching(true)} className="grid size-11 place-items-center">
             <SearchIcon />
           </button>
+          <Link to={account.href} aria-label={account.label} aria-busy={status === 'unknown' || undefined} className="grid size-11 place-items-center">
+            <UserIcon />
+          </Link>
           <button type="button" lang={lang === 'vi' ? 'en' : 'vi'} onClick={toggleLang} className={`${LABEL} hidden min-h-11 px-2 lg:block`}>
             {t('switchLang')}
           </button>
@@ -197,6 +204,7 @@ export function Header() {
           </li>
           <li className="border-b border-fg"><Link to="/products?sort=NEWEST" className={`${LABEL} flex min-h-12 items-center`}>{t('newArrivals')}</Link></li>
           <li className="border-b border-fg"><Link to="/products" className={`${LABEL} flex min-h-12 items-center`}>{t('products')}</Link></li>
+          <li className="border-b border-fg"><Link to={account.href} className={`${LABEL} flex min-h-12 items-center`}>{account.label}</Link></li>
           <li><button type="button" lang={lang === 'vi' ? 'en' : 'vi'} onClick={toggleLang} className={`${LABEL} min-h-12`}>{t('switchLang')}</button></li>
         </ul>
       </Drawer>

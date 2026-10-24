@@ -1,4 +1,4 @@
-"""TASK:WEB-01: storefront unit-test mocks must match the catalog response contract (spec section 5)."""
+"""TASK:WEB-01, TASK:WEB-02a: storefront unit-test mocks must match the response contracts (catalog, user)."""
 from pathlib import Path
 import json
 import unittest
@@ -11,15 +11,24 @@ from referencing.jsonschema import DRAFT202012
 ROOT = Path(__file__).resolve().parents[2]
 BASE = "https://fashion.local/contracts/openapi/"
 FIXTURES = ROOT / "web/storefront/src/test/fixtures"
+CATALOG = "catalog.yaml#/components/schemas/"
+USER = "user.yaml#/components/schemas/"
+# Value: "<contract file>#<JSON pointer>"; inline response schemas (no component name) are addressed by their path.
 SCHEMAS = {
-    "products.json": "ProductPageResponse",
-    "products-page2.json": "ProductPageResponse",
-    "products-empty.json": "ProductPageResponse",
-    "product.json": "PublicProductResponse",
-    "collections.json": "PublicCollectionsResponse",
-    "collection.json": "PublicCollectionResponse",
-    "categories.json": "PublicCategoriesResponse",
-    "brands.json": "PublicBrandsResponse",
+    "products.json": CATALOG + "ProductPageResponse",
+    "products-page2.json": CATALOG + "ProductPageResponse",
+    "products-empty.json": CATALOG + "ProductPageResponse",
+    "product.json": CATALOG + "PublicProductResponse",
+    "collections.json": CATALOG + "PublicCollectionsResponse",
+    "collection.json": CATALOG + "PublicCollectionResponse",
+    "categories.json": CATALOG + "PublicCategoriesResponse",
+    "brands.json": CATALOG + "PublicBrandsResponse",
+    "session.json": USER + "SessionResponse",
+    "refresh.json": USER + "RefreshResponse",
+    "profile.json": USER + "ProfileResponse",
+    "address.json": USER + "AddressResponse",
+    "forgot.json": USER + "ForgotAcceptedResponse",
+    "addresses.json": "user.yaml#/paths/~1api~1v1~1users~1me~1addresses/get/responses/200/content/application~1json/schema",
 }
 
 
@@ -27,7 +36,7 @@ class StorefrontFixtureContractTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         docs = {name: yaml.safe_load((ROOT / "contracts/openapi" / name).read_text(encoding="utf-8"))
-                for name in ("catalog.yaml", "common.yaml")}
+                for name in ("catalog.yaml", "user.yaml", "common.yaml")}
         cls.registry = Registry().with_resources(
             (BASE + name, Resource.from_contents(d, default_specification=DRAFT202012)) for name, d in docs.items())
 
@@ -37,7 +46,7 @@ class StorefrontFixtureContractTest(unittest.TestCase):
     def test_fixtures_match_response_schemas(self):
         for name, schema in SCHEMAS.items():
             with self.subTest(fixture=name):
-                validator = Draft202012Validator({"$ref": BASE + "catalog.yaml#/components/schemas/" + schema},
+                validator = Draft202012Validator({"$ref": BASE + schema},
                                                  registry=self.registry, format_checker=FormatChecker())
                 data = json.loads((FIXTURES / name).read_text(encoding="utf-8"))
                 self.assertEqual([e.message for e in validator.iter_errors(data)], [])
