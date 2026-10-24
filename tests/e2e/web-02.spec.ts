@@ -40,7 +40,7 @@ test.describe('real chain', () => {
     await dialog.getByLabel('Phường/xã').selectOption('26734');
     await dialog.getByLabel('Địa chỉ chi tiết').fill('1 Đường E2E');
     await dialog.getByRole('button', { name: 'Lưu' }).click();
-    await expect(page.getByRole('status')).toHaveText('Đã lưu địa chỉ.');
+    await expect(page.getByRole('main').getByRole('status')).toHaveText('Đã lưu địa chỉ.');
     await expect(page.getByTestId('address-card')).toHaveCount(1);
     await expect(page.getByTestId('address-card')).toContainText('Mặc định');
 
