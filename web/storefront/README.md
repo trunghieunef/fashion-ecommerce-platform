@@ -28,7 +28,8 @@ Drawer dùng chung (`src/ui/Drawer.tsx`) là `<dialog>` native (`showModal`): fo
 ## Giỏ hàng và gộp giỏ (WEB-02b)
 
 [Spec](../../docs/superpowers/specs/2026-10-23-web-02b-cart-merge-design.md) ·
-[evidence](../../docs/evidence/web-02b-local-2026-10-24.md). Trạng thái: **chờ review/nghiệm thu**.
+[evidence](../../docs/evidence/web-02b-local-2026-10-24.md). Trạng thái: **Done (local)**
+([nghiệm thu 2026-10-25](../../docs/evidence/acceptance-2026-10-25.md)).
 
 - Guest dùng cookie `cart_token` (HttpOnly, server đặt); member dùng Bearer. Không tạo giỏ khi chỉ xem hàng: lần "Thêm vào
   giỏ" đầu tiên tạo giỏ. `localStorage['storefront.cart']` chỉ là gợi ý `cart_id` của guest.
