@@ -10,6 +10,7 @@ import { ResetPasswordPage } from '../auth/ResetPasswordPage';
 import { RequireAuth } from '../auth/RequireAuth';
 import { CartPage } from '../cart/CartPage';
 import { CheckoutPage } from '../checkout/CheckoutPage';
+import { OrderPage } from '../orders/OrderPage';
 import { CartProvider } from '../cart/CartProvider';
 
 import { CollectionPage } from '../catalog/CollectionPage';
@@ -44,6 +45,7 @@ export function AppRoutes() {
         <Route path="/collections/:slug" element={<CollectionPage />} />
         <Route path="/cart" element={<CartPage />} />
         <Route path="/checkout" element={<CheckoutPage />} />
+        <Route path="/orders/:orderNo" element={<OrderPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
