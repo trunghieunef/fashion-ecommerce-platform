@@ -11,6 +11,7 @@ import { RequireAuth } from '../auth/RequireAuth';
 import { CartPage } from '../cart/CartPage';
 import { CheckoutPage } from '../checkout/CheckoutPage';
 import { OrderPage } from '../orders/OrderPage';
+import { OrdersPage } from '../orders/OrdersPage';
 import { CartProvider } from '../cart/CartProvider';
 
 import { CollectionPage } from '../catalog/CollectionPage';
@@ -52,6 +53,7 @@ export function AppRoutes() {
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/account" element={<RequireAuth><AccountPage /></RequireAuth>} />
         <Route path="/account/addresses" element={<RequireAuth><AddressesPage /></RequireAuth>} />
+        <Route path="/account/orders" element={<RequireAuth><OrdersPage /></RequireAuth>} />
         <Route path="*" element={<main id="main" tabIndex={-1} className={PAGE}><NotFound /></main>} />
       </Routes>
       </CartProvider>
