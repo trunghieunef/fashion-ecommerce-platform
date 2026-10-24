@@ -33,12 +33,21 @@ function CartLine({ item, onRemoved }: { item: CartItem; onRemoved: () => void }
     if (timer.current) clearTimeout(timer.current);
     if (!valid(text) || Number(text) === item.quantity) return;
     timer.current = setTimeout(async () => {
-      if (!(await setQuantity(item.item_id, Number(text)))) setDraft(String(latest.current));
+      // Only if the visitor has not typed something newer meanwhile.
+      if (!(await setQuantity(item.item_id, Number(text)))) setDraft((now) => (now === text ? String(latest.current) : now));
     }, DEBOUNCE_MS);
   };
   const step = (delta: number) => {
     const base = valid(draft) ? Number(draft) : item.quantity;
     change(String(Math.min(99, Math.max(1, base + delta))));
+  };
+  const removing = useRef(false);
+  const onRemove = async () => {
+    if (removing.current) return;
+    removing.current = true;
+    const ok = await remove(item.item_id);
+    removing.current = false;
+    if (ok) onRemoved();
   };
   const preview = item.preview;
   // No preview (just written, or catalog/stock unreachable) says nothing about the line: no mark.
@@ -67,7 +76,7 @@ function CartLine({ item, onRemoved }: { item: CartItem; onRemoved: () => void }
               className="h-11 w-14 border-y border-line text-center" />
             <button type="button" aria-label={t('increase')} onClick={() => step(1)} className="grid size-11 place-items-center border border-line">+</button>
           </div>
-          <button type="button" onClick={async () => { if (await remove(item.item_id)) onRemoved(); }}
+          <button type="button" onClick={() => void onRemove()}
             className={`${LABEL} min-h-11 px-2 underline underline-offset-4`}>{t('removeLine')}</button>
         </div>
       </div>

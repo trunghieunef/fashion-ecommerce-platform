@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 
 import type { Product, Variant } from '../catalog/api';
 import { BUTTON } from '../catalog/ui';
+import { useAuth } from '../auth/AuthProvider';
 import { useLang } from '../i18n';
 import { AddedDrawer } from './AddedDrawer';
 import { useCart } from './CartProvider';
@@ -12,6 +13,8 @@ import { rememberDisplay } from './display';
 export function AddToCart({ product, variant }: { product: Product; variant: Variant | undefined }) {
   const { t } = useLang();
   const { add } = useCart();
+  // Until the session is known, an add could create a guest cart for a member.
+  const restoring = useAuth().status === 'unknown';
   const [pending, setPending] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [added, setAdded] = useState<Variant | null>(null);
@@ -19,7 +22,7 @@ export function AddToCart({ product, variant }: { product: Product; variant: Var
   const busy = useRef(false);
 
   async function onAdd() {
-    if (!variant || busy.current) return;
+    if (!variant || restoring || busy.current) return;
     busy.current = true;
     setPending(true);
     setProblem(null);
@@ -34,12 +37,12 @@ export function AddToCart({ product, variant }: { product: Product; variant: Var
     busy.current = false;
     setPending(false);
     if (result === 'added') setAdded(variant);
-    else setProblem(t(result === 'conflict' ? 'cartChanged' : 'addFailed'));
+    else setProblem(result.problem);
   }
 
   return (
     <div className="grid gap-2">
-      <button type="button" onClick={() => void onAdd()} disabled={!variant} aria-disabled={pending || undefined}
+      <button type="button" onClick={() => void onAdd()} disabled={!variant} aria-disabled={pending || restoring || undefined}
         aria-busy={pending || undefined} className={`${BUTTON} w-full`}>
         {t('addToCart')}{pending && <span aria-hidden="true">&nbsp;· {t('sending')}</span>}
       </button>

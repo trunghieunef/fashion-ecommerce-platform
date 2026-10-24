@@ -80,7 +80,7 @@ it('the header badge label counts items', async () => {
 });
 
 it('a failed add shows the reason by the button', async () => {
-  mockFetch(shop(() => json({ code: 'OUT_OF_STOCK', message: 'OUT_OF_STOCK', errors: [{ field: 'quantity', message: 'available=0' }], metadata }, 409)));
+  mockFetch(shop(() => json({ code: 'INTERNAL_ERROR', message: 'INTERNAL_ERROR', metadata }, 500)));
   const container = await render(PATH);
   await chooseBlueM(container);
   await act(async () => { addButton(container).click(); });
@@ -98,4 +98,13 @@ it('a version conflict on add says so by the button', async () => {
   await act(async () => { addButton(container).click(); });
   await flush();
   expect(container.querySelector('[data-testid="product-info"] [role="alert"]')!.textContent).toBe('Giỏ hàng vừa thay đổi ở nơi khác, vui lòng kiểm tra lại.');
+});
+
+it('out of stock says how many are left', async () => {
+  mockFetch(shop(() => json({ code: 'OUT_OF_STOCK', message: 'OUT_OF_STOCK', errors: [{ field: 'quantity', message: 'available=2' }], metadata }, 409)));
+  const container = await render(PATH);
+  await chooseBlueM(container);
+  await act(async () => { addButton(container).click(); });
+  await flush();
+  expect(container.querySelector('[data-testid="product-info"] [role="alert"]')!.textContent).toBe('Không đủ hàng, chỉ còn 2.');
 });

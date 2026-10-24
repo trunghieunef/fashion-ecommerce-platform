@@ -13,6 +13,7 @@ import cartGuest from '../test/fixtures/cart-guest.json';
 import cartMember from '../test/fixtures/cart-member.json';
 import profile from '../test/fixtures/profile.json';
 import refresh from '../test/fixtures/refresh.json';
+import session from '../test/fixtures/session.json';
 import { FakeChannel, flush, json, mockFetch } from '../test/harness';
 import { CartProvider, useCart } from './CartProvider';
 
@@ -52,7 +53,7 @@ it('the first add creates the cart and stores the hint', async () => {
   const calls = mockFetch((path) => (path === '/api/v1/carts' ? json(cartEmpty, 201)
     : path === `/api/v1/carts/${GUEST}/items` ? json(cartGuest) : null));
   const h = await mount();
-  let result = '';
+  let result: unknown = null;
   await act(async () => { result = await h.cart.add(BLUE_M, 1); });
   await flush();
   expect(result).toBe('added');
@@ -97,9 +98,10 @@ it('retrying a failed add reuses its key', async () => {
       : null));
   const h = await mount();
   const results: string[] = [];
-  await act(async () => { results.push(await h.cart.add(BLUE_M, 1)); });
-  await act(async () => { results.push(await h.cart.add(BLUE_M, 1)); });
-  await act(async () => { results.push(await h.cart.add(BLUE_M, 2)); });
+  const push = async (q: number) => { const r = await h.cart.add(BLUE_M, q); results.push(r === 'added' ? r : 'failed'); };
+  await act(async () => { await push(1); });
+  await act(async () => { await push(1); });
+  await act(async () => { await push(2); });
   const keys = calls.filter((c) => c.url.endsWith('/items')).map((c) => c.headers['idempotency-key']);
   expect(results).toEqual(['failed', 'added', 'added']);
   expect(keys[0]).toBeTruthy();
@@ -174,4 +176,30 @@ it('overlapping writes send the version from the previous answer', async () => {
   const puts = calls.filter((c) => c.method === 'PUT');
   expect(puts.map((c) => (c.body as { expected_version: number }).expected_version)).toEqual([2, 3]);
   expect(h.cart.notice).toBeNull();
+});
+
+it('signing in as someone else replaces the previous member cart', async () => {
+  const other = { ...session, data: { ...session.data, user: { ...session.data.user, id: '99999999-0000-4000-8000-0000000000ff' } } };
+  const theirs = { ...cartMember, data: { ...cartMember.data, cart_id: '88888888-0000-4000-8000-0000000000ff', items: [] } };
+  let signedInAgain = false;
+  mockFetch((path) => (path === '/api/v1/auth/login' ? (signedInAgain = true, json(other))
+    : path === '/api/v1/carts/mine' ? json(signedInAgain ? theirs : cartMember) : memberAuth(path)));
+  const h = await mount();
+  expect(h.cart.count).toBe(3);
+  await act(async () => { await h.auth.signIn('other@example.test', 'correct horse'); });
+  await flush();
+  expect(h.cart.cart?.cart_id).toBe(theirs.data.cart_id);
+  expect(h.cart.count).toBe(0);
+});
+
+it('a write on a cart that is gone drops it', async () => {
+  localStorage.setItem('storefront.cart', GUEST);
+  let gone = false;
+  mockFetch((path) => (path === `/api/v1/carts/${GUEST}` ? (gone ? notFound() : json(cartGuest))
+    : path.startsWith(`/api/v1/carts/${GUEST}/items/`) ? (gone = true, notFound()) : null));
+  const h = await mount();
+  await act(async () => { await h.cart.remove(cartGuest.data.items[0].item_id); });
+  await flush();
+  expect(h.cart.cart).toBeNull();
+  expect(localStorage.getItem('storefront.cart')).toBeNull();
 });

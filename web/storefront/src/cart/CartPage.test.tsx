@@ -151,3 +151,15 @@ it('a quantity the server refused goes back to the cart value', async () => {
   await flush();
   expect((line.querySelector('input') as HTMLInputElement).value).toBe(String(BLUE_LINE.quantity));
 });
+
+it('a quantity over the limit says the limit', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  mockFetch((path) => (path === `/api/v1/carts/${GUEST}` ? json(cartGuest)
+    : path.startsWith(`/api/v1/carts/${GUEST}/items/`)
+      ? json({ code: 'VALIDATION_ERROR', message: 'QUANTITY_LIMIT', metadata: { request_id: 't', trace_id: 't' } }, 400) : null));
+  const container = await render('/cart');
+  await act(async () => { button(lines(container)[0], 'Tăng số lượng').click(); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(400); });
+  await flush();
+  expect(container.querySelector('main [role="alert"]')!.textContent).toContain('Mỗi sản phẩm tối đa 99.');
+});

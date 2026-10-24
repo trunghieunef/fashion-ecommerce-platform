@@ -21,7 +21,8 @@ export const writeHint = (cartId: string | null) => {
   }
 };
 
-type AddResult = 'added' | 'conflict' | 'failed';
+/** 'added', or what to tell the visitor next to the button. */
+type AddResult = 'added' | { problem: string };
 type CartContext = {
   cart: api.Cart | null;
   count: number;
@@ -41,17 +42,33 @@ const isVersionConflict = (e: unknown) => e instanceof HttpError && e.status ===
 /** Network failures and 503 leave nothing written: the same operation may be retried with the same key. */
 const isRetryable = (e: unknown) => e instanceof HttpError && (e.status === 0 || e.status === 503);
 const isNotFound = (e: unknown) => e instanceof HttpError && e.status === 404;
+/** The cart itself is gone (expired or cleared guest cookie, deleted member cart): drop it rather than retry into it. */
+const isCartGone = (e: unknown) => isNotFound(e) && (e as HttpError).message === 'CART_NOT_FOUND';
+const REFUSALS = { VARIANT_NOT_AVAILABLE: 'errNotSold', QUANTITY_LIMIT: 'errQuantityLimit', CART_ITEM_LIMIT: 'errCartFull' } as const;
+
+/** The server's expected refusals (cart.yaml 400/409) said plainly; null for anything else. */
+function refusal(error: unknown, t: ReturnType<typeof useLang>['t']): string | null {
+  if (!(error instanceof HttpError)) return null;
+  if (error.code === 'OUT_OF_STOCK') {
+    const left = error.fields.find((f) => f.field === 'quantity')?.message.match(/available=(\d+)/)?.[1];
+    return left ? t('errOutOfStockLeft').replace('{n}', left) : t('errOutOfStock');
+  }
+  const key = REFUSALS[error.message as keyof typeof REFUSALS];
+  return key ? t(key) : null;
+}
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const { t } = useLang();
   // Read through a ref in the merge: a language switch must not re-run the status effect (refetch, lost edits).
   const tRef = useRef(t);
   tRef.current = t;
-  const { status, onSignedIn } = useAuth();
+  const { status, me, onSignedIn } = useAuth();
+  const userId = me?.id ?? null;
   const member = status === 'member';
   const [cart, setCartState] = useState<api.Cart | null>(null);
   const cartRef = useRef<api.Cart | null>(null);
-  const [loading, setLoading] = useState(false);
+  // true until the first load settles, so /cart does not flash "empty" while the session restores.
+  const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
   // One app-wide status line for screen readers (spec: Contextual Live Badge Updates).
   const [announcement, setAnnouncement] = useState('');
@@ -127,11 +144,18 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => onSignedIn(() => (readHint() ? runMerge() : undefined)), [onSignedIn, runMerge]);
 
-  // Status changes (restore, sign in, sign out): show the cart that belongs to who the visitor is now.
+  // Status or account changes (restore, sign in — also as someone else, here or in another tab — sign out): show the
+  // cart that belongs to who the visitor is now.
   useEffect(() => {
     setCart(null);
     void reload();
-  }, [reload]);
+  }, [reload, userId]);
+
+  const drop = useCallback(async () => {
+    if (!member) writeHint(null);
+    setCart(null);
+    await reload();
+  }, [member, reload]);
 
   const conflict = useCallback(async () => {
     await reload();
@@ -147,11 +171,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
       void refresh(next, member);
       return true;
     } catch (error) {
-      if (isVersionConflict(error)) await conflict();
-      else setNotice(t('loadError'));
+      if (isVersionConflict(error)) { await conflict(); return false; }
+      if (isCartGone(error)) await drop();
+      setNotice(refusal(error, t) ?? t('errCartWrite'));
       return false;
     }
-  }), [conflict, refresh, member, t]);
+  }), [conflict, drop, refresh, member, t]);
 
   const value = useMemo<CartContext>(() => ({
     cart,
@@ -178,15 +203,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
         return 'added';
       } catch (error) {
         if (!isRetryable(error)) pending.current = null;
-        if (isVersionConflict(error)) { await conflict(); return 'conflict'; }
-        return 'failed';
+        if (isVersionConflict(error)) { await conflict(); return { problem: t('cartChanged') }; }
+        if (isCartGone(error)) await drop();
+        return { problem: refusal(error, t) ?? t('addFailed') };
       }
     }),
     setQuantity: (itemId, quantity) => write((c) => api.setQuantity(member, c.cart_id, itemId, quantity, c.version)),
     remove: (itemId) => write((c) => api.removeItem(member, c.cart_id, itemId, c.version)),
     clear: () => write((c) => api.clearCart(member, c.cart_id, c.version)),
     reload,
-  }), [cart, loading, notice, member, conflict, write, refresh, reload, t]);
+  }), [cart, loading, notice, member, conflict, drop, write, refresh, reload, t]);
 
   return (
     <Context.Provider value={value}>
