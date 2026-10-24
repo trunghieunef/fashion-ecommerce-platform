@@ -130,3 +130,24 @@ it('an empty cart links to products', async () => {
   expect(container.querySelector('main')!.textContent).toContain('Giỏ hàng của bạn đang trống.');
   expect(container.querySelector('main a[href="/products"]')).not.toBeNull();
 });
+
+it('a line without a preview yet is not marked as not sold', async () => {
+  const written = { ...cartGuest, data: { ...cartGuest.data, preview_status: 'NOT_LOADED', subtotal_preview: null,
+    items: cartGuest.data.items.map((i) => ({ ...i, preview: null })) } };
+  mockFetch(shop(written));
+  const container = await render('/cart');
+  expect(lines(container)[1].textContent).not.toContain('Không còn bán');
+});
+
+it('a quantity the server refused goes back to the cart value', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  mockFetch((path) => (path === `/api/v1/carts/${GUEST}` ? json(cartGuest)
+    : path.startsWith(`/api/v1/carts/${GUEST}/items/`)
+      ? json({ code: 'OUT_OF_STOCK', message: 'OUT_OF_STOCK', metadata: { request_id: 't', trace_id: 't' } }, 409) : null));
+  const container = await render('/cart');
+  const line = lines(container)[0];
+  await act(async () => { button(line, 'Tăng số lượng').click(); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(400); });
+  await flush();
+  expect((line.querySelector('input') as HTMLInputElement).value).toBe(String(BLUE_LINE.quantity));
+});

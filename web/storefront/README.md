@@ -34,6 +34,8 @@ Drawer dùng chung (`src/ui/Drawer.tsx`) là `<dialog>` native (`showModal`): fo
   giỏ" đầu tiên tạo giỏ. `localStorage['storefront.cart']` chỉ là gợi ý `cart_id` của guest.
 - Mọi lệnh ghi gửi `expected_version`; 409 `VERSION_CONFLICT` → tải lại giỏ + "Giỏ hàng vừa thay đổi ở nơi khác…", không tự
   gửi lại. Client không bao giờ xóa item ở local. `Idempotency-Key` giữ nguyên khi thử lại cùng thao tác sau lỗi mạng/503.
+  Các lệnh ghi chạy tuần tự (lệnh sau gửi version lệnh trước trả về). Lệnh ghi và gộp giỏ trả `preview_status = NOT_LOADED`
+  (`preview: null`), nên client đọc lại giỏ để lấy giá/tồn kho; dòng chưa có preview không bị đánh dấu.
 - Trang chi tiết: nút "Thêm vào giỏ" (cần đủ màu + size, chặn bấm lặp) → drawer xác nhận. Header: link `/cart` có nhãn
   "Giỏ hàng, N sản phẩm"; một vùng `role="status"` toàn app đọc "Đã thêm vào giỏ…".
 - `/cart`: số lượng 1–99 gửi số tuyệt đối sau 400 ms; dòng không còn bán/không đủ hàng được đánh dấu; tạm tính chỉ khi

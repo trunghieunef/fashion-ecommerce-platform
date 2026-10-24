@@ -34,7 +34,7 @@ export function AddToCart({ product, variant }: { product: Product; variant: Var
     busy.current = false;
     setPending(false);
     if (result === 'added') setAdded(variant);
-    else if (result === 'failed') setProblem(t('addFailed'));
+    else setProblem(t(result === 'conflict' ? 'cartChanged' : 'addFailed'));
   }
 
   return (

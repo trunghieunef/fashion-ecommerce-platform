@@ -23,20 +23,26 @@ function CartLine({ item, onRemoved }: { item: CartItem; onRemoved: () => void }
   const [draft, setDraft] = useState(String(item.quantity));
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => { setDraft(String(item.quantity)); }, [item.quantity]);
+  // A refused change leaves item.quantity as it was, so the effect above does not fire: put the box back by hand.
+  const latest = useRef(item.quantity);
+  latest.current = item.quantity;
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
 
   const change = (text: string) => {
     setDraft(text);
     if (timer.current) clearTimeout(timer.current);
     if (!valid(text) || Number(text) === item.quantity) return;
-    timer.current = setTimeout(() => { void setQuantity(item.item_id, Number(text)); }, DEBOUNCE_MS);
+    timer.current = setTimeout(async () => {
+      if (!(await setQuantity(item.item_id, Number(text)))) setDraft(String(latest.current));
+    }, DEBOUNCE_MS);
   };
   const step = (delta: number) => {
     const base = valid(draft) ? Number(draft) : item.quantity;
     change(String(Math.min(99, Math.max(1, base + delta))));
   };
   const preview = item.preview;
-  const mark = !preview || !preview.active ? t('notSold') : preview.available < item.quantity ? t('notEnough') : null;
+  // No preview (just written, or catalog/stock unreachable) says nothing about the line: no mark.
+  const mark = !preview ? null : !preview.active ? t('notSold') : preview.available < item.quantity ? t('notEnough') : null;
 
   return (
     <li data-testid="cart-line" className="grid grid-cols-[5rem_1fr] gap-4 border-b border-line py-4 lg:grid-cols-[7rem_1fr]">

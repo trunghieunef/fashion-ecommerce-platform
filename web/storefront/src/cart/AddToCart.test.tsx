@@ -88,3 +88,14 @@ it('a failed add shows the reason by the button', async () => {
   expect(container.querySelector('[data-testid="product-info"] [role="alert"]')!.textContent).toBe('Không thêm được vào giỏ. Vui lòng thử lại.');
   expect(container.querySelector('dialog[open]')).toBeNull();
 });
+
+it('a version conflict on add says so by the button', async () => {
+  localStorage.setItem('storefront.cart', GUEST);
+  mockFetch((path) => (path === `/api/v1/carts/${GUEST}` ? json(cartGuest)
+    : shop(() => json({ code: 'VERSION_CONFLICT', message: 'VERSION_CONFLICT', metadata }, 409))(path)));
+  const container = await render(PATH);
+  await chooseBlueM(container);
+  await act(async () => { addButton(container).click(); });
+  await flush();
+  expect(container.querySelector('[data-testid="product-info"] [role="alert"]')!.textContent).toBe('Giỏ hàng vừa thay đổi ở nơi khác, vui lòng kiểm tra lại.');
+});

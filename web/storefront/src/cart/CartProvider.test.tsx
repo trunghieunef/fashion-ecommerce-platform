@@ -139,3 +139,39 @@ it('signing out drops the member cart from view', async () => {
   expect(h.cart.cart).toBeNull();
   expect(h.cart.count).toBe(0);
 });
+
+const notLoaded = (cart: typeof cartGuest, version: number) => ({ ...cart, data: { ...cart.data, version, preview_status: 'NOT_LOADED',
+  subtotal_preview: null, items: cart.data.items.map((i) => ({ ...i, preview: null })) } });
+
+it('a write answered without a preview reads the cart again', async () => {
+  localStorage.setItem('storefront.cart', GUEST);
+  let written = false;
+  const calls = mockFetch((path) => (path === `/api/v1/carts/${GUEST}` ? json({ ...cartGuest, data: { ...cartGuest.data, version: written ? 3 : 2 } })
+    : path.startsWith(`/api/v1/carts/${GUEST}/items/`) ? (written = true, json(notLoaded(cartGuest, 3))) : null));
+  const h = await mount();
+  await act(async () => { await h.cart.setQuantity(cartGuest.data.items[0].item_id, 4); });
+  await flush();
+  expect(calls.filter((c) => c.url === `/api/v1/carts/${GUEST}` && c.method === 'GET')).toHaveLength(2);
+  expect(h.cart.cart?.preview_status).toBe('UNAVAILABLE');
+  expect(h.cart.cart?.version).toBe(3);
+});
+
+it('overlapping writes send the version from the previous answer', async () => {
+  localStorage.setItem('storefront.cart', GUEST);
+  let release: (r: Response) => void = () => {};
+  const calls = mockFetch((path) => (path === `/api/v1/carts/${GUEST}` ? json(cartGuest)
+    : path.startsWith(`/api/v1/carts/${GUEST}/items/`)
+      ? (calls.filter((c) => c.method === 'PUT').length === 1 ? new Promise<Response>((r) => { release = r; }) : json(cartGuest))
+      : null));
+  const h = await mount();
+  let first: Promise<boolean> = Promise.resolve(true);
+  let second: Promise<boolean> = Promise.resolve(true);
+  await act(async () => {
+    first = h.cart.setQuantity(cartGuest.data.items[0].item_id, 4);
+    second = h.cart.setQuantity(cartGuest.data.items[1].item_id, 1);
+  });
+  await act(async () => { release(json({ ...cartGuest, data: { ...cartGuest.data, version: 3 } })); await first; await second; });
+  const puts = calls.filter((c) => c.method === 'PUT');
+  expect(puts.map((c) => (c.body as { expected_version: number }).expected_version)).toEqual([2, 3]);
+  expect(h.cart.notice).toBeNull();
+});

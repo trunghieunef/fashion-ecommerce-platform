@@ -148,3 +148,16 @@ it('no guest cart, no merge call', async () => {
   expect(merges(calls)).toHaveLength(0);
   expect(h.cart.cart?.owner).toBe('MEMBER');
 });
+
+it('a merged cart without a preview is read again', async () => {
+  const bare = { ...merge, data: { ...merge.data, cart: { ...merge.data.cart, preview_status: 'NOT_LOADED', subtotal_preview: null,
+    items: merge.data.cart.items.map((i) => ({ ...i, preview: null })) } } };
+  const read = { ...cartMember, data: { ...cartMember.data, version: 5 } };
+  const calls = mockFetch(shop((path) => (path === '/api/v1/carts/merge' ? json(bare)
+    : path === `/api/v1/carts/${merge.data.cart.cart_id}` ? json(read) : null)));
+  const h = await mount();
+  await signIn(h);
+  await flush();
+  expect(calls.some((c) => c.url === `/api/v1/carts/${merge.data.cart.cart_id}`)).toBe(true);
+  expect(h.cart.cart?.preview_status).toBe('OK');
+});

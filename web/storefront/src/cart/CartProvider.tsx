@@ -44,6 +44,9 @@ const isNotFound = (e: unknown) => e instanceof HttpError && e.status === 404;
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const { t } = useLang();
+  // Read through a ref in the merge: a language switch must not re-run the status effect (refetch, lost edits).
+  const tRef = useRef(t);
+  tRef.current = t;
   const { status, onSignedIn } = useAuth();
   const member = status === 'member';
   const [cart, setCartState] = useState<api.Cart | null>(null);
@@ -58,13 +61,20 @@ export function CartProvider({ children }: { children: ReactNode }) {
   // the merge result must not overwrite the merged cart).
   const seq = useRef(0);
   const merging = useRef<Promise<void> | null>(null);
+  // Writes run one after another, so each sends the version the previous one returned (no self-inflicted 409).
+  const queue = useRef<Promise<unknown>>(Promise.resolve());
+  const serial = <T,>(task: () => Promise<T>) => {
+    const next = queue.current.then(task);
+    queue.current = next.catch(() => undefined);
+    return next;
+  };
 
   const setCart = (next: api.Cart | null) => { cartRef.current = next; setCartState(next); };
 
   const load = useCallback(async (asMember: boolean) => {
     const mine = ++seq.current;
     const hint = readHint();
-    if (!asMember && !hint) { setCart(null); return; }
+    if (!asMember && !hint) { setCart(null); setLoading(false); return; }
     setLoading(true);
     try {
       const next = asMember ? await api.getMyCart() : await api.getCart(false, hint!);
@@ -79,6 +89,18 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  /** Writes and the merge answer without previews (cart.yaml: NOT_LOADED); read the cart again for prices and stock. */
+  const refresh = useCallback(async (written: api.Cart, asMember: boolean) => {
+    if (written.preview_status !== 'NOT_LOADED') return;
+    try {
+      const next = await api.getCart(asMember, written.cart_id);
+      // A later write may have answered first: never step back to an older version.
+      if (cartRef.current?.cart_id === next.cart_id && next.version >= cartRef.current.version) setCart(next);
+    } catch {
+      // Keep the written cart; the next load brings the preview.
+    }
+  }, []);
+
   /** Single-flight: sign-in (onSignedIn) and the status change both ask for it; one merge runs. */
   const runMerge = useCallback(() => {
     if (merging.current) return merging.current;
@@ -87,15 +109,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
       setLoading(true);
       const { outcome, result } = await mergeGuestCart();
       if (outcome === 'merged' && result) {
-        if (mine === seq.current) { setCart(result.cart); setLoading(false); }
+        if (mine === seq.current) { setCart(result.cart); setLoading(false); void refresh(result.cart, true); }
         if (result.adjustments.length > 0) setAdjustments(result.adjustments);
         return;
       }
-      if (outcome === 'later') setNotice(t('mergeLater'));
+      if (outcome === 'later') setNotice(tRef.current('mergeLater'));
       await load(true);
     })().finally(() => { merging.current = null; });
     return merging.current;
-  }, [load, t]);
+  }, [load, refresh]);
 
   const reload = useCallback(async () => {
     if (status === 'unknown') return;
@@ -116,18 +138,20 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setNotice(t('cartChanged'));
   }, [reload, t]);
 
-  const write = useCallback(async (run: (c: api.Cart) => Promise<api.Cart>) => {
+  const write = useCallback((run: (c: api.Cart) => Promise<api.Cart>) => serial(async () => {
     const current = cartRef.current;
     if (!current) return false;
     try {
-      setCart(await run(current));
+      const next = await run(current);
+      setCart(next);
+      void refresh(next, member);
       return true;
     } catch (error) {
       if (isVersionConflict(error)) await conflict();
       else setNotice(t('loadError'));
       return false;
     }
-  }, [conflict, t]);
+  }), [conflict, refresh, member, t]);
 
   const value = useMemo<CartContext>(() => ({
     cart,
@@ -135,7 +159,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     loading,
     notice,
     clearNotice: () => setNotice(null),
-    add: async (variantId, quantity) => {
+    add: (variantId, quantity) => serial(async (): Promise<AddResult> => {
       const previous = pending.current;
       const key = previous && previous.variantId === variantId && previous.quantity === quantity ? previous.key : crypto.randomUUID();
       pending.current = { variantId, quantity, key };
@@ -148,6 +172,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         }
         const next = await api.addItem(member, current.cart_id, { variant_id: variantId, quantity, expected_version: current.version }, key);
         setCart(next);
+        void refresh(next, member);
         pending.current = null;
         setAnnouncement(t('addedAnnounce').replace('{n}', String(next.items.reduce((sum, item) => sum + item.quantity, 0))));
         return 'added';
@@ -156,12 +181,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
         if (isVersionConflict(error)) { await conflict(); return 'conflict'; }
         return 'failed';
       }
-    },
+    }),
     setQuantity: (itemId, quantity) => write((c) => api.setQuantity(member, c.cart_id, itemId, quantity, c.version)),
     remove: (itemId) => write((c) => api.removeItem(member, c.cart_id, itemId, c.version)),
     clear: () => write((c) => api.clearCart(member, c.cart_id, c.version)),
     reload,
-  }), [cart, loading, notice, member, conflict, write, reload, t]);
+  }), [cart, loading, notice, member, conflict, write, refresh, reload, t]);
 
   return (
     <Context.Provider value={value}>

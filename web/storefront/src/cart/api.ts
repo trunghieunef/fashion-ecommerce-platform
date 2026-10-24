@@ -19,7 +19,7 @@ export type Cart = {
   owner: 'GUEST' | 'MEMBER';
   expires_at: string | null;
   items: CartItem[];
-  preview_status: 'OK' | 'UNAVAILABLE' | 'EMPTY';
+  preview_status: 'OK' | 'UNAVAILABLE' | 'EMPTY' | 'NOT_LOADED';
   subtotal_preview: number | null;
   shipping_fee_status: 'NOT_CALCULATED';
 };
