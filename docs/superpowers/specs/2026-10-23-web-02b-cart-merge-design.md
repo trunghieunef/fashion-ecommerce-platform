@@ -51,7 +51,13 @@ Nguyên tắc UX (skill ui-ux-pro-max, `--domain ux`):
   gửi lại thao tác. Không có trường hợp nào client xóa item ở local.
 - **Idempotency-Key** (`POST …/items`, merge): `crypto.randomUUID()` sinh một lần cho mỗi thao tác người dùng, giữ nguyên
   qua retry do lỗi mạng/503/timeout; thao tác mới mới sinh key mới.
-- **Màn `/cart`**: mỗi dòng ảnh, tên, màu/size, giá preview, bộ số lượng (1–99, `PUT` số tuyệt đối, debounce 400 ms; ô số
+- **Thông tin hiển thị** (bổ sung 2026-10-24, chủ dự án đã duyệt cùng plan — §7.6): `CartItem` trong `cart.yaml` chỉ có `item_id`,
+  `variant_id`, `sku`, `quantity`, `price_snapshot`, `item_version`, `preview`; không có tên, ảnh, màu, size hay
+  `product_id`, và catalog public không tra được theo `variant_id`. Khi "Thêm vào giỏ" từ trang chi tiết, client lưu
+  `{ product_id, name_vi, name_en, image asset_id, color, size }` theo `variant_id` vào `localStorage['storefront.cartDisplay']`
+  (chỉ để hiển thị; giá luôn lấy từ server). Dòng không có dữ liệu này (giỏ gộp hoặc mở từ thiết bị khác) hiển thị SKU,
+  ảnh placeholder và giá — không lỗi, không gọi API phụ.
+- **Màn `/cart`**: mỗi dòng ảnh, tên, màu/size (hoặc SKU khi thiếu dữ liệu hiển thị), giá preview, bộ số lượng (1–99, `PUT` số tuyệt đối, debounce 400 ms; ô số
   cho phép gõ), xóa dòng; nút "Xóa giỏ" (xác nhận). `preview_status`: `OK` → tạm tính `subtotal_preview`; `UNAVAILABLE` →
   đánh dấu dòng không còn bán/không đủ hàng tham khảo, không hiện tạm tính; `EMPTY` → trạng thái giỏ trống + link mua sắm.
   Luôn kèm ghi chú: giá và tồn chỉ tham khảo, phí ship tính ở bước đặt hàng. Nút "Thanh toán" disabled (WEB-03).
@@ -99,3 +105,5 @@ cần đổi các interface này, ghi rõ trong plan và không sửa ngầm.
 3. Sau khi thêm vào giỏ: mở Drawer xác nhận, không chuyển trang.
 4. Checkout và ước tính phí ship không thuộc WEB-02; nút "Thanh toán" disabled.
 5. Không thêm thư viện.
+6. (Bổ sung 2026-10-24) Tên/ảnh/màu/size trong giỏ lấy từ dữ liệu client lưu lúc thêm vào giỏ; thiếu thì hiện SKU. Bổ sung
+   các trường hiển thị vào response giỏ (cart.yaml + cart-service) là task backend riêng, không thuộc WEB-02b.

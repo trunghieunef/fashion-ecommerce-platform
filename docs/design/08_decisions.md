@@ -630,6 +630,20 @@ mà WEB-01 đã hẹn); nghiên cứu thiết kế bằng skill ui-ux-pro-max v�
 | Size không có trong màu đang chọn: gạch ngang nhưng vẫn chọn được | Lệch chữ "disabled" của spec để giữ sửa lỗi review 1 của WEB-01 (không kẹt lựa chọn) |
 | Giữ "Tải thêm", link theo `id`, ngôn ngữ trong `localStorage` | Như WEB-01 |
 
+## WEB-02b — quyết định 2026-10-24
+
+`TASK:WEB-02` phần b. Chủ dự án duyệt [spec](../superpowers/specs/2026-10-23-web-02b-cart-merge-design.md) (2026-10-23) và
+bổ sung §3/§7.6 cùng plan (2026-10-24); các mặc định do agent chốt:
+
+| Quyết định | Hệ quả |
+|---|---|
+| Tạo giỏ lười ở lần "Thêm vào giỏ" đầu; `cart_id` guest trong `localStorage` chỉ là gợi ý | Không có giỏ rác cho người chỉ xem; credential vẫn là cookie HttpOnly |
+| 409 version: tải lại và báo, không tự gửi lại (trừ gộp giỏ: thử lại một lần) | Không âm thầm ghi đè thay đổi ở nơi khác |
+| Thêm vào giỏ mở drawer xác nhận, không chuyển trang | Người mua tiếp tục xem sản phẩm |
+| Checkout và ước tính phí ship không thuộc WEB-02 | "Thanh toán" disabled tới WEB-03 |
+| Tên/ảnh/màu/size dòng giỏ lưu ở client lúc thêm; thiếu thì hiện SKU | API giỏ (`cart.yaml` `CartItem`) không trả các trường này; bổ sung vào API là task backend riêng |
+| Không thêm thư viện | fetch, React context, storage có sẵn |
+
 ## WEB-02a — quyết định 2026-10-23
 
 `TASK:WEB-02` phần a. Chủ dự án chọn tách WEB-02 thành a (phiên, tài khoản, địa chỉ) và b (giỏ, gộp giỏ) và duyệt

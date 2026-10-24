@@ -6,9 +6,10 @@ import { Link, useLocation, useNavigate } from 'react-router';
 import { listCategories, listCollections, type Category, type Collection } from '../catalog/api';
 import { useLoad } from '../catalog/ui';
 import { useAuth } from '../auth/AuthProvider';
+import { useCart } from '../cart/CartProvider';
 import { useLang } from '../i18n';
 import { Drawer } from '../ui/Drawer';
-import { ChevronDown, CloseIcon, MenuIcon, SearchIcon, UserIcon } from '../ui/icons';
+import { BagIcon, ChevronDown, CloseIcon, MenuIcon, SearchIcon, UserIcon } from '../ui/icons';
 
 const LABEL = 'text-sm font-semibold uppercase tracking-[0.02em]';
 const COLLECTIONS = 'collections';
@@ -57,6 +58,9 @@ export function Header() {
   const navigate = useNavigate();
   const [categories] = useLoad(listCategories, []);
   const { status } = useAuth();
+  const { count } = useCart();
+  // TASK:WEB-02b: the badge number is decorative; the link label carries the count (no competing live region).
+  const cartLabel = t('cartLabel').replace('{n}', String(count));
   // TASK:WEB-02a: while the session is being restored the button points at /account (RequireAuth waits) and is busy.
   const account = status === 'guest' ? { href: '/login', label: t('signIn') } : { href: '/account', label: t('account') };
   const [collections, loadCollections] = useLazyCollections();
@@ -168,6 +172,14 @@ export function Header() {
           <Link to={account.href} aria-label={account.label} aria-busy={status === 'unknown' || undefined} className="grid size-11 place-items-center">
             <UserIcon />
           </Link>
+          <Link to="/cart" aria-label={cartLabel} className="relative grid size-11 place-items-center">
+            <BagIcon />
+            {count > 0 && (
+              <span aria-hidden="true" className="absolute top-1 right-0 grid min-w-5 place-items-center rounded-full bg-fg px-1 text-xs font-semibold text-bg">
+                {count > 99 ? '99+' : count}
+              </span>
+            )}
+          </Link>
           <button type="button" lang={lang === 'vi' ? 'en' : 'vi'} onClick={toggleLang} className={`${LABEL} hidden min-h-11 px-2 lg:block`}>
             {t('switchLang')}
           </button>
@@ -205,6 +217,7 @@ export function Header() {
           <li className="border-b border-fg"><Link to="/products?sort=NEWEST" className={`${LABEL} flex min-h-12 items-center`}>{t('newArrivals')}</Link></li>
           <li className="border-b border-fg"><Link to="/products" className={`${LABEL} flex min-h-12 items-center`}>{t('products')}</Link></li>
           <li className="border-b border-fg"><Link to={account.href} className={`${LABEL} flex min-h-12 items-center`}>{account.label}</Link></li>
+          <li className="border-b border-fg"><Link to="/cart" className={`${LABEL} flex min-h-12 items-center`}>{cartLabel}</Link></li>
           <li><button type="button" lang={lang === 'vi' ? 'en' : 'vi'} onClick={toggleLang} className={`${LABEL} min-h-12`}>{t('switchLang')}</button></li>
         </ul>
       </Drawer>

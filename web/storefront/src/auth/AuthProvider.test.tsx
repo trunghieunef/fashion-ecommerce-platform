@@ -154,3 +154,32 @@ it('a deliberate exit is used once; a later guest visit to /account keeps next (
   await navigateTo('/account');
   expect(locationOf(container)).toBe('/login?next=%2Faccount');
 });
+
+it('a throwing onSignedIn callback does not fail the sign-in and others still run (WEB-02b)', async () => {
+  mockFetch((path) => (path === '/api/v1/auth/login' ? json(session) : null));
+  resetSessionForTests();
+  const ran: string[] = [];
+  let auth: ReturnType<typeof useAuth> | null = null;
+  function Probe() {
+    const value = useAuth();
+    auth = value;
+    useEffect(() => {
+      const offs = [
+        value.onSignedIn(() => { ran.push('sync-throw'); throw new Error('boom'); }),
+        value.onSignedIn(async () => { ran.push('async-reject'); throw new Error('later'); }),
+        value.onSignedIn(() => { ran.push('fine'); }),
+      ];
+      return () => offs.forEach((off) => off());
+    }, [value.onSignedIn]);
+    return null;
+  }
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  await act(async () => createRoot(container).render(
+    <LangProvider initial="vi"><MemoryRouter><AuthProvider><Probe /></AuthProvider></MemoryRouter></LangProvider>));
+  await flush();
+  await act(async () => { await expect(auth!.signIn('member@example.test', 'correct horse')).resolves.toBeUndefined(); });
+  await flush();
+  expect(ran).toEqual(['sync-throw', 'async-reject', 'fine']);
+  expect(auth!.status).toBe('member');
+});

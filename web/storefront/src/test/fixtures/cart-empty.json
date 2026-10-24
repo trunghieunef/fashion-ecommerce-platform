@@ -1,0 +1,17 @@
+{
+  "code": "OK",
+  "data": {
+    "cart_id": "88888888-0000-4000-8000-0000000000c1",
+    "version": 0,
+    "owner": "GUEST",
+    "expires_at": "2026-11-23T03:00:00.000Z",
+    "items": [],
+    "preview_status": "EMPTY",
+    "subtotal_preview": null,
+    "shipping_fee_status": "NOT_CALCULATED"
+  },
+  "metadata": {
+    "request_id": "web02b-fixture",
+    "trace_id": "web02b-fixture"
+  }
+}

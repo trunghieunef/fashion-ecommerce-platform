@@ -8,6 +8,8 @@ import { LoginPage } from '../auth/LoginPage';
 import { RegisterPage } from '../auth/RegisterPage';
 import { ResetPasswordPage } from '../auth/ResetPasswordPage';
 import { RequireAuth } from '../auth/RequireAuth';
+import { CartPage } from '../cart/CartPage';
+import { CartProvider } from '../cart/CartProvider';
 
 import { CollectionPage } from '../catalog/CollectionPage';
 import { HomePage } from '../catalog/HomePage';
@@ -30,6 +32,7 @@ function SkipLink() {
 export function AppRoutes() {
   return (
     <AuthProvider>
+      <CartProvider>
       <SkipLink />
       <Header />
       <Routes>
@@ -38,6 +41,7 @@ export function AppRoutes() {
         <Route path="/search" element={<ListingPage />} />
         <Route path="/products/:id" element={<ProductPage />} />
         <Route path="/collections/:slug" element={<CollectionPage />} />
+        <Route path="/cart" element={<CartPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
@@ -46,6 +50,7 @@ export function AppRoutes() {
         <Route path="/account/addresses" element={<RequireAuth><AddressesPage /></RequireAuth>} />
         <Route path="*" element={<main id="main" tabIndex={-1} className={PAGE}><NotFound /></main>} />
       </Routes>
+      </CartProvider>
     </AuthProvider>
   );
 }

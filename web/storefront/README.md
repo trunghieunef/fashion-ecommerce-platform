@@ -25,10 +25,35 @@ Drawer dùng chung (`src/ui/Drawer.tsx`) là `<dialog>` native (`showModal`): fo
 | Drawer bộ lọc | `src/catalog/FilterDrawer.tsx` |
 | Gallery + zoom | `src/catalog/Gallery.tsx` |
 
+## Giỏ hàng và gộp giỏ (WEB-02b)
+
+[Spec](../../docs/superpowers/specs/2026-10-23-web-02b-cart-merge-design.md) ·
+[evidence](../../docs/evidence/web-02b-local-2026-10-24.md). Trạng thái: **chờ review/nghiệm thu**.
+
+- Guest dùng cookie `cart_token` (HttpOnly, server đặt); member dùng Bearer. Không tạo giỏ khi chỉ xem hàng: lần "Thêm vào
+  giỏ" đầu tiên tạo giỏ. `localStorage['storefront.cart']` chỉ là gợi ý `cart_id` của guest.
+- Mọi lệnh ghi gửi `expected_version`; 409 `VERSION_CONFLICT` → tải lại giỏ + "Giỏ hàng vừa thay đổi ở nơi khác…", không tự
+  gửi lại. Client không bao giờ xóa item ở local. `Idempotency-Key` giữ nguyên khi thử lại cùng thao tác sau lỗi mạng/503.
+  Các lệnh ghi chạy tuần tự (lệnh sau gửi version lệnh trước trả về). Lệnh ghi và gộp giỏ trả `preview_status = NOT_LOADED`
+  (`preview: null`), nên client đọc lại giỏ để lấy giá/tồn kho; dòng chưa có preview không bị đánh dấu.
+  Từ chối thông thường của server được nói rõ: `OUT_OF_STOCK` ("chỉ còn N"), `VARIANT_NOT_AVAILABLE`, `QUANTITY_LIMIT`,
+  `CART_ITEM_LIMIT`; 404 `CART_NOT_FOUND` khi ghi → bỏ giỏ đó (và gợi ý guest) rồi tải lại. Giỏ được tải lại khi đổi tài
+  khoản (đăng nhập người khác ở tab này hoặc tab khác); "Thêm vào giỏ" chờ tới khi biết phiên.
+- Trang chi tiết: nút "Thêm vào giỏ" (cần đủ màu + size, chặn bấm lặp) → drawer xác nhận. Header: link `/cart` có nhãn
+  "Giỏ hàng, N sản phẩm"; một vùng `role="status"` toàn app đọc "Đã thêm vào giỏ…".
+- `/cart`: số lượng 1–99 gửi số tuyệt đối sau 400 ms; dòng không còn bán/không đủ hàng được đánh dấu; tạm tính chỉ khi
+  `preview_status = OK`; xóa giỏ có xác nhận; "Thanh toán" disabled (WEB-03). Giá luôn từ server, không tính ở client.
+- Tên/ảnh/màu/size của dòng giỏ: API giỏ không trả các trường này, nên trang chi tiết lưu chúng theo `variant_id` vào
+  `localStorage['storefront.cartDisplay']` (tối đa 200) lúc thêm; dòng thiếu dữ liệu (giỏ gộp/mở ở máy khác) hiện SKU.
+- Gộp giỏ: sau đăng nhập/đăng ký khi còn gợi ý giỏ guest; key lưu `sessionStorage['storefront.merge']` cho tới khi xong;
+  409 thử lại một lần với key mới; thất bại → giữ giỏ guest, "Chưa gộp được giỏ, sẽ thử lại", lần khởi động sau thử lại.
+  Điều chỉnh (`adjustments`) hiện trong drawer. Gộp và tải giỏ member chạy single-flight, kết quả tải cũ bị bỏ qua.
+
 ## Phiên đăng nhập và tài khoản (WEB-02a)
 
 [Spec](../../docs/superpowers/specs/2026-10-23-web-02a-session-account-design.md) ·
-[evidence](../../docs/evidence/web-02a-local-2026-10-24.md). Trạng thái: **chờ review/nghiệm thu**.
+[evidence](../../docs/evidence/web-02a-local-2026-10-24.md). Trạng thái: **Done (local)**
+([nghiệm thu 2026-10-24](../../docs/evidence/acceptance-2026-10-24.md)); WEB-02b (giỏ, gộp giỏ) ở mục trên.
 
 - Access token chỉ ở biến module `src/auth/session.ts` (không storage); tải trang → một lần `POST /auth/refresh` (cookie
   HttpOnly) để khôi phục phiên. Refresh single-flight: một Promise trong tab, bọc Web Lock `storefront.auth.refresh` giữa
