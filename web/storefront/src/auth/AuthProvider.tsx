@@ -21,7 +21,8 @@ type Auth = {
   /** RequireAuth calls this once it has sent the member to the pending exit. */
   clearExit(): void;
   reloadMe(): Promise<void>;
-  onSignedIn(callback: () => void): () => void;
+  /** Runs after every sign in/registration. Errors are contained: a failing callback never fails the sign in. */
+  onSignedIn(callback: () => unknown): () => void;
 };
 
 const Context = createContext<Auth | null>(null);
@@ -30,7 +31,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>('unknown');
   const [me, setMeState] = useState<api.User | null>(null);
   const meRef = useRef<api.User | null>(null);
-  const signedIn = useRef(new Set<() => void>());
+  const signedIn = useRef(new Set<() => unknown>());
   const exit = useRef<{ to: string; state?: unknown } | null>(null);
 
   const setMe = (user: api.User | null) => { meRef.current = user; setMeState(user); };
@@ -68,7 +69,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!session.user) await reloadMe();
     if (getAccessToken()) setStatus('member');
     broadcast('login');
-    signedIn.current.forEach((callback) => callback());
+    // TASK:WEB-02b: each callback (e.g. the cart merge) is isolated, sync throw or async rejection alike.
+    signedIn.current.forEach((callback) => {
+      try {
+        void Promise.resolve(callback()).catch(() => undefined);
+      } catch {
+        // contained: the sign in itself succeeded
+      }
+    });
   }, [reloadMe]);
 
   const value = useMemo<Auth>(() => ({

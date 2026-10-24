@@ -25,6 +25,9 @@ function fallback(path: string): Response {
   if (path.startsWith('/brands')) return json(brands);
   if (path.startsWith('/collections?')) return json(collections);
   // TASK:WEB-02a: no session unless a test signs in, so every catalog test runs as a guest.
+  // TASK:WEB-02b: a member without a cart yet.
+  if (path === '/api/v1/carts/mine')
+    return json({ code: 'NOT_FOUND', message: 'CART_NOT_FOUND', metadata: { request_id: 'harness', trace_id: 'harness' } }, 404);
   if (path === '/api/v1/auth/refresh')
     return json({ code: 'UNAUTHORIZED', message: 'refresh token missing', metadata: { request_id: 'harness', trace_id: 'harness' } }, 401);
   throw new Error(`unmocked path: ${path}`);

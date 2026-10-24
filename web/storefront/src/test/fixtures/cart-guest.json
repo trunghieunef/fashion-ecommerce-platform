@@ -1,0 +1,48 @@
+{
+  "code": "OK",
+  "data": {
+    "cart_id": "88888888-0000-4000-8000-0000000000c1",
+    "version": 2,
+    "owner": "GUEST",
+    "expires_at": "2026-11-23T03:00:00.000Z",
+    "items": [
+      {
+        "item_id": "88888888-0000-4000-8000-0000000000d1",
+        "variant_id": "55555555-5555-4555-8555-555555555551",
+        "sku": "TEE-M-BLUE",
+        "quantity": 1,
+        "price_snapshot": 100000,
+        "item_version": 0,
+        "preview": {
+          "effective_price": 100000,
+          "price_changed": false,
+          "active": true,
+          "available": 3,
+          "observed_at": "2026-10-24T03:00:00.000Z"
+        }
+      },
+      {
+        "item_id": "88888888-0000-4000-8000-0000000000d2",
+        "variant_id": "55555555-5555-4555-8555-555555555553",
+        "sku": "TEE-M-RED",
+        "quantity": 2,
+        "price_snapshot": 100000,
+        "item_version": 0,
+        "preview": {
+          "effective_price": 100000,
+          "price_changed": false,
+          "active": false,
+          "available": 0,
+          "observed_at": "2026-10-24T03:00:00.000Z"
+        }
+      }
+    ],
+    "preview_status": "UNAVAILABLE",
+    "subtotal_preview": null,
+    "shipping_fee_status": "NOT_CALCULATED"
+  },
+  "metadata": {
+    "request_id": "web02b-fixture",
+    "trace_id": "web02b-fixture"
+  }
+}
