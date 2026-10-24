@@ -136,6 +136,7 @@ const STRINGS = {
     errDefaultRequired: 'Phải luôn có một địa chỉ mặc định. Hãy đặt địa chỉ khác làm mặc định.',
     errFormInvalid: 'Thông tin chưa hợp lệ. Vui lòng kiểm tra lại.',
     errSignOut: 'Chưa đăng xuất được. Vui lòng thử lại.',
+    cartChanged: 'Giỏ hàng vừa thay đổi ở nơi khác, vui lòng kiểm tra lại.',
   },
   en: {
     store: 'Fashion Store',
@@ -269,6 +270,7 @@ const STRINGS = {
     errDefaultRequired: 'There must always be a default address. Make another address the default.',
     errFormInvalid: 'Some details are not valid. Please check them.',
     errSignOut: 'Could not sign out. Please try again.',
+    cartChanged: 'Your cart changed elsewhere, please check it.',
   },
 } as const;
 
