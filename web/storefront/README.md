@@ -28,7 +28,8 @@ Drawer dùng chung (`src/ui/Drawer.tsx`) là `<dialog>` native (`showModal`): fo
 ## Phiên đăng nhập và tài khoản (WEB-02a)
 
 [Spec](../../docs/superpowers/specs/2026-10-23-web-02a-session-account-design.md) ·
-[evidence](../../docs/evidence/web-02a-local-2026-10-24.md). Trạng thái: **chờ review/nghiệm thu**.
+[evidence](../../docs/evidence/web-02a-local-2026-10-24.md). Trạng thái: **Done (local)**
+([nghiệm thu 2026-10-24](../../docs/evidence/acceptance-2026-10-24.md)); WEB-02b (giỏ, gộp giỏ) chưa làm.
 
 - Access token chỉ ở biến module `src/auth/session.ts` (không storage); tải trang → một lần `POST /auth/refresh` (cookie
   HttpOnly) để khôi phục phiên. Refresh single-flight: một Promise trong tab, bọc Web Lock `storefront.auth.refresh` giữa
