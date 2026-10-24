@@ -9,6 +9,7 @@ import cartEmpty from '../test/fixtures/cart-empty.json';
 import cartMember from '../test/fixtures/cart-member.json';
 import checkoutToken from '../test/fixtures/checkout-token.json';
 import profile from '../test/fixtures/profile.json';
+import orderFixture from '../test/fixtures/order-processing.json';
 import quoteFixture from '../test/fixtures/quote.json';
 import refresh from '../test/fixtures/refresh.json';
 import { forgetCheckoutToken } from './api';
@@ -171,4 +172,115 @@ it('a quote outage asks to try again', async () => {
   const { c } = await quoteFails(() => problem(503, 'TEMPORARILY_UNAVAILABLE', 'DEPENDENCY_UNAVAILABLE'));
   expect(main(c).querySelector('[role="alert"]')!.textContent).toContain('Chưa tính được tổng tiền, vui lòng thử lại.');
   expect(primary(c).textContent).toBe('Xem tổng tiền');
+});
+
+// --- Task 4: placing the order (spec §4) ---
+const orders = (calls: Call[]) => calls.filter((c) => c.url === '/api/v1/orders');
+const location = (c: Element) => c.querySelector('[data-testid="location"]')!.textContent;
+const placed = () => json(orderFixture, 202);
+async function quoted(answer: Answer = () => null) {
+  const calls = mockFetch(guestShop(answer));
+  const c = await render('/checkout');
+  await fillGuest(c);
+  await press(c);
+  return { c, calls };
+}
+
+it('placing an order sends the quote and goes to the order page', async () => {
+  const { c, calls } = await quoted((path) => (path === '/api/v1/orders' ? placed() : null));
+  const cartReads = calls.filter((x) => x.url === `/api/v1/carts/${GUEST}`).length;
+  await press(c);
+  const sent = orders(calls);
+  expect(sent).toHaveLength(1);
+  expect(sent[0].body).toEqual({ cart_id: GUEST, cart_version: cartGuest.data.version, quote_token: 'example-signed-quote' });
+  expect(sent[0].headers['idempotency-key']).toMatch(/^[0-9a-f-]{36}$/);
+  expect(location(c)).toBe('/orders/ORD202610000001');
+  expect(calls.filter((x) => x.url === `/api/v1/carts/${GUEST}`).length).toBeGreaterThan(cartReads);
+  expect(sessionStorage.getItem('storefront.checkout')).toBeNull();
+});
+
+it('double click places once', async () => {
+  const { c, calls } = await quoted((path) => (path === '/api/v1/orders' ? placed() : null));
+  await act(async () => { primary(c).click(); primary(c).click(); });
+  await flush();
+  expect(orders(calls)).toHaveLength(1);
+});
+
+it('a lost response is retried with the same key and says so', async () => {
+  let n = 0;
+  const { c, calls } = await quoted((path) => (path === '/api/v1/orders' ? (n++ === 0 ? Promise.reject(new TypeError('offline')) : placed()) : null));
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  await press(c);
+  expect(main(c).textContent).toContain('Chưa xác nhận được đơn, đang thử lại…');
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+  await flush();
+  const sent = orders(calls);
+  expect(sent).toHaveLength(2);
+  expect(sent[1].headers['idempotency-key']).toBe(sent[0].headers['idempotency-key']);
+  expect(location(c)).toBe('/orders/ORD202610000001');
+});
+
+it('a reload with a pending order resends the same key and body', async () => {
+  const body = { cart_id: GUEST, cart_version: 2, quote_token: 'example-signed-quote' };
+  sessionStorage.setItem('storefront.checkout', JSON.stringify({ key: 'saved-key', body }));
+  const calls = mockFetch(guestShop((path) => (path === '/api/v1/orders' ? placed() : null)));
+  const c = await render('/checkout');
+  await flush();
+  expect(orders(calls).map((x) => [x.headers['idempotency-key'], x.body])).toEqual([['saved-key', body]]);
+  expect(calls.some((x) => x.url === '/api/v1/orders/quote')).toBe(false);
+  expect(location(c)).toBe('/orders/ORD202610000001');
+});
+
+it('prices changed: a new quote is shown and nothing is placed', async () => {
+  let first = true;
+  const changed = { ...quoteFixture, data: { ...quoteFixture.data, quote_token: 'second-quote',
+    totals: { ...quoteFixture.data.totals, subtotal: 320000, total_amount: 360000 } } };
+  const { c, calls } = await quoted((path) => (path === '/api/v1/orders/quote' && !first ? json(changed)
+    : path === '/api/v1/orders' ? (first ? (first = false, problem(409, 'PRICE_CHANGED', 'PRICE_CHANGED',
+      [{ field: quoteFixture.data.items[0].variant_id, message: 'old=100000,new=120000' }])) : placed()) : null));
+  await press(c);
+  expect(quotes(calls)).toHaveLength(2);
+  expect(orders(calls)).toHaveLength(1);
+  const alert = main(c).querySelector('[role="alert"]')!.textContent!;
+  expect(alert).toContain('Giá đã thay đổi. Vui lòng kiểm tra rồi đặt lại.');
+  expect(alert).toMatch(/100\.000\s₫ → 120\.000\s₫/);
+  expect(primary(c).textContent).toMatch(/^Đặt hàng · 360\.000\s₫$/);
+  await press(c);
+  const sent = orders(calls);
+  expect(sent).toHaveLength(2);
+  expect(sent[1].headers['idempotency-key']).not.toBe(sent[0].headers['idempotency-key']);
+  expect((sent[1].body as { quote_token: string }).quote_token).toBe('second-quote');
+});
+
+it('an expired quote on submit goes back to See total', async () => {
+  const { c, calls } = await quoted((path) => (path === '/api/v1/orders' ? problem(409, 'QUOTE_EXPIRED') : null));
+  await press(c);
+  expect(primary(c).textContent).toBe('Xem tổng tiền');
+  expect(orders(calls)).toHaveLength(1);
+  expect(sessionStorage.getItem('storefront.checkout')).toBeNull();
+});
+
+it('an invalid quote is quoted again, not placed', async () => {
+  const { c, calls } = await quoted((path) => (path === '/api/v1/orders' ? problem(400, 'VALIDATION_ERROR', 'INVALID_QUOTE') : null));
+  await press(c);
+  expect(quotes(calls)).toHaveLength(2);
+  expect(orders(calls)).toHaveLength(1);
+});
+
+it('an order already placed for this cart opens it', async () => {
+  const { c } = await quoted((path) => (path === '/api/v1/orders'
+    ? problem(409, 'CART_ALREADY_ORDERED', 'CART_ALREADY_ORDERED', [{ field: 'cart_id', message: 'ORD202610000009' }]) : null));
+  await press(c);
+  expect(location(c)).toBe('/orders/ORD202610000009');
+});
+
+it('an expired checkout token is renewed with the same key', async () => {
+  let n = 0;
+  const { c, calls } = await quoted((path) => (path === '/api/v1/orders'
+    ? (n++ === 0 ? problem(401, 'UNAUTHORIZED', 'INVALID_CHECKOUT_TOKEN') : placed()) : null));
+  await press(c);
+  const sent = orders(calls);
+  expect(sent).toHaveLength(2);
+  expect(sent[1].headers['idempotency-key']).toBe(sent[0].headers['idempotency-key']);
+  expect(location(c)).toBe('/orders/ORD202610000001');
 });

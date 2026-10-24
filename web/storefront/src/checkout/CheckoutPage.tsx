@@ -2,7 +2,7 @@
 // quote (2 minutes); only a quote that still matches what is typed and has not expired can be confirmed. Nothing is ever
 // ordered on its own: an expired, changed or refused quote only brings the visitor back to "See total".
 import { useEffect, useRef, useState } from 'react';
-import { Link, Navigate } from 'react-router';
+import { Link, Navigate, useNavigate } from 'react-router';
 
 import { placeName } from '../account/AddressForm';
 import geo from '../account/geo.sample.json';
@@ -15,12 +15,15 @@ import { HttpError } from '../http';
 import { useLang } from '../i18n';
 import { ErrorSummary, Field, SelectField, StatusMessage, useForm } from '../ui/form';
 import * as api from './api';
+import { clearPending, readPending, send, startPending, type Pending } from './submit';
 import { Summary } from './Summary';
 
 const FIELDS = ['contact_phone', 'contact_email', 'recipient_name', 'phone', 'province_code', 'ward_code', 'address_line', 'note'] as const;
 type Name = (typeof FIELDS)[number];
 const ADDRESS_FIELDS = ['recipient_name', 'phone', 'province_code', 'ward_code', 'address_line'] as const;
 const NEW = 'new';
+/** PRICE_CHANGED errors carry `old=..,new=..` per variant_id (order.yaml). */
+const prices = (message: string) => message.match(/old=(\d+),new=(\d+)/)?.slice(1).map(Number) ?? null;
 
 const optional = (check: Validator): Validator => (v) => (v.trim() ? check(v) : null);
 const upTo = (n: number): Validator => (v) => ([...v.trim()].length > n ? 'errTooLong' : null);
@@ -50,6 +53,11 @@ export function CheckoutPage() {
   const [status_, setStatus] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const busy = useRef(false);
+  const navigate = useNavigate();
+  // A confirmation whose outcome is unknown (lost response, reload) is resent unchanged before anything else (spec §4.1).
+  const [resuming, setResuming] = useState(() => readPending() !== null);
+  const [retrying, setRetrying] = useState(false);
+  const [stuck, setStuck] = useState<Pending | null>(null);
 
   // Member: saved addresses (the default one chosen) and the account email.
   useEffect(() => {
@@ -83,6 +91,14 @@ export function CheckoutPage() {
     return () => clearTimeout(timer);
   }, [quoted]);
 
+  useEffect(() => {
+    const saved = readPending();
+    if (!saved || status === 'unknown' || busy.current) return;
+    busy.current = true;
+    void place(saved).finally(() => { busy.current = false; setResuming(false); });
+  }, [status]);
+
+  if (resuming) return <main id="main" tabIndex={-1} className={PAGE}><p role="status">{t('placingOrder')}</p></main>;
   if (loading && !cart) return <main id="main" tabIndex={-1} className={PAGE}><Loading /></main>;
   if (!cart || cart.items.length === 0) return <Navigate to="/cart" replace />;
 
@@ -119,12 +135,59 @@ export function CheckoutPage() {
     form.refocus();
   }
 
+  async function place(record: Pending) {
+    setStuck(null);
+    setRetrying(false);
+    try {
+      const order = await send(member, record, undefined, () => setRetrying(true));
+      void reload();
+      navigate(`/orders/${encodeURIComponent(order.order_no)}`, { replace: true });
+    } catch (error) {
+      setRetrying(false);
+      await placeFailed(error, record);
+    }
+  }
+
+  async function placeFailed(error: unknown, record: Pending) {
+    const e = error instanceof HttpError ? error : null;
+    if (e && (e.status === 0 || e.status === 503)) { setStuck(record); return; } // still unknown: keep the record, same key
+    clearPending();
+    if (e?.code === 'PRICE_CHANGED') {
+      const before = quoted?.quote;
+      const lines = e.fields.flatMap((f) => {
+        const pair = prices(f.message);
+        const item = before?.items.find((i) => i.variant_id === f.field);
+        return pair ? [`${item ? `${item.name} ${item.color} · ${item.size}` : f.field}: ${formatVnd(pair[0])} → ${formatVnd(pair[1])}`] : [];
+      });
+      setQuoted(null);
+      if (request) await getQuote(request);
+      setMessage({ text: [t('priceChanged'), ...lines].join(' ') });
+      form.refocus();
+    } else if (e?.code === 'QUOTE_EXPIRED') {
+      setExpired(true);
+      setStatus(t('quoteExpired'));
+    } else if (e?.message === 'INVALID_QUOTE') {
+      setQuoted(null);
+      if (request) await getQuote(request);
+    } else if (e?.code === 'CART_ALREADY_ORDERED' && e.fields[0]?.message) {
+      void reload();
+      navigate(`/orders/${encodeURIComponent(e.fields[0].message)}`, { replace: true });
+    } else if (e?.code === 'VERSION_CONFLICT' || e?.message === 'ITEM_UNAVAILABLE') {
+      setQuoted(null);
+      quoteFailed(error);
+    } else {
+      setMessage({ text: t('errOrderFailed') });
+      form.refocus();
+    }
+  }
+
   const onSubmit = form.submit(async () => {
     if (busy.current || !request) return;
     busy.current = true;
     setPending(true);
     try {
       if (!current) await getQuote(request);
+      else await place(startPending({ cart_id: request.cart_id, cart_version: current.cart_version, quote_token: current.quote_token }));
     } finally {
       busy.current = false;
       setPending(false);
@@ -210,6 +273,13 @@ export function CheckoutPage() {
           <button type="submit" form="checkout" disabled={pending} aria-busy={pending || undefined} className={`${BUTTON} w-full`}>
             {current ? `${t('placeOrder')} · ${formatVnd(current.totals.total_amount)}` : t('seeTotal')}
           </button>
+          {retrying && <p role="status" className="text-sm">{t('retryingOrder')}</p>}
+          {stuck && (
+            <div role="alert" className="grid gap-2 text-sm">
+              <p>{t('orderUnknown')}</p>
+              <button type="button" onClick={() => { if (!busy.current) { busy.current = true; void place(stuck).finally(() => { busy.current = false; }); } }}
+                className="min-h-11 underline">{t('retry')}</button>
+            </div>)}
         </Summary>
       </div>
     </main>
