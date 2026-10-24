@@ -1,0 +1,68 @@
+{
+  "code": "OK",
+  "data": {
+    "order_id": "22222222-2222-4222-8222-222222222222",
+    "order_no": "ORD202610000001",
+    "status": "CONFIRMED",
+    "processing_status": "READY",
+    "reason_code": null,
+    "status_url": "/api/v1/orders/ORD202610000001",
+    "retry_after_seconds": null,
+    "version": 2,
+    "method": "COD",
+    "items": [
+      {
+        "variant_id": "55555555-5555-4555-8555-555555555551",
+        "sku": "TEE-M-BLUE",
+        "name": "Áo thun mẫu",
+        "size": "M",
+        "color": "Blue",
+        "image_url": null,
+        "quantity": 1,
+        "unit_price": 100000,
+        "line_total": 100000
+      },
+      {
+        "variant_id": "55555555-5555-4555-8555-555555555552",
+        "sku": "TEE-M-RED",
+        "name": "Áo thun mẫu",
+        "size": "M",
+        "color": "Red",
+        "image_url": null,
+        "quantity": 2,
+        "unit_price": 100000,
+        "line_total": 200000
+      }
+    ],
+    "totals": {
+      "subtotal": 300000,
+      "discount_amount": 0,
+      "shipping_fee": 30000,
+      "shipping_discount": 0,
+      "cod_fee": 10000,
+      "total_amount": 340000,
+      "currency": "VND"
+    },
+    "shipping_address": {
+      "recipient_name": "Khách Mẫu",
+      "phone": "0912345678",
+      "province_code": "79",
+      "ward_code": "26734",
+      "address_line": "12 Đường Mẫu"
+    },
+    "contact": {
+      "phone": "0912345678",
+      "email": "khach@example.test"
+    },
+    "note": null,
+    "created_at": "2026-10-25T03:00:30Z",
+    "expires_at": "2026-10-26T03:00:30Z",
+    "allowed_actions": [
+      "CANCEL"
+    ]
+  },
+  "metadata": {
+    "request_id": "web03-fixture",
+    "trace_id": "web03-fixture"
+  }
+}
