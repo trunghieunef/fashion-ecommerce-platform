@@ -1,0 +1,28 @@
+{
+  "code": "OK",
+  "data": {
+    "items": [
+      {
+        "order_no": "ORD202610000002",
+        "status": "CONFIRMED",
+        "total_amount": 340000,
+        "currency": "VND",
+        "created_at": "2026-10-25T04:00:00Z",
+        "item_count": 3
+      },
+      {
+        "order_no": "ORD202610000001",
+        "status": "CANCELLED",
+        "total_amount": 120000,
+        "currency": "VND",
+        "created_at": "2026-10-24T04:00:00Z",
+        "item_count": 1
+      }
+    ],
+    "next_cursor": "cursor-2"
+  },
+  "metadata": {
+    "request_id": "web03-fixture",
+    "trace_id": "web03-fixture"
+  }
+}

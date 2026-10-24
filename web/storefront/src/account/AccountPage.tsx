@@ -117,6 +117,7 @@ export function AccountPage() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <h1 className="text-3xl font-bold tracking-[-0.03em] uppercase">{t('account')}</h1>
           <Link to="/account/addresses" className={`${LABEL} underline underline-offset-4`}>{t('manageAddresses')}</Link>
+          <Link to="/account/orders" className={`${LABEL} underline underline-offset-4`}>{t('myOrders')}</Link>
         </div>
         {failed && <Failed notFound={false} retry={() => setAttempt((n) => n + 1)} />}
         {!failed && !profile && <Loading />}

@@ -117,10 +117,10 @@ it('clearing the cart asks first and focuses Cancel', async () => {
   expect(calls.find((c) => c.method === 'DELETE')!.url).toBe(`/api/v1/carts/${GUEST}?expected_version=${cartGuest.data.version}`);
 });
 
-it('checkout is disabled', async () => {
+it('the cart page links to checkout when it has lines', async () => {
   mockFetch(shop());
   const container = await render('/cart');
-  expect(button(container.querySelector('main')!, 'Thanh toán').disabled).toBe(true);
+  expect(container.querySelector('main a[href="/checkout"]')!.textContent).toBe('Thanh toán');
 });
 
 it('an empty cart links to products', async () => {

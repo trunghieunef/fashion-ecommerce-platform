@@ -125,8 +125,7 @@ export function CartPage() {
                 </p>
               )}
               <p className="text-sm text-muted">{t('cartNote')}</p>
-              <button type="button" disabled aria-describedby="checkout-soon" className={`${BUTTON} w-full`}>{t('checkout')}</button>
-              <p id="checkout-soon" className="text-xs text-muted">{t('checkoutSoon')}</p>
+              <Link to="/checkout" className={`${BUTTON} w-full`}>{t('checkout')}</Link>
             </aside>
           </div>
         )}

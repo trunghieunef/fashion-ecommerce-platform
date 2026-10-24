@@ -1,0 +1,54 @@
+{
+  "code": "OK",
+  "data": {
+    "quote_token": "example-signed-quote",
+    "expires_at": "2099-01-01T00:02:00Z",
+    "cart_id": "88888888-0000-4000-8000-0000000000c1",
+    "cart_version": 2,
+    "method": "COD",
+    "shipping_address": {
+      "recipient_name": "Khách Mẫu",
+      "phone": "0912345678",
+      "province_code": "79",
+      "ward_code": "26734",
+      "address_line": "12 Đường Mẫu"
+    },
+    "items": [
+      {
+        "variant_id": "55555555-5555-4555-8555-555555555551",
+        "sku": "TEE-M-BLUE",
+        "name": "Áo thun mẫu",
+        "size": "M",
+        "color": "Blue",
+        "image_url": null,
+        "quantity": 1,
+        "unit_price": 100000,
+        "line_total": 100000
+      },
+      {
+        "variant_id": "55555555-5555-4555-8555-555555555552",
+        "sku": "TEE-M-RED",
+        "name": "Áo thun mẫu",
+        "size": "M",
+        "color": "Red",
+        "image_url": null,
+        "quantity": 2,
+        "unit_price": 100000,
+        "line_total": 200000
+      }
+    ],
+    "totals": {
+      "subtotal": 300000,
+      "discount_amount": 0,
+      "shipping_fee": 30000,
+      "shipping_discount": 0,
+      "cod_fee": 10000,
+      "total_amount": 340000,
+      "currency": "VND"
+    }
+  },
+  "metadata": {
+    "request_id": "web03-fixture",
+    "trace_id": "web03-fixture"
+  }
+}
