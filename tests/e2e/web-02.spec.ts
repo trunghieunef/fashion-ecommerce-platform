@@ -54,6 +54,44 @@ test.describe('real chain', () => {
     await expect(page).toHaveURL(/\/login\?next=%2Faccount$/);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
+  // TASK:WEB-02b: a guest cart follows the visitor into the new account.
+  test('guest cart merges on registration, then quantity and clear', async ({ page }, info) => {
+    await page.goto('/products');
+    const list = page.getByRole('list', { name: 'Danh sách sản phẩm' });
+    await expect(list.or(page.getByText(/Chưa có sản phẩm/))).toBeVisible();
+    if (!(await list.count())) {
+      // The local smoke unpublishes its product: without a public product only the empty cart can be checked.
+      await page.goto('/cart');
+      await expect(page.getByText('Giỏ hàng của bạn đang trống.')).toBeVisible();
+      return;
+    }
+    await list.getByRole('link').first().click();
+    for (const group of [/^Màu/, /^Size/]) {
+      const radio = page.getByRole('group', { name: group }).getByRole('radio').first();
+      await radio.focus();
+      await page.keyboard.press('Space');
+    }
+    await page.getByRole('button', { name: 'Thêm vào giỏ' }).click();
+    await expect(page.getByRole('dialog', { name: 'Đã thêm vào giỏ' })).toBeVisible();
+    await page.getByRole('button', { name: 'Tiếp tục mua' }).click();
+    await expect(page.getByRole('link', { name: 'Giỏ hàng, 1 sản phẩm' }).first()).toBeAttached();
+
+    await page.goto('/register');
+    await page.getByLabel('Họ và tên').fill('Khách Giỏ E2E');
+    await page.getByLabel('Email').fill(`web02b-${Date.now()}-${info.project.name}@example.test`);
+    await page.getByLabel('Mật khẩu', { exact: true }).fill('e2e-password-123');
+    await page.getByRole('main').getByRole('button', { name: 'Đăng ký' }).click();
+    await expect(page).toHaveURL(/\/account$/);
+    await expect(page.getByRole('link', { name: 'Giỏ hàng, 1 sản phẩm' }).first()).toBeAttached();
+
+    await page.goto('/cart');
+    await expect(page.getByTestId('cart-line')).toHaveCount(1);
+    await page.getByRole('button', { name: 'Tăng số lượng' }).click();
+    await expect(page.getByRole('link', { name: 'Giỏ hàng, 2 sản phẩm' }).first()).toBeAttached();
+    await page.getByRole('main').getByRole('button', { name: 'Xóa giỏ', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Xóa giỏ' }).getByRole('button', { name: 'Xóa giỏ hàng' }).click();
+    await expect(page.getByText('Giỏ hàng của bạn đang trống.')).toBeVisible();
+  });
 });
 
 test.describe('fixture', () => {
@@ -69,7 +107,8 @@ test.describe('fixture', () => {
       // Only catalog reads fall back to fixtures; an unexpected auth/user call must not get catalog data.
       if (!path.startsWith('/api/v1/catalog/') || path.startsWith('/api/v1/catalog/images/'))
         return route.fulfill({ status: 404, contentType: 'application/json', body: '{"code":"NOT_FOUND"}' });
-      const name = path.startsWith('/api/v1/catalog/collections') ? 'collections.json'
+      const name = path.startsWith('/api/v1/catalog/products/') ? 'product.json'
+        : path.startsWith('/api/v1/catalog/collections') ? 'collections.json'
         : path.startsWith('/api/v1/catalog/categories') ? 'categories.json'
         : path.startsWith('/api/v1/catalog/brands') ? 'brands.json' : 'products.json';
       return route.fulfill({ status: 200, contentType: 'application/json', body: fixture(name) });
@@ -110,5 +149,57 @@ test.describe('fixture', () => {
     expect(spans).toHaveLength(2);
     const [first, second] = [...spans].sort((x, y) => x.start - y.start);
     expect(second.start).toBeGreaterThanOrEqual(first.end);
+  });
+  // TASK:WEB-02b
+  const GUEST = JSON.parse(fixture('cart-guest.json')).data.cart_id as string;
+  const cartRoutes = (extra: (path: string, method: string) => { status: number; body?: string } | null = () => null) =>
+    async (context: BrowserContext) => {
+      await routes(context, (path) => (path === '/api/v1/auth/refresh' ? unauthorized : null));
+      await context.route('**/api/v1/carts**', async (route) => {
+        const path = new URL(route.request().url()).pathname;
+        const method = route.request().method();
+        const answer = extra(path, method)
+          ?? (path === '/api/v1/carts' ? { status: 201, body: fixture('cart-empty.json') } : { status: 200, body: fixture('cart-guest.json') });
+        await route.fulfill({ status: answer.status, contentType: 'application/json', body: answer.body ?? '' });
+      });
+    };
+
+  test('add to cart from the product page, then a conflict on the cart page is explained', async ({ page, context }) => {
+    await cartRoutes((path, method) => (method === 'PUT'
+      ? { status: 409, body: JSON.stringify({ code: 'VERSION_CONFLICT', message: 'VERSION_CONFLICT', metadata }) } : null))(context);
+    await page.goto('/products/11111111-1111-4111-8111-111111111111');
+    for (const name of ['Blue', 'M']) {
+      const radio = page.getByRole('radio', { name, exact: true });
+      await radio.focus();
+      await page.keyboard.press('Space');
+    }
+    await page.getByRole('button', { name: 'Thêm vào giỏ' }).click();
+    const added = page.getByRole('dialog', { name: 'Đã thêm vào giỏ' });
+    await expect(added).toContainText('Áo thun mẫu');
+    await added.getByRole('link', { name: 'Xem giỏ' }).click();
+    await expect(page).toHaveURL(/\/cart$/);
+    await expect(page.getByTestId('cart-line')).toHaveCount(2);
+    await expect(page.getByTestId('cart-line').first()).toContainText('Áo thun mẫu');
+    await expect(page.getByTestId('cart-line').nth(1)).toContainText('Không còn bán');
+    await page.getByTestId('cart-line').first().getByRole('button', { name: 'Tăng số lượng' }).click();
+    await expect(page.getByRole('main').getByRole('alert')).toContainText('Giỏ hàng vừa thay đổi ở nơi khác, vui lòng kiểm tra lại.');
+    await expect(page.getByRole('button', { name: 'Thanh toán' })).toBeDisabled();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  });
+
+  test('signing in with a guest cart shows what the merge adjusted', async ({ page, context }) => {
+    await context.addInitScript((id) => localStorage.setItem('storefront.cart', id), GUEST);
+    await cartRoutes((path) => (path === '/api/v1/carts/mine' ? { status: 200, body: fixture('cart-member.json') }
+      : path === '/api/v1/carts/merge' ? { status: 200, body: fixture('merge.json') } : null))(context);
+    await context.route('**/api/v1/auth/login', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: fixture('session.json') }));
+    await page.goto('/login');
+    await page.getByLabel('Email').fill('member@example.test');
+    await page.getByLabel('Mật khẩu', { exact: true }).fill('correct horse');
+    await page.getByRole('main').getByRole('button', { name: 'Đăng nhập' }).click();
+    const notice = page.getByRole('dialog', { name: 'Đã gộp giỏ hàng' });
+    await expect(notice).toContainText('TEE-M-BLUE');
+    await expect(notice).toContainText('5 → 3');
+    await notice.getByRole('button', { name: 'Đã hiểu' }).click();
+    await expect(page.getByRole('link', { name: 'Giỏ hàng, 3 sản phẩm' }).first()).toBeAttached();
   });
 });
