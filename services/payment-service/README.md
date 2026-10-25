@@ -74,7 +74,7 @@ VNPay chỉ gọi IPN qua HTTPS và máy local không nhận request từ Intern
 Cần chạy `bash scripts/local-up.sh` một lần trước (build jar, sinh khóa và `infra/local/.env`).
 
 1. Điền `PAYMENT_VNPAY_TMN_CODE` và `PAYMENT_VNPAY_HASH_SECRET` (merchant sandbox) vào `infra/local/.env` (gitignore; `scripts/local-up.sh` thêm
-   hai khóa rỗng nếu `.env` cũ chưa có). Không commit, không dán vào chat/log.
+   hai khóa rỗng nếu `.env` cũ chưa có). Không commit, không dán vào chat/log. Cách điền từ email VNPay: mục dưới.
 2. `docker compose --env-file infra/local/.env -f infra/local/compose.yaml up -d postgres kafka payment gateway`
    (máy 7.4 GB: chỉ các service này; `PAYMENT_INTERNAL_CALLERS` có `order-service` do `local-up.sh` sinh).
 3. `bash scripts/vnpay-sandbox.sh [amount]` (mặc định 10000): tạo payment VNPAY cho order giả lập (`SBX<yyyyMMddHHmmss>`), in `payment_url`,
@@ -83,6 +83,26 @@ Cần chạy `bash scripts/local-up.sh` một lần trước (build jar, sinh kh
    trong vài phút.
 5. Tùy chọn IPN: `cloudflared tunnel --url http://localhost:8080`, rồi đặt IPN URL `https://<tunnel>/api/v1/payments/vnpay/ipn` ở trang merchant sandbox
    và trả đơn thứ hai; `payment_transactions.source = WEBHOOK`.
+
+### Đăng ký sandbox và điền thông tin từ email VNPay
+
+1. Đăng ký tại `https://sandbox.vnpayment.vn/devreg/`. Ô website chưa cần tên miền thật: điền `http://localhost:5173` hoặc link repo
+   GitHub (form bắt buộc `https` thì dùng link GitHub). ReturnURL gửi theo từng giao dịch, IPN URL đặt sau trong trang merchant.
+2. Email VNPay gửi về có thông tin cấu hình. Chỉ hai giá trị đi vào `infra/local/.env`:
+
+   | Trong email | Dòng trong `infra/local/.env` |
+   |---|---|
+   | Mã website / Terminal ID (`vnp_TmnCode`, 8 ký tự) | `PAYMENT_VNPAY_TMN_CODE=<mã>` |
+   | Chuỗi bí mật tạo checksum (`vnp_HashSecret`) | `PAYMENT_VNPAY_HASH_SECRET=<chuỗi>` |
+
+   Viết liền sau dấu `=`, không ngoặc kép, không khoảng trắng đầu/cuối. URL thanh toán sandbox trong email đã là mặc định
+   (`PAYMENT_VNPAY_PAY_URL`), không cần điền. Tài khoản đăng nhập trang quản trị merchant sandbox (dùng để đặt IPN URL ở bước 5)
+   giữ ở trình quản lý mật khẩu, không ghi vào repo hay `.env`.
+3. Kiểm tra đã điền mà không in giá trị: `grep -c '^PAYMENT_VNPAY_TMN_CODE=.' infra/local/.env` và
+   `grep -c '^PAYMENT_VNPAY_HASH_SECRET=.' infra/local/.env` đều ra `1`.
+4. Đổi giá trị khi payment đang chạy: `docker compose --env-file infra/local/.env -f infra/local/compose.yaml up -d payment` để tạo lại container
+   với env mới. Lộ HashSecret (dán nhầm vào chat, commit…) thì đổi ở trang merchant sandbox và điền lại.
+5. Khi lên domain/production: merchant thật, secret manager thay `.env` (spec PAY-02 §10).
 
 Lịch QueryDR: +1, +2, +5, +10, +30 phút sau create, rồi mỗi 30 phút tới hạn link + 24 giờ. Lỗi mạng/timeout chỉ dời lịch. `91` (không có giao dịch)
 chỉ thành `FAILED` `EXPIRED` sau hạn link + 15 phút. Payment `FAILED` do close vẫn được query theo lịch (late `SUCCESS` giữ `closed_at`),
