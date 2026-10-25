@@ -1,0 +1,10 @@
+{
+  "params": {
+    "vnp_RequestId": "0123456789abcdef0123456789abcdef", "vnp_Version": "2.1.0", "vnp_Command": "querydr",
+    "vnp_TmnCode": "TESTTMN1", "vnp_TxnRef": "ORD202610250001", "vnp_OrderInfo": "Thanh toan don hang ORD202610250001",
+    "vnp_TransactionDate": "20261025100000", "vnp_CreateDate": "20261025100800", "vnp_IpAddr": "127.0.0.1",
+    "vnp_SecureHash": "1e65fac943dfa826cfad5d6118881b47592bff31968c7bd1adb56b06366fd457a9d766e463ccdddbb9cd355da6d549c694c976485df0dac4c8ce98b0d17a83a1"
+  },
+  "data": "0123456789abcdef0123456789abcdef|2.1.0|querydr|TESTTMN1|ORD202610250001|20261025100000|20261025100800|127.0.0.1|Thanh toan don hang ORD202610250001",
+  "secure_hash": "1e65fac943dfa826cfad5d6118881b47592bff31968c7bd1adb56b06366fd457a9d766e463ccdddbb9cd355da6d549c694c976485df0dac4c8ce98b0d17a83a1"
+}

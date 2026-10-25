@@ -1,0 +1,11 @@
+{
+  "params": {
+    "vnp_TmnCode": "TESTTMN1", "vnp_Amount": "27500000", "vnp_BankCode": "NCB", "vnp_CardType": "ATM",
+    "vnp_OrderInfo": "Thanh toan don hang ORD202610250001", "vnp_TransactionNo": "14000001",
+    "vnp_ResponseCode": "00", "vnp_TransactionStatus": "00", "vnp_TxnRef": "ORD202610250001",
+    "vnp_PayDate": "20261025100530", "vnp_BankTranNo": "",
+    "vnp_SecureHashType": "HmacSHA512", "vnp_SecureHash": "080eafd569ba89e93acd2b66c1326a764e5b6dd318cf74009f20a6207abf5bf802e9722de47fe6521bc26bdf4cdcccf12ce89bdd65bb3bdde0074f365e0aad47"
+  },
+  "canonical": "vnp_Amount=27500000&vnp_BankCode=NCB&vnp_CardType=ATM&vnp_OrderInfo=Thanh+toan+don+hang+ORD202610250001&vnp_PayDate=20261025100530&vnp_ResponseCode=00&vnp_TmnCode=TESTTMN1&vnp_TransactionNo=14000001&vnp_TransactionStatus=00&vnp_TxnRef=ORD202610250001",
+  "secure_hash": "080eafd569ba89e93acd2b66c1326a764e5b6dd318cf74009f20a6207abf5bf802e9722de47fe6521bc26bdf4cdcccf12ce89bdd65bb3bdde0074f365e0aad47"
+}

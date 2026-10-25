@@ -1,0 +1,12 @@
+{
+  "params": {
+    "vnp_ResponseId": "fedcba9876543210fedcba9876543210", "vnp_Command": "querydr", "vnp_ResponseCode": "00",
+    "vnp_Message": "QueryDR Success", "vnp_TmnCode": "TESTTMN1", "vnp_TxnRef": "ORD202610250001",
+    "vnp_Amount": "27500000", "vnp_BankCode": "NCB", "vnp_PayDate": "20261025100530",
+    "vnp_TransactionNo": "14000001", "vnp_TransactionType": "01", "vnp_TransactionStatus": "00",
+    "vnp_OrderInfo": "Thanh toan don hang ORD202610250001",
+    "vnp_SecureHash": "7ad402041a08cd34651039b2566a03fafb00e9502d23c6f0066c6190e9cb52144e7f580b5d94a855c0d0ca63a383e392b95f0f706ea92b102f38c68df022a53e"
+  },
+  "data": "fedcba9876543210fedcba9876543210|querydr|00|QueryDR Success|TESTTMN1|ORD202610250001|27500000|NCB|20261025100530|14000001|01|00|Thanh toan don hang ORD202610250001||",
+  "secure_hash": "7ad402041a08cd34651039b2566a03fafb00e9502d23c6f0066c6190e9cb52144e7f580b5d94a855c0d0ca63a383e392b95f0f706ea92b102f38c68df022a53e"
+}
