@@ -2,7 +2,7 @@
 
 `TASK:PAY-02` · `REQ:PAY-01`, `REQ:PAY-04`, `REQ:PAY-06` (query UNKNOWN tối thiểu), `REQ:PAY-07` · dependency PAY-01, ORD-02
 (Done local). Gate O03: chủ dự án đăng ký **merchant sandbox** VNPay (2026-10-25); merchant production vẫn mở.
-Trạng thái: **chờ duyệt**. Chủ dự án giao agent tự chốt mặc định; lựa chọn ghi ở §10.
+Trạng thái: **đã duyệt** 2026-10-25 (chủ dự án yêu cầu thêm §10 rồi viết plan). Chủ dự án giao agent tự chốt mặc định; lựa chọn ghi ở §11.
 Nguồn: 02 PAY-01/04/06/07, 03 §4 (`POST /payments`) và §6 (provider callbacks), 05 §9, 06 §7.1 và §17.1, 15 §1–§3, T06/T07
 (06 §13); tài liệu VNPay đối chiếu 2026-10-25: [PAY 2.1.0](https://sandbox.vnpayment.vn/apis/docs/thanh-toan-pay/pay.html),
 [QueryDR/Refund](https://sandbox.vnpayment.vn/apis/docs/truy-van-hoan-tien/querydr&refund.html).
@@ -155,10 +155,29 @@ PostgreSQL Testcontainers như PAY-01; VNPay HTTP giả bằng `MockRestServiceS
   payment-service, Gateway.
 
 Docs: `services/payment-service/README.md`, `payment-internal.yaml` + contract mới cho hai endpoint public (`payment.yaml`),
-03 §4/§6, 05 (cột mới), 06 §7.1 (QueryDR), 15 §2/§3 (ngày đối chiếu, profile), 08 (quyết định §10), 10, 12 (lệnh sandbox),
+03 §4/§6, 05 (cột mới), 06 §7.1 (QueryDR), 15 §2/§3 (ngày đối chiếu, profile), 08 (quyết định §11), 10, 12 (lệnh sandbox),
 `CLAUDE.md`, evidence.
 
-## 10. Lựa chọn mặc định của agent (chờ chủ dự án duyệt)
+## 10. Chuyển sang domain/production (checklist, ngoài PAY-02)
+
+Không đổi code: mọi URL và merchant là biến (§2). Ví dụ domain `shop.vn`:
+
+| Biến / cấu hình | Local sandbox | Có domain |
+|---|---|---|
+| `PAYMENT_VNPAY_TMN_CODE`, `PAYMENT_VNPAY_HASH_SECRET` | Merchant sandbox, file env local | Merchant thật, secret manager (16) |
+| `PAYMENT_VNPAY_PAY_URL`, `PAYMENT_VNPAY_API_URL` | URL sandbox | URL production VNPay cấp khi ký hợp đồng |
+| `PAYMENT_VNPAY_RETURN_URL` | `http://localhost:8080/api/v1/payments/vnpay/return` | `https://shop.vn/api/v1/payments/vnpay/return` |
+| `PAYMENT_STOREFRONT_URL` | `http://localhost:5173` | `https://shop.vn` |
+| IPN URL (khai trong trang merchant VNPay) | Tunnel tạm hoặc không dùng | `https://shop.vn/api/v1/payments/vnpay/ipn` |
+
+Lưu ý trước khi bật thật (O03, G0/G2):
+
+1. Hỏi VNPay profile của hợp đồng production; khác PAY 2.1.0 GET (ví dụ IPN POST) thì sửa adapter + fixture trước (15 §2).
+2. IPN bắt buộc HTTPS: domain cần chứng chỉ (16).
+3. `client_ip` thật của khách do order lấy từ Gateway khi bật VNPAY (ORD-05); script sandbox dùng IP giả lập.
+4. Tùy chọn: chỉ nhận IPN từ dải IP VNPay công bố ở Gateway/ingress; chữ ký vẫn là kiểm tra chính.
+
+## 11. Lựa chọn mặc định của agent (chủ dự án duyệt cùng spec 2026-10-25)
 
 | # | Lựa chọn | Lý do / tác động |
 |---|---|---|
