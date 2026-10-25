@@ -31,7 +31,7 @@ test.describe('real chain', () => {
     const list = page.getByRole('list', { name: 'Danh sách sản phẩm' });
     await expect(list.or(page.getByText(/Chưa có sản phẩm/))).toBeVisible();
     if (!(await list.count())) {
-      // The local smoke unpublishes its product: without one, an empty cart cannot check out.
+      // smoke-local.sh leaves its product public with stock; without any public product an empty cart cannot check out.
       await page.goto('/checkout');
       await expect(page).toHaveURL(/\/cart$/);
       return;

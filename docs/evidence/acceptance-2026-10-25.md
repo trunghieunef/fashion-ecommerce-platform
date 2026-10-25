@@ -18,8 +18,8 @@ Phạm vi: phần b của dòng WEB-02 ở [10](../delivery/10_backlog.md) (REQ 
 - **CI PR #39 trên `436368e`: SUCCESS.**
   - `s1-local` ([run 40113986120](https://github.com/trunghieunef/fashion-ecommerce-platform/actions/runs/40113986120)):
     verify toolchain/lockfile, backend reactor, frontend typecheck/test/build, contract, local stack + smoke và
-    **browser smoke**. Browser smoke gồm `web-02.spec.ts` chuỗi thật: thêm vào giỏ → đăng ký gộp giỏ → tăng số lượng →
-    xóa giỏ, trên desktop và 360px.
+    **browser smoke**. Browser smoke pass, nhưng chuỗi thật `web-02.spec.ts` "guest cart merges on registration…" chỉ
+    chạy nhánh "không có sản phẩm public" (chỉ kiểm giỏ trống), xem đính chính dưới.
   - `docs-check`: SUCCESS.
   - Lần CI trên `a53bcce` fail ở e2e WEB-02a: `getByRole('status')` khớp hai vùng. Đã sửa ở `f81e1b4`.
 - **Merge:** chủ dự án merge PR #39 vào `main` tại `b28059f` (2026-10-24). Documentation CI và Application CI trên
@@ -27,7 +27,7 @@ Phạm vi: phần b của dòng WEB-02 ở [10](../delivery/10_backlog.md) (REQ 
 - **Local** (Windows, 7.4 GB RAM): typecheck, **176 test** Vitest (54 mới so với 122), build, contract 95 OK, docs check.
   - Playwright fixture 10/10 (WEB-01 + WEB-02) trên `vite preview --host 127.0.0.1`.
   - Phản chứng: bỏ guard chống tải cũ → 4 test gộp giỏ FAIL.
-  - Máy này không chạy được stack thật; bằng chứng chuỗi thật là CI `s1-local`.
+  - Máy này không chạy được stack thật; chuỗi thật chỉ có thể chứng minh trên CI `s1-local`.
   - Chi tiết: [evidence WEB-02b](web-02b-local-2026-10-24.md).
 
 ### Kết quả theo tiêu chí
@@ -44,10 +44,14 @@ Phạm vi: phần b của dòng WEB-02 ở [10](../delivery/10_backlog.md) (REQ 
 | Gộp giỏ sau đăng nhập/đăng ký: key giữ qua reload, 409 thử lại một lần, thất bại giữ giỏ guest, không âm thầm bỏ item (drawer điều chỉnh) | `merge.test.tsx` (10): `…merges it and shows the adjustments`, `a merge retried after reload sends the same key`, `a first conflict retries once with a new key`, `a second merge conflict keeps the guest cart for later`, `a network failure keeps the key and the guest cart`; e2e fixture drawer "5 → 3" | Pass |
 | Tải giỏ cũ không ghi đè kết quả gộp; lỗi gộp không làm đăng nhập lỗi | `a member cart load answered after the merge does not overwrite the merged cart` (có phản chứng); `AuthProvider.test.tsx` callback `onSignedIn` được cách ly | Pass |
 | Fixture giỏ đúng `cart.yaml` | `tests/contracts/test_storefront_fixtures.py` (4 fixture giỏ), phản chứng enum `reason` sai → FAIL | Pass |
-| Chuỗi thật: thêm vào giỏ → đăng ký gộp giỏ → số lượng → xóa giỏ | e2e `web-02.spec.ts` "guest cart merges on registration…" trên CI ([run 40113986120](https://github.com/trunghieunef/fashion-ecommerce-platform/actions/runs/40113986120), Browser smoke) | Pass |
+| Chuỗi thật: thêm vào giỏ → đăng ký gộp giỏ → số lượng → xóa giỏ | e2e `web-02.spec.ts` "guest cart merges on registration…" trên CI ([run 40113986120](https://github.com/trunghieunef/fashion-ecommerce-platform/actions/runs/40113986120), Browser smoke) — chỉ nhánh không có sản phẩm public | **Chưa chứng minh** (đính chính 2026-10-25; chạy lại ở CI PR #40) |
 | Docs đồng bộ (README, 14, 08, 10, plans README, evidence) | Commit `ec092cb`, `a53bcce`, `436368e` và commit nghiệm thu này (gồm `CLAUDE.md`) | Pass |
 
-**WEB-02b: Done (local, trước G0).** CI trên `436368e` PASS. Chủ dự án đã merge PR #39 vào `main` (`b28059f`, 2026-10-24).
+**Đính chính 2026-10-25:** `scripts/smoke-local.sh` gỡ public sản phẩm duy nhất nó tạo trước khi browser smoke chạy, nên trên
+CI các chuỗi thật cần sản phẩm (WEB-02b gộp giỏ, WEB-03 checkout, nhánh chi tiết của WEB-01) chỉ chạy nhánh "không có sản
+phẩm public". Từ PR #40 smoke publish lại sản phẩm đó kèm tồn kho ở cuối; bằng chứng chuỗi thật ghi lại khi CI PR #40 chạy.
+
+**WEB-02b: Done (local, trước G0)**, trừ tiêu chí chuỗi thật đang chờ CI PR #40. CI trên `436368e` PASS. Chủ dự án đã merge PR #39 vào `main` (`b28059f`, 2026-10-24).
 **`TASK:WEB-02`: Done (local, trước G0)**, vì cả phần a ([nghiệm thu 2026-10-24](acceptance-2026-10-24.md)) và phần b đã Done.
 
 ### Ngoại lệ và việc còn lại (không chặn Done local)
