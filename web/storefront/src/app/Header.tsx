@@ -217,6 +217,7 @@ export function Header() {
           <li className="border-b border-fg"><Link to="/products?sort=NEWEST" className={`${LABEL} flex min-h-12 items-center`}>{t('newArrivals')}</Link></li>
           <li className="border-b border-fg"><Link to="/products" className={`${LABEL} flex min-h-12 items-center`}>{t('products')}</Link></li>
           <li className="border-b border-fg"><Link to={account.href} className={`${LABEL} flex min-h-12 items-center`}>{account.label}</Link></li>
+          {status === 'member' && <li className="border-b border-fg"><Link to="/account/orders" className={`${LABEL} flex min-h-12 items-center`}>{t('myOrders')}</Link></li>}
           <li className="border-b border-fg"><Link to="/cart" className={`${LABEL} flex min-h-12 items-center`}>{cartLabel}</Link></li>
           <li><button type="button" lang={lang === 'vi' ? 'en' : 'vi'} onClick={toggleLang} className={`${LABEL} min-h-12`}>{t('switchLang')}</button></li>
         </ul>

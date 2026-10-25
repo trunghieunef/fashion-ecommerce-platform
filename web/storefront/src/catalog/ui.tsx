@@ -90,6 +90,8 @@ export const BUTTON_OUTLINE = `${LABEL} inline-flex min-h-11 items-center justif
 export const PAGE = 'mx-auto w-full max-w-screen-2xl px-4 py-8 lg:px-8';
 
 const VND = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' });
+/** The same VND text as Price, for places that need a string (a button label). */
+export const formatVnd = (amount: number) => VND.format(amount);
 /** Server amounts only; no arithmetic on the client. */
 export function Price({ min, max, className = '' }: { min: number; max: number; className?: string }) {
   return (

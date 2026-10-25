@@ -609,6 +609,23 @@ test "$(status -H 'Content-Type: application/json' -d "{\"email\":\"$reset_email
 unset reset_token
 echo 'NOT-01 reset email PASS'
 
+# TASK:WEB-02b/WEB-03: leave the smoke product public with stock, so the browser smoke real chains (cart merge,
+# COD checkout) run end to end instead of their "no public product" branch. Fresh tokens: the first ones live 300 s.
+catalog_access="$(local_ops_token catalog.write)"
+catalog_request 200 POST "/products/$product_id/publish" '{"expected_version":4}' "smoke-$catalog_suffix-republish" | \
+  python3 -c 'import json,sys; assert json.load(sys.stdin)["data"]["status"] == "ACTIVE"'
+unset catalog_access
+curl --fail --silent --show-error -H "Authorization: Bearer $(local_ops_token inventory.read inventory.adjust)" \
+  -H 'Content-Type: application/json' -H "Idempotency-Key: smoke-$catalog_suffix-browser-stock" \
+  -d "{\"sku\":\"$inventory_sku\",\"delta\":20,\"reason\":\"browser smoke\"}" \
+  "$GATEWAY_URL/admin/api/v1/inventory/adjust" >/dev/null
+for _ in $(seq 1 20); do
+  curl -fsS "$GATEWAY_URL/api/v1/catalog/products?limit=100" | python3 -c 'import json,sys; sys.exit(0 if any(p["id"] == sys.argv[1] for p in json.load(sys.stdin)["data"]["items"]) else 1)' "$product_id" && break
+  sleep 0.5
+done
+curl -fsS "$GATEWAY_URL/api/v1/catalog/products?limit=100" | python3 -c 'import json,sys; assert any(p["id"] == sys.argv[1] for p in json.load(sys.stdin)["data"]["items"])' "$product_id"
+echo 'Browser smoke product published with stock'
+
 test "$(status "$STOREFRONT_URL/api/not-found")" = 404
 test "$(status "$STOREFRONT_URL/api")" = 404
 test "$(status "$STOREFRONT_URL/assets/missing.js")" = 404

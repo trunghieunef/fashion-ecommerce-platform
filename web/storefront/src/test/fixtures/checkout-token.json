@@ -1,0 +1,11 @@
+{
+  "code": "OK",
+  "data": {
+    "checkout_token": "example-checkout-token",
+    "expires_at": "2099-01-01T00:15:00Z"
+  },
+  "metadata": {
+    "request_id": "web03-fixture",
+    "trace_id": "web03-fixture"
+  }
+}

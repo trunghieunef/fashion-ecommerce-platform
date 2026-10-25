@@ -630,6 +630,24 @@ mà WEB-01 đã hẹn); nghiên cứu thiết kế bằng skill ui-ux-pro-max v�
 | Size không có trong màu đang chọn: gạch ngang nhưng vẫn chọn được | Lệch chữ "disabled" của spec để giữ sửa lỗi review 1 của WEB-01 (không kẹt lựa chọn) |
 | Giữ "Tải thêm", link theo `id`, ngôn ngữ trong `localStorage` | Như WEB-01 |
 
+## WEB-03 — quyết định 2026-10-25
+
+`TASK:WEB-03`. Chủ dự án duyệt [spec](../superpowers/specs/2026-10-25-web-03-checkout-design.md) và plan (2026-10-25); các mặc
+định do agent chốt, trừ D10 do chủ dự án chọn trên mockup:
+
+| Quyết định | Hệ quả |
+|---|---|
+| D1 Checkout một trang, không wizard | Chỉ COD, ít trường |
+| D2 Guest checkout được phép, gợi ý đăng nhập; guest bắt buộc email | Theo ORD-01 (checkout token) |
+| D3 Không làm ước tính phí ship trong giỏ | Phí thật ở quote; làm sau nếu PO cần |
+| D4 Quote khi bấm "Xem tổng tiền", không tự quote khi gõ | Tổng không nhảy khi đang nhập; hết hạn chỉ cần bấm lại |
+| D5 Địa chỉ nhập ở checkout không tự lưu vào sổ | Không ghi PII ngoài ý muốn |
+| D6 `{key, owner, body}` đặt đơn lưu `sessionStorage` tới khi có kết quả hoặc đăng xuất | Tải lại trang gửi lại đúng đơn, chỉ cho đúng người đặt; `quote_token` mang địa chỉ/liên hệ của chính khách (đính chính theo review PR #40, trước ghi "không phải secret") nên xóa khi đăng xuất; `checkout_token` không lưu |
+| D7 Poll tối đa 2 phút, rồi "Kiểm tra lại" | Saga MANUAL giữ `PROCESSING` không giới hạn |
+| D8 Trang đơn tối giản; hủy đơn, lịch sử, tracking ở WEB-04 | SF-08 thuộc WEB-04 |
+| D9 Không thêm thư viện | fetch, React, storage có sẵn |
+| D10 Mobile: tóm tắt đầy đủ cuối trang, không thanh dính (chủ dự án chọn) | Khách cuộn hết form mới thấy tổng |
+
 ## WEB-02b — quyết định 2026-10-24
 
 `TASK:WEB-02` phần b. Chủ dự án duyệt [spec](../superpowers/specs/2026-10-23-web-02b-cart-merge-design.md) (2026-10-23) và

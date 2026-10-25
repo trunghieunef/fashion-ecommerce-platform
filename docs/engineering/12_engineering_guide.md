@@ -124,7 +124,8 @@ trên host). Smoke catalog hiện gồm CAT-01a category/product/variant/publish
 collection/size guide create/read/update/replay/stale qua Gateway; giữ401/403 với member thật.
 CAT-03: intent → PUT PNG synthetic tới RustFS (`127.0.0.1:19000`, URL ký chỉ trong bộ nhớ) →
 complete (route Gateway riêng, timeout 30s) → attach → publish → public GET 200/ETag/304 →
-unpublish → 404. Hai route GET ảnh public/admin cũng có response budget Gateway 30s để giữ
+unpublish → 404; cuối smoke publish lại sản phẩm đó và cộng 20 tồn kho để browser smoke (chuỗi thật WEB-02b/WEB-03) có
+sản phẩm public. Hai route GET ảnh public/admin cũng có response budget Gateway 30s để giữ
 503 storage sau timeout S3 10s; các route catalog khác vẫn 2s (regression GatewayBoundaryTest).
 OPS smoke dùng JWT synthetic local; phạm vi, giới hạn và dữ liệu tích lũy ghi tại
 [catalog README](../../services/catalog-service/README.md). Lệnh trong bảng không đổi.

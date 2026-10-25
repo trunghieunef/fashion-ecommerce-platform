@@ -60,7 +60,7 @@ test.describe('real chain', () => {
     const list = page.getByRole('list', { name: 'Danh sách sản phẩm' });
     await expect(list.or(page.getByText(/Chưa có sản phẩm/))).toBeVisible();
     if (!(await list.count())) {
-      // The local smoke unpublishes its product: without a public product only the empty cart can be checked.
+      // smoke-local.sh leaves its product public with stock; without any public product only the empty cart can be checked.
       await page.goto('/cart');
       await expect(page.getByText('Giỏ hàng của bạn đang trống.')).toBeVisible();
       return;
@@ -183,7 +183,7 @@ test.describe('fixture', () => {
     await expect(page.getByTestId('cart-line').nth(1)).toContainText('Không còn bán');
     await page.getByTestId('cart-line').first().getByRole('button', { name: 'Tăng số lượng' }).click();
     await expect(page.getByRole('main').getByRole('alert')).toContainText('Giỏ hàng vừa thay đổi ở nơi khác, vui lòng kiểm tra lại.');
-    await expect(page.getByRole('button', { name: 'Thanh toán' })).toBeDisabled();
+    await expect(page.getByRole('main').getByRole('link', { name: 'Thanh toán' })).toHaveAttribute('href', '/checkout');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
 

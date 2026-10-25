@@ -14,3 +14,7 @@ test-results/
 
 # Local env copied from .env.example; never commit.
 infra/local/.env
+
+# Python bytecode
+__pycache__/
+*.pyc

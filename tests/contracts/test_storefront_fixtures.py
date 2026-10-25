@@ -14,6 +14,7 @@ FIXTURES = ROOT / "web/storefront/src/test/fixtures"
 CATALOG = "catalog.yaml#/components/schemas/"
 USER = "user.yaml#/components/schemas/"
 CART = "cart.yaml#/components/schemas/"
+ORDER = "order.yaml#/components/schemas/"
 # Value: "<contract file>#<JSON pointer>"; inline response schemas (no component name) are addressed by their path.
 SCHEMAS = {
     "products.json": CATALOG + "ProductPageResponse",
@@ -33,6 +34,12 @@ SCHEMAS = {
     "cart-member.json": CART + "CartResponse",
     "cart-empty.json": CART + "CartResponse",
     "merge.json": CART + "MergeResponse",
+    "checkout-token.json": CART + "CheckoutTokenResponse",
+    "quote.json": ORDER + "QuoteResponse",
+    "order-processing.json": ORDER + "OrderResponse",
+    "order-confirmed.json": ORDER + "OrderResponse",
+    "order-cancelled.json": ORDER + "OrderResponse",
+    "orders-mine.json": ORDER + "OrderPageResponse",
     "addresses.json": "user.yaml#/paths/~1api~1v1~1users~1me~1addresses/get/responses/200/content/application~1json/schema",
 }
 
@@ -41,7 +48,7 @@ class StorefrontFixtureContractTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         docs = {name: yaml.safe_load((ROOT / "contracts/openapi" / name).read_text(encoding="utf-8"))
-                for name in ("catalog.yaml", "user.yaml", "cart.yaml", "common.yaml")}
+                for name in ("catalog.yaml", "user.yaml", "cart.yaml", "order.yaml", "common.yaml")}
         cls.registry = Registry().with_resources(
             (BASE + name, Resource.from_contents(d, default_specification=DRAFT202012)) for name, d in docs.items())
 

@@ -73,7 +73,7 @@ test('home, listing with drawer filters and chips, detail by keyboard and langua
   expect(await noHorizontalScroll(page)).toBe(true);
 });
 
-// The local smoke unpublishes its product, so the detail flow also runs against the contract-validated fixtures
+// Real data varies (in CI the only public product is the smoke product), so the detail flow also runs against the contract-validated fixtures
 // (tests/contracts/test_storefront_fixtures.py) to be deterministic on both viewports. Needs no backend, so it also
 // runs against `vite preview` (TASK:WEB-01b evidence screenshots).
 test('detail with contract fixtures: keyboard variant choice, stock states, image fallback, size guide, English', async ({ page }) => {
