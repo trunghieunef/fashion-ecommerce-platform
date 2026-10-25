@@ -40,6 +40,7 @@ export function CheckoutPage() {
   const { t, pick, lang } = useLang();
   const { status, me } = useAuth();
   const member = status === 'member';
+  const owner = member ? me?.id ?? null : 'guest';
   const { cart, loading, reload } = useCart();
   const [saved, setSaved] = useState<accountApi.Address[]>([]);
   const [choice, setChoice] = useState(NEW);
@@ -95,6 +96,15 @@ export function CheckoutPage() {
   useEffect(() => {
     const saved = readPending();
     if (!saved || status === 'unknown' || busy.current) return;
+    // Placed by someone else (a guest who then signed in, another account): the server would see another actor and the
+    // order may already exist, so never resend or re-quote it here (PR #40 review I3).
+    if ((saved.owner === 'guest') !== !member || (owner && saved.owner !== owner)) {
+      clearPending();
+      setResuming(false);
+      setStuck(null);
+      setMessage({ text: t('earlierOrderMaybe') });
+      return;
+    }
     busy.current = true;
     void place(saved).finally(() => { busy.current = false; setResuming(false); });
   }, [status]);
@@ -142,7 +152,6 @@ export function CheckoutPage() {
     setRetrying(false);
     try {
       const order = await send(member, record, undefined, () => setRetrying(true));
-      void reload();
       navigate(`/orders/${encodeURIComponent(order.order_no)}`, { replace: true });
     } catch (error) {
       setRetrying(false);
@@ -171,8 +180,7 @@ export function CheckoutPage() {
     } else if (e?.message === 'INVALID_QUOTE') {
       setQuoted(null);
       if (request) await getQuote(request);
-    } else if (e?.code === 'CART_ALREADY_ORDERED' && e.fields[0]?.message) {
-      void reload();
+    } else if (e?.message === 'CART_ALREADY_ORDERED' && e.fields[0]?.message) {
       navigate(`/orders/${encodeURIComponent(e.fields[0].message)}`, { replace: true });
     } else if (e?.code === 'VERSION_CONFLICT' || e?.message === 'ITEM_UNAVAILABLE') {
       setQuoted(null);
@@ -191,7 +199,7 @@ export function CheckoutPage() {
       // Outcome still unknown: the main button resends the same key, never a new one for the same order (spec §4.1).
       if (stuck) await place(stuck);
       else if (!current) await getQuote(request);
-      else await place(startPending({ cart_id: request.cart_id, cart_version: current.cart_version, quote_token: current.quote_token }));
+      else await place(startPending(owner ?? 'member', { cart_id: request.cart_id, cart_version: current.cart_version, quote_token: current.quote_token }));
     } finally {
       busy.current = false;
       setPending(false);
@@ -213,7 +221,7 @@ export function CheckoutPage() {
         <form id="checkout" noValidate onSubmit={onSubmit} className="grid content-start gap-6">
           <div className="grid gap-2">
             <h1 className="text-3xl font-bold tracking-[-0.03em] uppercase">{t('checkout')}</h1>
-            {status === 'guest' && (
+            {status === 'guest' && !stuck && (
               <p className="text-sm text-muted">{t('haveAccount')}{' '}
                 <Link to={`/login?next=${encodeURIComponent('/checkout')}`} className="underline underline-offset-4">{t('signInForAddresses')}</Link></p>)}
           </div>

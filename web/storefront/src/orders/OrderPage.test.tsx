@@ -3,6 +3,7 @@
 import { act } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
+import cartGuest from '../test/fixtures/cart-guest.json';
 import cancelled from '../test/fixtures/order-cancelled.json';
 import confirmed from '../test/fixtures/order-confirmed.json';
 import processing from '../test/fixtures/order-processing.json';
@@ -75,4 +76,19 @@ it('the heading gets focus', async () => {
   mockFetch((path) => (path === PATH ? json(confirmed) : null));
   const c = await render('/orders/ORD202610000001');
   expect(document.activeElement).toBe(main(c).querySelector('h1'));
+});
+
+it('the cart is read again once the order leaves processing (PR #40 review I2)', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  localStorage.setItem('storefront.cart', cartGuest.data.cart_id);
+  let n = 0;
+  const calls = mockFetch((path) => (path === PATH ? json(n++ === 0 ? processing : confirmed)
+    : path === `/api/v1/carts/${cartGuest.data.cart_id}` ? json(cartGuest) : null));
+  await render('/orders/ORD202610000001');
+  const reads = () => calls.filter((x) => x.url === `/api/v1/carts/${cartGuest.data.cart_id}`).length;
+  const before = reads();
+  await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+  await flush();
+  expect(reads()).toBe(before + 1);
+  localStorage.clear();
 });

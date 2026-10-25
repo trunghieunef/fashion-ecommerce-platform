@@ -6,6 +6,7 @@ import { Link, useParams } from 'react-router';
 
 import { placeName } from '../account/AddressForm';
 import { useAuth } from '../auth/AuthProvider';
+import { useCart } from '../cart/CartProvider';
 import { BUTTON, BUTTON_OUTLINE, CatalogImage, LABEL, Loading, PAGE, Price } from '../catalog/ui';
 import { useLang } from '../i18n';
 import { usePolledOrder } from './poll';
@@ -17,6 +18,10 @@ export function OrderPage() {
   const { status } = useAuth();
   const { state, order, stalled, check } = usePolledOrder(orderNo, status === 'unknown' ? null : status === 'member');
   const heading = useRef<HTMLHeadingElement>(null);
+  // The order empties the cart only once stock is held (after PROCESSING), so the cart is read again then (review I2).
+  const { reload } = useCart();
+  const settled = order !== null && order.processing_status !== 'PROCESSING';
+  useEffect(() => { if (settled) void reload(); }, [settled]);
   useEffect(() => { heading.current?.focus(); }, [order !== null]);
 
   const time = (iso: string) => new Date(iso).toLocaleString(lang === 'vi' ? 'vi-VN' : 'en-GB', { dateStyle: 'short', timeStyle: 'short' });

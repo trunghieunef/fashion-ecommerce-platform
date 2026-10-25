@@ -32,7 +32,11 @@ const memberShop = (answer: Answer = () => null) => (path: string) => answer(pat
   ?? (path === '/api/v1/auth/refresh' ? json(refresh) : path === '/api/v1/users/me' ? json(profile)
     : path === '/api/v1/carts/mine' ? json(cartMember) : path === '/api/v1/users/me/addresses' ? json(addresses)
       : path === '/api/v1/orders/quote' ? json({ ...quoteFixture, data: { ...quoteFixture.data, cart_id: cartMember.data.cart_id, cart_version: 4 } }) : null);
-const problem = (status: number, code: string, message = code, errors?: { field: string; message: string }[]) =>
+/** common.yaml ApiError.code: only these exist; the specific reason travels in `message` (e.g. CONFLICT + CART_ALREADY_ORDERED). */
+type ApiCode = 'VALIDATION_ERROR' | 'UNAUTHORIZED' | 'FORBIDDEN' | 'NOT_FOUND' | 'CONFLICT' | 'VERSION_CONFLICT' | 'PRICE_CHANGED'
+  | 'QUOTE_EXPIRED' | 'OUT_OF_STOCK' | 'PROMOTION_LIMIT' | 'ALREADY_REVIEWED' | 'VOUCHER_INVALID' | 'PAYMENT_AMOUNT_UNSUPPORTED'
+  | 'ACCOUNT_LOCKED' | 'RATE_LIMITED' | 'TEMPORARILY_UNAVAILABLE' | 'INTERNAL';
+const problem = (status: number, code: ApiCode, message: string = code, errors?: { field: string; message: string }[]) =>
   json({ code, message, errors, metadata }, status);
 
 export const main = (c: Element) => c.querySelector('main')!;
@@ -156,7 +160,7 @@ it('a cart changed elsewhere reloads it and says so', async () => {
 });
 
 it('unavailable items are listed with a link to the cart', async () => {
-  const { c } = await quoteFails(() => problem(409, 'ITEM_UNAVAILABLE', 'ITEM_UNAVAILABLE',
+  const { c } = await quoteFails(() => problem(409, 'CONFLICT', 'ITEM_UNAVAILABLE',
     [{ field: cartGuest.data.items[1].variant_id, message: 'inactive' }]));
   const alert = main(c).querySelector('[role="alert"]')!;
   expect(alert.textContent).toContain('TEE-M-RED');
@@ -164,7 +168,7 @@ it('unavailable items are listed with a link to the cart', async () => {
 });
 
 it('no shipping rule is said at the address', async () => {
-  const { c } = await quoteFails(() => problem(422, 'UNPROCESSABLE', 'NO_SHIPPING_RULE'));
+  const { c } = await quoteFails(() => problem(422, 'VALIDATION_ERROR', 'NO_SHIPPING_RULE'));
   expect(c.querySelector('#province_code-error')!.textContent).toBe('Chưa giao được tới khu vực này.');
 });
 
@@ -188,14 +192,12 @@ async function quoted(answer: Answer = () => null) {
 
 it('placing an order sends the quote and goes to the order page', async () => {
   const { c, calls } = await quoted((path) => (path === '/api/v1/orders' ? placed() : null));
-  const cartReads = calls.filter((x) => x.url === `/api/v1/carts/${GUEST}`).length;
   await press(c);
   const sent = orders(calls);
   expect(sent).toHaveLength(1);
   expect(sent[0].body).toEqual({ cart_id: GUEST, cart_version: cartGuest.data.version, quote_token: 'example-signed-quote' });
   expect(sent[0].headers['idempotency-key']).toMatch(/^[0-9a-f-]{36}$/);
   expect(location(c)).toBe('/orders/ORD202610000001');
-  expect(calls.filter((x) => x.url === `/api/v1/carts/${GUEST}`).length).toBeGreaterThan(cartReads);
   expect(sessionStorage.getItem('storefront.checkout')).toBeNull();
 });
 
@@ -222,7 +224,7 @@ it('a lost response is retried with the same key and says so', async () => {
 
 it('a reload with a pending order resends the same key and body', async () => {
   const body = { cart_id: GUEST, cart_version: 2, quote_token: 'example-signed-quote' };
-  sessionStorage.setItem('storefront.checkout', JSON.stringify({ key: 'saved-key', body }));
+  sessionStorage.setItem('storefront.checkout', JSON.stringify({ key: 'saved-key', owner: 'guest', body }));
   const calls = mockFetch(guestShop((path) => (path === '/api/v1/orders' ? placed() : null)));
   const c = await render('/checkout');
   await flush();
@@ -269,7 +271,7 @@ it('an invalid quote is quoted again, not placed', async () => {
 
 it('an order already placed for this cart opens it', async () => {
   const { c } = await quoted((path) => (path === '/api/v1/orders'
-    ? problem(409, 'CART_ALREADY_ORDERED', 'CART_ALREADY_ORDERED', [{ field: 'cart_id', message: 'ORD202610000009' }]) : null));
+    ? problem(409, 'CONFLICT', 'CART_ALREADY_ORDERED', [{ field: 'order_no', message: 'ORD202610000009' }]) : null));
   await press(c);
   expect(location(c)).toBe('/orders/ORD202610000009');
 });
@@ -303,6 +305,8 @@ it('the main button resends the stuck order with the same key', async () => {
   await act(async () => { await vi.advanceTimersByTimeAsync(31_000); });
   await flush();
   expect(main(c).textContent).toContain('Chưa xác nhận được đơn. Bấm Thử lại');
+  // Signing in now would replay this guest order as the member (PR #40 review I3).
+  expect(main(c).querySelector('a[href^="/login"]')).toBeNull();
   up = true;
   await press(c);
   const keys = new Set(orders(calls).map((x) => x.headers['idempotency-key']));
@@ -311,11 +315,40 @@ it('the main button resends the stuck order with the same key', async () => {
 });
 
 it('a resumed order with unavailable items says so and links to the cart', async () => {
-  sessionStorage.setItem('storefront.checkout', JSON.stringify({ key: 'saved-key', body: { cart_id: GUEST, cart_version: 2, quote_token: 'q' } }));
+  sessionStorage.setItem('storefront.checkout', JSON.stringify({ key: 'saved-key', owner: 'guest', body: { cart_id: GUEST, cart_version: 2, quote_token: 'q' } }));
   mockFetch(guestShop((path) => (path === '/api/v1/orders'
-    ? problem(409, 'ITEM_UNAVAILABLE', 'ITEM_UNAVAILABLE', [{ field: cartGuest.data.items[1].variant_id, message: 'inactive' }]) : null)));
+    ? problem(409, 'CONFLICT', 'ITEM_UNAVAILABLE', [{ field: cartGuest.data.items[1].variant_id, message: 'inactive' }]) : null)));
   const c = await render('/checkout');
   await flush();
   const alert = [...main(c).querySelectorAll('[role="alert"]')].find((x) => x.querySelector('a[href="/cart"]'));
   expect(alert).toBeTruthy();
+});
+
+// --- PR #40 review ---
+it('a pending order is stored with who placed it', async () => {
+  const { c } = await quoted((path) => (path === '/api/v1/orders' ? Promise.reject(new TypeError('offline')) : null));
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  await press(c);
+  expect(JSON.parse(sessionStorage.getItem('storefront.checkout')!).owner).toBe('guest');
+});
+
+it('a guest order still pending after signing in is not replayed as the member', async () => {
+  sessionStorage.setItem('storefront.checkout', JSON.stringify({ key: 'saved-key', owner: 'guest', body: { cart_id: GUEST, cart_version: 2, quote_token: 'q' } }));
+  const calls = mockFetch(memberShop());
+  const c = await render('/checkout');
+  await flush();
+  expect(orders(calls)).toHaveLength(0);
+  expect(quotes(calls)).toHaveLength(0);
+  expect(main(c).textContent).toContain('Đơn bạn xác nhận trước đó có thể đã được tạo');
+  expect(sessionStorage.getItem('storefront.checkout')).toBeNull();
+});
+
+it('signing out forgets the pending order', async () => {
+  sessionStorage.setItem('storefront.checkout', JSON.stringify({ key: 'saved-key', owner: profile.data.id, body: { cart_id: 'x', cart_version: 1, quote_token: 'q' } }));
+  mockFetch(memberShop((path) => (path === '/api/v1/auth/logout' ? new Response(null, { status: 204 }) : null)));
+  const c = await render('/account');
+  const button = [...c.querySelectorAll('main button')].find((b) => b.textContent === 'Đăng xuất') as HTMLButtonElement;
+  await act(async () => { button.click(); });
+  await flush();
+  expect(sessionStorage.getItem('storefront.checkout')).toBeNull();
 });

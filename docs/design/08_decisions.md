@@ -642,7 +642,7 @@ mà WEB-01 đã hẹn); nghiên cứu thiết kế bằng skill ui-ux-pro-max v�
 | D3 Không làm ước tính phí ship trong giỏ | Phí thật ở quote; làm sau nếu PO cần |
 | D4 Quote khi bấm "Xem tổng tiền", không tự quote khi gõ | Tổng không nhảy khi đang nhập; hết hạn chỉ cần bấm lại |
 | D5 Địa chỉ nhập ở checkout không tự lưu vào sổ | Không ghi PII ngoài ý muốn |
-| D6 `{key, body}` đặt đơn lưu `sessionStorage` tới khi có kết quả | Tải lại trang gửi lại đúng đơn; `quote_token` không phải secret; `checkout_token` không lưu |
+| D6 `{key, owner, body}` đặt đơn lưu `sessionStorage` tới khi có kết quả hoặc đăng xuất | Tải lại trang gửi lại đúng đơn, chỉ cho đúng người đặt; `quote_token` mang địa chỉ/liên hệ của chính khách (đính chính theo review PR #40, trước ghi "không phải secret") nên xóa khi đăng xuất; `checkout_token` không lưu |
 | D7 Poll tối đa 2 phút, rồi "Kiểm tra lại" | Saga MANUAL giữ `PROCESSING` không giới hạn |
 | D8 Trang đơn tối giản; hủy đơn, lịch sử, tracking ở WEB-04 | SF-08 thuộc WEB-04 |
 | D9 Không thêm thư viện | fetch, React, storage có sẵn |

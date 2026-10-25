@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 
 import { HttpError } from '../http';
 import * as api from './api';
+import { forgetCheckout } from '../checkout/submit';
 import { broadcast, endSession, getAccessToken, onSessionChange, refreshAccessToken, startSession } from './session';
 
 export type AuthStatus = 'unknown' | 'guest' | 'member';
@@ -50,7 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const off = onSessionChange((active, otherTab) => {
-      if (!active) { setMe(null); setStatus('guest'); }
+      if (!active) { forgetCheckout(); setMe(null); setStatus('guest'); }
       // A token without a profile (boot restore), or another tab signed in — possibly as someone else.
       else if (otherTab || !meRef.current) void reloadMe();
     });

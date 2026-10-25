@@ -113,24 +113,26 @@ Header tài khoản: thêm mục "Đơn hàng của tôi".
 
 ### 4.1 Một lần xác nhận = một key
 
-- Bấm "Đặt hàng" → tạo `Idempotency-Key` (UUID) và body `{cart_id, cart_version, quote_token}`, lưu cặp này vào
-  `sessionStorage['storefront.checkout']` **trước** khi gửi (body không có secret: `quote_token` không phải secret theo
-  contract; D6).
+- Bấm "Đặt hàng" → tạo `Idempotency-Key` (UUID) và body `{cart_id, cart_version, quote_token}`, lưu cùng người đặt
+  (`'guest'` hoặc id member) vào `sessionStorage['storefront.checkout']` **trước** khi gửi. `quote_token` mang địa chỉ và
+  liên hệ của chính khách (base64url + HMAC), nên bản ghi bị xóa khi đăng xuất (D6, đính chính theo review PR #40).
 - `POST /api/v1/orders` với key đó. Lỗi mạng/503/timeout → **không biết kết quả**: hiện "Chưa xác nhận được đơn, đang thử
   lại…" và tự gửi lại **cùng key + body** với backoff (1 s, 2 s, 4 s… tối đa 30 s, tối đa 5 lần), sau đó nút "Thử lại" (cùng
   key). Không bao giờ sinh key mới cho cùng body.
 - Tải lại trang khi đang có bản ghi trong sessionStorage → `/checkout` gửi lại ngay cùng key + body (server trả đúng đơn cũ,
   kể cả khi quote đã hết hạn). Bản ghi bị xóa khi có kết quả xác định (202, hoặc 4xx ở bảng dưới).
+- Bản ghi của người khác (guest rồi đăng nhập, hoặc tài khoản khác) **không** gửi lại và không tự quote lại: xóa bản ghi,
+  báo "Đơn bạn xác nhận trước đó có thể đã được tạo…". Khi đang kẹt "Thử lại", link đăng nhập bị ẩn.
 
 ### 4.2 Kết quả
 
 | Trả về | Xử lý |
 |---|---|
-| 202 | Xóa bản ghi; tải lại giỏ (order dọn giỏ ở background); chuyển `/orders/{order_no}` (`replace`) |
+| 202 | Xóa bản ghi; chuyển `/orders/{order_no}` (`replace`). Order chỉ dọn giỏ sau khi giữ được hàng, nên trang đơn tải lại giỏ một lần khi đơn rời `PROCESSING` |
 | 409 `PRICE_CHANGED` | Xóa bản ghi; tự quote lại (không tự đặt), tóm tắt hiện "Giá đã thay đổi" kèm giá cũ → mới theo `errors` (`old=..,new=..`); khách bấm "Đặt hàng" lần nữa (key mới vì body mới) |
 | 409 `QUOTE_EXPIRED` | Xóa bản ghi; nút về "Xem tổng tiền" + câu hết hạn như §2.3 |
 | 409 `VERSION_CONFLICT`, `ITEM_UNAVAILABLE` | Như §3.3 |
-| 409 `CART_ALREADY_ORDERED` | Đơn đã tồn tại cho đúng trạng thái giỏ này: chuyển `/orders/{errors[0].message}` (guest có cookie mới) |
+| 409 `CART_ALREADY_ORDERED` (`code: CONFLICT`, lý do ở `message`) | Đơn đã tồn tại cho đúng trạng thái giỏ này: chuyển `/orders/{errors[0].message}` (guest có cookie mới) |
 | 409 `IDEMPOTENCY_KEY_REUSED` | Lỗi client (key cũ với body khác): xóa bản ghi, báo lỗi chung, cho bấm lại |
 | 400 `INVALID_QUOTE` | Xóa bản ghi; báo giá không hợp lệ → quote lại (không tự đặt) |
 | 401 `INVALID_CHECKOUT_TOKEN` | Token mới, gửi lại cùng key + body |
@@ -181,7 +183,7 @@ này (đơn guest xem qua link trong email, còn cookie).
 | D3 | Không làm ước tính phí ship trong giỏ | Phí thật có ở báo giá checkout; ước tính trong giỏ cần chọn tỉnh ngay ở giỏ. Làm sau nếu PO cần (SF-05 ghi "estimate fee") |
 | D4 | Lấy báo giá bằng nút "Xem tổng tiền", không tự quote khi gõ | Tránh gọi quote liên tục và tổng nhảy khi đang nhập; hết hạn chỉ cần bấm lại |
 | D5 | Địa chỉ nhập ở checkout không tự lưu vào sổ địa chỉ | Tránh ghi PII ngoài ý muốn; member vẫn quản lý sổ ở `/account/addresses` |
-| D6 | Lưu `{key, cart_id, cart_version, quote_token}` trong `sessionStorage` tới khi có kết quả | Tải lại trang vẫn gửi lại đúng đơn; theo contract `quote_token` không phải secret; không lưu `checkout_token` |
+| D6 | Lưu `{key, owner, cart_id, cart_version, quote_token}` trong `sessionStorage` tới khi có kết quả hoặc đăng xuất | Tải lại trang vẫn gửi lại đúng đơn; `quote_token` mang địa chỉ/liên hệ của chính khách nên xóa khi đăng xuất; không lưu `checkout_token` |
 | D7 | Poll tối đa 2 phút rồi dừng với nút "Kiểm tra lại" | 14 §3 (saga MANUAL giữ `PROCESSING` không giới hạn) |
 | D8 | Trang đơn ở WEB-03 tối giản (trạng thái + snapshot); hủy đơn, lịch sử trạng thái để WEB-04 | Phạm vi SF-08 thuộc WEB-04 |
 | D9 | Không thêm thư viện | fetch, React, storage có sẵn |

@@ -1,9 +1,10 @@
 // TASK:WEB-03: placing an order (spec §4.1). One confirmation gets one Idempotency-Key; key and body are stored before the
 // request so a lost response — even across a reload — is resent unchanged and the server answers with the same order.
+// `owner` ('guest' or the member's id) keeps a guest's order from being replayed under an account (PR #40 review I3).
 import { HttpError } from '../http';
-import { createOrder, type CreateBody, type Order } from './api';
+import { createOrder, forgetCheckoutToken, type CreateBody, type Order } from './api';
 
-export type Pending = { key: string; body: CreateBody };
+export type Pending = { key: string; owner: string; body: CreateBody };
 
 const KEY = 'storefront.checkout';
 const RETRIES = 5;
@@ -12,7 +13,7 @@ const CAP_MS = 30_000;
 export function readPending(): Pending | null {
   try {
     const saved = JSON.parse(sessionStorage.getItem(KEY) ?? 'null') as Pending | null;
-    return saved?.key && saved.body?.cart_id && saved.body.quote_token ? saved : null;
+    return saved?.key && saved.owner && saved.body?.cart_id && saved.body.quote_token ? saved : null;
   } catch {
     return null;
   }
@@ -22,8 +23,14 @@ export function clearPending() {
   try { sessionStorage.removeItem(KEY); } catch { /* blocked storage: nothing was kept */ }
 }
 
-export function startPending(body: CreateBody): Pending {
-  const pending = { key: crypto.randomUUID(), body };
+/** Sign-out: the quote token inside the record carries the customer's address and contact (D6). */
+export function forgetCheckout() {
+  clearPending();
+  forgetCheckoutToken();
+}
+
+export function startPending(owner: string, body: CreateBody): Pending {
+  const pending = { key: crypto.randomUUID(), owner, body };
   try {
     sessionStorage.setItem(KEY, JSON.stringify(pending));
   } catch {

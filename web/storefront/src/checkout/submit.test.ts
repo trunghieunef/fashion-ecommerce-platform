@@ -22,16 +22,16 @@ const wait = async (ms: number) => { waits.push(ms); };
 beforeEach(() => { waits.length = 0; });
 
 it('startPending stores key and body before anything is sent', () => {
-  const pending = startPending(body);
+  const pending = startPending('guest', body);
   expect(pending.key).toMatch(/^[0-9a-f-]{36}$/);
-  expect(JSON.parse(sessionStorage.getItem('storefront.checkout')!)).toEqual({ key: pending.key, body });
+  expect(JSON.parse(sessionStorage.getItem('storefront.checkout')!)).toEqual({ key: pending.key, owner: 'guest', body });
   expect(readPending()).toEqual(pending);
 });
 
 it('network failures resend the same key and body with backoff', async () => {
   let n = 0;
   const calls = mockFetch((path) => token(path) ?? (path === '/api/v1/orders' ? (n++ < 2 ? network() : json(order, 202)) : null));
-  const pending = startPending(body);
+  const pending = startPending('guest', body);
   const created = await send(false, pending, wait);
   expect(created.order_no).toBe('ORD202610000001');
   const sent = calls.filter((c) => c.url === '/api/v1/orders');
@@ -43,7 +43,7 @@ it('network failures resend the same key and body with backoff', async () => {
 
 it('after five automatic retries the last error is thrown and the record is kept', async () => {
   const calls = mockFetch((path) => token(path) ?? (path === '/api/v1/orders' ? json({ code: 'TEMPORARILY_UNAVAILABLE', message: 'x', metadata }, 503) : null));
-  const pending = startPending(body);
+  const pending = startPending('guest', body);
   await expect(send(false, pending, wait)).rejects.toMatchObject({ status: 503 });
   expect(calls.filter((c) => c.url === '/api/v1/orders')).toHaveLength(6);
   expect(waits).toEqual([1000, 2000, 4000, 8000, 16000]);
@@ -52,7 +52,7 @@ it('after five automatic retries the last error is thrown and the record is kept
 
 it('a 409 is thrown at once and the record is kept', async () => {
   const calls = mockFetch((path) => token(path) ?? (path === '/api/v1/orders' ? json({ code: 'PRICE_CHANGED', message: 'PRICE_CHANGED', metadata }, 409) : null));
-  const pending = startPending(body);
+  const pending = startPending('guest', body);
   await expect(send(false, pending, wait)).rejects.toMatchObject({ status: 409, code: 'PRICE_CHANGED' });
   expect(calls.filter((c) => c.url === '/api/v1/orders')).toHaveLength(1);
   expect(readPending()).toEqual(pending);
@@ -60,14 +60,14 @@ it('a 409 is thrown at once and the record is kept', async () => {
 
 it('a 202 clears the record', async () => {
   mockFetch((path) => token(path) ?? (path === '/api/v1/orders' ? json(order, 202) : null));
-  await send(false, startPending(body), wait);
+  await send(false, startPending('guest', body), wait);
   expect(readPending()).toBeNull();
 });
 
 it('blocked storage still sends', async () => {
   vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked'); });
   const calls = mockFetch((path) => token(path) ?? (path === '/api/v1/orders' ? json(order, 202) : null));
-  const pending = startPending(body);
+  const pending = startPending('guest', body);
   await send(false, pending, wait);
   expect(calls.find((c) => c.url === '/api/v1/orders')!.headers['idempotency-key']).toBe(pending.key);
   vi.restoreAllMocks();
