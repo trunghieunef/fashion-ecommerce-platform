@@ -44,14 +44,15 @@ Phạm vi: phần b của dòng WEB-02 ở [10](../delivery/10_backlog.md) (REQ 
 | Gộp giỏ sau đăng nhập/đăng ký: key giữ qua reload, 409 thử lại một lần, thất bại giữ giỏ guest, không âm thầm bỏ item (drawer điều chỉnh) | `merge.test.tsx` (10): `…merges it and shows the adjustments`, `a merge retried after reload sends the same key`, `a first conflict retries once with a new key`, `a second merge conflict keeps the guest cart for later`, `a network failure keeps the key and the guest cart`; e2e fixture drawer "5 → 3" | Pass |
 | Tải giỏ cũ không ghi đè kết quả gộp; lỗi gộp không làm đăng nhập lỗi | `a member cart load answered after the merge does not overwrite the merged cart` (có phản chứng); `AuthProvider.test.tsx` callback `onSignedIn` được cách ly | Pass |
 | Fixture giỏ đúng `cart.yaml` | `tests/contracts/test_storefront_fixtures.py` (4 fixture giỏ), phản chứng enum `reason` sai → FAIL | Pass |
-| Chuỗi thật: thêm vào giỏ → đăng ký gộp giỏ → số lượng → xóa giỏ | e2e `web-02.spec.ts` "guest cart merges on registration…" trên CI ([run 40113986120](https://github.com/trunghieunef/fashion-ecommerce-platform/actions/runs/40113986120), Browser smoke) — chỉ nhánh không có sản phẩm public | **Chưa chứng minh** (đính chính 2026-10-25; chạy lại ở CI PR #40) |
+| Chuỗi thật: thêm vào giỏ → đăng ký gộp giỏ → số lượng → xóa giỏ | e2e `web-02.spec.ts` "guest cart merges on registration…" trên CI ([run 40113986120](https://github.com/trunghieunef/fashion-ecommerce-platform/actions/runs/40113986120), Browser smoke) — chỉ nhánh không có sản phẩm public; CI PR #40 trên `c9a83a4` ([run 40165015692](https://github.com/trunghieunef/fashion-ecommerce-platform/actions/runs/40165015692)): smoke để lại sản phẩm public có tồn kho, browser smoke 26/26 | Pass (2026-10-25, sau đính chính) |
 | Docs đồng bộ (README, 14, 08, 10, plans README, evidence) | Commit `ec092cb`, `a53bcce`, `436368e` và commit nghiệm thu này (gồm `CLAUDE.md`) | Pass |
 
 **Đính chính 2026-10-25:** `scripts/smoke-local.sh` gỡ public sản phẩm duy nhất nó tạo trước khi browser smoke chạy, nên trên
 CI các chuỗi thật cần sản phẩm (WEB-02b gộp giỏ, WEB-03 checkout, nhánh chi tiết của WEB-01) chỉ chạy nhánh "không có sản
-phẩm public". Từ PR #40 smoke publish lại sản phẩm đó kèm tồn kho ở cuối; bằng chứng chuỗi thật ghi lại khi CI PR #40 chạy.
+phẩm public". Từ PR #40 smoke publish lại sản phẩm đó kèm tồn kho ở cuối; CI PR #40 trên `c9a83a4` ([run 40165015692](https://github.com/trunghieunef/fashion-ecommerce-platform/actions/runs/40165015692)) chạy đủ chuỗi thật,
+browser smoke 26/26.
 
-**WEB-02b: Done (local, trước G0)**, trừ tiêu chí chuỗi thật đang chờ CI PR #40. CI trên `436368e` PASS. Chủ dự án đã merge PR #39 vào `main` (`b28059f`, 2026-10-24).
+**WEB-02b: Done (local, trước G0)**; tiêu chí chuỗi thật đạt ở CI PR #40 (`c9a83a4`). CI trên `436368e` PASS. Chủ dự án đã merge PR #39 vào `main` (`b28059f`, 2026-10-24).
 **`TASK:WEB-02`: Done (local, trước G0)**, vì cả phần a ([nghiệm thu 2026-10-24](acceptance-2026-10-24.md)) và phần b đã Done.
 
 ### Ngoại lệ và việc còn lại (không chặn Done local)
