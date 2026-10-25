@@ -15,7 +15,7 @@ Chỉ COD trong PAY-01: VNPAY/MOMO trả 422 `PAYMENT_METHOD_UNAVAILABLE` tới 
 bash scripts/local-up.sh && bash scripts/smoke-local.sh   # smoke: "PAY-01 payment admin route PASS"
 ```
 
-Port 8086 (không publish ra host). Qua Gateway chỉ `/admin/api/v1/payments/**`; `/internal` không route.
+Port 8086 (không publish ra host). Qua Gateway chỉ `/admin/api/v1/payments/**` và (PAY-02) `/api/v1/payments/vnpay/ipn`, `/api/v1/payments/vnpay/return`; `/api/v1/payments` khác và `/internal` không route.
 
 ## API
 
@@ -26,6 +26,8 @@ Port 8086 (không publish ra host). Qua Gateway chỉ `/admin/api/v1/payments/**
 | `POST /internal/api/v1/payments/by-order/{order_id}/close` | `order-service` | Snapshot gốc + `reason` + key → close hoặc tombstone |
 | `GET /admin/api/v1/payments`, `/{id}` | `payment.read` | Danh sách (status, cursor) / chi tiết + transactions, settlements, reconciliation items |
 | `POST /admin/api/v1/payments/{id}/cod-settlements` | `payment.settle` | `settlement_ref, gross_amount, fee_amount, net_amount, evidence_ref, expected_version` + key |
+| `GET /api/v1/payments/vnpay/ipn` | chữ ký HMAC-SHA512 + `vnp_TmnCode` | Luôn 200 `{RspCode, Message}` (00/01/02/04/97/99); SUCCESS chỉ khi `00`+`00` đúng số tiền ×100, ACK sau commit |
+| `GET /api/v1/payments/vnpay/return` | public | Không đọc/ghi DB; 302 tới `{PAYMENT_STOREFRONT_URL}/orders/{vnp_TxnRef}` hoặc `/` |
 
 - **Create**: một TX dưới advisory lock theo `order_id`; `provider_request_id = order_no` (PAY-07); transaction `CREATE`, outbox
   `PAYMENT_CREATED` (`payment.events`, key `order_no`). Cùng order + cùng snapshot → payment cũ (mọi key); khác → 409

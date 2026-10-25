@@ -128,7 +128,14 @@ class GatewayBoundaryTest {
     // TASK:PAY-01: FINANCE admin only; no public payment route and /internal never leaves the cluster.
     client.get().uri("/admin/api/v1/payments").exchange().expectStatus().isOk();
     assertThat(CATALOG.path()).isEqualTo("/admin/api/v1/payments");
+    // TASK:PAY-02: only the two VNPay paths are public.
+    client.get().uri("/api/v1/payments/vnpay/ipn").exchange().expectStatus().isOk();
+    assertThat(CATALOG.path()).isEqualTo("/api/v1/payments/vnpay/ipn");
+    client.get().uri("/api/v1/payments/vnpay/return").exchange().expectStatus().isOk();
+    assertThat(CATALOG.path()).isEqualTo("/api/v1/payments/vnpay/return");
     int before = CATALOG.requestCount();
+    client.get().uri("/api/v1/payments/vnpay/other").exchange().expectStatus().isNotFound();
+    client.get().uri("/api/v1/payments/vnpay/ipn/x").exchange().expectStatus().isNotFound();
     client.post().uri("/internal/api/v1/payments").exchange().expectStatus().isNotFound();
     client.get().uri("/internal/api/v1/payments/by-order/4c8a1f2e-0000-4000-8000-000000000011").exchange().expectStatus().isNotFound();
     client.get().uri("/api/v1/payments").exchange().expectStatus().isNotFound();

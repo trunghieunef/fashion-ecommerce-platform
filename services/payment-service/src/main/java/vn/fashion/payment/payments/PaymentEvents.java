@@ -24,13 +24,17 @@ public class PaymentEvents {
     } catch (IOException e) { throw new IllegalStateException("Cannot read event registry", e); }
   }
 
-  public void created(PaymentService.View view, String correlationId) { append("PAYMENT_CREATED", view, null, correlationId); }
+  public void created(PaymentService.View view, String correlationId) { append("PAYMENT_CREATED", view, null, null, correlationId); }
   /** Close: reason CLOSED (spec section 4). */
-  public void failed(PaymentService.View view, String reason, String correlationId) { append("PAYMENT_FAILED", view, reason, correlationId); }
+  public void failed(PaymentService.View view, String reason, String correlationId) { append("PAYMENT_FAILED", view, reason, null, correlationId); }
   /** COD money confirmed by FINANCE; also on a closed payment, where the order owes a refund. */
-  public void completed(PaymentService.View view, String correlationId) { append("PAYMENT_COMPLETED", view, null, correlationId); }
+  public void completed(PaymentService.View view, String correlationId) { append("PAYMENT_COMPLETED", view, null, null, correlationId); }
+  /** TASK:PAY-02: provider money verified (VNPay IPN/QueryDR) carries the provider transaction number. */
+  public void completed(PaymentService.View view, String providerTxnId, String correlationId) {
+    append("PAYMENT_COMPLETED", view, null, providerTxnId, correlationId);
+  }
 
-  private void append(String type, PaymentService.View view, String reason, String correlationId) {
+  private void append(String type, PaymentService.View view, String reason, String providerTxnId, String correlationId) {
     var payload = new LinkedHashMap<String, Object>();
     payload.put("order_id", view.orderId().toString());
     payload.put("order_no", view.orderNo());
@@ -40,7 +44,7 @@ public class PaymentEvents {
     payload.put("currency", view.currency());
     payload.put("status", view.status());
     payload.put("paid_at", view.paidAt() == null ? null : view.paidAt().toString());
-    payload.put("provider_txn_id", null);
+    payload.put("provider_txn_id", providerTxnId);
     payload.put("reason", reason);
     var route = routes.required(type);
     outbox.append(new OutboxEvent(UUID.randomUUID(), "payment", (String) payload.get(route.required("aggregate_id").asString()),

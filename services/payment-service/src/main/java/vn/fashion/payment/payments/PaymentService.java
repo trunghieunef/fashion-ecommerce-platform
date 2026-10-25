@@ -154,12 +154,12 @@ public class PaymentService {
   public Optional<View> byOrder(UUID orderId) {
     return jdbc.sql(VIEW + " where order_id = :o").param("o", orderId).query(View.class).optional();
   }
-  View byId(UUID id) {
+  public View byId(UUID id) {
     return jdbc.sql(VIEW + " where id = :id").param("id", id).query(View.class).single();
   }
 
   /** Serializes create, close and COD evidence of one order (payments may not exist yet, so no row lock). */
-  void lockOrder(UUID orderId) {
+  public void lockOrder(UUID orderId) {
     jdbc.sql("select pg_advisory_xact_lock(hashtextextended(:o, 0))").param("o", orderId.toString()).query((rs, n) -> 1).list();
   }
   /** Canonical JSON (sorted keys) of the snapshot. */
@@ -190,7 +190,7 @@ public class PaymentService {
         .param("snap", json.writeValueAsString(canonical(s))).param("exp", Timestamp.from(s.expiresAt())).param("r", closeReason).update();
   }
   /** One evidence row; a repeated (source, key) is ignored and reported as false. */
-  boolean transaction(UUID payment, String source, String key, String status, Long amount, Instant occurredAt, String payload) {
+  public boolean transaction(UUID payment, String source, String key, String status, Long amount, Instant occurredAt, String payload) {
     return jdbc.sql("""
         insert into payment_transactions(id, payment_id, source, provider_event_key, status, amount, occurred_at, sanitized_payload,
           payload_hash)

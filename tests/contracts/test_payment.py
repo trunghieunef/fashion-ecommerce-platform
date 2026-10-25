@@ -12,6 +12,8 @@ BASE = "https://fashion.local/contracts/openapi/"
 FILES = ("payment.yaml", "payment-internal.yaml", "common.yaml")
 ADMIN = {("get", "/admin/api/v1/payments"), ("get", "/admin/api/v1/payments/{id}"),
          ("post", "/admin/api/v1/payments/{id}/cod-settlements")}
+# TASK:PAY-02: the only public payment paths (no auth: the IPN is verified by its signature).
+VNPAY = {("get", "/api/v1/payments/vnpay/ipn"), ("get", "/api/v1/payments/vnpay/return")}
 INTERNAL = {("post", "/internal/api/v1/payments"), ("get", "/internal/api/v1/payments/by-order/{order_id}"),
             ("post", "/internal/api/v1/payments/by-order/{order_id}/close")}
 SNAPSHOT = {"order_id": "99999999-9999-4999-8999-999999999991", "order_no": "ORD1", "user_id": None, "method": "COD",
@@ -43,11 +45,17 @@ class PaymentContractTest(unittest.TestCase):
         return Draft202012Validator({"$ref": ref}, registry=self.registry, format_checker=FormatChecker())
 
     def test_operations(self):
-        self.assertEqual({(m, p) for m, p, _ in self.operations("payment.yaml")}, ADMIN)
+        self.assertEqual({(m, p) for m, p, _ in self.operations("payment.yaml")}, ADMIN | VNPAY)
         self.assertEqual({(m, p) for m, p, _ in self.operations("payment-internal.yaml")}, INTERNAL)
         self.assertEqual(self.docs["payment-internal.yaml"]["security"], [{"serviceToken": []}])
-        for _, _, op in self.operations("payment.yaml"):
-            self.assertEqual(op["security"], [{"bearerAuth": []}])
+        for m, p, op in self.operations("payment.yaml"):
+            self.assertEqual(op["security"], [] if (m, p) in VNPAY else [{"bearerAuth": []}])
+
+    def test_vnpay_ack(self):
+        ack = self.validator(BASE + "payment.yaml#/components/schemas/VnPayIpnAck")
+        self.assertEqual(list(ack.iter_errors({"RspCode": "99", "Message": "Unknow error"})), [])
+        for bad in ({"RspCode": "00"}, {"RspCode": "05", "Message": "x"}, {"RspCode": "00", "Message": "Confirm Success", "data": 1}):
+            self.assertTrue(list(ack.iter_errors(bad)), bad)
 
     def test_every_response_is_no_store_and_examples_validate(self):
         for name in ("payment.yaml", "payment-internal.yaml"):
