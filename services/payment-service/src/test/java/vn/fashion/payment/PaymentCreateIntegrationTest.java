@@ -15,6 +15,8 @@ class PaymentCreateIntegrationTest extends PaymentTestSupport {
     assertThat(created.path("method").asString()).isEqualTo("COD");
     assertThat(created.path("amount").asLong()).isEqualTo(275000);
     assertThat(created.path("closed_at").isNull()).isTrue();
+    assertThat(created.path("payment_url").isNull()).isTrue();
+    assertThat(created.path("payment_url_expires_at").isNull()).isTrue();
     String id = created.path("payment_id").asString();
     assertThat(jdbc.queryForObject("select provider_request_id from payments where id = cast(? as uuid)", String.class, id)).isEqualTo("ORD-1");
     assertThat(count("select count(*) from payment_transactions where payment_id = cast(? as uuid) and source = 'CREATE'", id)).isEqualTo(1);
@@ -59,7 +61,7 @@ class PaymentCreateIntegrationTest extends PaymentTestSupport {
     var zero = create("a", snapshot(order, "ORD-4", "COD", 0));
     assertThat(problem(zero, 422)).isEqualTo("PAYMENT_AMOUNT_UNSUPPORTED");
     assertThat(json(zero).path("code").asString()).isEqualTo("PAYMENT_AMOUNT_UNSUPPORTED"); // 03 section 1 error code
-    assertThat(problem(create("b", snapshot(order, "ORD-4", "VNPAY", 1000)), 422)).isEqualTo("PAYMENT_METHOD_UNAVAILABLE");
+    assertThat(problem(create("b", snapshot(order, "ORD-4", "MOMO", 1000)), 422)).isEqualTo("PAYMENT_METHOD_UNAVAILABLE");
     assertThat(problem(create("c", snapshot(order, "ORD-4", "COD", 1000).replace("\"VND\"", "\"USD\"")), 400)).isEqualTo("INVALID_FIELDS");
     assertThat(problem(create("d", snapshot(order, "ORD-4", "CARD", 1000)), 400)).isEqualTo("INVALID_FIELDS");
     assertThat(problem(create("e", snapshot(order, "ORD-4", "COD", 1000).replace("}", ",\"payment_url\":\"x\"}")), 400)).isEqualTo("INVALID_FIELDS");

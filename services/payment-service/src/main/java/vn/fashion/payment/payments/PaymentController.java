@@ -38,8 +38,24 @@ public class PaymentController {
     callers.require(authorization);
     Api.requireKey(key);
     var meta = Api.metadata(tracer);
-    var snapshot = PaymentService.parse(Api.object(json, body), Set.of());
-    return Api.ok(HttpStatus.OK, payments.create(key, snapshot, meta.traceId()), meta);
+    var node = Api.object(json, body);
+    var snapshot = PaymentService.parse(node, Set.of("client_ip", "locale"));
+    return Api.ok(HttpStatus.OK, payments.create(key, snapshot, extras(node), meta.traceId()), meta);
+  }
+
+  /** TASK:PAY-02: client_ip (VNPAY needs it, checked by the service after the closed check: IPv4, or hex with ':'; 7..45 chars) and locale vi|en (default vi). */
+  static PaymentService.Extras extras(JsonNode node) {
+    var errors = new java.util.ArrayList<Api.FieldError>();
+    JsonNode i = node.path("client_ip"), l = node.path("locale");
+    String ip = i.isString() ? i.asString() : null;
+    boolean present = !i.isMissingNode() && !i.isNull();
+    if (present && (ip == null || ip.length() < 7 || ip.length() > 45
+        || !(ip.matches("(\\d{1,3}\\.){3}\\d{1,3}") || ip.contains(":") && ip.matches("[0-9a-fA-F:.]+"))))
+      errors.add(new Api.FieldError("client_ip", "must be an IPv4 or IPv6 address"));
+    String locale = l.isString() ? l.asString() : null;
+    if (!l.isMissingNode() && !l.isNull() && !Set.of("vi", "en").contains(locale)) errors.add(new Api.FieldError("locale", "must be vi or en"));
+    if (!errors.isEmpty()) throw new Api.Problem(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "INVALID_FIELDS", errors);
+    return new PaymentService.Extras(ip, locale == null ? "vi" : locale);
   }
 
   /** PAY-08: body is the original create snapshot plus reason 1..500. */

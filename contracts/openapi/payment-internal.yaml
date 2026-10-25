@@ -25,7 +25,9 @@ paths:
         with a CREATE evidence row and outbox PAYMENT_CREATED. The same order and snapshot returns the existing payment (any
         key); another snapshot is 409 PAYMENT_CONFLICT. A closed order (tombstone or closed payment) is 409 PAYMENT_CLOSED,
         checked before the snapshot and the 422 rules, also for a same-key replay after the close. amount 0 is 422
-        PAYMENT_AMOUNT_UNSUPPORTED; VNPAY/MOMO are 422 PAYMENT_METHOD_UNAVAILABLE until PAY-02/03.
+        PAYMENT_AMOUNT_UNSUPPORTED; MOMO is 422 PAYMENT_METHOD_UNAVAILABLE until PAY-03, and VNPAY only
+        while it is disabled (blank tmn-code). TASK:PAY-02: VNPAY becomes CREATED with a signed payment_url (no network call);
+        client_ip (required for VNPAY) and locale (vi|en) are outside the snapshot hash, and a replay returns the same link.
       x-implementation-status: implemented
       parameters:
       - $ref: ./common.yaml#/components/parameters/IdempotencyKey
@@ -49,7 +51,7 @@ paths:
                     code: OK
                     data: &payment {payment_id: 55555555-5555-4555-8555-555555555591, order_id: 99999999-9999-4999-8999-999999999991,
                       order_no: ORD202610000001, method: COD, amount: 275000, currency: VND, status: COD_PENDING, closed_at: null,
-                      paid_at: null, version: 0}
+                      paid_at: null, version: 0, payment_url: null, payment_url_expires_at: null}
                     metadata: {request_id: pay01-synthetic-request, trace_id: pay01-synthetic-trace}
         '400': &error
           description: INVALID_FIELDS, INVALID_KEY or MALFORMED_JSON
@@ -95,7 +97,8 @@ paths:
                     code: OK
                     data: {payment_id: 55555555-5555-4555-8555-555555555591, order_id: 99999999-9999-4999-8999-999999999991,
                       order_no: ORD202610000001, method: COD, amount: 275000, currency: VND, status: FAILED,
-                      closed_at: '2026-10-20T06:00:00Z', paid_at: null, version: 1}
+                      closed_at: '2026-10-20T06:00:00Z', paid_at: null, version: 1,
+                      payment_url: null, payment_url_expires_at: null}
                     metadata: {request_id: pay01-synthetic-request, trace_id: pay01-synthetic-trace}
         '400': *error
         '401': {<<: *error, description: INVALID_SERVICE_TOKEN}
@@ -142,6 +145,8 @@ components:
         amount: {type: integer, minimum: 0, maximum: 1000000000000, description: 'Order total in VND from the order snapshot; 0 is 422 on create'}
         currency: {type: string, const: VND}
         expires_at: {type: string, format: date-time}
+        client_ip: {type: string, minLength: 7, maxLength: 45, description: 'Required for VNPAY (vnp_IpAddr); not part of the snapshot hash'}
+        locale: {type: string, enum: [vi, en], default: vi, description: 'Pay page language; not part of the snapshot hash'}
     PaymentClose:
       type: object
       additionalProperties: false
@@ -158,7 +163,7 @@ components:
     Payment:
       type: object
       additionalProperties: false
-      required: [payment_id, order_id, order_no, method, amount, currency, status, closed_at, paid_at, version]
+      required: [payment_id, order_id, order_no, method, amount, currency, status, closed_at, paid_at, version, payment_url, payment_url_expires_at]
       properties:
         payment_id: {type: string, format: uuid}
         order_id: {type: string, format: uuid}
@@ -170,6 +175,8 @@ components:
         closed_at: {type: [string, 'null'], format: date-time}
         paid_at: {type: [string, 'null'], format: date-time}
         version: {type: integer, minimum: 0}
+        payment_url: {type: [string, 'null'], description: 'Signed VNPay link; null for COD'}
+        payment_url_expires_at: {type: [string, 'null'], format: date-time, description: 'min(order expires_at, provider_created_at + link TTL); null for COD'}
     PaymentResponse:
       type: object
       required: [code, data, metadata]

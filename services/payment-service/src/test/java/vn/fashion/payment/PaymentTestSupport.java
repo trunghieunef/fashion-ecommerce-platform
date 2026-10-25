@@ -35,7 +35,8 @@ import tools.jackson.databind.ObjectMapper;
 
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-    properties = {"fashion.messaging.relay.enabled=false", "spring.kafka.listener.auto-startup=false"})
+    properties = {"fashion.messaging.relay.enabled=false", "spring.kafka.listener.auto-startup=false",
+        "fashion.payment.vnpay.tmn-code=TESTTMN1", "fashion.payment.vnpay.hash-secret=TEST-HASH-SECRET"})
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 public abstract class PaymentTestSupport {
   protected static final ECKey KEY = key();
@@ -95,6 +96,11 @@ public abstract class PaymentTestSupport {
   protected static String snapshot(String order, String orderNo, String method, long amount) {
     return "{\"order_id\":\"" + order + "\",\"order_no\":\"" + orderNo + "\",\"user_id\":null,\"method\":\"" + method
         + "\",\"amount\":" + amount + ",\"currency\":\"VND\",\"expires_at\":\"2030-01-01T00:00:00Z\"}";
+  }
+  /** PAY-02: snapshot plus the order's client_ip. */
+  protected static String snapshot(String order, String orderNo, String method, long amount, String clientIp) {
+    String base = snapshot(order, orderNo, method, amount);
+    return base.substring(0, base.length() - 1) + ",\"client_ip\":\"" + clientIp + "\"}";
   }
   protected HttpResponse<String> create(String key, String body) {
     return send("POST", "/internal/api/v1/payments", body, "Authorization", serviceToken("order-service"), "Idempotency-Key", key);
