@@ -12,13 +12,15 @@ Không dùng secret/URL/account thật trong repo. Mỗi adapter có version/pro
 
 ## 2. Những điểm đã đối chiếu nguồn chính thức
 
-Đối chiếu trang công khai ngày 2026-09-19; vẫn cần xác nhận profile của merchant và sandbox trước bật thật.
+Đối chiếu trang công khai ngày 2026-09-19; VNPay PAY 2.1.0 và QueryDR đối chiếu lại 2026-10-25 cho PAY-02; vẫn cần xác nhận profile của merchant và sandbox trước bật thật.
 
 | Provider/profile | Contract B1 dùng | Nguồn |
 |---|---|---|
 | VNPay PAY 2.1.0, GET profile | IPN GET, amount nhân 100; ký HMAC-SHA512 theo profile chọn; ACK JSON RspCode/Message sau xử lý | [Hướng dẫn PAY](https://sandbox.vnpayment.vn/apis/docs/thanh-toan-pay/pay.html), [chuyển thuật toán](https://sandbox.vnpayment.vn/apis/docs/chuyen-doi-thuat-toan/changeTypeHash.html) |
 | MoMo notification | POST JSON, verify theo signature field mapping; ACK HTTP 204 không body | [Payment Notification](https://developers.momo.vn/v3/vi/docs/payment/api/result-handling/notification/) |
 | MoMo refund/query | Refund và query kết quả riêng; tài liệu refund yêu cầu timeout tối thiểu 30 giây cho lời gọi API đó | [Reverse & Refund](https://developers.momo.vn/v3/docs/payment/api/payment-api/refund/) |
+
+VNPay (PAY-02, 2026-10-25): IPN bắt buộc HTTPS nên local dùng QueryDR làm đường xác nhận chính; IPN qua `cloudflared tunnel --url http://localhost:8080` là tùy chọn. QueryDR +1, +2, +5, +10, +30 phút rồi mỗi 30 phút tới hạn link + 24 giờ; `91` chỉ thành FAILED `EXPIRED` sau hạn link + 15 phút. Sandbox thật chưa chạy: PAY-02 chưa Done tới khi có evidence (§3).
 
 Vì vậy timeout 2 giây nội bộ không được áp lên mọi provider call. Worker provider chạy ngoài transaction và ngoài response budget checkout. VNPay merchant dùng profile POST khác cần đổi route/fixtures tương ứng trước triển khai; B1 không mặc định mọi profile giống GET PAY.
 

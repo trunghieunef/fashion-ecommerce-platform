@@ -45,8 +45,8 @@ hoặc dữ liệu thẻ vào Git/log/DB/fixture; dùng thư viện VNPay ngoài
 | `PAYMENT_STOREFRONT_URL` | `http://localhost:5173` | Đích redirect duy nhất (allowlist) |
 | `PAYMENT_VNPAY_LINK_TTL` | `15m` | Hạn link, không vượt `expires_at` của order |
 
-- Local: `infra/local/vnpay.local.env` (**gitignore**) do chủ dự án tự điền; repo chỉ có `vnpay.local.env.example` với
-  placeholder. `scripts/local-up.sh` đọc file nếu có. CI không có secret: VNPAY tắt, mọi test dùng secret giả lập.
+- Local: `PAYMENT_VNPAY_TMN_CODE`/`PAYMENT_VNPAY_HASH_SECRET` do chủ dự án tự điền ở `infra/local/.env` (**gitignore**); repo chỉ có
+  placeholder rỗng ở `.env.example` (đổi theo plan: dùng `infra/local/.env`, không có `vnpay.local.env`). CI không có secret: VNPAY tắt, mọi test dùng secret giả lập.
 - `scripts/scan-secrets.sh` (gitleaks) phải pass; log JSON hiện có đã che giá trị chuỗi (PLT-05); Gateway che query của
   `/api/v1/payments/vnpay/**` khỏi access log (03 §6).
 

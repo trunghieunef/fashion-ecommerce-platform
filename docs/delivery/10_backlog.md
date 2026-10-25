@@ -4,6 +4,10 @@ B1 · 2026-09-19 · Work package mặc định: **Planned; Assignee TBD; Reviewe
 
 ## 1. Cách nhận việc
 
+Update 2026-10-25 — `TASK:PAY-02` (VNPay link/IPN/return/QueryDR —
+[spec](../superpowers/specs/2026-10-25-pay-02-vnpay-design.md)) **In progress — code local xong, chờ sandbox thật + review/nghiệm thu**
+([evidence](../evidence/pay-02-local-2026-10-25.md)); chưa Done tới khi có kết quả sandbox thật (15 §3).
+
 Update 2026-10-25 — `TASK:WEB-03` (checkout COD, trang đơn, đơn của member —
 [spec](../superpowers/specs/2026-10-25-web-03-checkout-design.md)) **Done (local, trước G0)** theo
 [nghiệm thu](../evidence/acceptance-2026-10-25.md#taskweb-03--checkout-cod-trang-đơn-đơn-của-member) (PR #40 CI PASS trên `6b2c68d`, đã merge `main` `3078ce8`;

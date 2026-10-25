@@ -488,7 +488,7 @@ Report orders do order sở hữu, cash do payment, stock do inventory; dashboar
 | POST /promotions/reservations/commit | order → promotion | order_id,key → COMMITTED |
 | POST /promotions/reservations/release | order → promotion | order_id,original_snapshot,original_hash,reason,key → RELEASED |
 | GET /promotions/reservations/{order_id} | order → promotion | Aggregate/child states |
-| POST /payments | order → payment | Authenticated order snapshot/hash,expires_at,key → payment state/URL — `PAY-01` implemented ([payment-internal.yaml](../../contracts/openapi/payment-internal.yaml)): chỉ COD → COD_PENDING; VNPAY/MOMO 422 tới PAY-02/03; `provider_request_id = order_no`; đã close → 409 PAYMENT_CLOSED. Caller `order-service` từ ORD-02, key `payment:{order_id}` |
+| POST /payments | order → payment | Authenticated order snapshot/hash,expires_at,key → payment state/URL — `PAY-01` implemented ([payment-internal.yaml](../../contracts/openapi/payment-internal.yaml)): COD → COD_PENDING; VNPAY (`PAY-02`, code local) → CREATED + `payment_url`/`payment_url_expires_at` đã ký, nhận thêm `client_ip`, `locale` ngoài hash, không gọi mạng; MOMO 422 tới PAY-03; `provider_request_id = order_no`; đã close → 409 PAYMENT_CLOSED. Caller `order-service` từ ORD-02, key `payment:{order_id}` |
 | GET /payments/by-order/{order_id} | order → payment | Verified amount/method/status/closed_at — `PAY-01` implemented |
 | POST /payments/by-order/{order_id}/close | order → payment | Original snapshot/hash,key → closed intent/tombstone — `PAY-01` implemented; path đổi từ `/payments/{order_id}/close` để không trùng dạng `/payments/{payment_id}/…` (08). ORD-02 luôn close khi bù trừ (tombstone), key `close:{order_id}`; status COD_COLLECTED/SUCCESS → saga MANUAL `PAID_NEEDS_REFUND` |
 | POST /payments/{payment_id}/refunds | order → payment | operation_key,amount,reason,order context → refund |
@@ -609,8 +609,8 @@ Không áp response envelope của shop lên ACK provider. Chi tiết và nguồ
 
 | Endpoint public | Baseline adapter | Hành vi |
 |---|---|---|
-| GET /payments/vnpay/ipn | VNPay PAY 2.1.0 GET profile | Verify, TX, JSON RspCode/Message theo spec |
-| GET /payments/vnpay/return | Browser return | Redirect allowlist tới UI, UI đọc trạng thái server |
+| GET /payments/vnpay/ipn | VNPay PAY 2.1.0 GET profile (`PAY-02`) | Verify chữ ký/merchant/reference/amount, TX, luôn 200 JSON `RspCode` 00/01/02/04/97/99; ACK sau commit |
+| GET /payments/vnpay/return | Browser return (`PAY-02`) | Không đọc/ghi DB; 302 tới `{storefront}/orders/{order_no}` hoặc `/`, không chuyển tiếp `vnp_*`; UI đọc trạng thái server |
 | POST /payments/momo/notify | MoMo notification JSON | Verify, TX, HTTP 204 ACK theo spec |
 | GET /payments/momo/return | Browser return | Chỉ điều hướng, không xác nhận thu tiền |
 | POST /shipping/webhook/{carrier} | GHN/GHTK/VTPL theo account/spec | Adapter auth/event/status mapping, commit trước ACK |

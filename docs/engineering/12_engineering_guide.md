@@ -117,6 +117,7 @@ chỉ copy JAR/`dist` vào image runtime pin tag + digest.
 | Khởi động stack | `bash scripts/local-up.sh` (tạo `infra/local/.env` từ example nếu chưa có) |
 | Smoke | `bash scripts/smoke-local.sh`; local Redis timeout qua Gateway: `bash scripts/smoke-auth-redis-timeout.sh` (pause/unpause Redis, không chạy khi có traffic người dùng); browser: `npx playwright install chromium && npx playwright test` |
 | Nacos proof O02 | `bash scripts/nacos-compat-check.sh` sau `local-up.sh`; tự trả stack về profile mặc định. Mật khẩu admin chỉ được khởi tạo lần đầu và lưu trong volume `nacos-data`: đổi `NACOS_PASSWORD` sau đó thì xóa riêng volume này (`docker volume rm local_nacos-data`) |
+| VNPay sandbox thật (PAY-02, local, không CI) | Điền `PAYMENT_VNPAY_*` trong `infra/local/.env`, `docker compose ... up -d postgres kafka payment gateway`, `bash scripts/vnpay-sandbox.sh [amount]`; xem [payment README](../../services/payment-service/README.md#vnpay-sandbox) |
 | Dừng / reset | `docker compose --env-file infra/local/.env -f infra/local/compose.yaml --profile nacos-compat down`; thêm `-v` chỉ khi chủ động xóa dữ liệu local |
 
 Ports chỉ bind `127.0.0.1`: storefront 4173, Gateway 8080, PostgreSQL 5432 (cho chạy JVM

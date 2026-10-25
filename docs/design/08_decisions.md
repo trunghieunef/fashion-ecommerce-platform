@@ -630,6 +630,23 @@ mà WEB-01 đã hẹn); nghiên cứu thiết kế bằng skill ui-ux-pro-max v�
 | Size không có trong màu đang chọn: gạch ngang nhưng vẫn chọn được | Lệch chữ "disabled" của spec để giữ sửa lỗi review 1 của WEB-01 (không kẹt lựa chọn) |
 | Giữ "Tải thêm", link theo `id`, ngôn ngữ trong `localStorage` | Như WEB-01 |
 
+## PAY-02 — quyết định 2026-10-25
+
+`TASK:PAY-02`. Chủ dự án duyệt [spec](../superpowers/specs/2026-10-25-pay-02-vnpay-design.md) (2026-10-25); các mặc định do agent chốt:
+
+| Quyết định | Hệ quả |
+|---|---|
+| D1 PAY-02 chỉ ở payment-service + Gateway | Order/storefront VNPAY để ORD-05/WEB-04; sandbox chạy bằng script gọi internal create |
+| D2 `vnp_TxnRef = order_no`, một link/đơn, không tạo link mới khi hết hạn | PAY-07; VNPay cấm trùng `TxnRef` trong ngày |
+| D3 Create không gọi mạng → `CREATED` + link; không có `UNKNOWN` | Link PAY 2.1.0 chỉ là URL đã ký |
+| D4 `client_ip`, `locale` là trường không băm của create | VNPay bắt buộc `vnp_IpAddr`; không đổi `request_hash` |
+| D5 IPN: chữ ký/merchant sai `97`, amount sai `04` + reconciliation, đã xác nhận `02`, lỗi `99` | Theo bảng RspCode của VNPay |
+| D6 QueryDR là đường xác nhận chính ở local, IPN qua tunnel tùy chọn | IPN cần HTTPS, local/CI không nhận request từ Internet |
+| D7 Query lỗi mạng chỉ dời lịch; `91` chỉ thành `FAILED` sau hạn link + 15 phút | Query là đọc; link hết hạn không chứng minh chưa thu |
+| D8 Return chỉ 302 về storefront, không verify/không ghi | Return chỉ điều hướng (15 §2) |
+| D9 Không thư viện VNPay; JDK HMAC + `RestClient` | Ít dependency |
+| D10 Secret qua env, `infra/local/.env` gitignore; CI không có secret | Không secret trong Git/log |
+
 ## WEB-03 — quyết định 2026-10-25
 
 `TASK:WEB-03`. Chủ dự án duyệt [spec](../superpowers/specs/2026-10-25-web-03-checkout-design.md) và plan (2026-10-25); các mặc
