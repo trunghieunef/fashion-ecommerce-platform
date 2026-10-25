@@ -49,6 +49,9 @@ public class VnPayResults {
     Instant paidAt = e.payDate() == null ? null : VnPaySigner.parse(e.payDate());
     String kind = kind(source, e);
     if (kind.equals("SUCCESS") && paidAt == null) throw new IllegalArgumentException("vnp_PayDate is required for a success");
+    // TASK:PAY-02 review C1: provider_txn_id is unique per method and required by PAYMENT_COMPLETED.
+    if (kind.equals("SUCCESS") && (e.transactionNo() == null || e.transactionNo().isBlank()))
+      throw new IllegalArgumentException("vnp_TransactionNo is required for a success");
     String correlationId = Api.metadata(tracer).traceId();
     return tx.execute(status -> {
       var orderId = jdbc.sql("select order_id from payments where order_no = :no and method = 'VNPAY'").param("no", e.txnRef())

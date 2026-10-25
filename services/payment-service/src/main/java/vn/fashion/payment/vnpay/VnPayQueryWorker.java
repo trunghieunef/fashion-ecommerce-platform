@@ -43,7 +43,11 @@ public class VnPayQueryWorker {
     List<Due> due = tx.execute(status -> {
       var rows = jdbc.sql("""
           select id, order_no, provider_created_at, payment_url_expires_at from payments
-          where method = 'VNPAY' and status in ('CREATED', 'PROCESSING') and next_reconcile_at <= :now
+          where method = 'VNPAY' and next_reconcile_at <= :now
+            and (status in ('CREATED', 'PROCESSING')
+              -- TASK:PAY-02 review I3: closed (FAILED by the close) may still hide a capture; a verified decline/expiry ends it.
+              or status = 'FAILED' and closed_at is not null and not exists (select 1 from payment_transactions t
+                where t.payment_id = payments.id and t.source in ('WEBHOOK', 'QUERY') and t.status = 'FAILED'))
           order by next_reconcile_at limit 20 for update skip locked""").param("now", Timestamp.from(now)).query(Due.class).list();
       for (Due d : rows) {
         Instant next = next(d.providerCreatedAt(), d.paymentUrlExpiresAt(), now);
@@ -94,6 +98,11 @@ public class VnPayQueryWorker {
       return;
     }
     String status = b.path("vnp_TransactionStatus").asString(""), txn = b.path("vnp_TransactionNo").asString("");
+    if (status.equals("00") && !txn.matches("[0-9]{1,32}")) {
+      // TASK:PAY-02 review C1: a capture without VNPay's transaction number is no answer; ask again later.
+      LOG.warn("VNPay QueryDR answer for payment {} has no valid transaction number", d.id());
+      return;
+    }
     results.apply("QUERY", new VnPayResults.Evidence(d.orderNo(), Long.parseLong(amount), "00", status, txn,
         orNull(b, "vnp_PayDate"), orNull(b, "vnp_BankCode"), orNull(b, "vnp_CardType"),
         txn + ":00:" + status + ":" + r.responseId()));

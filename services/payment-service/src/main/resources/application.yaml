@@ -9,7 +9,7 @@ spring:
   task:
     scheduling:
       pool:
-        size: 1
+        size: 2
   jackson:
     property-naming-strategy: SNAKE_CASE
     deserialization:

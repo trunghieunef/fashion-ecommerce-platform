@@ -82,9 +82,9 @@ provider_txn_id)`; `payment_transactions.source` đã có `WEBHOOK`, `QUERY`). M
   `vnp_OrderType=other`, `vnp_ReturnUrl`, `vnp_CreateDate` (= `provider_created_at`, GMT+7 `yyyyMMddHHmmss`),
   `vnp_ExpireDate = min(order.expires_at, created + PAYMENT_VNPAY_LINK_TTL)`; không gửi `vnp_BankCode` (khách chọn trên
   VNPay). Chữ ký: tham số `vnp_*` khác rỗng, sắp xếp tên tăng dần, `name=URLEncode(value)` nối `&`, HMAC-SHA512 hex.
-- Response thêm `payment_url` (null với COD) và `expires_at` của link. Replay/cùng snapshot trả **cùng link** (link không đổi
+- Response thêm `payment_url` (null với COD) và `payment_url_expires_at` (hạn link, ruling R2). Replay/cùng snapshot trả **cùng link** (link không đổi
   vì `TxnRef` không được trùng trong ngày). Đã close → 409 `PAYMENT_CLOSED` (như PAY-01); link hết hạn → vẫn trả link cũ
-  kèm `expires_at` (order quyết định; không tạo `TxnRef` mới).
+  kèm `payment_url_expires_at` (order quyết định; không tạo `TxnRef` mới).
 - `amount = 0` vẫn 422; VNPAY tắt (§2) → 422 `PAYMENT_METHOD_UNAVAILABLE`.
 
 ## 6. Endpoint public (qua Gateway, route `payment-vnpay-public` chỉ hai path)
@@ -124,7 +124,8 @@ Order hiện bỏ qua `PAYMENT_COMPLETED` của order không tồn tại (ORD-02
 
 ## 8. QueryDR worker
 
-- `@Scheduled` mỗi 30 s: chọn payment `VNPAY` trạng thái `CREATED`/`PROCESSING`, `closed_at` bất kỳ, `next_reconcile_at <=
+- `@Scheduled` mỗi 30 s: chọn payment `VNPAY` trạng thái `CREATED`/`PROCESSING`, `closed_at` bất kỳ (kể cả `FAILED` do close
+  khi chưa có evidence `WEBHOOK`/`QUERY` thất bại; close giữ `next_reconcile_at`), `next_reconcile_at <=
   now()` (đặt lúc create = created + 1 phút), `limit 20 for update skip locked`, dời `next_reconcile_at` trước khi commit;
   gọi VNPay **ngoài** transaction (timeout 10 s), rồi `applyVerified(QUERY, …)`.
 - Lịch: 1, 2, 5, 10, 30 phút sau create, rồi mỗi 30 phút tới hạn link + 24 giờ; sau đó dừng (FINANCE xem qua admin).

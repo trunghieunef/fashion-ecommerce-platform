@@ -1,7 +1,9 @@
 package vn.fashion.payment;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static vn.fashion.payment.VnPayIpnIntegrationTest.NO;
+import static vn.fashion.payment.VnPayIpnIntegrationTest.result;
 import static vn.fashion.payment.VnPayIpnIntegrationTest.signed;
 import static vn.fashion.payment.VnPayIpnIntegrationTest.success;
 import com.sun.net.httpserver.HttpExchange;
@@ -35,6 +37,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import vn.fashion.payment.vnpay.VnPayQueryWorker;
+import vn.fashion.payment.vnpay.VnPayResults;
 import vn.fashion.payment.vnpay.VnPaySigner;
 
 /** TASK:PAY-02 Task 4: QueryDR against a signing VNPay stub; the worker is driven with explicit clocks. */
@@ -42,6 +45,7 @@ import vn.fashion.payment.vnpay.VnPaySigner;
 class VnPayQueryIntegrationTest extends PaymentTestSupport {
   static final Stub STUB = new Stub();
   @Autowired VnPayQueryWorker worker;
+  @Autowired VnPayResults results;
   String order;
   Instant created, expires;
 
@@ -132,6 +136,7 @@ class VnPayQueryIntegrationTest extends PaymentTestSupport {
     assertThat(status()).isEqualTo("SUCCESS");
     assertThat(events("PAYMENT_COMPLETED")).isEqualTo(1);
     assertThat(evidence("QUERY")).isEqualTo(1);
+    assertThat(count("select count(*) from reconciliation_items")).isZero();
     // Query first, then the IPN is told "already confirmed".
     reset();
     payment();
@@ -155,6 +160,7 @@ class VnPayQueryIntegrationTest extends PaymentTestSupport {
     assertThat(events("PAYMENT_COMPLETED")).isEqualTo(1);
     assertThat(evidence("WEBHOOK")).isEqualTo(1);
     assertThat(evidence("QUERY")).isEqualTo(1);
+    assertThat(count("select count(*) from reconciliation_items")).isZero();
   }
   static void await(CyclicBarrier barrier) {
     try { barrier.await(); } catch (Exception e) { throw new AssertionError(e); }
@@ -237,12 +243,88 @@ class VnPayQueryIntegrationTest extends PaymentTestSupport {
     cod(UUID.randomUUID().toString(), 50000);
     payment();
     assertThat(ipn(ipnSuccess())).containsEntry("RspCode", "00");
-    String closed = UUID.randomUUID().toString();
-    data(create(UUID.randomUUID().toString(), snapshot(closed, "ORD202610250002", "VNPAY", 1000, "203.0.113.7")), 200);
-    data(close(closed, "c1", withReason(snapshot(closed, "ORD202610250002", "VNPAY", 1000), "expired")), 200);
+    // Declined by VNPay, then closed: the decline is the answer, nothing left to ask.
+    String declined = UUID.randomUUID().toString();
+    data(create(UUID.randomUUID().toString(), snapshot(declined, "ORD202610250002", "VNPAY", 1000, "203.0.113.7")), 200);
+    var decline = result(100000, "14000009", "24", "02", "20261025100405");
+    decline.put("vnp_TxnRef", "ORD202610250002");
+    assertThat(ipn(signed(decline))).containsEntry("RspCode", "00");
+    data(close(declined, "c1", withReason(snapshot(declined, "ORD202610250002", "VNPAY", 1000), "expired")), 200);
     asOwner("update payments set next_reconcile_at = now() - interval '1 hour'");
     worker.runOnce(Instant.now().plus(Duration.ofDays(3)));
     assertThat(STUB.requests).isEmpty();
+  }
+
+  record Case(String name, Function<JsonNode, Map<String, String>> answer, String status, String review, String event) { }
+  static Function<JsonNode, Map<String, String>> with(String status, String field, String value) {
+    return r -> { var m = answer(r, "00", status); m.put(field, value); return m; };
+  }
+
+  /** Review C2/C1: every signed answer that is not a verified capture of this payment leaves no SUCCESS behind. */
+  @Test void queryMoneyGuards() {
+    var cases = List.of(
+        new Case("other merchant", with("00", "vnp_TmnCode", "OTHERTMN"), "CREATED", null, null),
+        new Case("other reference", with("00", "vnp_TxnRef", "ORD209912310001"), "CREATED", null, null),
+        new Case("wrong amount", with("00", "vnp_Amount", "27500100"), "CREATED", "AMOUNT_MISMATCH", null),
+        new Case("declined", r -> answer(r, "00", "02"), "FAILED", null, "PAYMENT_FAILED"),
+        new Case("reversed", r -> answer(r, "00", "04"), "CREATED", "PROVIDER_REVIEW", null),
+        new Case("fraud suspected", r -> answer(r, "00", "07"), "CREATED", "PROVIDER_REVIEW", null),
+        new Case("ResponseCode 02", r -> answer(r, "02", null), "CREATED", null, null),
+        new Case("ResponseCode 97", r -> answer(r, "97", null), "CREATED", null, null),
+        new Case("no transaction number", with("00", "vnp_TransactionNo", ""), "CREATED", null, null));
+    for (Case c : cases) {
+      try { reset(); } catch (Exception e) { throw new AssertionError(e); }
+      payment();
+      STUB.answer = c.answer();
+      worker.runOnce(created.plusSeconds(60));
+      assertThat(STUB.requests).as(c.name()).hasSize(1);
+      assertThat(status()).as(c.name()).isEqualTo(c.status());
+      assertThat(jdbc.queryForList("select kind from reconciliation_items", String.class)).as(c.name())
+          .isEqualTo(c.review() == null ? List.of() : List.of(c.review()));
+      assertThat(jdbc.queryForList("select event_type from outbox_events where event_type <> 'PAYMENT_CREATED'", String.class))
+          .as(c.name()).isEqualTo(c.event() == null ? List.of() : List.of(c.event()));
+      assertThat(jdbc.queryForObject("select provider_txn_id from payments", String.class)).as(c.name()).isNull();
+      if (c.event() != null)
+        assertThat(jdbc.queryForObject("select payload->>'reason' from outbox_events where event_type = 'PAYMENT_FAILED'", String.class))
+            .isEqualTo("PROVIDER_DECLINED");
+    }
+  }
+
+  /** Review C1 second guard: a success without a VNPay transaction number is never applied, whoever calls. */
+  @Test void successWithoutTransactionNumberIsRejected() {
+    payment();
+    for (String txn : new String[] {"", " "}) {
+      var e = new VnPayResults.Evidence(NO, 27500000L, "00", "00", txn, "20261025100405", "NCB", "ATM", txn + ":00:00:r1");
+      assertThatThrownBy(() -> results.apply("QUERY", e)).isInstanceOf(IllegalArgumentException.class);
+    }
+    assertThat(status()).isEqualTo("CREATED");
+    assertThat(evidence("QUERY")).isZero();
+    assertThat(events("PAYMENT_COMPLETED")).isZero();
+  }
+
+  /** Review I3 (spec section 8, closed_at any): a capture just before the close, with no IPN, is still found. */
+  @Test void closedPaymentStillFindsALateCapture() throws Exception {
+    payment();
+    data(close(order, "c1", withReason(snapshot(order, NO, "VNPAY", 275000), "expired")), 200);
+    Timestamp closedAt = jdbc.queryForObject("select closed_at from payments", Timestamp.class);
+    assertThat(status()).isEqualTo("FAILED");
+    assertThat(next()).isEqualTo(created.plusSeconds(60));
+    STUB.answer = r -> answer(r, "00", "00");
+    worker.runOnce(created.plusSeconds(60));
+    assertThat(jdbc.queryForMap("select status, provider_txn_id, closed_at from payments"))
+        .containsEntry("status", "SUCCESS").containsEntry("provider_txn_id", "14000001").containsEntry("closed_at", closedAt);
+    assertThat(events("PAYMENT_COMPLETED")).isEqualTo(1);
+    worker.runOnce(created.plus(Duration.ofHours(1)));
+    assertThat(STUB.requests).hasSize(1);
+    // 91 on a closed FAILED payment: already FAILED, no second PAYMENT_FAILED.
+    reset();
+    payment();
+    data(close(order, "c1", withReason(snapshot(order, NO, "VNPAY", 275000), "expired")), 200);
+    STUB.answer = r -> answer(r, "91", null);
+    worker.runOnce(expires.plus(Duration.ofMinutes(20)));
+    assertThat(STUB.requests).hasSize(1);
+    assertThat(status()).isEqualTo("FAILED");
+    assertThat(events("PAYMENT_FAILED")).isEqualTo(1);
   }
 
   /** VNPay QueryDR stand-in: records requests, answers signed with TEST-HASH-SECRET (or a wrong key). */

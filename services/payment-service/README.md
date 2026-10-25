@@ -63,13 +63,15 @@ Port 8086 (compose chỉ publish `127.0.0.1:${PAYMENT_PORT:-8086}` cho `scripts/
 | `PAYMENT_VNPAY_PAY_URL`, `PAYMENT_VNPAY_API_URL` | URL sandbox | Trang thanh toán và QueryDR |
 | `PAYMENT_VNPAY_RETURN_URL`, `PAYMENT_STOREFRONT_URL` | Gateway `:8080`, storefront `:5173` (compose: `:4173`) | Return qua Gateway; storefront là đích redirect duy nhất |
 | `PAYMENT_VNPAY_LINK_TTL`, `PAYMENT_VNPAY_SERVER_IP` | `15m`, `127.0.0.1` | Hạn link (không vượt `expires_at` order); `vnp_IpAddr` của QueryDR |
-| `PAYMENT_VNPAY_QUERY_TIMEOUT` | `10s` | Timeout mỗi lần gọi QueryDR |
+| `PAYMENT_VNPAY_QUERY_TIMEOUT` | `10s` | Áp riêng cho connect và read, nên một lần gọi QueryDR tối đa ~2× giá trị này |
 | `fashion.payment.vnpay.query-poll` (property, chưa có env) | `30s` | Chu kỳ worker QueryDR chọn payment tới hạn |
+| `spring.task.scheduling.pool.size` | `2` | Outbox relay (500 ms) và worker QueryDR chạy song song; VNPay chậm không chặn relay |
 | `PAYMENT_RELAY_ENABLED`, `SPRING_KAFKA_BOOTSTRAP_SERVERS` | `true`, `localhost:19092` | outbox relay và consumer (platform-messaging) |
 
 ## VNPay sandbox
 
 VNPay chỉ gọi IPN qua HTTPS và máy local không nhận request từ Internet, nên local xác nhận bằng **QueryDR**; IPN qua tunnel là tùy chọn.
+Cần chạy `bash scripts/local-up.sh` một lần trước (build jar, sinh khóa và `infra/local/.env`).
 
 1. Điền `PAYMENT_VNPAY_TMN_CODE` và `PAYMENT_VNPAY_HASH_SECRET` (merchant sandbox) vào `infra/local/.env` (gitignore; `scripts/local-up.sh` thêm
    hai khóa rỗng nếu `.env` cũ chưa có). Không commit, không dán vào chat/log.
@@ -83,7 +85,8 @@ VNPay chỉ gọi IPN qua HTTPS và máy local không nhận request từ Intern
    và trả đơn thứ hai; `payment_transactions.source = WEBHOOK`.
 
 Lịch QueryDR: +1, +2, +5, +10, +30 phút sau create, rồi mỗi 30 phút tới hạn link + 24 giờ. Lỗi mạng/timeout chỉ dời lịch. `91` (không có giao dịch)
-chỉ thành `FAILED` `EXPIRED` sau hạn link + 15 phút. Return không đổi trạng thái tiền.
+chỉ thành `FAILED` `EXPIRED` sau hạn link + 15 phút. Payment `FAILED` do close vẫn được query theo lịch (late `SUCCESS` giữ `closed_at`),
+trừ khi đã có evidence thất bại từ IPN/QueryDR. Câu trả lời `00` thiếu `vnp_TransactionNo` bị bỏ qua (hỏi lại lần sau). Return không đổi trạng thái tiền.
 
 ## Database
 
