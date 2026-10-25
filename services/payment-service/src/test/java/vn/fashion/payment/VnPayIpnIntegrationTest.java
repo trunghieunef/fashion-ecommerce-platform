@@ -151,6 +151,35 @@ class VnPayIpnIntegrationTest extends PaymentTestSupport {
     assertThat(ipn(signed(p))).containsEntry("RspCode", "00");
   }
 
+  // TASK:PAY-02 review R5: a second capture (another TransactionNo) after SUCCESS is FINANCE's call, never a second event.
+  @Test void secondCaptureWithAnotherTransactionNoOpensReview() {
+    payment();
+    assertThat(ipn(signed(success(27500000, "14000001", "20261025100405")))).containsEntry("RspCode", "00");
+    assertThat(ipn(signed(success(27500000, "14000001", "20261025100405")))).containsEntry("RspCode", "02");
+    assertThat(count("select count(*) from reconciliation_items")).isZero();
+    assertThat(ipn(signed(success(27500000, "14000002", "20261025100505")))).containsEntry("RspCode", "02");
+    assertThat(ipn(signed(success(27500000, "14000002", "20261025100505")))).containsEntry("RspCode", "02");
+    assertThat(count("select count(*) from reconciliation_items where kind = 'PROVIDER_REVIEW' and source_ref = '14000002'")).isEqualTo(1);
+    assertThat(count("select count(*) from reconciliation_items")).isEqualTo(1);
+    assertThat(row()).containsEntry("status", "SUCCESS").containsEntry("provider_txn_id", "14000001");
+    assertThat(events("PAYMENT_COMPLETED")).hasSize(1);
+  }
+
+  @Test void parallelDuplicateIpnsMakeOneEffect() {
+    payment();
+    var barrier = new java.util.concurrent.CyclicBarrier(2);
+    var calls = new java.util.ArrayList<java.util.concurrent.CompletableFuture<Map<String, String>>>();
+    for (int i = 0; i < 2; i++)
+      calls.add(java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+        try { barrier.await(); } catch (Exception e) { throw new AssertionError(e); }
+        return ipn(signed(success(27500000, "14000001", "20261025100405")));
+      }));
+    assertThat(calls.stream().map(c -> c.join().get("RspCode")).sorted()).containsExactly("00", "02");
+    assertThat(row()).containsEntry("status", "SUCCESS");
+    assertThat(events("PAYMENT_COMPLETED")).hasSize(1);
+    assertThat(count("select count(*) from payment_transactions where source = 'WEBHOOK'")).isEqualTo(1);
+  }
+
   @Test void returnRedirectsOnlyToTheStorefrontOrder() {
     assertThat(location(send("GET", "/api/v1/payments/vnpay/return?vnp_TxnRef=" + NO + "&vnp_ResponseCode=00", null)))
         .isEqualTo("http://localhost:5173/orders/" + NO);

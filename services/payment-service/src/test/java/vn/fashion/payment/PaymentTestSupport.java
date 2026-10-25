@@ -36,7 +36,9 @@ import tools.jackson.databind.ObjectMapper;
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
     properties = {"fashion.messaging.relay.enabled=false", "spring.kafka.listener.auto-startup=false",
-        "fashion.payment.vnpay.tmn-code=TESTTMN1", "fashion.payment.vnpay.hash-secret=TEST-HASH-SECRET"})
+        "fashion.payment.vnpay.tmn-code=TESTTMN1", "fashion.payment.vnpay.hash-secret=TEST-HASH-SECRET",
+        // TASK:PAY-02: the QueryDR poll never fires in tests; VnPayQueryIntegrationTest calls runOnce itself.
+        "fashion.payment.vnpay.query-poll=1h"})
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 public abstract class PaymentTestSupport {
   protected static final ECKey KEY = key();

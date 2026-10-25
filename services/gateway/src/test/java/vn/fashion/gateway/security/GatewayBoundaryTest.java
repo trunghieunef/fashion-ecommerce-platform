@@ -142,6 +142,16 @@ class GatewayBoundaryTest {
     assertThat(CATALOG.requestCount()).isEqualTo(before);
   }
 
+  // TASK:PAY-02: the IPN signature covers the exact encoded values, so the query must reach payment-service byte for byte.
+  @Test
+  void vnpayIpnQueryIsForwardedVerbatim() {
+    String query = "vnp_OrderInfo=Thanh+toan+don+hang+ORD-1%3A&vnp_X=a%2Bb";
+    client.get().uri(java.net.URI.create("http://localhost:" + port + "/api/v1/payments/vnpay/ipn?" + query))
+        .exchange().expectStatus().isOk();
+    assertThat(CATALOG.path()).isEqualTo("/api/v1/payments/vnpay/ipn");
+    assertThat(CATALOG.rawQuery()).isEqualTo(query);
+  }
+
   @Test
   void orderPublicIsRoutedAndInternalIsNot() {
     // TASK:ORD-01: customer quote/create/read go to order-service; /internal never leaves the cluster.
@@ -442,6 +452,7 @@ class GatewayBoundaryTest {
     private final AtomicInteger requestCount = new AtomicInteger();
     private Map<String, List<String>> headers = Map.of();
     private volatile String path;
+    private volatile String rawQuery;
     private volatile int delayMillis;
     private volatile int responseStatus = 200;
 
@@ -460,6 +471,7 @@ class GatewayBoundaryTest {
       exchange.getRequestHeaders().forEach((name, values) ->
           headers.put(name.toLowerCase(), List.copyOf(values)));
       path = exchange.getRequestURI().getPath();
+      rawQuery = exchange.getRequestURI().getRawQuery();
       requestCount.incrementAndGet();
       if (delayMillis > 0) {
         try {
@@ -500,6 +512,10 @@ class GatewayBoundaryTest {
 
     private String path() {
       return path;
+    }
+
+    private String rawQuery() {
+      return rawQuery;
     }
 
     private int requestCount() {
