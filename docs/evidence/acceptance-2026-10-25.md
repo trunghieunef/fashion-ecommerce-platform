@@ -71,3 +71,63 @@ browser smoke 26/26.
   - Form chặn submit lặp bằng state, nên hai lần submit trong cùng một tick có thể gửi hai lần.
   - Follow-up của PR #38.
 - **Chưa đo:** accessibility tự động (axe).
+
+## TASK:WEB-03 — checkout COD, trang đơn, đơn của member
+
+Chủ dự án yêu cầu Claude Code merge PR #40 rồi nghiệm thu **WEB-03**. **Không độc lập:** WEB-03 do Claude Code viết (7 task
+Native, TDD, skill ui-ux-pro-max cho UX). Hai vòng review:
+
+- Review toàn nhánh bằng một subagent (`1a956e6..bf4e7a7`): 0 Critical, 4 Important, sửa ở `2d62bcf`.
+- Review của chủ dự án trên PR #40 (head `e56f827`): 0 Critical, 4 Important (I1–I4), 7 Minor. I1–I4 sửa ở `6b2c68d`.
+
+Phạm vi: dòng WEB-03 ở [10](../delivery/10_backlog.md) (REQ ORD-01/05/07, CART-05), SF-06/SF-07 ở
+[14](../design/14_frontend_behavior.md), theo [spec đã duyệt](../superpowers/specs/2026-10-25-web-03-checkout-design.md)
+(D10 mobile do chủ dự án chọn), mức local trước G0. Chỉ frontend và script smoke: contract, service và dependency không đổi.
+
+### Bằng chứng chung
+
+- **CI PR #40 trên `6b2c68d`: SUCCESS.** `s1-local` ([run 40198147916](https://github.com/trunghieunef/fashion-ecommerce-platform/actions/runs/40198147916))
+  gồm toolchain/lockfile, backend reactor, frontend typecheck/test/build, contract, local stack + smoke và **browser smoke**
+  với chuỗi thật. Từ `c9a83a4` smoke để lại sản phẩm public có tồn kho nên chuỗi thật chạy hết (run 40165015692: 26/26,
+  có member đặt COD → "Đã tiếp nhận, chờ shop xác nhận" → "Đơn hàng của tôi", desktop + 360px). `docs-check`: SUCCESS.
+- **Merge:** Claude Code merge PR #40 vào `main` tại `3078ce8` (2026-10-25) theo yêu cầu của chủ dự án. Documentation CI và Application CI trên `3078ce8`: SUCCESS ([run 40199521088](https://github.com/trunghieunef/fashion-ecommerce-platform/actions/runs/40199521088)).
+- **Local** (Windows, 7.4 GB RAM) trên `6b2c68d`: typecheck, **233 test** Vitest (57 mới so với 176), build, contract 95 OK,
+  docs check; Playwright fixture 14/14 (WEB-01, WEB-02, WEB-03; desktop + 360px) trên `vite preview --host 127.0.0.1`.
+  Mỗi lỗi review có test FAIL trước khi sửa. Chi tiết: [evidence WEB-03](web-03-local-2026-10-25.md).
+
+### Kết quả theo tiêu chí
+
+| Tiêu chí (10 WEB-03 / 14 SF-06, SF-07 / spec §1) | Bằng chứng | Kết quả |
+|---|---|---|
+| Tổng do server báo giá; client không tính tiền; quote gửi `cart_version`, `Accept-Language` | `See total sends the cart version and shows the server totals`, `quote sends Accept-Language`; `Summary.tsx` chỉ hiện `totals` của quote | Pass |
+| Không bao giờ tự đặt đơn: sửa trường, hết hạn (115 s từ lúc nhận), `QUOTE_EXPIRED`, `INVALID_QUOTE` chỉ đưa về "Xem tổng tiền"/quote lại | `editing a field drops the quote`, `an expired quote asks for a new one`, `an expired quote on submit goes back to See total`, `an invalid quote is quoted again, not placed`, `a client clock running fast still gets a usable quote` | Pass |
+| Giá/phí đổi phải xác nhận lại | `prices changed: a new quote is shown and nothing is placed`; e2e fixture "giá đổi → xác nhận lại" | Pass |
+| Một lần xác nhận = một `Idempotency-Key`; mất response/503/tải lại → cùng key + body; không đơn thứ hai | `double click places once`, `a lost response is retried with the same key and says so`, `a reload with a pending order resends the same key and body`, `the main button resends the stuck order with the same key`, `submit.test.ts`; e2e fixture "mất response + tải lại → một đơn" | Pass |
+| Đơn đã có cho giỏ (`CART_ALREADY_ORDERED`, `code: CONFLICT`) mở đúng đơn; fake lỗi trong test chỉ dùng mã của contract | `an order already placed for this cart opens it` (FAIL trước `6b2c68d`) | Pass |
+| Bản ghi đang chờ không bị gửi lại dưới người khác; xóa khi đăng xuất (chứa địa chỉ/liên hệ trong `quote_token`) | `a pending order is stored with who placed it`, `a guest order still pending after signing in is not replayed as the member`, `signing out forgets the pending order` | Pass |
+| Guest: checkout token chỉ trong bộ nhớ, làm mới trước 30 s, `INVALID_CHECKOUT_TOKEN` → token mới, gửi lại một lần cùng key; member dùng Bearer | `api.test.ts` (4), `an expired checkout token is renewed with the same key` | Pass |
+| Lỗi quote nói rõ: trường bị từ chối, giỏ đổi, hàng không bán, không giao được, mất kết nối | `a field the server rejects…`, `a cart changed elsewhere…`, `unavailable items are listed…`, `no shipping rule…`, `a quote outage…`, `a resumed order with unavailable items…` | Pass |
+| 202 → trang đơn poll theo `retry_after_seconds`; dừng khi tab ẩn, backoff tới 30 s, dừng sau 2 phút với "Kiểm tra lại"; không coi timeout là thành/bại | `poll.test.tsx` (5), `a status change is announced`, `a stalled order says the shop will contact…` | Pass |
+| Trang đơn: trạng thái lời khách, mốc tiến độ, snapshot, hết hàng → link giỏ; giỏ đọc lại khi đơn rời `PROCESSING` | `OrderPage.test.tsx` (8) gồm `the cart is read again once the order leaves processing` (FAIL trước `6b2c68d`) | Pass |
+| Lịch sử đơn member `/account/orders` (cursor), guest phải đăng nhập | `OrdersPage.test.tsx` (5) | Pass |
+| Fixture đơn hàng đúng `order.yaml`/`cart.yaml` | `tests/contracts/test_storefront_fixtures.py` (6 fixture mới) | Pass |
+| Chuỗi thật: member thêm vào giỏ → checkout COD → đơn được tiếp nhận → có trong "Đơn hàng của tôi" | e2e `web-03.spec.ts` trên CI (run 40165015692, 40198147916) | Pass |
+| Mobile 360 px không cuộn ngang; tóm tắt cuối trang (D10) | e2e fixture chromium-mobile | Pass |
+| Docs đồng bộ (README, 14, 08, 10, spec, plans README, `CLAUDE.md`, evidence) | `e56f827`, `6b2c68d` và commit nghiệm thu này | Pass |
+
+**WEB-03: Done (local, trước G0).** CI trên `6b2c68d` PASS; PR #40 đã merge vào `main` (`3078ce8`, 2026-10-25).
+
+### Ngoại lệ và việc còn lại (không chặn Done local)
+
+- **Ngoài phạm vi (WEB-04):** VNPay/MoMo, hủy đơn, lịch sử trạng thái, tracking, refund. Ước tính phí ship trong giỏ không làm (D3).
+- **Chuỗi thật guest checkout** chỉ có ở e2e fixture; chuỗi thật trên CI là member.
+- **Minor từ review PR #40 (M1–M7):** hạn quote không kiểm lại lúc bấm sau khi máy ngủ; khi kẹt form vẫn sửa được nhưng
+  "Thử lại" gửi body cũ; trang đơn/danh sách không tải lại khi đổi tài khoản; member mở đơn đặt lúc là guest nhận 404;
+  vòng gửi lại không hủy được khi rời trang (~31 s); đường gửi lại sau reload hiện id biến thể khi `PRICE_CHANGED` và không
+  quote lại; 401 của phiên member hết hạn báo "giỏ đã đổi".
+- **Minor từ review subagent:** hết hạn quote lần hai không đọc lại câu; lỗi server cho địa chỉ đã lưu trỏ vào trường ẩn;
+  sổ địa chỉ tải muộn có thể đổi lựa chọn; trang đơn chưa hiện `shipping_discount` (0 ở MVP); đổi `orderNo` trên trang đang
+  mở còn hiện đơn cũ tới khi tải xong.
+- **Hệ quả đã biết của I4:** phiên member hết hạn cũng xóa bản ghi đặt đơn, nên đơn member đang kẹt không tự gửi lại sau khi
+  đăng nhập lại (không tạo đơn trùng; khách xem "Đơn hàng của tôi").
+- **Chưa đo:** accessibility tự động (axe). Danh mục tỉnh/phường là mẫu (O04).

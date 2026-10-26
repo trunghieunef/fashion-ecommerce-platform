@@ -6,7 +6,7 @@ Spec [WEB-01](../../docs/superpowers/specs/2026-10-18-web-01-storefront-design.m
 [WEB-01](../../docs/evidence/web-01-local-2026-10-18.md), [WEB-01b](../../docs/evidence/web-01b-local-2026-10-23.md).
 React 19 SPA (Vite, React Router) + Tailwind CSS 4; không component/i18n/state/icon library.
 Trạng thái: WEB-01 **Done (local) — bản thô** ([nghiệm thu 2026-10-19](../../docs/evidence/acceptance-2026-10-19.md));
-WEB-01b (làm lại giao diện/UX) **Done (local)** ([nghiệm thu 2026-10-23](../../docs/evidence/acceptance-2026-10-23.md)). Chưa có giỏ, login (WEB-02) hay checkout (WEB-03).
+WEB-01b (làm lại giao diện/UX) **Done (local)** ([nghiệm thu 2026-10-23](../../docs/evidence/acceptance-2026-10-23.md)). Giỏ/login: WEB-02; checkout: WEB-03 (bên dưới).
 
 ## Hệ thiết kế (WEB-01b)
 
@@ -28,7 +28,7 @@ Drawer dùng chung (`src/ui/Drawer.tsx`) là `<dialog>` native (`showModal`): fo
 ## Checkout COD và đơn hàng (WEB-03)
 
 [Spec](../../docs/superpowers/specs/2026-10-25-web-03-checkout-design.md) ·
-[evidence](../../docs/evidence/web-03-local-2026-10-25.md). Trạng thái: **chờ review/nghiệm thu**.
+[evidence](../../docs/evidence/web-03-local-2026-10-25.md). Trạng thái: **Done (local)** ([nghiệm thu 2026-10-25](../../docs/evidence/acceptance-2026-10-25.md#taskweb-03--checkout-cod-trang-đơn-đơn-của-member)).
 
 - `/checkout` (một trang): liên hệ, địa chỉ giao (member chọn từ sổ địa chỉ, địa chỉ mặc định chọn sẵn; nhập ở đây không tự lưu
   vào sổ), COD, ghi chú. "Xem tổng tiền" gọi `POST /orders/quote`; tổng chỉ từ server. Báo giá giữ 2 phút, tính từ lúc nhận (115 s, không dựa vào

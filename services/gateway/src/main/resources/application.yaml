@@ -72,7 +72,13 @@ spring:
               uri: ${SHIPPING_BASE_URL:http://localhost:8085}
               predicates:
                 - Path=/admin/api/v1/shipping/**
-            # TASK:PAY-01: FINANCE payments admin only (no public payment route); payment-service checks permissions.
+            # TASK:PAY-02: VNPay IPN (server-to-server, signature checked by payment-service) and browser return only;
+            # every other /api/v1/payments path stays 404.
+            - id: payment-vnpay-public
+              uri: ${PAYMENT_BASE_URL:http://localhost:8086}
+              predicates:
+                - Path=/api/v1/payments/vnpay/ipn,/api/v1/payments/vnpay/return
+            # TASK:PAY-01: FINANCE payments admin; payment-service checks permissions.
             - id: payment-admin
               uri: ${PAYMENT_BASE_URL:http://localhost:8086}
               predicates:

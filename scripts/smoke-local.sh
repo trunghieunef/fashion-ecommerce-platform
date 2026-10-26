@@ -307,6 +307,12 @@ test "$(status -H "Authorization: Bearer $finance" "$GATEWAY_URL/admin/api/v1/pa
 test "$(status -H "Authorization: Bearer $access" "$GATEWAY_URL/admin/api/v1/payments")" = 403
 test "$(status -X POST "$GATEWAY_URL/internal/api/v1/payments")" = 404
 echo 'PAY-01 payment admin route PASS'
+# TASK:PAY-02: only the VNPay IPN/return are public; an unsigned IPN is VNPay's 99, every other public payment path 404.
+curl -sS "$GATEWAY_URL/api/v1/payments/vnpay/ipn" | \
+  python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["RspCode"] == "99", d'
+test "$(status "$GATEWAY_URL/api/v1/payments/vnpay/other")" = 404
+test "$(status "$GATEWAY_URL/api/v1/payments")" = 404
+echo 'PAY-02 VNPay public route PASS'
 # TASK:ORD-03: the ORD-02 order end to end through the Gateway: OPS confirm-cod -> inventory commit -> PACKING + SELF
 # shipment -> shipper self-events -> DELIVERED -> FINANCE settlement -> payment SUCCESS -> order paid (payment_state PAID
 # is written with orders.paid_at in one transaction, ORD-02 PaymentEvents).

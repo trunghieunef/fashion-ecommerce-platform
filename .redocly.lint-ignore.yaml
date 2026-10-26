@@ -1,0 +1,9 @@
+# This file instructs Redocly's linter to ignore the rules contained for specific parts of your API.
+# See https://redocly.com/docs/cli/ for more information.
+# TASK:PAY-02: the VNPay IPN always answers HTTP 200 (VNPay RspCode in the body) and the browser return is only a 302.
+contracts/openapi/payment.yaml:
+  operation-4xx-response:
+    - '#/paths/~1api~1v1~1payments~1vnpay~1ipn/get/responses'
+    - '#/paths/~1api~1v1~1payments~1vnpay~1return/get/responses'
+  operation-2xx-response:
+    - '#/paths/~1api~1v1~1payments~1vnpay~1return/get/responses'

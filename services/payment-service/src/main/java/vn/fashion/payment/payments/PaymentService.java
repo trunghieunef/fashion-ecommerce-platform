@@ -4,6 +4,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -16,6 +17,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import vn.fashion.platform.idempotency.IdempotencyStore;
+import vn.fashion.payment.vnpay.VnPayConfig;
+import vn.fashion.payment.vnpay.VnPaySigner;
 import vn.fashion.payment.web.Api;
 
 /**
@@ -26,26 +29,31 @@ import vn.fashion.payment.web.Api;
 public class PaymentService {
   public record Snapshot(UUID orderId, String orderNo, UUID userId, String method, long amount, String currency, Instant expiresAt) { }
   public record View(UUID paymentId, UUID orderId, String orderNo, String method, long amount, String currency, String status,
-                     Instant closedAt, Instant paidAt, long version) { }
+                     Instant closedAt, Instant paidAt, long version, String paymentUrl, Instant paymentUrlExpiresAt) { }
+  /** TASK:PAY-02: order facts outside the snapshot hash (client_ip required for VNPAY, locale vi|en). */
+  public record Extras(String clientIp, String locale) { }
   static final String ACTOR = "service:order-service";
   static final long MAX_AMOUNT = 1_000_000_000_000L;
   /** Close before any money: these become FAILED (06 section 17.1); UNKNOWN keeps its state until verified. */
   private static final Set<String> UNCOLLECTED = Set.of("CREATED", "PROCESSING", "COD_PENDING");
   private static final Set<String> SNAPSHOT_FIELDS = Set.of("order_id", "order_no", "user_id", "method", "amount", "currency", "expires_at");
   private static final String VIEW = """
-      select id as payment_id, order_id, order_no, method, amount, currency, status, closed_at, paid_at, version from payments""";
+      select id as payment_id, order_id, order_no, method, amount, currency, status, closed_at, paid_at, version, payment_url,
+        payment_url_expires_at from payments""";
   private final JdbcClient jdbc;
   private final TransactionTemplate tx;
   private final IdempotencyStore keys;
   private final PaymentEvents events;
   private final ObjectMapper json;
+  private final VnPayConfig vnpay;
 
-  public PaymentService(JdbcClient jdbc, TransactionTemplate tx, IdempotencyStore keys, PaymentEvents events, ObjectMapper json) {
-    this.jdbc = jdbc; this.tx = tx; this.keys = keys; this.events = events; this.json = json;
+  public PaymentService(JdbcClient jdbc, TransactionTemplate tx, IdempotencyStore keys, PaymentEvents events, ObjectMapper json,
+                        VnPayConfig vnpay) {
+    this.jdbc = jdbc; this.tx = tx; this.keys = keys; this.events = events; this.json = json; this.vnpay = vnpay;
   }
 
-  /** COD -> COD_PENDING; a closed order (tombstone or closed payment) is 409 PAYMENT_CLOSED, another snapshot 409 PAYMENT_CONFLICT. */
-  public Object create(String key, Snapshot s, String correlationId) {
+  /** COD -> COD_PENDING, VNPAY -> CREATED with a signed link (no network call); a closed order (tombstone or closed payment) is 409 PAYMENT_CLOSED, another snapshot 409 PAYMENT_CONFLICT. */
+  public Object create(String key, Snapshot s, Extras extras, String correlationId) {
     String hash = hash(s);
     return tx.execute(status -> {
       var replay = Api.replay(keys.begin(ACTOR, "payment.create", key, hash), json);
@@ -61,21 +69,49 @@ public class PaymentService {
       // After the closed check (review M2): a closed order answers 409 whatever the snapshot.
       if (s.amount() == 0)
         throw new Api.Problem(HttpStatus.UNPROCESSABLE_CONTENT, "PAYMENT_AMOUNT_UNSUPPORTED", "PAYMENT_AMOUNT_UNSUPPORTED", List.of());
-      if (!s.method().equals("COD"))
-        throw new Api.Problem(HttpStatus.UNPROCESSABLE_CONTENT, "VALIDATION_ERROR", "PAYMENT_METHOD_UNAVAILABLE", List.of());
+      // PR #41 review M4: an existing payment answers before availability (VNPAY switched off must not cancel open orders).
       if (existing.isPresent()) {
         if (!requestHash(s.orderId()).equals(hash)) throw conflict("PAYMENT_CONFLICT");
         keys.finish(ACTOR, "payment.create", key, existing.get().paymentId(), 200, json.writeValueAsString(existing.get()));
         return existing.get();
       }
+      // TASK:PAY-02: MOMO until PAY-03; VNPAY only while configured.
+      boolean vnpayLink = s.method().equals("VNPAY") && vnpay.enabled();
+      if (!s.method().equals("COD") && !vnpayLink)
+        throw new Api.Problem(HttpStatus.UNPROCESSABLE_CONTENT, "VALIDATION_ERROR", "PAYMENT_METHOD_UNAVAILABLE", List.of());
+      if (vnpayLink && extras.clientIp() == null)
+        throw new Api.Problem(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "INVALID_FIELDS", List.of(new Api.FieldError("client_ip", "is required for VNPAY")));
       UUID id = UUID.randomUUID();
-      insert(id, s, hash, "COD_PENDING", null);
-      transaction(id, "CREATE", "create", "COD_PENDING", s.amount(), null, "{}");
+      String initial = vnpayLink ? "CREATED" : "COD_PENDING";
+      insert(id, s, hash, initial, null);
+      if (vnpayLink) link(id, s, extras);
+      transaction(id, "CREATE", "create", initial, s.amount(), null, "{}");
       var view = byId(id);
       events.created(view, correlationId);
       keys.finish(ACTOR, "payment.create", key, id, 200, json.writeValueAsString(view));
       return view;
     });
+  }
+
+  /** Signed pay link: the create time is read back from the row so the link and a replay agree to the second. */
+  private void link(UUID id, Snapshot s, Extras extras) {
+    Instant created = jdbc.sql("""
+        update payments set provider_created_at = date_trunc('second', now()),
+          next_reconcile_at = date_trunc('second', now()) + interval '1 minute' where id = :id returning provider_created_at""")
+        .param("id", id).query((rs, n) -> rs.getTimestamp(1).toInstant()).single();
+    Instant expires = created.plus(vnpay.linkTtl());
+    if (s.expiresAt().isBefore(expires)) expires = s.expiresAt();
+    // PR #41 review M5: an order past its deadline gets no link (rolls the create back).
+    if (!expires.isAfter(created)) throw conflict("PAYMENT_CLOSED");
+    var p = new LinkedHashMap<String, String>();
+    p.put("vnp_Version", "2.1.0"); p.put("vnp_Command", "pay"); p.put("vnp_TmnCode", vnpay.tmnCode());
+    p.put("vnp_Amount", String.valueOf(Math.multiplyExact(s.amount(), 100L))); p.put("vnp_CurrCode", "VND");
+    p.put("vnp_TxnRef", s.orderNo()); p.put("vnp_OrderInfo", "Thanh toan don hang " + s.orderNo()); p.put("vnp_OrderType", "other");
+    p.put("vnp_Locale", extras.locale().equals("en") ? "en" : "vn"); p.put("vnp_ReturnUrl", vnpay.returnUrl().toString());
+    p.put("vnp_IpAddr", extras.clientIp()); p.put("vnp_CreateDate", VnPaySigner.format(created));
+    p.put("vnp_ExpireDate", VnPaySigner.format(expires));
+    jdbc.sql("update payments set payment_url = :u, payment_url_expires_at = :e where id = :id")
+        .param("u", VnPaySigner.payUrl(vnpay, p)).param("e", Timestamp.from(expires)).param("id", id).update();
   }
 
   /**
@@ -121,16 +157,16 @@ public class PaymentService {
   public Optional<View> byOrder(UUID orderId) {
     return jdbc.sql(VIEW + " where order_id = :o").param("o", orderId).query(View.class).optional();
   }
-  View byId(UUID id) {
+  public View byId(UUID id) {
     return jdbc.sql(VIEW + " where id = :id").param("id", id).query(View.class).single();
   }
 
   /** Serializes create, close and COD evidence of one order (payments may not exist yet, so no row lock). */
-  void lockOrder(UUID orderId) {
+  public void lockOrder(UUID orderId) {
     jdbc.sql("select pg_advisory_xact_lock(hashtextextended(:o, 0))").param("o", orderId.toString()).query((rs, n) -> 1).list();
   }
   /** Canonical JSON (sorted keys) of the snapshot. */
-  String hash(Snapshot s) {
+  public String hash(Snapshot s) {
     return Api.sha256(json.writeValueAsString(canonical(s)));
   }
   private static TreeMap<String, Object> canonical(Snapshot s) {
@@ -157,12 +193,18 @@ public class PaymentService {
         .param("snap", json.writeValueAsString(canonical(s))).param("exp", Timestamp.from(s.expiresAt())).param("r", closeReason).update();
   }
   /** One evidence row; a repeated (source, key) is ignored and reported as false. */
-  boolean transaction(UUID payment, String source, String key, String status, Long amount, Instant occurredAt, String payload) {
+  public boolean transaction(UUID payment, String source, String key, String status, Long amount, Instant occurredAt, String payload) {
+    return transaction(payment, source, key, null, status, amount, occurredAt, payload);
+  }
+  /** PR #41 review M6: with the provider transaction number (VNPay vnp_TransactionNo) for FINANCE lookups. */
+  public boolean transaction(UUID payment, String source, String key, String providerTxnId, String status, Long amount,
+                             Instant occurredAt, String payload) {
     return jdbc.sql("""
-        insert into payment_transactions(id, payment_id, source, provider_event_key, status, amount, occurred_at, sanitized_payload,
-          payload_hash)
-        values (:id, :p, :src, :k, :st, :a, :at, cast(:payload as jsonb), :ph) on conflict do nothing""")
-        .param("id", UUID.randomUUID()).param("p", payment).param("src", source).param("k", key).param("st", status)
+        insert into payment_transactions(id, payment_id, source, provider_event_key, provider_txn_id, status, amount, occurred_at,
+          sanitized_payload, payload_hash)
+        values (:id, :p, :src, :k, :txn, :st, :a, :at, cast(:payload as jsonb), :ph) on conflict do nothing""")
+        .param("id", UUID.randomUUID()).param("p", payment).param("src", source).param("k", key).param("txn", providerTxnId)
+        .param("st", status)
         .param("a", amount).param("at", occurredAt == null ? null : Timestamp.from(occurredAt)).param("payload", payload)
         .param("ph", Api.sha256(payload)).update() == 1;
   }

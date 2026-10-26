@@ -5,8 +5,10 @@ COD từ `shipping.events`, FINANCE settlement gross-fee-net. [Spec](../../docs/
 [contract](../../contracts/openapi/payment.yaml) · [internal](../../contracts/openapi/payment-internal.yaml) ·
 [evidence](../../docs/evidence/pay-01-local-2026-10-20.md).
 
-Chỉ COD trong PAY-01: VNPAY/MOMO trả 422 `PAYMENT_METHOD_UNAVAILABLE` tới PAY-02/03 (schema đã có `provider_txn_id`,
-`payment_url`, `next_reconcile_at`). Chưa có refund (PAY-04), resolve đối soát/batch (PAY-05), route public cho khách (ORD).
+`TASK:PAY-02` (đang làm: code local xong, chờ sandbox thật + nghiệm thu): VNPay PAY 2.1.0 GET — link ký, IPN, return, QueryDR
+([spec](../../docs/superpowers/specs/2026-10-25-pay-02-vnpay-design.md) · [evidence](../../docs/evidence/pay-02-local-2026-10-25.md)).
+VNPAY tắt (thiếu `PAYMENT_VNPAY_TMN_CODE`/`HASH_SECRET`) và MOMO trả 422 `PAYMENT_METHOD_UNAVAILABLE`. Chưa có refund (PAY-04),
+resolve đối soát/batch (PAY-05); order chưa cho chọn VNPAY khi checkout (ORD-05/WEB-04).
 
 ## Chạy và test
 
@@ -15,7 +17,7 @@ Chỉ COD trong PAY-01: VNPAY/MOMO trả 422 `PAYMENT_METHOD_UNAVAILABLE` tới 
 bash scripts/local-up.sh && bash scripts/smoke-local.sh   # smoke: "PAY-01 payment admin route PASS"
 ```
 
-Port 8086 (không publish ra host). Qua Gateway chỉ `/admin/api/v1/payments/**`; `/internal` không route.
+Port 8086 (compose chỉ publish `127.0.0.1:${PAYMENT_PORT:-8086}` cho `scripts/vnpay-sandbox.sh`). Qua Gateway chỉ `/admin/api/v1/payments/**` và (PAY-02) `/api/v1/payments/vnpay/ipn`, `/api/v1/payments/vnpay/return`; `/api/v1/payments` khác và `/internal` không route.
 
 ## API
 
@@ -26,6 +28,9 @@ Port 8086 (không publish ra host). Qua Gateway chỉ `/admin/api/v1/payments/**
 | `POST /internal/api/v1/payments/by-order/{order_id}/close` | `order-service` | Snapshot gốc + `reason` + key → close hoặc tombstone |
 | `GET /admin/api/v1/payments`, `/{id}` | `payment.read` | Danh sách (status, cursor) / chi tiết + transactions, settlements, reconciliation items |
 | `POST /admin/api/v1/payments/{id}/cod-settlements` | `payment.settle` | `settlement_ref, gross_amount, fee_amount, net_amount, evidence_ref, expected_version` + key |
+| `POST /internal/api/v1/payments` (VNPAY) | `order-service` | Thêm `client_ip` (bắt buộc) và `locale` (`vi`/`en`), không vào hash; trả `payment_url` + `payment_url_expires_at`, không gọi mạng, `vnp_TxnRef = order_no`; replay cùng link |
+| `GET /api/v1/payments/vnpay/ipn` | chữ ký HMAC-SHA512 + `vnp_TmnCode` | Luôn 200 `{RspCode, Message}` (00/01/02/04/97/99); SUCCESS chỉ khi `00`+`00` đúng số tiền ×100, ACK sau commit |
+| `GET /api/v1/payments/vnpay/return` | public | Không đọc/ghi DB; 302 tới `{PAYMENT_STOREFRONT_URL}/orders/{vnp_TxnRef}` hoặc `/` |
 
 - **Create**: một TX dưới advisory lock theo `order_id`; `provider_request_id = order_no` (PAY-07); transaction `CREATE`, outbox
   `PAYMENT_CREATED` (`payment.events`, key `order_no`). Cùng order + cùng snapshot → payment cũ (mọi key); khác → 409
@@ -54,11 +59,61 @@ Port 8086 (không publish ra host). Qua Gateway chỉ `/admin/api/v1/payments/**
 | `PAYMENT_JWT_PUBLIC_KEYS` | — | verifier access token FINANCE |
 | `PAYMENT_INTERNAL_CALLERS` | trống | `order-service:<base64 X.509>`; trống → mọi call internal 401 (order-service chưa có) |
 | `PAYMENT_COD_ORPHAN_GRACE` | `10m` | COD evidence không có payment: retry trong khoảng này rồi vào DLT |
+| `PAYMENT_VNPAY_TMN_CODE`, `PAYMENT_VNPAY_HASH_SECRET` | trống | Merchant sandbox; trống = VNPAY tắt (create 422, worker không chạy, IPN `99`). Chỉ từ env, không log |
+| `PAYMENT_VNPAY_PAY_URL`, `PAYMENT_VNPAY_API_URL` | URL sandbox | Trang thanh toán và QueryDR |
+| `PAYMENT_VNPAY_RETURN_URL`, `PAYMENT_STOREFRONT_URL` | Gateway `:8080`, storefront `:5173` (compose: `:4173`) | Return qua Gateway; storefront là đích redirect duy nhất |
+| `PAYMENT_VNPAY_LINK_TTL`, `PAYMENT_VNPAY_SERVER_IP` | `15m`, `127.0.0.1` | Hạn link (không vượt `expires_at` order); `vnp_IpAddr` của QueryDR |
+| `PAYMENT_VNPAY_QUERY_TIMEOUT` | `10s` | Áp riêng cho connect và read, nên một lần gọi QueryDR tối đa ~2× giá trị này |
+| `fashion.payment.vnpay.query-poll` (property, chưa có env) | `30s` | Chu kỳ worker QueryDR chọn payment tới hạn |
+| `spring.task.scheduling.pool.size` | `2` | Outbox relay (500 ms) và worker QueryDR chạy song song; VNPay chậm không chặn relay |
 | `PAYMENT_RELAY_ENABLED`, `SPRING_KAFKA_BOOTSTRAP_SERVERS` | `true`, `localhost:19092` | outbox relay và consumer (platform-messaging) |
+
+## VNPay sandbox
+
+VNPay chỉ gọi IPN qua HTTPS và máy local không nhận request từ Internet, nên local xác nhận bằng **QueryDR**; IPN qua tunnel là tùy chọn.
+Cần chạy `bash scripts/local-up.sh` một lần trước (build jar, sinh khóa và `infra/local/.env`).
+
+1. Điền `PAYMENT_VNPAY_TMN_CODE` và `PAYMENT_VNPAY_HASH_SECRET` (merchant sandbox) vào `infra/local/.env` (gitignore; `scripts/local-up.sh` thêm
+   hai khóa rỗng nếu `.env` cũ chưa có). Không commit, không dán vào chat/log. Cách điền từ email VNPay: mục dưới.
+2. `docker compose --env-file infra/local/.env -f infra/local/compose.yaml up -d postgres kafka payment gateway`
+   (máy 7.4 GB: chỉ các service này; `PAYMENT_INTERNAL_CALLERS` có `order-service` do `local-up.sh` sinh).
+3. `bash scripts/vnpay-sandbox.sh [amount]` (mặc định 10000): tạo payment VNPAY cho order giả lập (`SBX<yyyyMMddHHmmss>`), in `payment_url`,
+   poll trạng thái mỗi 15 s tối đa 20 phút; thoát 0 khi `SUCCESS`, 1 khi `FAILED`/hết giờ. Chỉ local, không chạy trong CI.
+4. Mở link, trả bằng thẻ test trong [tài liệu VNPay](https://sandbox.vnpayment.vn/apis/docs/thanh-toan-pay/pay.html). QueryDR phát hiện kết quả
+   trong vài phút.
+5. Tùy chọn IPN: `cloudflared tunnel --url http://localhost:8080`, rồi đặt IPN URL `https://<tunnel>/api/v1/payments/vnpay/ipn` ở trang merchant sandbox
+   và trả đơn thứ hai; `payment_transactions.source = WEBHOOK`.
+
+### Đăng ký sandbox và điền thông tin từ email VNPay
+
+1. Đăng ký tại `https://sandbox.vnpayment.vn/devreg/`. Ô website chưa cần tên miền thật: điền `http://localhost:5173` hoặc link repo
+   GitHub (form bắt buộc `https` thì dùng link GitHub). ReturnURL gửi theo từng giao dịch, IPN URL đặt sau trong trang merchant.
+2. Email VNPay gửi về có thông tin cấu hình. Chỉ hai giá trị đi vào `infra/local/.env`:
+
+   | Trong email | Dòng trong `infra/local/.env` |
+   |---|---|
+   | Mã website / Terminal ID (`vnp_TmnCode`, 8 ký tự) | `PAYMENT_VNPAY_TMN_CODE=<mã>` |
+   | Chuỗi bí mật tạo checksum (`vnp_HashSecret`) | `PAYMENT_VNPAY_HASH_SECRET=<chuỗi>` |
+
+   Viết liền sau dấu `=`, không ngoặc kép, không khoảng trắng đầu/cuối. URL thanh toán sandbox trong email đã là mặc định
+   (`PAYMENT_VNPAY_PAY_URL`), không cần điền. Tài khoản đăng nhập trang quản trị merchant sandbox (dùng để đặt IPN URL ở bước 5)
+   giữ ở trình quản lý mật khẩu, không ghi vào repo hay `.env`.
+3. Kiểm tra đã điền mà không in giá trị: `grep -c '^PAYMENT_VNPAY_TMN_CODE=.' infra/local/.env` và
+   `grep -c '^PAYMENT_VNPAY_HASH_SECRET=.' infra/local/.env` đều ra `1`.
+4. Đổi giá trị khi payment đang chạy: `docker compose --env-file infra/local/.env -f infra/local/compose.yaml up -d payment` để tạo lại container
+   với env mới. Lộ HashSecret (dán nhầm vào chat, commit…) thì đổi ở trang merchant sandbox và điền lại.
+5. Khi lên domain/production: merchant thật, secret manager thay `.env` (spec PAY-02 §10).
+
+Lịch QueryDR: +1, +2, +5, +10, +30 phút sau create, rồi mỗi 30 phút tới hạn link + 24 giờ. Lỗi mạng/timeout chỉ dời lịch. `91` (không có giao dịch)
+chỉ thành `FAILED` `EXPIRED` sau hạn link + 15 phút. Payment `FAILED` do close vẫn được query theo lịch (late `SUCCESS` giữ `closed_at`),
+trừ khi đã có evidence thất bại từ IPN/QueryDR (kể cả `91` sau hạn, ghi evidence không phát event). Câu trả lời `00` thiếu
+`vnp_TransactionNo` bị bỏ qua (hỏi lại lần sau). Return không đổi trạng thái tiền. `ResponseCode` 07 hoặc mã ≠ 00 kèm
+`TransactionStatus` 00 → `PROVIDER_REVIEW` cho FINANCE, không `FAILED`. Tắt VNPAY không chặn retry của payment đã có;
+order quá hạn khi tạo link → 409 `PAYMENT_CLOSED`.
 
 ## Database
 
-`V001__payment.sql`: `payments` (05 + `snapshot`), `payment_transactions` (source thêm CLOSE/SETTLEMENT), `cod_settlements`
+`V002__vnpay.sql` thêm `payments.provider_created_at` (`vnp_CreateDate`, dùng lại cho `vnp_TransactionDate` của QueryDR) và `payment_url_expires_at`. `V001__payment.sql`: `payments` (05 + `snapshot`), `payment_transactions` (source thêm CLOSE/SETTLEMENT), `cod_settlements`
 (CHECK `gross = fee + net`), `reconciliation_items`, `outbox_events`, `processed_events`, `idempotency_requests`. Runtime không
 DELETE/TRUNCATE bảng tiền, không UPDATE `payment_transactions`/`cod_settlements`. Local DB/role: `infra/local/postgres-init/06-payment-db.sh`.
 Retention: chứng từ tài chính 10 năm, không purge (13 §3, O06).
@@ -67,7 +122,8 @@ Retention: chứng từ tài chính 10 năm, không purge (13 §3, O06).
 
 Readiness `readinessState,db`; log JSON ECS có redaction; trace OTLP khi đặt endpoint; `/actuator/prometheus`; DLT
 `shipping.events.DLT` cho event hỏng. Payment chỉ lưu `user_id`, không liên hệ/địa chỉ.
-Chưa có: smoke internal (cần order-service), consumer `payment.events` (ORD-02/03), alert COD outstanding/discrepancy (PAY-05),
+VNPay: trace span có thể giữ query string của IPN (không có secret, nhưng có amount/bank/txn); không mở Tempo/Grafana ra ngoài local.
+Mới kiểm bằng test + fixture tự ký; chưa có kết quả sandbox thật. Chưa có: smoke internal (cần order-service), consumer `payment.events` (ORD-02/03), alert COD outstanding/discrepancy (PAY-05),
 `NOTIFY_PAYMENT_SUCCESS` (NOT-01). Một `COD_COLLECTED` của đơn không có payment chặn **cả partition** (mọi shipping event sau nó,
 gồm COD của đơn khác; FINANCE settle nhận 409 trong lúc đó) tối đa thời gian grace rồi vào DLT; grace tính từ `occurred_at`
 của shipping (đồng hồ khác). Replay: sau khi tạo payment, publish lại bản ghi từ `shipping.events.DLT` vào `shipping.events`

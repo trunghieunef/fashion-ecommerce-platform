@@ -1,78 +1,89 @@
 # Fashion E-commerce Platform
 
-Nền tảng bán lẻ thời trang một shop tại Việt Nam: React storefront/admin, 9 service Spring Boot, PostgreSQL, Kafka, Redis và Kubernetes.
+Nền tảng bán lẻ thời trang một shop tại Việt Nam: storefront React (VI/EN, VND), admin API, 9 service Spring Boot, PostgreSQL,
+Kafka, Redis; Kubernetes/AWS là đích triển khai sau này.
 
-Repo có tài liệu, CI và nền tảng S1-local; Phase 1A đã có `user-service` (auth, profile/địa chỉ,
-RBAC/admin, mật khẩu và rate limit Redis), các thư viện durability/security, catalog admin CAT-01a,
-Gateway và storefront shell. Có cấu hình AWS/GitOps chuẩn bị offline, chưa provision/deploy.
-USR-01/02 còn chờ nghiệm thu; catalog/cart/checkout và UI nghiệp vụ chưa hoàn thành.
-Các chỉ số tải là mục tiêu nghiệm thu, không phải kết quả đo.
-
-Sprint 1 theo ADR-18 chỉ xây local-first MVP foundation: frontend shell → Gateway → service mẫu → PostgreSQL chạy được từ fresh clone. Không provision AWS hoặc tuyên bố toàn bộ business MVP/G0/G1/G2 hoàn thành trong Sprint 1.
+**Trạng thái (2026-10-26):** luồng mua hàng **COD** đã chạy được từ đầu tới cuối trên local — duyệt sản phẩm → giỏ hàng → đăng
+nhập/gộp giỏ → checkout COD → OPS xác nhận → đóng gói → giao SELF → FINANCE đối soát, kèm hủy/hoàn hàng và email giao dịch.
+Thanh toán online đang làm (VNPay PAY-02 code local xong, chờ sandbox thật); MoMo, refund, màn hình admin chưa có. Mọi "Done"
+dưới đây là **Done (local, trước G0)**: chưa có staging/AWS, chưa G1/G2. Các chỉ số tải là mục tiêu nghiệm thu, chưa đo.
 
 ## Bắt đầu ở đâu?
 
-1. Đọc [cẩm nang tài liệu](docs/README.md) và [Project Brief](docs/design/01_brief.md).
-2. Đọc [PRD](docs/design/02_prd.md), sau đó [quyết định và vấn đề còn mở](docs/design/08_decisions.md).
-3. Chia việc từ [kế hoạch nhóm](docs/delivery/09_delivery_plan.md) và [backlog có tiêu chí nghiệm thu](docs/delivery/10_backlog.md).
-4. Khi nhận task, tra [API/event](docs/design/03_interfaces.md), [schema](docs/design/05_database_design.md), [service flows](docs/design/06_service_flows.md), [kiểm thử](docs/quality/11_test_strategy.md).
-5. Triển khai cloud sau Sprint 1: đọc [AWS staging và CI/CD](docs/engineering/16_aws_deployment.md). AWS đã chọn; EC2 + K3s là đề xuất cho credit $200, chưa provision.
-6. Tra cứu công nghệ và phiên bản: [Tech Stack](docs/engineering/17_tech_stack.md). Hồ sơ R1 đã chọn exact versions sau research; phần S1 có code, lockfile và evidence local/CI, O02 vẫn mở cho nghiệm thu và phần compatibility còn lại.
+1. [Cẩm nang tài liệu](docs/README.md), [Project Brief](docs/design/01_brief.md), [PRD](docs/design/02_prd.md),
+   [quyết định và vấn đề mở](docs/design/08_decisions.md).
+2. Chia việc: [kế hoạch nhóm](docs/delivery/09_delivery_plan.md), [backlog + tiêu chí nghiệm thu](docs/delivery/10_backlog.md)
+   (nguồn sự thật về trạng thái task).
+3. Khi nhận task: [API/event](docs/design/03_interfaces.md), [schema](docs/design/05_database_design.md),
+   [service flows](docs/design/06_service_flows.md), [frontend behavior](docs/design/14_frontend_behavior.md),
+   [kiểm thử](docs/quality/11_test_strategy.md), [engineering guide](docs/engineering/12_engineering_guide.md).
+4. Provider bên ngoài: [15 Integrations](docs/engineering/15_integrations.md). Cloud: [16 AWS](docs/engineering/16_aws_deployment.md)
+   (EC2 + K3s là đề xuất, chưa provision). Phiên bản: [17 Tech Stack](docs/engineering/17_tech_stack.md) (O02 còn mở).
+5. Spec, plan và handoff theo task: [docs/superpowers/plans](docs/superpowers/plans/README.md); bằng chứng và nghiệm thu:
+   [docs/evidence](docs/evidence/).
 
-## Chạy local (S1-local)
+## Thành phần
+
+| Thành phần | Task (trạng thái) | Nội dung |
+|---|---|---|
+| [user-service](services/user-service/README.md) | USR-01/02 Done | Đăng ký/đăng nhập/refresh, profile, sổ địa chỉ, RBAC/admin + audit, rate limit Redis |
+| [catalog-service](services/catalog-service/README.md) | CAT-01/02/03 Done | Catalog admin, browse/search/quote public, media S3 private |
+| [inventory-service](services/inventory-service/README.md) | INV-01/02/03 Done | Stock ledger, adjust/import, reserve/commit/release/expiry, return |
+| [cart-service](services/cart-service/README.md) | CART-01/02/03 Done | Giỏ guest/member, gộp giỏ, snapshot/cleanup cho order, checkout token guest |
+| [shipping-service](services/shipping-service/README.md) | SHP-01/02 Done | Phí SELF (bảng mẫu, O04), vận đơn SELF, sự kiện giao, COD thu/nộp |
+| [payment-service](services/payment-service/README.md) | PAY-01 Done; PAY-02 In progress | COD, close/tombstone, settlement; VNPay link/IPN/return/QueryDR (chờ sandbox thật) |
+| [order-service](services/order-service/README.md) | ORD-01–04 Done | Quote ký, tạo đơn idempotent, saga COD, OPS xác nhận/hủy, hoàn hàng |
+| [notification-service](services/notification-service/README.md) | NOT-01 Done | 6 email giao dịch VI/EN qua SMTP (local: Mailpit), chưa provider thật (O07) |
+| [gateway](services/gateway/README.md) | — | Route public/admin, CSRF, chặn `/internal` |
+| [storefront](web/storefront/README.md) | WEB-01/01b/02/03 Done | Trang chủ/danh mục/tìm kiếm/chi tiết, tài khoản, giỏ hàng, checkout COD, trang đơn |
+| Thư viện dùng chung | PLT-03 Done | [platform-durability](services/platform-durability/README.md) (outbox/inbox/idempotency/lease), [platform-messaging](services/platform-messaging/README.md) (Kafka relay/consumer), [platform-security](services/platform-security/README.md) (service token ADR-19, JWT) |
+
+Chưa làm: MoMo (PAY-03), refund/đối soát (PAY-04), hoàn tất đơn online (ORD-05), UI thanh toán online (WEB-04), admin UI
+(ADM-01/02), QA/load/restore (QA-*, OPS-*). Nền tảng PLT-01/02/04/05, SEC-01 còn chờ O01/O02/O06. Chi tiết: [backlog](docs/delivery/10_backlog.md).
+
+## Chạy local
 
 Cần JDK 21, Node 24.21.0/npm 11.19.0 (`.tool-versions`), Docker với Compose và Python 3.10+. Từ repo root:
 
 ```bash
-bash scripts/local-up.sh        # build JAR/dist, postgres + Kafka → catalog + inventory + user → gateway → storefront
-bash scripts/smoke-local.sh     # smoke xuyên chuỗi
-docker compose --env-file infra/local/.env -f infra/local/compose.yaml down   # giữ volume
+bash scripts/local-up.sh        # sinh infra/local/.env (khóa local), build JAR/dist, chạy toàn bộ stack
+bash scripts/smoke-local.sh     # smoke xuyên chuỗi qua Gateway, kể cả browser smoke
+docker compose --env-file infra/local/.env -f infra/local/compose.yaml down   # dừng, giữ volume
 ```
 
-Storefront: `http://localhost:4173`; Gateway: `http://localhost:8080`. Catalog không publish port. Lệnh test đầy đủ, proof Nacos và giới hạn ở [12 Engineering guide](docs/engineering/12_engineering_guide.md).
+- Storefront `http://localhost:4173`, Gateway `http://localhost:8080`, Mailpit `http://127.0.0.1:8025`, Grafana
+  `http://127.0.0.1:3000`. Các service khác không publish port (payment chỉ `127.0.0.1:8086` cho script sandbox VNPay).
+- Windows: chạy script `.sh` bằng Git Bash; backend có `mvnw.cmd` cho PowerShell. Máy ít RAM: chạy test từng module,
+  ví dụ `./mvnw -pl services/payment-service test` (cần Docker cho Testcontainers).
+- VNPay sandbox (tùy chọn): điền thông tin merchant sandbox vào `infra/local/.env` theo
+  [payment-service README](services/payment-service/README.md#vnpay-sandbox); không commit secret.
+- Lệnh test đầy đủ, lưu ý Docker/Testcontainers và giới hạn: [12 Engineering guide](docs/engineering/12_engineering_guide.md) §1.
 
-Trên Windows, dùng Git Bash cho các script `.sh`; backend có `mvnw.cmd` cho PowerShell.
-Máy cần được phép tải toolchain/dependency. [Evidence ngày 2026-10-02](docs/evidence/s1-local-2026-10-02.md)
-ghi rõ các kiểm tra đã chạy và phần fresh-clone runtime bị mạng công ty chặn.
-[Fresh-clone review ngày 2026-10-04](docs/evidence/s1-local-2026-10-04.md) chạy đủ chuỗi trên Windows
-sau khi sửa lỗi timezone; S1-local đã được Codex (GPT-6) nghiệm thu theo chỉ định
-chủ dự án ngày 2026-10-04, với CI PASS trên patch `b62f963`. Đây không phải G0/G1/G2.
-Contract core đã review; [platform-durability](services/platform-durability/README.md) được
-user-service dùng cho outbox/idempotency, user-service đã bật relay (NOT-01) cho `notification.events`/`user.events`.
-INV-01 thêm [platform-messaging](services/platform-messaging/README.md), Kafka local và
-[cart-service](services/cart-service/README.md) (CART-01, Done local): giỏ guest/member, version + idempotency, preview giá/tồn; CART-03 (Done local): internal snapshot/checkout-cleanup cho order-service, tạm tính `subtotal_preview`; CART-02 (Done local): merge giỏ guest→member. [shipping-service](services/shipping-service/README.md) (SHP-01, Done local; phí mẫu chờ O04): phí SELF, quote, shipment SELF; SHP-02 (Done local): sự kiện SELF, COD thu/nộp, hủy + tombstone. [payment-service](services/payment-service/README.md) (PAY-01, Done local): payment COD, close/tombstone, bằng chứng COD, settlement gross-fee-net. [order-service](services/order-service/README.md) (ORD-01, Done local): quote ký, tạo đơn PENDING idempotent, đọc đơn theo ownership, guest checkout token; ORD-02 (Done local): saga COD giữ hàng → payment → CONFIRMED, bù trừ/hết hạn, dọn giỏ nền; ORD-03 (Done local): admin orders OPS/FINANCE, OPS xác nhận/hủy COD, commit kho → PACKING → vận đơn SELF, `shipping.events` → SHIPPING/DELIVERED; ORD-04 (Done local): khách tự hủy đơn chờ OPS, OPS hủy sau xác nhận (bù trừ vận đơn → kho → payment), hoàn hàng và phiếu kiểm đếm cộng kho một lần. [Storefront](web/storefront/README.md): WEB-01 (Done local, bản thô — chưa hoàn thiện chi tiết UI) home/listing/search/collection/detail VI/EN. [notification-service](services/notification-service/README.md) (NOT-01, Done local): 6 email giao dịch VI/EN (đặt đơn, đang chuẩn bị, giao thành công, hủy, hoàn về shop, đặt lại mật khẩu) qua SMTP; local dùng Mailpit tại `http://127.0.0.1:8025`; chưa có provider thật (O07).
-[inventory-service](services/inventory-service/README.md): catalog relay → inbox đăng ký SKU,
-stock ledger, adjust/import và internal availability. [Handoff hiện hành](docs/superpowers/plans/2026-10-15-inv-01-handoff.md)
-ghi kiểm tra/giới hạn và follow-up; INV-01 đã merge PR #20/#21 và
-[nghiệm thu Done (local)](docs/evidence/acceptance-2026-10-16.md) ngày 2026-10-16.
-Chi tiết phần auth đang review ở [User service](services/user-service/README.md).
-INV-02 đã hiện thực local reservation đa SKU, commit/release/expiry và tombstone;
-xem [evidence](docs/evidence/inv-02-local-2026-10-16.md) và
-[handoff INV-02](docs/superpowers/plans/2026-10-16-inv-02-handoff.md);
-[nghiệm thu Done (local)](docs/evidence/acceptance-2026-10-17.md) ngày 2026-10-17; merge vào `main` qua PR #22 (`abd5cfb`).
-INV-03 (Done local): return/restore hàng đã commit, xem [evidence](docs/evidence/inv-03-local-2026-10-18.md).
-Tiến độ mới nhất và bước tiếp ở [handoff CAT-01a](docs/superpowers/plans/2026-10-07-cat-01a-handoff.md):
-PR #14 đã merge; [spec CAT-01b](docs/superpowers/specs/2026-10-07-cat-01b-design.md)
-collection/items và size guide admin đã được duyệt;
-[implementation plan](docs/superpowers/plans/2026-10-07-cat-01b-catalog-admin.md) đã duyệt Native;
-thực thi tuần tự trên dev, commit local, chỉ push/PR khi chủ dự án yêu cầu riêng.
+## CI
 
-Chuyển sang máy mới: dùng [handoff S1-local](docs/superpowers/plans/2026-10-02-s1-local-machine-handoff.md)
-để tiếp tục đúng checklist và ghi evidence trên commit được pull từ `origin/dev`.
+- [Documentation CI](.github/workflows/docs-ci.yml) (mọi push/PR): code fences, JSON, link nội bộ. Chạy local:
 
-## CI hiện có
+  ```bash
+  python3 -B -m unittest discover -s scripts -p 'test_*.py' -v
+  python3 -B scripts/check_docs.py
+  ```
 
-[Documentation CI](.github/workflows/docs-ci.yml) kiểm tra code fences, JSON và đường dẫn link nội bộ khi push/PR. Chạy local:
+  Chưa kiểm anchor, URL ngoài, render Mermaid.
+- [Application CI](.github/workflows/application-ci.yml) (PR và push `main`): toolchain/lockfile, Maven + Testcontainers,
+  frontend typecheck/test/build, contract, local stack + smoke, Playwright browser smoke. Không có quyền AWS, chưa có CD;
+  [publish-images](.github/workflows/publish-images.yml) đang khóa tới PLT-04.
 
-```bash
-python3 -B -m unittest discover -s scripts -p 'test_*.py' -v
-python3 -B scripts/check_docs.py
-```
+## Cách làm việc
 
-Cần Python 3.10+. Chưa kiểm tra anchor/URL ngoài/render Mermaid. [Application CI](.github/workflows/application-ci.yml) chạy toolchain check, Maven/Testcontainers, frontend, contract, local smoke và Playwright, không có quyền AWS; chưa có CD. Đã xác minh [Application CI PASS](https://github.com/trunghieunef/fashion-ecommerce-platform/actions/runs/36662487345) và [Documentation CI PASS](https://github.com/trunghieunef/fashion-ecommerce-platform/actions/runs/36662487374) trên commit `d16151d` ngày 2026-09-30. Các run này chứng minh commit đó, không bao gồm thay đổi chưa commit hoặc thay fresh-clone review/TL acceptance.
+Quy tắc cho người và agent ở [AGENTS.md](AGENTS.md): làm theo task trong backlog (spec → plan → TDD → review → evidence),
+commit trên `dev`, PR `dev → main`; mọi thay đổi đồng bộ tài liệu cùng PR. Không lưu secret, token hay dữ liệu khách thật vào
+Git; tiền/kho theo guardrails ở AGENTS.md.
 
 ## Trạng thái bộ tài liệu
 
-Baseline **B1 — 2026-09-19**, đã hợp nhất nội dung để lập kế hoạch và triển khai theo từng task. Các giả định D01–D12 và vấn đề O01–O10 được theo dõi riêng; việc đồng bộ tài liệu không thay thế phê duyệt kinh doanh, ngân sách hay nghiệm thu. Lịch sử bản cũ được giữ trong Git.
+Baseline **B1 — 2026-09-19**. Giả định D01–D12 và vấn đề O01–O10 được theo dõi ở [08](docs/design/08_decisions.md); đồng bộ tài
+liệu không thay phê duyệt kinh doanh, ngân sách hay nghiệm thu. S1-local nghiệm thu 2026-10-04
+([evidence](docs/evidence/s1-local-2026-10-04.md)); G0 hoãn tới sau G1.
 
-MVP là Phase 1; Release 1 gồm Phase 1 và Phase 2. Promotion/OTP/social/carrier bên ngoài thuộc Phase 2. MVP vẫn có SELF shipping, quyền admin, refund, khôi phục saga và đối soát tối thiểu.
+MVP là Phase 1; Release 1 gồm Phase 1 và Phase 2. Promotion/OTP/social/carrier bên ngoài thuộc Phase 2. MVP vẫn có SELF
+shipping, quyền admin, refund, khôi phục saga và đối soát tối thiểu.

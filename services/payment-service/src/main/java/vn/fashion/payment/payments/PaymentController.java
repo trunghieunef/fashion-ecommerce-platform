@@ -38,8 +38,32 @@ public class PaymentController {
     callers.require(authorization);
     Api.requireKey(key);
     var meta = Api.metadata(tracer);
-    var snapshot = PaymentService.parse(Api.object(json, body), Set.of());
-    return Api.ok(HttpStatus.OK, payments.create(key, snapshot, meta.traceId()), meta);
+    var node = Api.object(json, body);
+    var snapshot = PaymentService.parse(node, Set.of("client_ip", "locale"));
+    return Api.ok(HttpStatus.OK, payments.create(key, snapshot, extras(node), meta.traceId()), meta);
+  }
+
+  /**
+   * TASK:PAY-02: client_ip (format checked here, before any state; required for VNPAY by the service after the closed check)
+   * and locale vi|en (default vi). PR #41 review M3: IPv4 octets 0..255; IPv6 parsed as a literal (a ':' never reaches DNS).
+   */
+  private static final String IPV4 = "((25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.){3}(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)";
+  private static boolean ipv6(String ip) {
+    if (!ip.contains(":") || !ip.matches("[0-9a-fA-F:.]+")) return false;
+    try { java.net.InetAddress.getByName(ip); return true; }
+    catch (java.net.UnknownHostException e) { return false; }
+  }
+  static PaymentService.Extras extras(JsonNode node) {
+    var errors = new java.util.ArrayList<Api.FieldError>();
+    JsonNode i = node.path("client_ip"), l = node.path("locale");
+    String ip = i.isString() ? i.asString() : null;
+    boolean present = !i.isMissingNode() && !i.isNull();
+    if (present && (ip == null || ip.length() > 45 || !(ip.matches(IPV4) || ipv6(ip))))
+      errors.add(new Api.FieldError("client_ip", "must be an IPv4 or IPv6 address"));
+    String locale = l.isString() ? l.asString() : null;
+    if (!l.isMissingNode() && !l.isNull() && !Set.of("vi", "en").contains(locale)) errors.add(new Api.FieldError("locale", "must be vi or en"));
+    if (!errors.isEmpty()) throw new Api.Problem(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "INVALID_FIELDS", errors);
+    return new PaymentService.Extras(ip, locale == null ? "vi" : locale);
   }
 
   /** PAY-08: body is the original create snapshot plus reason 1..500. */

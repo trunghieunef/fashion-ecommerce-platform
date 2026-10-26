@@ -253,6 +253,9 @@ services:
   # TASK:PAY-01: COD payments, close/tombstone, COD evidence from shipping.events, FINANCE settlements.
   payment:
     build: ../../services/payment-service
+    # TASK:PAY-02: chỉ loopback, cho scripts/vnpay-sandbox.sh gọi /internal (cần service token); /internal không qua Gateway.
+    ports:
+      - "127.0.0.1:${PAYMENT_PORT:-8086}:8086"
     environment:
       MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT: http://tempo:4318/v1/traces
       TRACING_SAMPLING_PROBABILITY: ${TRACING_SAMPLING_PROBABILITY:-1.0}
@@ -262,6 +265,11 @@ services:
       PAYMENT_MIGRATION_DB_PASSWORD: ${PAYMENT_MIGRATION_DB_PASSWORD:?run scripts/local-up.sh}
       PAYMENT_JWT_PUBLIC_KEYS: ${USER_JWT_PUBLIC_KEYS:?run scripts/local-up.sh}
       PAYMENT_INTERNAL_CALLERS: ${PAYMENT_INTERNAL_CALLERS:-}
+      # TASK:PAY-02: rỗng = VNPAY tắt. Điền ở infra/local/.env (không commit).
+      PAYMENT_VNPAY_TMN_CODE: ${PAYMENT_VNPAY_TMN_CODE:-}
+      PAYMENT_VNPAY_HASH_SECRET: ${PAYMENT_VNPAY_HASH_SECRET:-}
+      PAYMENT_VNPAY_RETURN_URL: http://localhost:${GATEWAY_PORT:-8080}/api/v1/payments/vnpay/return
+      PAYMENT_STOREFRONT_URL: http://localhost:${STOREFRONT_PORT:-4173}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     depends_on:
       postgres:

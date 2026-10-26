@@ -3,15 +3,71 @@ info:
   title: Payment admin API
   version: 0.1.0
   description: TASK:PAY-01 FINANCE payment reads and COD settlements (gross = fee + net). COD_COLLECTED means the shipper
-    collected; only FINANCE settlements that add up to the amount make SUCCESS (T27). No public payment route in PAY-01.
-    Every response is no-store.
+    collected; only FINANCE settlements that add up to the amount make SUCCESS (T27). TASK:PAY-02 adds the only public
+    payment paths, the VNPay IPN and browser return (Gateway route payment-vnpay-public); every other /api/v1/payments path is
+    404. Every response is no-store.
 servers:
 - url: http://localhost:8080
   description: Local Gateway
 tags:
 - name: Payment admin
   description: FINANCE (permission payment.read / payment.settle)
+- name: VNPay
+  description: TASK:PAY-02 public VNPay callbacks (sandbox); no shop envelope
 paths:
+  /api/v1/payments/vnpay/ipn:
+    get:
+      tags: [VNPay]
+      operationId: vnpayIpn
+      summary: VNPay IPN (server to server)
+      description: >-
+        PAY-02 implemented. Every vnp_* query parameter VNPay sends (vnp_TmnCode, vnp_Amount, vnp_TxnRef, vnp_ResponseCode,
+        vnp_TransactionStatus, vnp_TransactionNo, vnp_PayDate, vnp_SecureHash required; HMAC-SHA512 over the sorted non-empty
+        vnp_* parameters). Always HTTP 200 with VNPay's acknowledgement, checked in this order - VNPAY disabled or a parameter
+        missing 99; bad signature or another vnp_TmnCode 97 (nothing written); no VNPAY payment with order_no = vnp_TxnRef 01;
+        vnp_Amount different from amount x 100 04 (one reconciliation item AMOUNT_MISMATCH, no state change); payment already
+        SUCCESS, or already FAILED and this result also failed, 02 (new evidence still recorded); applied and committed 00;
+        any other error 99 (VNPay retries). SUCCESS only on vnp_ResponseCode 00 and vnp_TransactionStatus 00 (paid_at =
+        vnp_PayDate in GMT+7, outbox PAYMENT_COMPLETED with provider_txn_id = vnp_TransactionNo); FAILED (PAYMENT_FAILED
+        PROVIDER_DECLINED) still accepts a late success; TransactionStatus 04/07 opens a PROVIDER_REVIEW item and keeps the state.
+      security: []
+      x-implementation-status: implemented
+      parameters:
+      - {name: vnp_TxnRef, in: query, required: true, schema: {type: string, maxLength: 32}}
+      - {name: vnp_Amount, in: query, required: true, schema: {type: string, pattern: '^[0-9]{1,18}$'}, description: VND x 100}
+      - {name: vnp_SecureHash, in: query, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: VNPay acknowledgement
+          headers:
+            Cache-Control: {$ref: '#/components/headers/NoStore'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VnPayIpnAck'}
+              examples:
+                confirmed:
+                  value: {RspCode: '00', Message: Confirm Success}
+                duplicate:
+                  value: {RspCode: '02', Message: Order already confirmed}
+  /api/v1/payments/vnpay/return:
+    get:
+      tags: [VNPay]
+      operationId: vnpayReturn
+      summary: Browser return from VNPay
+      description: >-
+        PAY-02 implemented. Reads and writes nothing (the redirect proves no payment). vnp_TxnRef matching ^[A-Za-z0-9-]{1,32}$
+        redirects to {PAYMENT_STOREFRONT_URL}/orders/{vnp_TxnRef}, anything else to {PAYMENT_STOREFRONT_URL}/; vnp_* parameters
+        are never forwarded.
+      security: []
+      x-implementation-status: implemented
+      parameters:
+      - {name: vnp_TxnRef, in: query, schema: {type: string}}
+      responses:
+        '302':
+          description: Redirect to the storefront order page
+          headers:
+            Location: {schema: {type: string, format: uri}}
+            Cache-Control: {$ref: '#/components/headers/NoStore'}
   /admin/api/v1/payments:
     get:
       tags: [Payment admin]
@@ -109,6 +165,13 @@ components:
       description: Never cached, errors included.
       schema: {type: string, const: no-store}
   schemas:
+    VnPayIpnAck:
+      type: object
+      additionalProperties: false
+      required: [RspCode, Message]
+      properties:
+        RspCode: {type: string, enum: ['00', '01', '02', '04', '97', '99']}
+        Message: {type: string, enum: [Confirm Success, Order not found, Order already confirmed, invalid amount, Invalid signature, Unknow error]}
     Money: {type: integer, minimum: 0, maximum: 1000000000000}
     Method: {type: string, enum: [COD, VNPAY, MOMO]}
     PaymentStatus: {type: string, enum: [CREATED, PROCESSING, UNKNOWN, SUCCESS, FAILED, PARTIALLY_REFUNDED, REFUNDED, COD_PENDING, COD_COLLECTED]}
