@@ -94,6 +94,9 @@ class VnPayIpnIntegrationTest extends PaymentTestSupport {
     assertThat(ipn(signed(success(100, "14000001", "20261025100405")))).containsEntry("RspCode", "04");
     assertThat(count("select count(*) from reconciliation_items where kind = 'AMOUNT_MISMATCH' and observed_amount = 1 and expected_amount = 275000"))
         .isEqualTo(1);
+    // PR #41 review M2: 27500050 is not 275000 VND.
+    assertThat(ipn(signed(success(27500050, "14000003", "20261025100405")))).containsEntry("RspCode", "04");
+    assertThat(count("select count(*) from reconciliation_items where kind = 'AMOUNT_MISMATCH' and observed_amount = 275001")).isEqualTo(1);
     var unknown = success(27500000, "14000001", "20261025100405");
     unknown.put("vnp_TxnRef", "ORD-NOPE");
     assertThat(ipn(signed(unknown))).containsEntry("RspCode", "01").containsEntry("Message", "Order not found");
@@ -139,8 +142,13 @@ class VnPayIpnIntegrationTest extends PaymentTestSupport {
       assertThat(ipn(signed(result(27500000, "14000001", "00", status, "20261025100405")))).containsEntry("RspCode", "00");
       assertThat(ipn(signed(result(27500000, "14000001", "00", status, "20261025100405")))).containsEntry("RspCode", "00");
     }
+    // PR #41 review I1: ResponseCode 07 (money taken, suspicious) or a non-00 code with TransactionStatus 00 is never FAILED.
+    for (String[] rcTs : new String[][] {{"07", "00"}, {"07", "01"}, {"24", "00"}})
+      assertThat(ipn(signed(result(27500000, "14000001", rcTs[0], rcTs[1], "20261025100405")))).containsEntry("RspCode", "00");
     assertThat(count("select count(*) from reconciliation_items where kind = 'PROVIDER_REVIEW'")).isEqualTo(1);
     assertThat(row()).containsEntry("status", "CREATED");
+    // PR #41 review M6: the VNPay transaction number is on the evidence rows.
+    assertThat(count("select count(*) from payment_transactions where source = 'WEBHOOK' and provider_txn_id = '14000001'")).isEqualTo(5);
     assertThat(count("select count(*) from outbox_events where event_type <> 'PAYMENT_CREATED'")).isZero();
   }
 

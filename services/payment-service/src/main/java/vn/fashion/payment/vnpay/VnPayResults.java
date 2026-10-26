@@ -62,10 +62,11 @@ public class VnPayResults {
           .query(Target.class).single();
       String payload = payload(e);
       if (e.amountHundredths() != Math.multiplyExact(p.amount(), 100L)) {
-        review(p, e, "AMOUNT_MISMATCH", e.amountHundredths() / 100, payload);
+        review(p, e, "AMOUNT_MISMATCH", Math.ceilDiv(e.amountHundredths(), 100L), payload); // review M2: never equals expected
         return Outcome.AMOUNT_MISMATCH;
       }
-      boolean fresh = payments.transaction(p.id(), source, e.eventKey(), kind, p.amount(), paidAt, payload);
+      boolean fresh = payments.transaction(p.id(), source, e.eventKey(), blankToNull(e.transactionNo()), kind, p.amount(), paidAt,
+          payload);
       // Reversal/fraud suspicion is FINANCE's call whatever the state (spec section 4); one item per provider transaction.
       if (kind.equals("PROVIDER_REVIEW")) review(p, e, kind, p.amount(), payload);
       // TASK:PAY-02 review R5: another verified capture after SUCCESS may be a double charge; FINANCE decides, no second event.
@@ -92,13 +93,14 @@ public class VnPayResults {
   }
 
   /**
-   * Spec section 4: 04/07 review first; 00+00 success; 02 (or a non-00 IPN response) failed; 01 pending; else evidence only.
+   * Spec section 4: review first (status 04/07, ResponseCode 07 "money taken, suspicious", or a non-00 code contradicting
+   * status 00: PR #41 review I1); 00+00 success; 02 (or a non-00 IPN response) failed; 01 pending; else evidence only.
    * A missing code or status (a QueryDR answer may have none) is never a success.
    */
   static String kind(String source, Evidence e) {
     String s = e.transactionStatus() == null ? "" : e.transactionStatus();
     boolean ok = "00".equals(e.responseCode());
-    if (s.equals("04") || s.equals("07")) return "PROVIDER_REVIEW";
+    if (s.equals("04") || s.equals("07") || "07".equals(e.responseCode()) || !ok && s.equals("00")) return "PROVIDER_REVIEW";
     if (ok && s.equals("00")) return "SUCCESS";
     if (s.equals("02") || source.equals("WEBHOOK") && !ok) return "FAILED";
     if (s.equals("01")) return "PROCESSING";
@@ -111,13 +113,18 @@ public class VnPayResults {
     tx.executeWithoutResult(status -> {
       payments.lockOrder(jdbc.sql("select order_id from payments where id = :id").param("id", paymentId).query(UUID.class).single());
       String current = jdbc.sql("select status from payments where id = :id").param("id", paymentId).query(String.class).single();
-      if (!OPEN.contains(current)) return;
+      // PR #41 review M1: already FAILED (closed) records the 91 too, which ends the queries; no state change, no event.
+      boolean open = OPEN.contains(current);
+      if (!open && !current.equals("FAILED")) return;
       payments.transaction(paymentId, "QUERY", "91:expired", "FAILED", null, null, "{\"vnp_ResponseCode\":\"91\"}");
+      if (!open) return;
       jdbc.sql("update payments set status = 'FAILED', version = version + 1, updated_at = now() where id = :id")
           .param("id", paymentId).update();
       events.failed(payments.byId(paymentId), "EXPIRED", correlationId);
     });
   }
+
+  private static String blankToNull(String s) { return s == null || s.isBlank() ? null : s; }
 
   /** Allowlist only: no vnp_SecureHash, no vnp_BankTranNo, no OrderInfo. */
   private String payload(Evidence e) {

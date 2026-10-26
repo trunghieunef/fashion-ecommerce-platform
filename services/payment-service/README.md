@@ -106,7 +106,10 @@ Cần chạy `bash scripts/local-up.sh` một lần trước (build jar, sinh kh
 
 Lịch QueryDR: +1, +2, +5, +10, +30 phút sau create, rồi mỗi 30 phút tới hạn link + 24 giờ. Lỗi mạng/timeout chỉ dời lịch. `91` (không có giao dịch)
 chỉ thành `FAILED` `EXPIRED` sau hạn link + 15 phút. Payment `FAILED` do close vẫn được query theo lịch (late `SUCCESS` giữ `closed_at`),
-trừ khi đã có evidence thất bại từ IPN/QueryDR. Câu trả lời `00` thiếu `vnp_TransactionNo` bị bỏ qua (hỏi lại lần sau). Return không đổi trạng thái tiền.
+trừ khi đã có evidence thất bại từ IPN/QueryDR (kể cả `91` sau hạn, ghi evidence không phát event). Câu trả lời `00` thiếu
+`vnp_TransactionNo` bị bỏ qua (hỏi lại lần sau). Return không đổi trạng thái tiền. `ResponseCode` 07 hoặc mã ≠ 00 kèm
+`TransactionStatus` 00 → `PROVIDER_REVIEW` cho FINANCE, không `FAILED`. Tắt VNPAY không chặn retry của payment đã có;
+order quá hạn khi tạo link → 409 `PAYMENT_CLOSED`.
 
 ## Database
 

@@ -68,7 +68,7 @@ class VnPayCreateIntegrationTest extends PaymentTestSupport {
   @Test void vnpayNeedsAClientIp() {
     String order = UUID.randomUUID().toString();
     int n = 0;
-    for (String ip : new String[] {"", "abc", "1.2.3", "<script>", "x".repeat(50)})
+    for (String ip : new String[] {"", "abc", "1.2.3", "<script>", "x".repeat(50), "999.999.999.999", "256.1.1.1", "1:2:3:4:5:6:7:8:9", ":::"})
       assertThat(problem(create("a" + n++, snapshot(order, "ORD-IP", "VNPAY", 1000, ip)), 400)).isEqualTo("INVALID_FIELDS");
     var missing = create("m", snapshot(order, "ORD-IP", "VNPAY", 1000));
     assertThat(problem(missing, 400)).isEqualTo("INVALID_FIELDS");
@@ -77,6 +77,17 @@ class VnPayCreateIntegrationTest extends PaymentTestSupport {
     assertThat(problem(fr, 400)).isEqualTo("INVALID_FIELDS");
     assertThat(count("select count(*) from payments")).isZero();
     assertThat(data(create("v6", snapshot(order, "ORD-IP", "VNPAY", 1000, "2001:db8::1")), 200).path("status").asString()).isEqualTo("CREATED");
+    // PR #41 review M3: short IPv6 (loopback) is an address too.
+    assertThat(data(create("lo", snapshot(UUID.randomUUID().toString(), "ORD-LO", "VNPAY", 1000, "::1")), 200).path("status").asString())
+        .isEqualTo("CREATED");
+  }
+
+  /** PR #41 review M5: an order already past its deadline gets no link (ExpireDate would not be after CreateDate). */
+  @Test void expiredOrderGetsNoLink() {
+    String body = snapshot(UUID.randomUUID().toString(), "ORD-OLD", "VNPAY", 1000, "203.0.113.7")
+        .replace("2030-01-01T00:00:00Z", Instant.now().minus(1, ChronoUnit.MINUTES).truncatedTo(ChronoUnit.SECONDS).toString());
+    assertThat(problem(create("k", body), 409)).isEqualTo("PAYMENT_CLOSED");
+    assertThat(count("select count(*) from payments")).isZero();
   }
 
   @Test void clientIpAndLocaleDoNotChangeTheSnapshotHash() {

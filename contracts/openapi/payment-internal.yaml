@@ -28,6 +28,8 @@ paths:
         PAYMENT_AMOUNT_UNSUPPORTED; MOMO is 422 PAYMENT_METHOD_UNAVAILABLE until PAY-03, and VNPAY only
         while it is disabled (blank tmn-code). TASK:PAY-02: VNPAY becomes CREATED with a signed payment_url (no network call);
         client_ip (required for VNPAY) and locale (vi|en) are outside the snapshot hash, and a replay returns the same link.
+        An existing payment is returned even while VNPAY is disabled; a VNPAY order already past expires_at is 409
+        PAYMENT_CLOSED with no payment created.
       x-implementation-status: implemented
       parameters:
       - $ref: ./common.yaml#/components/parameters/IdempotencyKey
@@ -145,7 +147,7 @@ components:
         amount: {type: integer, minimum: 0, maximum: 1000000000000, description: 'Order total in VND from the order snapshot; 0 is 422 on create'}
         currency: {type: string, const: VND}
         expires_at: {type: string, format: date-time}
-        client_ip: {type: string, minLength: 7, maxLength: 45, description: 'Required for VNPAY (vnp_IpAddr); not part of the snapshot hash'}
+        client_ip: {type: string, minLength: 2, maxLength: 45, description: 'Required for VNPAY (vnp_IpAddr): IPv4 (octets 0..255) or an IPv6 literal; not part of the snapshot hash'}
         locale: {type: string, enum: [vi, en], default: vi, description: 'Pay page language; not part of the snapshot hash'}
     PaymentClose:
       type: object

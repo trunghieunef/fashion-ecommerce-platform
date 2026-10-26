@@ -325,6 +325,10 @@ class VnPayQueryIntegrationTest extends PaymentTestSupport {
     assertThat(STUB.requests).hasSize(1);
     assertThat(status()).isEqualTo("FAILED");
     assertThat(events("PAYMENT_FAILED")).isEqualTo(1);
+    // PR #41 review M1: the 91 is evidence, so the worker stops asking.
+    assertThat(evidence("QUERY")).isEqualTo(1);
+    worker.runOnce(expires.plus(Duration.ofHours(2)));
+    assertThat(STUB.requests).hasSize(1);
   }
 
   /** VNPay QueryDR stand-in: records requests, answers signed with TEST-HASH-SECRET (or a wrong key). */

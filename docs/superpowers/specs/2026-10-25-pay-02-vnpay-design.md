@@ -64,19 +64,21 @@ provider_txn_id)`; `payment_transactions.source` đã có `WEBHOOK`, `QUERY`). M
 | (mới) → `CREATED` | Create VNPAY: row + `payment_url` + `CREATE` evidence + `PAYMENT_CREATED`, cùng transaction. Không gọi mạng (link VNPay chỉ là URL đã ký) |
 | `CREATED` → `PROCESSING` | QueryDR thấy giao dịch tồn tại nhưng `vnp_TransactionStatus = 01` (chưa xong) |
 | `CREATED`/`PROCESSING`/`UNKNOWN`/`FAILED` → `SUCCESS` | IPN hoặc QueryDR đã xác minh `ResponseCode = 00` và `TransactionStatus = 00`, đúng merchant/reference/amount×100/VND. `FAILED` vẫn nhận late success; giữ `closed_at` (order phải refund) |
-| `CREATED`/`PROCESSING`/`UNKNOWN` → `FAILED` | IPN/QueryDR xác minh thất bại chắc chắn (`TransactionStatus` 02, hoặc `ResponseCode` ≠ 00 trên IPN), hoặc QueryDR `91` (không có giao dịch) **sau** hạn link + 15 phút; close của order như PAY-01 |
+| `CREATED`/`PROCESSING`/`UNKNOWN` → `FAILED` | IPN/QueryDR xác minh thất bại chắc chắn (`TransactionStatus` 02, hoặc `ResponseCode` ≠ 00 (trừ 07) và `TransactionStatus` ≠ 00 trên IPN), hoặc QueryDR `91` (không có giao dịch) **sau** hạn link + 15 phút; close của order như PAY-01 |
 | `SUCCESS` → (giữ) | Mọi IPN/query sau đó: ghi evidence nếu mới, không đổi trạng thái, không phát event lần hai |
 
 `UNKNOWN` không phát sinh trong PAY-02: create không gọi mạng; lỗi mạng/timeout của QueryDR chỉ dời lịch query (query là
-đọc, không phải mutation). `TransactionStatus` 04/07 (đảo/nghi gian lận) → giữ trạng thái, mở `reconciliation_items`
-`PROVIDER_REVIEW` cho FINANCE.
+đọc, không phải mutation). `TransactionStatus` 04/07 (đảo/nghi gian lận), `ResponseCode` 07 (trừ tiền thành công, nghi ngờ) hoặc cặp mâu thuẫn
+`ResponseCode` ≠ 00 với `TransactionStatus` 00 (review PR #41 I1: có thể đã trừ tiền, không được thành `FAILED` hủy đơn) → giữ
+trạng thái, mở `reconciliation_items` `PROVIDER_REVIEW` cho FINANCE. QueryDR `91` cho payment đã `FAILED` (close) chỉ ghi
+evidence để dừng query, không phát event (review M1). `AMOUNT_MISMATCH` ghi `observed_amount` làm tròn lên (review M2).
 
 ## 5. API nội bộ: create VNPAY
 
 `POST /internal/api/v1/payments` (đã có, PAY-01) thêm nhánh `method = VNPAY`:
 
 - Thêm trường **không băm** (không vào `request_hash`/snapshot vì không phải dữ liệu tiền): `client_ip` (bắt buộc với VNPAY,
-  IPv4/IPv6 → `vnp_IpAddr`) và `locale` (`vi`|`en`, mặc định `vi` → `vnp_Locale` `vn`|`en`). COD bỏ qua hai trường.
+  IPv4 hợp lệ hoặc IPv6 literal, tối đa 45 ký tự → `vnp_IpAddr`; định dạng kiểm ở controller trước mọi trạng thái) và `locale` (`vi`|`en`, mặc định `vi` → `vnp_Locale` `vn`|`en`). COD bỏ qua hai trường.
 - Link: `vnp_Version=2.1.0`, `vnp_Command=pay`, `vnp_TmnCode`, `vnp_Amount = Math.multiplyExact(amount, 100)`,
   `vnp_CurrCode=VND`, `vnp_TxnRef = order_no`, `vnp_OrderInfo = "Thanh toan don hang {order_no}"` (ASCII, không dấu),
   `vnp_OrderType=other`, `vnp_ReturnUrl`, `vnp_CreateDate` (= `provider_created_at`, GMT+7 `yyyyMMddHHmmss`),
@@ -85,7 +87,10 @@ provider_txn_id)`; `payment_transactions.source` đã có `WEBHOOK`, `QUERY`). M
 - Response thêm `payment_url` (null với COD) và `payment_url_expires_at` (hạn link, ruling R2). Replay/cùng snapshot trả **cùng link** (link không đổi
   vì `TxnRef` không được trùng trong ngày). Đã close → 409 `PAYMENT_CLOSED` (như PAY-01); link hết hạn → vẫn trả link cũ
   kèm `payment_url_expires_at` (order quyết định; không tạo `TxnRef` mới).
-- `amount = 0` vẫn 422; VNPAY tắt (§2) → 422 `PAYMENT_METHOD_UNAVAILABLE`.
+- `amount = 0` vẫn 422; VNPAY tắt (§2) → 422 `PAYMENT_METHOD_UNAVAILABLE`, nhưng payment đã có của order luôn được trả trước
+  (review PR #41 M4: tắt VNPAY không làm retry của order bị 422 rồi hủy đơn). Order đã quá `expires_at` khi tạo link → 409
+  `PAYMENT_CLOSED`, không tạo payment (review M5: `vnp_ExpireDate` phải sau `vnp_CreateDate`).
+- Evidence VNPay ghi `payment_transactions.provider_txn_id = vnp_TransactionNo` (review M6).
 
 ## 6. Endpoint public (qua Gateway, route `payment-vnpay-public` chỉ hai path)
 

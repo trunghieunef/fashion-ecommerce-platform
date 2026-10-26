@@ -69,15 +69,16 @@ public class PaymentService {
       // After the closed check (review M2): a closed order answers 409 whatever the snapshot.
       if (s.amount() == 0)
         throw new Api.Problem(HttpStatus.UNPROCESSABLE_CONTENT, "PAYMENT_AMOUNT_UNSUPPORTED", "PAYMENT_AMOUNT_UNSUPPORTED", List.of());
-      // TASK:PAY-02: MOMO until PAY-03; VNPAY only while configured.
-      boolean vnpayLink = s.method().equals("VNPAY") && vnpay.enabled();
-      if (!s.method().equals("COD") && !vnpayLink)
-        throw new Api.Problem(HttpStatus.UNPROCESSABLE_CONTENT, "VALIDATION_ERROR", "PAYMENT_METHOD_UNAVAILABLE", List.of());
+      // PR #41 review M4: an existing payment answers before availability (VNPAY switched off must not cancel open orders).
       if (existing.isPresent()) {
         if (!requestHash(s.orderId()).equals(hash)) throw conflict("PAYMENT_CONFLICT");
         keys.finish(ACTOR, "payment.create", key, existing.get().paymentId(), 200, json.writeValueAsString(existing.get()));
         return existing.get();
       }
+      // TASK:PAY-02: MOMO until PAY-03; VNPAY only while configured.
+      boolean vnpayLink = s.method().equals("VNPAY") && vnpay.enabled();
+      if (!s.method().equals("COD") && !vnpayLink)
+        throw new Api.Problem(HttpStatus.UNPROCESSABLE_CONTENT, "VALIDATION_ERROR", "PAYMENT_METHOD_UNAVAILABLE", List.of());
       if (vnpayLink && extras.clientIp() == null)
         throw new Api.Problem(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "INVALID_FIELDS", List.of(new Api.FieldError("client_ip", "is required for VNPAY")));
       UUID id = UUID.randomUUID();
@@ -100,6 +101,8 @@ public class PaymentService {
         .param("id", id).query((rs, n) -> rs.getTimestamp(1).toInstant()).single();
     Instant expires = created.plus(vnpay.linkTtl());
     if (s.expiresAt().isBefore(expires)) expires = s.expiresAt();
+    // PR #41 review M5: an order past its deadline gets no link (rolls the create back).
+    if (!expires.isAfter(created)) throw conflict("PAYMENT_CLOSED");
     var p = new LinkedHashMap<String, String>();
     p.put("vnp_Version", "2.1.0"); p.put("vnp_Command", "pay"); p.put("vnp_TmnCode", vnpay.tmnCode());
     p.put("vnp_Amount", String.valueOf(Math.multiplyExact(s.amount(), 100L))); p.put("vnp_CurrCode", "VND");
@@ -163,7 +166,7 @@ public class PaymentService {
     jdbc.sql("select pg_advisory_xact_lock(hashtextextended(:o, 0))").param("o", orderId.toString()).query((rs, n) -> 1).list();
   }
   /** Canonical JSON (sorted keys) of the snapshot. */
-  String hash(Snapshot s) {
+  public String hash(Snapshot s) {
     return Api.sha256(json.writeValueAsString(canonical(s)));
   }
   private static TreeMap<String, Object> canonical(Snapshot s) {
@@ -191,11 +194,17 @@ public class PaymentService {
   }
   /** One evidence row; a repeated (source, key) is ignored and reported as false. */
   public boolean transaction(UUID payment, String source, String key, String status, Long amount, Instant occurredAt, String payload) {
+    return transaction(payment, source, key, null, status, amount, occurredAt, payload);
+  }
+  /** PR #41 review M6: with the provider transaction number (VNPay vnp_TransactionNo) for FINANCE lookups. */
+  public boolean transaction(UUID payment, String source, String key, String providerTxnId, String status, Long amount,
+                             Instant occurredAt, String payload) {
     return jdbc.sql("""
-        insert into payment_transactions(id, payment_id, source, provider_event_key, status, amount, occurred_at, sanitized_payload,
-          payload_hash)
-        values (:id, :p, :src, :k, :st, :a, :at, cast(:payload as jsonb), :ph) on conflict do nothing""")
-        .param("id", UUID.randomUUID()).param("p", payment).param("src", source).param("k", key).param("st", status)
+        insert into payment_transactions(id, payment_id, source, provider_event_key, provider_txn_id, status, amount, occurred_at,
+          sanitized_payload, payload_hash)
+        values (:id, :p, :src, :k, :txn, :st, :a, :at, cast(:payload as jsonb), :ph) on conflict do nothing""")
+        .param("id", UUID.randomUUID()).param("p", payment).param("src", source).param("k", key).param("txn", providerTxnId)
+        .param("st", status)
         .param("a", amount).param("at", occurredAt == null ? null : Timestamp.from(occurredAt)).param("payload", payload)
         .param("ph", Api.sha256(payload)).update() == 1;
   }
